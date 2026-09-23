@@ -9,11 +9,18 @@ unchanged:
 NvcppCc80 is the preset with GPU "cc80". parse_diagnostics reads the stderr
 of the NVHPC EDG front end, the NVC++ backend, and GCC style and linker lines
 (nvc++ runs the link step itself); the patterns below each show a sample
-line. The -Minfo report matches no pattern, so it yields no diagnostics.
+line, from the captures in tests/toolchains/fixtures/ where one shows it. The
+-Minfo report goes to stderr too and matches no pattern, so it yields no
+diagnostics; for example (capture nvcpp_minfo_clean)
+    saxpy(int, float, float const*, float*):
+          4, #omp target teams distribute parallel for
+              4, Generating "nvkernel__Z5saxpyifPKfPf_F1L4_2" GPU kernel
+          6, Loop not vectorized/parallelized: not countable
 """
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections.abc import Mapping, Sequence
 
@@ -28,32 +35,38 @@ from lassi.toolchains._stderr import (
     UNDEFINED_REFERENCE,
     LinePattern,
     compile_diagnostic,
+    fold_edg_lines,
     parse_stderr,
 )
 
 # EDG front end: '"<file>", line <line>: <severity>: <message>', with an optional trailing
-# " [<tag>]" that becomes the code, for example
-#   "main.cpp", line 8: error: identifier "undefined_var" is undefined
-#   "main.cpp", line 14: warning: variable "unused" was declared but never referenced [declared_but_not_referenced]
-#   "main.cpp", line 1: catastrophic error: cannot open source file "kernels/missing.h"
+# " [<tag>]" that becomes the code, for example (captures nvcpp_edg_error, nvcpp_edg_warning, and
+# nvcpp_missing_include; a warning carries its tag, an error none)
+#   "main.cpp", line 7: error: identifier "undefined_var" is undefined
+#   "main.cpp", line 13: warning: variable "unused" was declared but never referenced [declared_but_not_referenced]
+#   "main.cpp", line 2: catastrophic error: cannot open source file "kernels/scale.h"
 # A remark is a note, and a catastrophic, command-line, or internal error is an error (NVHPC's EDG
 # front end preprocesses too, so a missing header is a catastrophic error). Continuation lines, a
 # source echo, and a caret line may follow.
 _EDG = re.compile(
-    r'"(?P<file>[^"]+)", line (?P<line>[0-9]+): '
+    r'"(?P<file>[^"]+)", line (?P<line>[0-9]{1,10}): '
     r"(?P<severity>catastrophic error|command-line error|internal error|error|warning|remark): "
     r"(?P<message>.*?)"
     r"(?: \[(?P<code>[A-Za-z_][A-Za-z0-9_]*)\])?"
 )
 
-# NVC++ backend: "NVC++-<S>-<nnnn>-<message>", with an optional trailing " (<file>: <line>)", for example
-#   NVC++-S-0155-Compiler failed to translate accelerator region (see -Minfo messages): ... (main.cpp: 21)
-#   NVC++-F-0704-Compilation aborted due to previous errors.
+# NVC++ backend: "NVC++-<S>-<nnnn>-<message>", with an optional trailing "(<file>: <line>)" after one or more
+# blanks, for example (captures nvcpp_backend_error and nvcpp_fatal_abort, both messages shortened with "...")
+#   NVC++-S-1101-The maximum stack size ... is limited to 524288 bytes: 1048676 (main.cpp: 4)
+#   NVC++-F-0000-Internal compiler error. child tinfo ... outlining function for host    1198  (main.cpp: 8)
 # The code is "<S>-<nnnn>". S is I (a note), W (a warning), S (severe, an error), or F (fatal, an error).
+# The message is the text before the blanks, as printed, so an internal error keeps its internal number and
+# its inner blanks. The look-behind lets only the first blank of a run start the separator, which keeps the
+# match linear in the line length.
 _BACKEND = re.compile(
     r"NVC\+\+-(?P<severity>[IWSF])-(?P<number>[0-9]+)-"
     r"(?P<message>.*?)"
-    r"(?: \((?P<file>[^()]+): (?P<line>[0-9]+)\))?"
+    r"(?:(?<=\S)\s+\((?P<file>[^()]+): (?P<line>[0-9]{1,10})\))?"
 )
 _BACKEND_SEVERITY = {"I": "note", "W": "warning", "S": "error", "F": "error"}
 
@@ -81,11 +94,27 @@ def _backend(match: re.Match[str]) -> Diagnostic:
     )
 
 
+# GCC style lines: nvc++ compiles the built files itself, with no regenerated source in between, so a GCC style
+# line on a built file keeps its column as printed; no capture shows one yet. Any other place gets no column. An
+# exploratory probe (nvcpp_probe_asm_int in dirty-tree rx 20260923-104618-desktop-8r113ei-p0-core-173d, not a
+# fixture) showed LLVM's assembler rejecting an inline asm instruction, with an echo and a caret line (no
+# gutter) that match no pattern after it:
+#   <inline asm>:1:2: error: invalid instruction mnemonic 'bogus.op.s32'
+# Its line and column index the asm string, not a built file; the file and line stay as printed.
+def _gcc_column(
+    diagnostic: Diagnostic, lines: list[str], index: int, files: Mapping[str, str], patterns: Sequence[LinePattern]
+) -> tuple[Diagnostic, int]:
+    """Keep GCC's column only when the named file is a key of `files`, else set it to None; consume no line."""
+    if diagnostic.file in files:
+        return diagnostic, index
+    return dataclasses.replace(diagnostic, column=None), index
+
+
 # Tried in this order on each line; the linker pattern is last because it is the loosest.
 _PATTERNS = (
-    LinePattern(_EDG, _edg, echoed=True),
+    LinePattern(_EDG, _edg, fold=fold_edg_lines),
     LinePattern(_BACKEND, _backend),
-    GCC,
+    dataclasses.replace(GCC, fold=_gcc_column),
     COLLECT2,
     UNDEFINED_REFERENCE,
 )
@@ -95,9 +124,15 @@ def parse_diagnostics(stderr: str, files: Mapping[str, str] = NO_FILES) -> list[
     """Return the compile-stage Diagnostics in nvc++'s `stderr`, in order.
 
     `files` (relative path -> text) are the files built; an EDG diagnostic
-    gets its column by aligning the source echo with its line in them.
-    Lines that match no pattern are skipped: error summaries, Remark lines,
-    the -Minfo report, the compiler's closing status line, and blank lines.
+    gets its column by aligning the source echo with its line in them, a
+    GCC style diagnostic keeps its column only on one of them (_gcc_column),
+    and a linker place is kept only as one of them. Lines that match no
+    pattern are skipped: error summaries, Remark lines, the -Minfo report,
+    the compiler's closing status line (such as "NVC++/x86-64 Linux
+    24.11-0: compilation aborted"), the linker's "in function" line, the
+    "pgacclnk: child process exit status 1: /usr/bin/ld" line (it only
+    restates that ld failed and says no "error:", unlike the "collect2:
+    error: ..." line, which is read as an error), and blank lines.
     """
     return parse_stderr(stderr, files, _PATTERNS)
 

@@ -1,6 +1,10 @@
-saxpy(int, float, const float *, float *):
-      6, #omp target teams distribute parallel for
-          6, Generating "nvkernel__Z5saxpyifPKfPf_F1L6_2" GPU kernel
-          7, Loop parallelized across teams and threads(128), schedule(static)
-      6, Generating map(to:x[:n])
-         Generating map(tofrom:y[:n])
+saxpy(int, float, float const*, float*):
+      4, #omp target teams distribute parallel for
+          4, Generating "nvkernel__Z5saxpyifPKfPf_F1L4_2" GPU kernel
+          6, Loop parallelized across teams and threads(128), schedule(static)
+      4, Generating map(tofrom:y[:n]) 
+         Generating map(to:x[:n]) 
+      6, Loop not vectorized/parallelized: not countable
+      7, FMA (fused multiply-add) instruction(s) generated
+main:
+     14, Generated vector simd code for the loop

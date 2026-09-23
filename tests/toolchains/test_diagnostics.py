@@ -1,4 +1,4 @@
-"""Tests for the nvcc and nvc++ toolchain adapters in lassi/toolchains/ (P0.5).
+"""Tests for the nvcc and nvc++ toolchain adapters in lassi/toolchains/ (P0.5, P0.15).
 
 A Toolchain turns files into an artifact plus diagnostics parsed into records
 of (severity, code, file, line, column, message, stage); the raw stderr is kept
@@ -8,26 +8,35 @@ are the toolchain bindings of the bible's lassi-repro recipe, `nvcc-sm80` and
 `nvcpp-cc80`, and their command lines carry the LASSI compile flags from the
 bible's Source Papers section unchanged.
 
-No test here runs a compiler. parse_diagnostics is called on the hand-written
-stderr files in tests/toolchains/fixtures/ (see the README there), and build
-gets a fake command runner that records its call and returns canned stderr.
-subprocess_runner is exercised with the current Python interpreter only. The
-sources below are what the EDG echo and caret lines in the fixtures point
-into, so every expected column is exact. No value in this module is a
-measurement.
+The .stderr files in tests/toolchains/fixtures/ are raw stderr captured on the
+build host with the pinned compilers under LC_ALL=C, one scenario each, copied
+byte for byte; captures.json there is the capture's provenance manifest, and
+fixtures/sources/<scenario>/ holds the files each scenario compiled (see the
+README there). Each expected Diagnostic list below is derived by hand from the
+raw stderr and the Toolchain contract, never copied from a parser's output;
+the comment above each case gives the reasoning. The one-pattern sample lines
+either come from a capture or say that no capture shows their format yet.
+
+No test here runs a compiler: parse_diagnostics reads the fixtures, build gets
+a fake command runner that records its call and returns canned stderr, and
+subprocess_runner runs the current Python interpreter only. No value in this
+module is a measurement; the captures record compiler output, not performance.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import inspect
+import json
 import re
 import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 import yaml
@@ -47,6 +56,8 @@ subprocess_runner = toolchains.subprocess_runner
 REPO = Path(__file__).resolve().parents[2]
 BIBLE = REPO / "docs" / "BIBLE.md"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+SOURCES = FIXTURES / "sources"
+CAPTURES = FIXTURES / "captures.json"
 OUTPUT = "main"
 ATTACHMENT = "compile.stderr"
 E_ACUTE = "\N{LATIN SMALL LETTER E WITH ACUTE}"
@@ -56,67 +67,16 @@ NVCPP_FLAGS = ("-Wall", "-O3", "-Minfo", "-mp=gpu", "-gpu=cc80")
 NVCC_SUFFIXES = (".cu", ".cpp", ".cc", ".cxx", ".c")
 NVCPP_SUFFIXES = (".cpp", ".cc", ".cxx", ".c")
 
-# ---------------------------------------------------------------------------
-# Sources the fixtures point into (line numbers in the comments)
 
-# Line 8 uses an identifier that does not exist; nvcc_undefined_identifier points at column 27.
-NVCC_BROKEN = (
-    "#include <cstdio>\n"
-    '#include "kernels/scale.cuh"\n'
-    "\n"
-    "__global__ void saxpy(int n, float a, const float *x, float *y)\n"
-    "{\n"
-    "    int i = blockIdx.x * blockDim.x + threadIdx.x;\n"
-    "    if (i < n) {\n"
-    "        y[i] = a * x[i] + undefined_var;\n"
-    "    }\n"
-    "}\n"
-)
-NVCC_MAIN = NVCC_BROKEN.replace("a * x[i] + undefined_var", "scale(x[i], a) + y[i]")
-# Line 5 declares a variable it never uses; nvcc_warning_177 points at column 11.
-SCALE_CUH = (
-    "#pragma once\n"
-    "\n"
-    "__device__ inline float scale(float v, float s)\n"
-    "{\n"
-    "    float unused = 0.0f;\n"
-    "    return v * s;\n"
-    "}\n"
-)
-# Line 8 uses an identifier that does not exist; nvcpp_edg_error points at column 23.
-NVCPP_BROKEN = (
-    "#include <cstdio>\n"
-    "#include <vector>\n"
-    "\n"
-    "void saxpy(int n, float a, const float *x, float *y)\n"
-    "{\n"
-    "#pragma omp target teams distribute parallel for map(to: x[0:n]) map(tofrom: y[0:n])\n"
-    "  for (int i = 0; i < n; i++) {\n"
-    "    y[i] = a * x[i] + undefined_var;\n"
-    "  }\n"
-    "}\n"
-)
-# Line 14 declares a variable it never uses; nvcpp_edg_warning points at column 7.
-NVCPP_MAIN = (
-    NVCPP_BROKEN.replace("a * x[i] + undefined_var", "a * x[i] + y[i]")
-    + "\n"
-    + "int main()\n"
-    + "{\n"
-    + "  int unused = 0;\n"
-    + "  std::vector<float> x(1024, 1.0f), y(1024, 2.0f);\n"
-    + "  saxpy(1024, 2.0f, x.data(), y.data());\n"
-    + '  std::printf("%f\\n", y[0]);\n'
-    + "  return 0;\n"
-    + "}\n"
-)
+def scenario_files(name: str) -> dict[str, str]:
+    """Return the files scenario `name` compiled: fixtures/sources/<name>/, relative POSIX path -> text.
 
-# Line 2 includes a header the response did not return; nvcpp_missing_include points at column 10.
-NVCPP_INCLUDES = '#include <cstdio>\n#include "kernels/scale.h"\n\nint main() { return 0; }\n'
-
-NVCC_BROKEN_FILES = {"main.cu": NVCC_BROKEN, "kernels/scale.cuh": SCALE_CUH}
-NVCC_FILES = {"main.cu": NVCC_MAIN, "kernels/scale.cuh": SCALE_CUH}
-NVCPP_BROKEN_FILES = {"main.cpp": NVCPP_BROKEN}
-NVCPP_FILES = {"main.cpp": NVCPP_MAIN}
+    The text is the file's bytes decoded as UTF-8 with no newline translation,
+    as build() writes it.
+    """
+    tree = SOURCES / name
+    paths = sorted(path for path in tree.rglob("*") if path.is_file())
+    return {path.relative_to(tree).as_posix(): path.read_bytes().decode("utf-8") for path in paths}
 
 
 def compile_diag(
@@ -134,56 +94,63 @@ def compile_diag(
 
 @dataclass(frozen=True)
 class FixtureCase:
-    """One stderr fixture: the adapter module that parses it, the files it points into, and the expected list.
+    """One captured stderr fixture: the adapter module that parses it and the Diagnostics it must give.
 
-    `edg` marks fixtures whose diagnostics are all EDG lines with a source
-    echo and caret, so their columns need the file text.
+    The files it is parsed with are its scenario's source tree (scenario_files).
+    `without_files`, when set, is what it must give with no file text, where
+    more than the columns change; by default only every column becomes None.
     """
 
     module: ModuleType
-    files: Mapping[str, str]
     expected: list[Diagnostic]
-    edg: bool = False
+    without_files: list[Diagnostic] | None = None
 
+
+SIGN_COMPARE = (
+    "comparison of integer expressions of different signedness: 'int' and 'std::vector<float>::size_type' "
+    "{aka 'long unsigned int'}"
+)
+HELPER_UNDEFINED = "undefined reference to `helper(float*, int)'"
+VTABLE_UNDEFINED = "undefined reference to `vtable for Foo'"
+STACK_LIMIT = "The maximum stack size for a GPU kernel or procedure is limited to 524288 bytes: 1048676"
+# As printed, with the four blanks before the internal number; only the blanks before "(main.cpp: 8)" go.
+TINFO_ICE = "Internal compiler error. child tinfo should have been created at outlining function for host    1198"
 
 FIXTURE_CASES: dict[str, FixtureCase] = {
+    # main.cu line 7 is "        y[i] = a * x[i] + undefined_var;". The echo adds 2 blanks in front and the
+    # caret is at index 28, so the column is 28 - 2 + 1 = 27, the 'u'. nvcc prints no number for an EDG error,
+    # so there is no code. The blank line and the "1 error detected" summary are no diagnostics.
     "nvcc_undefined_identifier": FixtureCase(
-        nvcc,
-        NVCC_BROKEN_FILES,
-        [compile_diag("error", None, "main.cu", 8, 27, 'identifier "undefined_var" is undefined')],
-        edg=True,
+        nvcc, [compile_diag("error", None, "main.cu", 7, 27, 'identifier "undefined_var" is undefined')]
     ),
+    # kernels/scale.cuh line 5 is "    float unused = 0.0f;": caret index 12 - echo prefix 2 + 1 = column 11, the
+    # 'u'. The code is the number with its "-D". The Remark line and the blank lines are no diagnostics, and
+    # the warning appears once.
     "nvcc_warning_177": FixtureCase(
         nvcc,
-        NVCC_FILES,
         [
             compile_diag(
                 "warning", "177-D", "kernels/scale.cuh", 5, 11, 'variable "unused" was declared but never referenced'
             )
         ],
-        edg=True,
     ),
+    # GCC names main.cu:16:19 with the flag [-Wsign-compare] as the code. Its echo is line 16 of main.cu as the
+    # file holds it, but GCC counted column 19 in the host code cudafe1 regenerated, where the line has no
+    # indent: there the '<' is column 19, in main.cu it is column 23, and column 19 of main.cu is the ';'. A
+    # column must index the named file, and nothing in stderr shows which text GCC counted in, so under nvcc
+    # a GCC column is always None; file, line, flag, and message stay. The "In function" line and the echo
+    # and caret lines are no diagnostics. The build exited 0.
     "nvcc_host_gcc_warning": FixtureCase(
-        nvcc,
-        {},
-        [
-            compile_diag(
-                "warning",
-                "-Wsign-compare",
-                "main.cu",
-                21,
-                23,
-                "comparison of integer expressions of different signedness: 'int' and 'size_t' "
-                "{aka 'long unsigned int'}",
-            )
-        ],
+        nvcc, [compile_diag("warning", "-Wsign-compare", "main.cu", 16, None, SIGN_COMPARE)]
     ),
+    # The driver names no file; the message is the text after "nvcc fatal   : ".
     "nvcc_fatal": FixtureCase(
-        nvcc, {}, [compile_diag("error", None, None, None, None, "Unsupported gpu architecture 'compute_80'")]
+        nvcc,
+        [compile_diag("error", None, None, None, None, "Value 'sm_35' is not defined for option 'gpu-architecture'")],
     ),
+    # ptxas names the mangled kernel but no file or line; the message is the text after "ptxas error   : ".
     "nvcc_ptxas_error": FixtureCase(
         nvcc,
-        {},
         [
             compile_diag(
                 "error",
@@ -191,70 +158,74 @@ FIXTURE_CASES: dict[str, FixtureCase] = {
                 None,
                 None,
                 None,
-                "Entry function '_Z6reducePKfPfi' uses too much shared data (0x10000 bytes, 0xc000 max)",
+                "Entry function '_Z6reducePKfPfi' uses too much shared data (0x40000 bytes, 0x29000 max)",
             )
         ],
     ),
+    # The "in function `main'" context line is no diagnostic. The undefined reference names a temporary cudafe1
+    # file of this run and a section offset, no built file and no line, so it has no file or line; its message
+    # is the text after the last ": ". The collect2 line is a second error.
     "nvcc_linker_error": FixtureCase(
         nvcc,
-        {},
         [
-            compile_diag("error", None, None, None, None, "undefined reference to `helper(float*, int)'"),
+            compile_diag("error", None, None, None, None, HELPER_UNDEFINED),
             compile_diag("error", None, None, None, None, "ld returned 1 exit status"),
         ],
     ),
-    "nvcc_clean": FixtureCase(nvcc, {}, []),
+    # Empty stderr.
+    "nvcc_clean": FixtureCase(nvcc, []),
+    # main.cpp line 7 is "        y[i] = a * x[i] + undefined_var;": caret index 28 - echo prefix 2 + 1 = 27.
+    # The blank line and the summary are no diagnostics.
     "nvcpp_edg_error": FixtureCase(
-        nvcpp,
-        NVCPP_BROKEN_FILES,
-        [compile_diag("error", None, "main.cpp", 8, 23, 'identifier "undefined_var" is undefined')],
-        edg=True,
+        nvcpp, [compile_diag("error", None, "main.cpp", 7, 27, 'identifier "undefined_var" is undefined')]
     ),
+    # main.cpp line 13 is "    int unused = 0;": caret index 10 - echo prefix 2 + 1 = column 9, the 'u'. The
+    # trailing [declared_but_not_referenced] is the code. The Remark line and the whole -Minfo report after it
+    # (function names, numbered region lines, "Generating map(...)" lines) are no diagnostics.
     "nvcpp_edg_warning": FixtureCase(
         nvcpp,
-        NVCPP_FILES,
         [
             compile_diag(
                 "warning",
                 "declared_but_not_referenced",
                 "main.cpp",
-                14,
-                7,
+                13,
+                9,
                 'variable "unused" was declared but never referenced',
             )
         ],
-        edg=True,
     ),
-    "nvcpp_backend_error": FixtureCase(
-        nvcpp,
-        {},
-        [
-            compile_diag(
-                "error",
-                "S-0155",
-                "main.cpp",
-                21,
-                None,
-                "Compiler failed to translate accelerator region (see -Minfo messages): "
-                "Could not find allocated-variable index for symbol - tmp",
-            )
-        ],
-    ),
-    "nvcpp_fatal_abort": FixtureCase(
-        nvcpp, {}, [compile_diag("error", "F-0704", None, None, None, "Compilation aborted due to previous errors.")]
-    ),
-    "nvcpp_minfo_clean": FixtureCase(nvcpp, {}, []),
+    # NVC++-S-1101: S (severe) is an error, and the code is "S-1101". The file and line come from the trailing
+    # "(main.cpp: 4)"; line 4 is as printed (the line before the pragma, as the -Minfo report numbers the
+    # region). A backend line gives no column. The -Minfo report and the closing summary are no diagnostics.
+    "nvcpp_backend_error": FixtureCase(nvcpp, [compile_diag("error", "S-1101", "main.cpp", 4, None, STACK_LIMIT)]),
+    # NVC++-F-0000: F (fatal) is an error, and the code is "F-0000". Two blanks separate the message from
+    # "(main.cpp: 8)", which gives file and line; the message is the text before them, as printed. The
+    # "compilation aborted" summary is no diagnostic.
+    "nvcpp_fatal_abort": FixtureCase(nvcpp, [compile_diag("error", "F-0000", "main.cpp", 8, None, TINFO_ICE)]),
+    # The -Minfo report alone yields nothing.
+    "nvcpp_minfo_clean": FixtureCase(nvcpp, []),
+    # The -Minfo report, the "in function `main'" context line, and the closing pgacclnk status line are no
+    # diagnostics. The undefined reference names main.cpp by its absolute path in this run's workdir, which
+    # ends with "/main.cpp", a built file, and line 21, the call "    helper(y, 1024);" in main.cpp: so the file
+    # is main.cpp and the line 21. The linker gives no column, and the message is the text after the last ": ".
+    # Without the file text nothing shows that the path is a built file, so file and line are None.
     "nvcpp_linker_error": FixtureCase(
-        nvcpp, {}, [compile_diag("error", None, None, None, None, "undefined reference to `helper(float*, int)'")]
-    ),
-    "nvcpp_missing_include": FixtureCase(
         nvcpp,
-        {"main.cpp": NVCPP_INCLUDES},
-        [compile_diag("error", None, "main.cpp", 2, 10, 'cannot open source file "kernels/scale.h"')],
-        edg=True,
+        [compile_diag("error", None, "main.cpp", 21, None, HELPER_UNDEFINED)],
+        without_files=[compile_diag("error", None, None, None, None, HELPER_UNDEFINED)],
+    ),
+    # main.cpp line 2 is '#include "kernels/scale.h"' (26 characters). The caret is at index 28 of the echo,
+    # after the closing quote: 28 - echo prefix 2 + 1 = column 27, one past the end of the line, kept as the
+    # compiler gives it since the echo matches the line. A catastrophic error is an error. The summary and
+    # "Compilation terminated." are no diagnostics.
+    "nvcpp_missing_include": FixtureCase(
+        nvcpp, [compile_diag("error", None, "main.cpp", 2, 27, 'cannot open source file "kernels/scale.h"')]
     ),
 }
-EDG_FIXTURES = sorted(name for name, case in FIXTURE_CASES.items() if case.edg)
+
+# The preset each adapter module registers, which the capture built for that module's scenarios.
+PRESET_OF: dict[ModuleType, type] = {nvcc: nvcc.NvccSm80, nvcpp: nvcpp.NvcppCc80}
 
 
 def fixture_text(name: str) -> str:
@@ -262,8 +233,15 @@ def fixture_text(name: str) -> str:
     return (FIXTURES / f"{name}.stderr").read_bytes().decode("utf-8")
 
 
+def load_captures() -> dict[str, Any]:
+    """Return captures.json, the provenance manifest of the capture the fixtures were copied from."""
+    raw = CAPTURES.read_bytes()
+    assert raw.isascii(), f"{CAPTURES} is not plain ASCII"
+    return json.loads(raw.decode("ascii"))
+
+
 # ---------------------------------------------------------------------------
-# The fixtures themselves
+# The fixtures themselves and their capture record
 
 
 def test_every_fixture_file_has_a_case() -> None:
@@ -281,6 +259,60 @@ def test_fixture_is_raw_ascii_stderr(name: str) -> None:
         assert not raw.startswith((b"#", b"//")), f"{name} starts with a comment; fixtures are raw stderr"
 
 
+def test_the_capture_ran_from_a_clean_commit_and_covers_every_fixture() -> None:
+    captures = load_captures()
+    assert captures["dirty"] is False
+    assert captures["snapshot_of"] is None
+    assert re.fullmatch(r"[0-9a-f]{40}", captures["commit"]), captures["commit"]
+    assert captures["rx_run_id"], "the capture must come from a recorded rx run"
+    assert captures["host"] == "alpha01"
+    assert sorted(captures["scenarios"]) == sorted(FIXTURE_CASES)
+
+
+@pytest.mark.parametrize("name", sorted(FIXTURE_CASES))
+def test_fixture_is_the_captured_stderr_byte_for_byte(name: str) -> None:
+    entry = load_captures()["scenarios"][name]
+    raw = (FIXTURES / f"{name}.stderr").read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == entry["stderr_sha256"], name
+    assert len(raw) == entry["stderr_bytes"], name
+
+
+@pytest.mark.parametrize("name", sorted(FIXTURE_CASES))
+def test_the_capture_compiled_the_scenario_source_tree(name: str) -> None:
+    # The recorded argv is the adapter's own command over the tree's sources, so the fixture belongs to these files.
+    entry = load_captures()["scenarios"][name]
+    preset = PRESET_OF[FIXTURE_CASES[name].module]
+    assert entry["toolchain"] == preset.name, name
+    adapter = type(f"{preset.__name__}Capture", (preset,), dict(entry["overrides"]))
+    sources = sorted(path for path in scenario_files(name) if path.endswith(preset.SOURCE_SUFFIXES))
+    assert sources, name
+    assert entry["argv"] == adapter(executable=entry["argv"][0]).command(sources), name
+
+
+@pytest.mark.parametrize("name", sorted(FIXTURE_CASES))
+def test_a_failed_capture_parses_into_an_error_and_a_clean_one_into_none(name: str) -> None:
+    status = load_captures()["scenarios"][name]["exit_status"]
+    errors = [diagnostic for diagnostic in FIXTURE_CASES[name].expected if diagnostic.severity == "error"]
+    assert bool(errors) == (status != 0), (name, status)
+
+
+def test_readme_records_the_capture_without_placeholder() -> None:
+    # One table row per fixture holds its file name, the capture's exit status, and the rx id; the README names
+    # the commit the capture ran from and points to captures.json.
+    text = (FIXTURES / "README.md").read_text(encoding="utf-8")
+    captures = load_captures()
+    assert "PLACEHOLDER" not in text
+    assert captures["commit"][:7] in text
+    assert "captures.json" in text
+    rows = [line for line in text.splitlines() if line.startswith("|")]
+    for name, entry in sorted(captures["scenarios"].items()):
+        matching = [row for row in rows if f"{name}.stderr" in row]
+        assert len(matching) == 1, f"{name}: {len(matching)} table rows"
+        cells = [cell.strip().strip("`") for cell in matching[0].strip().strip("|").split("|")]
+        assert str(entry["exit_status"]) in cells, (name, cells)
+        assert any(captures["rx_run_id"] in cell for cell in cells), (name, cells)
+
+
 # ---------------------------------------------------------------------------
 # parse_diagnostics on the fixtures
 
@@ -288,14 +320,17 @@ def test_fixture_is_raw_ascii_stderr(name: str) -> None:
 @pytest.mark.parametrize("name", sorted(FIXTURE_CASES))
 def test_fixture_parses_into_the_exact_diagnostics(name: str) -> None:
     case = FIXTURE_CASES[name]
-    assert case.module.parse_diagnostics(fixture_text(name), case.files) == case.expected
+    assert case.module.parse_diagnostics(fixture_text(name), scenario_files(name)) == case.expected
 
 
-@pytest.mark.parametrize("name", EDG_FIXTURES)
-def test_edg_column_needs_the_file_text(name: str) -> None:
-    # Without the file text the echo cannot be aligned, so the column is None and the rest is unchanged.
+@pytest.mark.parametrize("name", sorted(FIXTURE_CASES))
+def test_no_column_or_linker_place_without_the_file_text(name: str) -> None:
+    # Every column and linker place in the fixtures needs the file text to be checked against, so without it
+    # the column is None, a linker place is gone (without_files), and the rest is unchanged.
     case = FIXTURE_CASES[name]
-    expected = [dataclasses.replace(diagnostic, column=None) for diagnostic in case.expected]
+    expected = case.without_files
+    if expected is None:
+        expected = [dataclasses.replace(diagnostic, column=None) for diagnostic in case.expected]
     assert case.module.parse_diagnostics(fixture_text(name)) == expected
     assert case.module.parse_diagnostics(fixture_text(name), {}) == expected
 
@@ -311,19 +346,44 @@ def test_empty_stderr_parses_to_nothing(module: ModuleType) -> None:
 
 
 NVCC_LINES = [
+    # From capture nvcc_undefined_identifier: nvcc prints an EDG error without a number.
     pytest.param(
-        'main.cu(3): error #20: identifier "blockIdy" is undefined\n',
-        [compile_diag("error", "20", "main.cu", 3, None, 'identifier "blockIdy" is undefined')],
-        id="edg-error-number",
+        'main.cu(7): error: identifier "undefined_var" is undefined\n',
+        [compile_diag("error", None, "main.cu", 7, None, 'identifier "undefined_var" is undefined')],
+        id="edg-error",
     ),
+    # From capture nvcc_warning_177: an EDG warning carries its number with "-D".
+    pytest.param(
+        'kernels/scale.cuh(5): warning #177-D: variable "unused" was declared but never referenced\n',
+        [
+            compile_diag(
+                "warning", "177-D", "kernels/scale.cuh", 5, None, 'variable "unused" was declared but never referenced'
+            )
+        ],
+        id="edg-warning-number",
+    ),
+    # No capture shows an EDG number without "-D" from nvcc yet.
+    pytest.param(
+        'main.cu(3): error #20: identifier "x" is undefined\n',
+        [compile_diag("error", "20", "main.cu", 3, None, 'identifier "x" is undefined')],
+        id="edg-number-without-d",
+    ),
+    # No capture shows an EDG remark from nvcc yet.
     pytest.param(
         "main.cu(14): remark #186-D: pointless comparison of unsigned integer with zero\n",
         [compile_diag("note", "186-D", "main.cu", 14, None, "pointless comparison of unsigned integer with zero")],
         id="edg-remark-is-note",
     ),
+    # From capture nvcc_host_gcc_warning. nvcc keeps no GCC column (see the GCC column tests).
+    pytest.param(
+        "main.cu:16:19: warning: " + SIGN_COMPARE + " [-Wsign-compare]\n",
+        [compile_diag("warning", "-Wsign-compare", "main.cu", 16, None, SIGN_COMPARE)],
+        id="gcc-warning-flag",
+    ),
+    # No capture shows the GCC lines below from nvcc yet; nvcc keeps no GCC column.
     pytest.param(
         "main.cu:3:10: fatal error: kernels/missing.cuh: No such file or directory\ncompilation terminated.\n",
-        [compile_diag("error", None, "main.cu", 3, 10, "kernels/missing.cuh: No such file or directory")],
+        [compile_diag("error", None, "main.cu", 3, None, "kernels/missing.cuh: No such file or directory")],
         id="gcc-fatal-error",
     ),
     pytest.param(
@@ -335,7 +395,7 @@ NVCC_LINES = [
                 None,
                 "/usr/local/cuda/include/crt/host_config.h",
                 143,
-                2,
+                None,
                 "#error -- unsupported GNU version! gcc versions later than 12 are not supported!",
             )
         ],
@@ -351,14 +411,35 @@ NVCC_LINES = [
                 "-Wformat=",
                 "main.cu",
                 30,
-                17,
+                None,
                 "format '%d' expects argument of type 'int', but argument 2 has type 'size_t' "
                 "{aka 'long unsigned int'}",
             ),
-            compile_diag("note", None, "main.cu", 30, 24, "format string is defined here"),
+            compile_diag("note", None, "main.cu", 30, None, "format string is defined here"),
         ],
         id="gcc-warning-flag-with-equals-and-note",
     ),
+    pytest.param(
+        "main.cu:12:9: error: static assertion failed: size(3): error: too small\n",
+        [compile_diag("error", None, "main.cu", 12, None, "static assertion failed: size(3): error: too small")],
+        id="gcc-message-that-looks-like-edg",
+    ),
+    # From capture nvcc_ptxas_error.
+    pytest.param(
+        "ptxas error   : Entry function '_Z6reducePKfPfi' uses too much shared data (0x40000 bytes, 0x29000 max)\n",
+        [
+            compile_diag(
+                "error",
+                None,
+                None,
+                None,
+                None,
+                "Entry function '_Z6reducePKfPfi' uses too much shared data (0x40000 bytes, 0x29000 max)",
+            )
+        ],
+        id="ptxas-error",
+    ),
+    # No capture shows a ptxas warning or fatal line yet.
     pytest.param(
         "ptxas warning : Stack size for entry function '_Z6kernelPf' cannot be statically determined\n",
         [
@@ -378,11 +459,13 @@ NVCC_LINES = [
         [compile_diag("error", None, None, None, None, "Unresolved extern function '_Z6helperPfi'")],
         id="ptxas-fatal-is-error",
     ),
+    # The driver format is the one capture nvcc_fatal shows; this message is another driver fatal.
     pytest.param(
         "nvcc fatal   : Don't know what to do with 'kernels/scale.cuh'\n",
         [compile_diag("error", None, None, None, None, "Don't know what to do with 'kernels/scale.cuh'")],
         id="driver-fatal",
     ),
+    # No capture shows a catastrophic or internal EDG error from nvcc yet.
     pytest.param(
         'main.cu(2): catastrophic error: cannot open source file "kernels/scale.cuh"\n',
         [compile_diag("error", None, "main.cu", 2, None, 'cannot open source file "kernels/scale.cuh"')],
@@ -393,24 +476,27 @@ NVCC_LINES = [
         [compile_diag("error", None, "main.cu", 40, None, "assertion failed in lower_il")],
         id="edg-internal-error",
     ),
+    # From capture nvcc_linker_error: the undefined reference names a temporary cudafe1 file and a section
+    # offset, with no "/usr/bin/ld: " in front; the collect2 line follows.
     pytest.param(
-        "/usr/bin/ld: main.cpp:(.text+0x51): undefined reference to `x'\n",
-        [compile_diag("error", None, None, None, None, "undefined reference to `x'")],
+        "tmpxft_0013778e_00000000-6_main.cudafe1.cpp:(.text.startup+0x2c): " + HELPER_UNDEFINED + "\n"
+        "collect2: error: ld returned 1 exit status\n",
+        [
+            compile_diag("error", None, None, None, None, HELPER_UNDEFINED),
+            compile_diag("error", None, None, None, None, "ld returned 1 exit status"),
+        ],
         id="linker-message-after-the-last-colon",
     ),
+    # No capture shows this yet: a reference from a data section, with two ": " before the phrase.
     pytest.param(
-        "main.cu:7:0: warning: ignoring '#pragma unroll' [-Wunknown-pragmas]\n",
-        [compile_diag("warning", "-Wunknown-pragmas", "main.cu", 7, None, "ignoring '#pragma unroll'")],
-        id="gcc-column-zero-is-none",
-    ),
-    pytest.param(
-        "main.cu:12:9: error: static assertion failed: size(3): error: too small\n",
-        [compile_diag("error", None, "main.cu", 12, 9, "static assertion failed: size(3): error: too small")],
-        id="gcc-message-that-looks-like-edg",
+        "/usr/bin/ld: main.o:(.data.rel.ro+0x10): " + VTABLE_UNDEFINED + "\n",
+        [compile_diag("error", None, None, None, None, VTABLE_UNDEFINED)],
+        id="linker-two-colons-before-the-phrase",
     ),
 ]
 
 NVCPP_LINES = [
+    # The EDG format and the trailing tag are the ones capture nvcpp_edg_warning shows; this is another tag.
     pytest.param(
         '"kernels/scale.h", line 3: warning: variable "t" was set but never used [set_but_not_used]\n',
         [
@@ -420,25 +506,62 @@ NVCPP_LINES = [
         ],
         id="edg-warning-tag",
     ),
+    # From capture nvcpp_edg_error.
     pytest.param(
-        '"main.cpp", line 9: error: expected a ";"\n',
-        [compile_diag("error", None, "main.cpp", 9, None, 'expected a ";"')],
+        '"main.cpp", line 7: error: identifier "undefined_var" is undefined\n',
+        [compile_diag("error", None, "main.cpp", 7, None, 'identifier "undefined_var" is undefined')],
         id="edg-error-no-tag",
     ),
+    # From capture nvcpp_missing_include: nvc++ reports a missing header as an EDG catastrophic error.
+    pytest.param(
+        '"main.cpp", line 2: catastrophic error: cannot open source file "kernels/scale.h"\n',
+        [compile_diag("error", None, "main.cpp", 2, None, 'cannot open source file "kernels/scale.h"')],
+        id="edg-catastrophic-error",
+    ),
+    # No capture shows these EDG severities from nvc++ yet.
+    pytest.param(
+        '"main.cpp", line 5: remark: loop was vectorized\n',
+        [compile_diag("note", None, "main.cpp", 5, None, "loop was vectorized")],
+        id="edg-remark-is-note",
+    ),
+    pytest.param(
+        '"main.cpp", line 3: internal error: assertion failed at: "lower_il.c", line 12\n',
+        [compile_diag("error", None, "main.cpp", 3, None, 'assertion failed at: "lower_il.c", line 12')],
+        id="edg-internal-error",
+    ),
+    pytest.param(
+        '"main.cpp", line 1: command-line error: invalid macro definition: N=\n',
+        [compile_diag("error", None, "main.cpp", 1, None, "invalid macro definition: N=")],
+        id="edg-command-line-error",
+    ),
+    # From capture nvcpp_backend_error: one blank before "(main.cpp: 4)".
+    pytest.param(
+        "NVC++-S-1101-" + STACK_LIMIT + " (main.cpp: 4)\n",
+        [compile_diag("error", "S-1101", "main.cpp", 4, None, STACK_LIMIT)],
+        id="backend-severe-with-file",
+    ),
+    # From capture nvcpp_fatal_abort: two blanks before "(main.cpp: 8)". Any run of blanks separates the file,
+    # and the message keeps the text before them as printed, internal number included.
+    pytest.param(
+        "NVC++-F-0000-" + TINFO_ICE + "  (main.cpp: 8)\n",
+        [compile_diag("error", "F-0000", "main.cpp", 8, None, TINFO_ICE)],
+        id="backend-fatal-internal-error",
+    ),
+    # No capture shows the backend lines below yet.
     pytest.param(
         "NVC++-W-0155-Accelerator region ignored; see -Minfo messages (main.cpp: 12)\n",
         [compile_diag("warning", "W-0155", "main.cpp", 12, None, "Accelerator region ignored; see -Minfo messages")],
         id="backend-warning",
     ),
     pytest.param(
+        "NVC++-W-0155-Accelerator region ignored; see -Minfo messages\t(main.cpp: 12)\n",
+        [compile_diag("warning", "W-0155", "main.cpp", 12, None, "Accelerator region ignored; see -Minfo messages")],
+        id="backend-tab-before-the-file",
+    ),
+    pytest.param(
         "NVC++-I-0035-Predefined intrinsic max loses intrinsic property (main.cpp: 7)\n",
         [compile_diag("note", "I-0035", "main.cpp", 7, None, "Predefined intrinsic max loses intrinsic property")],
         id="backend-info-is-note",
-    ),
-    pytest.param(
-        "NVC++-F-0000-Internal compiler error. unsupported procedure (main.cpp: 40)\n",
-        [compile_diag("error", "F-0000", "main.cpp", 40, None, "Internal compiler error. unsupported procedure")],
-        id="backend-fatal-with-file",
     ),
     pytest.param(
         "NVC++-S-0155-Invalid accelerator region: branching into or out of region is not allowed\n",
@@ -455,39 +578,39 @@ NVCPP_LINES = [
         id="backend-severe-without-file",
     ),
     pytest.param(
-        "main.cpp:3:10: fatal error: kernels/missing.h: No such file or directory\n",
-        [compile_diag("error", None, "main.cpp", 3, 10, "kernels/missing.h: No such file or directory")],
-        id="gcc-fatal-error",
+        "NVC++-S-0155-Invalid accelerator region (main.cpp: 21)   \t\n",
+        [compile_diag("error", "S-0155", "main.cpp", 21, None, "Invalid accelerator region")],
+        id="backend-trailing-blanks-keep-the-file",
     ),
+    # No capture shows a collect2 line from nvc++ yet; its captured link failure ends with a pgacclnk line.
     pytest.param(
         "collect2: error: ld returned 1 exit status\n",
         [compile_diag("error", None, None, None, None, "ld returned 1 exit status")],
         id="collect2",
     ),
+    # From capture nvcpp_linker_error: the linker names main.cpp by its absolute workdir path and a line. With
+    # no files the path is no built file, so file and line are None (see the linker place tests).
     pytest.param(
-        '"main.cpp", line 5: remark: loop was vectorized\n',
-        [compile_diag("note", None, "main.cpp", 5, None, "loop was vectorized")],
-        id="edg-remark-is-note",
-    ),
-    pytest.param(
-        '"main.cpp", line 3: internal error: assertion failed at: "lower_il.c", line 12\n',
-        [compile_diag("error", None, "main.cpp", 3, None, 'assertion failed at: "lower_il.c", line 12')],
-        id="edg-internal-error",
-    ),
-    pytest.param(
-        '"main.cpp", line 1: command-line error: invalid macro definition: N=\n',
-        [compile_diag("error", None, "main.cpp", 1, None, "invalid macro definition: N=")],
-        id="edg-command-line-error",
-    ),
-    pytest.param(
-        "NVC++-S-0155-Invalid accelerator region (main.cpp: 21)   \t\n",
-        [compile_diag("error", "S-0155", "main.cpp", 21, None, "Invalid accelerator region")],
-        id="backend-trailing-blanks-keep-the-file",
-    ),
-    pytest.param(
-        "/usr/bin/ld: main.cpp:(.text+0x51): undefined reference to `x'\n",
-        [compile_diag("error", None, None, None, None, "undefined reference to `x'")],
+        "/mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-112105-desktop-8r113ei-p0-core-ba1a/work/"
+        "nvcpp_linker_error/main.cpp:21: " + HELPER_UNDEFINED + "\n",
+        [compile_diag("error", None, None, None, None, HELPER_UNDEFINED)],
         id="linker-message-after-the-last-colon",
+    ),
+    # No capture shows this yet: a reference from a data section, with two ": " before the phrase.
+    pytest.param(
+        "/usr/bin/ld: main.o:(.data.rel.ro+0x10): " + VTABLE_UNDEFINED + "\n",
+        [compile_diag("error", None, None, None, None, VTABLE_UNDEFINED)],
+        id="linker-two-colons-before-the-phrase",
+    ),
+    # No committed capture shows this. Exploratory probe nvcpp_probe_asm_int (dirty-tree rx
+    # 20260923-104618-desktop-8r113ei-p0-core-173d) showed LLVM's assembler naming the inline asm string, whose
+    # line and column index no built file, so there is no column; its echo and caret lines match no pattern.
+    pytest.param(
+        "<inline asm>:1:2: error: invalid instruction mnemonic 'bogus.op.s32'\n"
+        "        bogus.op.s32 %edi, %edi;\n"
+        "        ^~~~~~~~~~~~\n",
+        [compile_diag("error", None, "<inline asm>", 1, None, "invalid instruction mnemonic 'bogus.op.s32'")],
+        id="llvm-inline-asm-error",
     ),
 ]
 
@@ -503,38 +626,65 @@ def test_nvcpp_pattern(stderr: str, expected: list[Diagnostic]) -> None:
 
 
 SKIPPED_LINES = [
+    # From the captures.
     pytest.param(nvcc, '1 error detected in the compilation of "main.cu".', id="nvcc-error-summary"),
-    pytest.param(nvcc, '2 errors detected in the compilation of "main.cu".', id="nvcc-errors-summary"),
     pytest.param(
         nvcc, 'Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"', id="nvcc-remark"
     ),
-    pytest.param(nvcc, "main.cu: In function 'void launch(float*, int)':", id="nvcc-gcc-in-function"),
+    pytest.param(nvcc, "main.cu: In function 'int main()':", id="nvcc-gcc-in-function"),
+    pytest.param(nvcc, "   16 |     for (int i = 0; i < host.size(); i++) {", id="nvcc-gcc-echo"),
+    pytest.param(nvcc, "      |                 ~~^~~~~~~~~~~~~", id="nvcc-gcc-caret"),
+    pytest.param(
+        nvcc,
+        "/usr/bin/ld: /mnt/nvme10/joseph_ufl/tmp/tmpxft_0013778e_00000000-11_main.o: in function `main':",
+        id="nvcc-ld-context",
+    ),
+    pytest.param(nvcpp, '1 error detected in the compilation of "main.cpp".', id="nvcpp-error-summary"),
+    pytest.param(
+        nvcpp,
+        '1 catastrophic error detected in the compilation of "main.cpp".',
+        id="nvcpp-catastrophic-summary",
+    ),
+    pytest.param(nvcpp, "Compilation terminated.", id="nvcpp-terminated"),
+    pytest.param(
+        nvcpp,
+        'Remark: individual warnings can be suppressed with "--diag_suppress <warning-name>"',
+        id="nvcpp-remark",
+    ),
+    pytest.param(nvcpp, "NVC++/x86-64 Linux 24.11-0: compilation completed with severe errors", id="nvcpp-summary"),
+    pytest.param(nvcpp, "NVC++/x86-64 Linux 24.11-0: compilation aborted", id="nvcpp-summary-aborted"),
+    pytest.param(nvcpp, "saxpy(int, float, float const*, float*):", id="nvcpp-minfo-function"),
+    pytest.param(nvcpp, "main:", id="nvcpp-minfo-main"),
+    pytest.param(nvcpp, "      4, #omp target teams distribute parallel for", id="nvcpp-minfo-region"),
+    pytest.param(
+        nvcpp, '          4, Generating "nvkernel__Z5saxpyifPKfPf_F1L4_2" GPU kernel', id="nvcpp-minfo-kernel"
+    ),
+    pytest.param(
+        nvcpp,
+        "          6, Loop parallelized across teams and threads(128), schedule(static)",
+        id="nvcpp-minfo-parallel",
+    ),
+    pytest.param(nvcpp, "      6, Loop not vectorized/parallelized: not countable", id="nvcpp-minfo-colon"),
+    pytest.param(nvcpp, "         Generating map(to:x[:n]) ", id="nvcpp-minfo-map"),
+    pytest.param(nvcpp, "     15, Generated vector simd code for the loop", id="nvcpp-minfo-simd"),
+    pytest.param(
+        nvcpp,
+        "/usr/bin/ld: /mnt/nvme10/joseph_ufl/tmp/nvc++xwe4ef5MXtbZI.o: in function `main':",
+        id="nvcpp-ld-context",
+    ),
+    pytest.param(nvcpp, "pgacclnk: child process exit status 1: /usr/bin/ld", id="nvcpp-link-status"),
+    # No capture shows these yet.
+    pytest.param(nvcc, '2 errors detected in the compilation of "main.cu".', id="nvcc-errors-summary"),
     pytest.param(nvcc, "compilation terminated.", id="nvcc-gcc-terminated"),
-    pytest.param(nvcc, "   21 |     for (int i = 0; i < n; i++) {", id="nvcc-gcc-echo"),
-    pytest.param(nvcc, "      |                     ~~^~~", id="nvcc-gcc-caret"),
+    pytest.param(
+        nvcpp, "     21, Accelerator restriction: size of the GPU copy of tmp is unknown", id="nvcpp-minfo-note"
+    ),
     # Echoed source text never becomes a diagnostic, even when it looks like a linker or GCC line.
     pytest.param(nvcc, '   21 |     printf("undefined reference to %d", name);', id="nvcc-gcc-echo-linker-phrase"),
     pytest.param(nvcc, '    5 |     const char* msg = "a.c:1:2: error: boom";', id="nvcc-gcc-echo-gcc-line"),
     pytest.param(nvcc, '12345 | x("main.cu(3): error: y");', id="nvcc-gcc-echo-edg-line"),
     pytest.param(nvcpp, '   21 |     printf("undefined reference to %d", name);', id="nvcpp-gcc-echo-linker-phrase"),
     pytest.param(nvcpp, '    5 |     const char* msg = "a.c:1:2: error: boom";', id="nvcpp-gcc-echo-gcc-line"),
-    pytest.param(
-        nvcc, "/usr/bin/ld: /tmp/tmpxft_00002d4c_00000000-11_main.o: in function `main':", id="nvcc-ld-context"
-    ),
-    pytest.param(nvcpp, '1 error detected in the compilation of "main.cpp".', id="nvcpp-error-summary"),
-    pytest.param(
-        nvcpp,
-        'Remark: individual warnings can be suppressed with "--diag_suppress <warning-name>"',
-        id="nvcpp-remark",
-    ),
-    pytest.param(nvcpp, "NVC++/x86-64 Linux PLACEHOLDER: compilation completed with severe errors", id="nvcpp-summary"),
-    pytest.param(nvcpp, "saxpy(int, float, const float *, float *):", id="nvcpp-minfo-function"),
-    pytest.param(nvcpp, "      6, #omp target teams distribute parallel for", id="nvcpp-minfo-region"),
-    pytest.param(
-        nvcpp, "     21, Accelerator restriction: size of the GPU copy of tmp is unknown", id="nvcpp-minfo-note"
-    ),
-    pytest.param(nvcpp, "         Generating map(tofrom:y[:n])", id="nvcpp-minfo-map"),
-    pytest.param(nvcpp, "pgacclnk: child process exit status 1: /usr/bin/ld", id="nvcpp-link-status"),
 ]
 
 
@@ -546,7 +696,8 @@ def test_lines_matching_no_pattern_are_skipped(module: ModuleType, line: str) ->
 
 @pytest.mark.parametrize("module", [nvcc, nvcpp], ids=["nvcc", "nvcpp"])
 def test_a_gcc_warning_keeps_its_echo_out_of_the_diagnostics(module: ModuleType) -> None:
-    # A build that exits 0 with this warning must not carry a false linker error from the echoed source.
+    # A build that exits 0 with this warning must not carry a false linker error from the echoed source. With
+    # no files neither adapter keeps a GCC column.
     stderr = (
         "main.cu:21:37: warning: format '%d' expects argument of type 'int', but argument 2 has type "
         "'const char*' [-Wformat=]\n"
@@ -556,7 +707,7 @@ def test_a_gcc_warning_keeps_its_echo_out_of_the_diagnostics(module: ModuleType)
         "      |                                     int\n"
     )
     message = "format '%d' expects argument of type 'int', but argument 2 has type 'const char*'"
-    assert module.parse_diagnostics(stderr) == [compile_diag("warning", "-Wformat=", "main.cu", 21, 37, message)]
+    assert module.parse_diagnostics(stderr) == [compile_diag("warning", "-Wformat=", "main.cu", 21, None, message)]
 
 
 @pytest.mark.parametrize("module", [nvcc, nvcpp], ids=["nvcc", "nvcpp"])
@@ -571,6 +722,177 @@ def test_a_long_line_with_many_colons_parses_in_linear_time(module: ModuleType) 
         compile_diag("error", None, None, None, None, with_phrase[len("x: ") :])
     ]
     assert time.monotonic() - began < 2.0
+
+
+def test_a_backend_line_with_a_long_blank_run_parses_in_linear_time() -> None:
+    # Any run of blanks may separate "(main.cpp: 3)" from the message (capture nvcpp_fatal_abort has two). A
+    # separator pattern that starts at every blank of a long run rescans the run each time and took seconds here.
+    message = "a" + " " * 50_000 + "b"
+    began = time.monotonic()
+    assert nvcpp.parse_diagnostics(f"NVC++-S-0155-{message} (main.cpp: 3)\n") == [
+        compile_diag("error", "S-0155", "main.cpp", 3, None, message)
+    ]
+    assert time.monotonic() - began < 2.0
+
+
+# ---------------------------------------------------------------------------
+# The GCC column
+#
+# Under nvcc a GCC diagnostic never keeps GCC's column. GCC preprocesses a .cu file as it is but compiles the
+# host code cudafe1 regenerated from it, and echoes the line from disk either way (capture
+# nvcc_host_gcc_warning), so nothing in stderr shows whether a column indexes the named file. nvc++ compiles
+# the built files itself: it keeps GCC's column for a built file (a key of `files`) and drops it anywhere
+# else. No committed capture shows a GCC style line from nvc++ yet.
+
+# A host .cpp file; line 5 declares a variable it never uses, and GCC's column 9 is the 'u'.
+HOST_CPP = "#include <cstdio>\n\nint main()\n{\n    int u = 0;\n    return 0;\n}\n"
+UNUSED = "unused variable 'u'"
+
+
+def gcc_unused_stderr(column: int = 9) -> str:
+    """Return GCC's -Wunused-variable warning at main.cpp:5:<column>, with its source echo and caret lines."""
+    return f"main.cpp:5:{column}: warning: {UNUSED} [-Wunused-variable]\n    5 |     int u = 0;\n      |         ^\n"
+
+
+def gcc_unused(column: int | None) -> Diagnostic:
+    """Return the Diagnostic of gcc_unused_stderr with `column`."""
+    return compile_diag("warning", "-Wunused-variable", "main.cpp", 5, column, UNUSED)
+
+
+@pytest.mark.parametrize(
+    "files",
+    [{}, {"main.cpp": HOST_CPP}, {"main.cpp": HOST_CPP.replace("int u = 0;", "int u = 1;")}],
+    ids=["no-files", "echo-is-the-file-line", "echo-differs"],
+)
+def test_nvcc_gcc_column_is_always_none(files: dict[str, str]) -> None:
+    # No capture shows a GCC line for a host .cpp source built by nvcc yet; even an echo equal to the file line
+    # keeps no column (see the next test for why).
+    assert nvcc.parse_diagnostics(gcc_unused_stderr(), files) == [gcc_unused(None)]
+
+
+def test_nvcc_gcc_column_from_cudafe1_code_is_none_although_the_echo_is_the_file_line() -> None:
+    # Capture nvcc_host_gcc_warning: GCC echoes line 16 of main.cu exactly as the file holds it, yet its column
+    # 19 counts in cudafe1's text, where the line lost its indent; in main.cu it would point at the ';', not at
+    # the '<' GCC marks (column 23). So an echo equal to the file line does not show that a column is right.
+    files = scenario_files("nvcc_host_gcc_warning")
+    stderr = fixture_text("nvcc_host_gcc_warning")
+    echo = stderr.split("\n")[2].split("| ", 1)[1]
+    assert echo == files["main.cu"].split("\n")[15]
+    assert nvcc.parse_diagnostics(stderr, files) == [
+        compile_diag("warning", "-Wsign-compare", "main.cu", 16, None, SIGN_COMPARE)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("files", "column"),
+    [
+        pytest.param({}, None, id="no-files"),
+        pytest.param({"other.cpp": HOST_CPP}, None, id="not-a-built-file"),
+        pytest.param({"main.cpp": HOST_CPP}, 9, id="built-file"),
+        # nvc++ builds the file as it is, so the column is kept as printed without comparing the echo.
+        pytest.param({"main.cpp": HOST_CPP.replace("int u = 0;", "int u = 1;")}, 9, id="built-file-echo-differs"),
+    ],
+)
+def test_nvcpp_gcc_column_is_kept_only_on_a_built_file(files: dict[str, str], column: int | None) -> None:
+    assert nvcpp.parse_diagnostics(gcc_unused_stderr(), files) == [gcc_unused(column)]
+
+
+def test_nvcpp_gcc_column_zero_is_none() -> None:
+    # GCC prints column 0 when it has no column; on a built file, where nvc++ keeps GCC's column, it is None.
+    assert nvcpp.parse_diagnostics(gcc_unused_stderr(column=0), {"main.cpp": HOST_CPP}) == [gcc_unused(None)]
+
+
+def test_nvcpp_inline_asm_error_has_no_column_with_the_files() -> None:
+    # Exploratory probe nvcpp_probe_asm_int (see NVCPP_LINES): '<inline asm>' is no built file, so even with the
+    # files there is no column; file and line stay as printed.
+    stderr = "<inline asm>:1:2: error: invalid instruction mnemonic 'bogus.op.s32'\n"
+    assert nvcpp.parse_diagnostics(stderr, {"main.cpp": HOST_CPP}) == [
+        compile_diag("error", None, "<inline asm>", 1, None, "invalid instruction mnemonic 'bogus.op.s32'")
+    ]
+
+
+# ---------------------------------------------------------------------------
+# The linker's place
+#
+# An undefined reference may name the source file and line of the call (capture nvcpp_linker_error). The place
+# is kept only as a built file: the path is a key of `files` or ends with "/" and a key (the longest key wins),
+# and the line is in that file. Otherwise file and line are None. The linker gives no column.
+
+# Line 7 calls the undefined helper.
+LINKED = "#include <cstdio>\n\nvoid helper(float *data, int n);\n\nint main()\n{\n    helper(0, 1);\n}\n"
+
+
+@pytest.mark.parametrize(
+    ("place", "files", "file", "line"),
+    [
+        # As in capture nvcpp_linker_error, with a shorter workdir.
+        pytest.param("/work/run/main.cpp:7", {"main.cpp": LINKED}, "main.cpp", 7, id="absolute-path"),
+        # No capture shows the three places below yet.
+        pytest.param("main.cpp:7", {"main.cpp": LINKED}, "main.cpp", 7, id="relative-path"),
+        pytest.param("/usr/bin/ld: /work/run/main.cpp:7", {"main.cpp": LINKED}, "main.cpp", 7, id="ld-in-front"),
+        pytest.param(
+            "/work/run/src/main.cpp:7",
+            {"main.cpp": "int x;\n", "src/main.cpp": LINKED},
+            "src/main.cpp",
+            7,
+            id="longest-key",
+        ),
+        pytest.param("/work/run/xmain.cpp:7", {"main.cpp": LINKED}, None, None, id="no-path-boundary"),
+        pytest.param("/work/run/other.cpp:7", {"main.cpp": LINKED}, None, None, id="not-a-built-file"),
+        pytest.param("/work/run/main.cpp:99", {"main.cpp": LINKED}, None, None, id="line-past-the-end"),
+        pytest.param("/work/run/main.cpp:7", {}, None, None, id="no-files"),
+        # As in capture nvcc_linker_error: a temporary file and a section offset.
+        pytest.param(
+            "tmpxft_0013778e_00000000-6_main.cudafe1.cpp:(.text.startup+0x2c)",
+            {"main.cpp": LINKED},
+            None,
+            None,
+            id="section-offset",
+        ),
+    ],
+)
+@pytest.mark.parametrize("module", [nvcc, nvcpp], ids=["nvcc", "nvcpp"])
+def test_linker_place_is_kept_only_as_a_built_file(
+    module: ModuleType, place: str, files: dict[str, str], file: str | None, line: int | None
+) -> None:
+    stderr = f"{place}: {HELPER_UNDEFINED}\n"
+    assert module.parse_diagnostics(stderr, files) == [compile_diag("error", None, file, line, None, HELPER_UNDEFINED)]
+
+
+# ---------------------------------------------------------------------------
+# Numbers too long to be a line
+
+HUGE = "5" * 5000
+
+
+@pytest.mark.parametrize(
+    ("module", "stderr", "expected"),
+    [
+        pytest.param(nvcc, f"main.cu({HUGE}): error: x\n", [], id="nvcc-edg-line"),
+        pytest.param(nvcc, f"main.cu:1:{HUGE}: error: x\n", [], id="nvcc-gcc-column"),
+        pytest.param(nvcc, f"main.cu:{HUGE}:1: error: x\n", [], id="nvcc-gcc-line"),
+        pytest.param(nvcpp, f'"main.cpp", line {HUGE}: error: x\n', [], id="nvcpp-edg-line"),
+        pytest.param(nvcpp, f"main.cpp:1:{HUGE}: error: x\n", [], id="nvcpp-gcc-column"),
+        pytest.param(
+            nvcpp,
+            f"NVC++-S-0155-x (main.cpp: {HUGE})\n",
+            [compile_diag("error", "S-0155", None, None, None, f"x (main.cpp: {HUGE})")],
+            id="nvcpp-backend-line",
+        ),
+        pytest.param(
+            nvcpp,
+            f"/work/main.cpp:{HUGE}: {HELPER_UNDEFINED}\n",
+            [compile_diag("error", None, None, None, None, HELPER_UNDEFINED)],
+            id="nvcpp-linker-line",
+        ),
+    ],
+)
+def test_a_number_past_ten_digits_is_never_a_line_or_column(
+    module: ModuleType, stderr: str, expected: list[Diagnostic]
+) -> None:
+    # Model-controlled text can reach stderr, and int() refuses a digit string past 4300 digits. Every line
+    # and column is read up to 10 digits, enough for any #line (at most 2147483647), so parsing never raises.
+    assert module.parse_diagnostics(stderr, {"main.cu": "int x;\n", "main.cpp": "int x;\n"}) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -628,9 +950,19 @@ def test_column_is_none_when_the_echo_does_not_match_the_file(tool: str) -> None
 
 @pytest.mark.parametrize("tool", TOOLS)
 def test_column_is_none_past_the_end_of_the_file(tool: str) -> None:
+    # Line 9 of a two-line file: the rule is about lines; a caret past the end of a line is the next test.
     stderr = edg_header(tool, 9, 'identifier "b" is undefined') + "  int a = b;\n" + " " * 10 + "^\n"
     expected = [edg_error(tool, 9, None, 'identifier "b" is undefined')]
     assert edg_parse(tool, stderr, "int x;\nint a = b;\n") == expected
+
+
+@pytest.mark.parametrize("tool", TOOLS)
+def test_a_caret_one_past_the_end_of_the_line_keeps_its_column(tool: str) -> None:
+    # As in capture nvcpp_missing_include: the caret sits after the closing quote. Line 2 has 14 characters and
+    # the echo prefix is 2, so caret index 16 gives column 15, which the echo match keeps as the compiler gave it.
+    stderr = edg_header(tool, 2, 'cannot open source file "x.h"') + '  #include "x.h"\n' + " " * 16 + "^\n"
+    expected = [edg_error(tool, 2, 15, 'cannot open source file "x.h"')]
+    assert edg_parse(tool, stderr, '#include <a>\n#include "x.h"\n') == expected
 
 
 @pytest.mark.parametrize("tool", TOOLS)
@@ -672,7 +1004,7 @@ OVERLOAD_SOURCE = "void foo(float *p);\nint main() {\n  int *p = 0;\n  foo(p);\n
 @pytest.mark.parametrize("tool", TOOLS)
 def test_continuation_lines_join_the_message_and_the_column_still_counts(tool: str) -> None:
     # EDG prints supplementary lines between the diagnostic and the echo; the echo prefix is 2 here,
-    # so caret index 4 - 2 + 1 = column 3, the 'f' in '  foo(p);'.
+    # so caret index 4 - 2 + 1 = column 3, the 'f' in '  foo(p);'. No capture shows continuation lines yet.
     stderr = (
         edg_header(tool, 4, OVERLOAD)
         + "            argument types are: (int *)\n"
@@ -1042,7 +1374,9 @@ def test_build_parses_diagnostics_with_the_files_and_keeps_stderr_out(preset: st
     fixture = FIXTURE_CASES[case.error_fixture]
     stderr = fixture_text(case.error_fixture)
     workdir = make_workdir(tmp_path)
-    result = case.factory(runner=FakeRunner(returncode=1, stderr=stderr)).build(fixture.files, workdir)
+    result = case.factory(runner=FakeRunner(returncode=1, stderr=stderr)).build(
+        scenario_files(case.error_fixture), workdir
+    )
     assert isinstance(result, BuildResult)
     assert [f.name for f in dataclasses.fields(result)] == ["artifact", "diagnostics", "stderr_ref"]
     assert result.diagnostics == fixture.expected  # the exact columns show the files reached the parser
@@ -1121,7 +1455,7 @@ def test_warnings_on_success_add_no_error(preset: str, tmp_path: Path) -> None:
     case = PRESETS[preset]
     fixture = FIXTURE_CASES[case.warning_fixture]
     runner = FakeRunner(stderr=fixture_text(case.warning_fixture), creates_output=True)
-    result = case.factory(runner=runner).build(fixture.files, make_workdir(tmp_path))
+    result = case.factory(runner=runner).build(scenario_files(case.warning_fixture), make_workdir(tmp_path))
     assert result.diagnostics == fixture.expected
     assert result.artifact is not None
 
@@ -1141,7 +1475,7 @@ def test_exit_status_fallback_follows_parsed_warnings(preset: str, tmp_path: Pat
     case = PRESETS[preset]
     fixture = FIXTURE_CASES[case.warning_fixture]
     runner = FakeRunner(returncode=2, stderr=fixture_text(case.warning_fixture))
-    result = case.factory(runner=runner).build(fixture.files, make_workdir(tmp_path))
+    result = case.factory(runner=runner).build(scenario_files(case.warning_fixture), make_workdir(tmp_path))
     assert result.diagnostics[:-1] == fixture.expected
     exit_status_check(case, result.diagnostics[-1], "2")
 
@@ -1151,7 +1485,7 @@ def test_no_exit_status_error_when_an_error_was_parsed(preset: str, tmp_path: Pa
     case = PRESETS[preset]
     fixture = FIXTURE_CASES[case.error_fixture]
     runner = FakeRunner(returncode=2, stderr=fixture_text(case.error_fixture))
-    result = case.factory(runner=runner).build(fixture.files, make_workdir(tmp_path))
+    result = case.factory(runner=runner).build(scenario_files(case.error_fixture), make_workdir(tmp_path))
     assert result.diagnostics == fixture.expected
     assert all(diagnostic.code != "exit-status" for diagnostic in result.diagnostics)
 
@@ -1176,7 +1510,7 @@ def test_a_timeout_is_reported_even_after_a_parsed_error(preset: str, tmp_path: 
     fixture = FIXTURE_CASES[case.error_fixture]
     stderr = fixture_text(case.error_fixture) + "timed out after 600 s\n"
     runner = FakeRunner(returncode=-1, stderr=stderr)
-    result = case.factory(runner=runner).build(fixture.files, make_workdir(tmp_path))
+    result = case.factory(runner=runner).build(scenario_files(case.error_fixture), make_workdir(tmp_path))
     assert result.diagnostics[:-1] == fixture.expected
     last = result.diagnostics[-1]
     assert (last.code, last.severity) == ("exit-status", "error")
@@ -1184,10 +1518,11 @@ def test_a_timeout_is_reported_even_after_a_parsed_error(preset: str, tmp_path: 
 
 
 def test_a_missing_header_reaches_the_model_as_a_located_error(tmp_path: Path) -> None:
-    # nvc++ reports a missing header as an EDG catastrophic error; it replaces the exit-status fallback.
+    # Capture nvcpp_missing_include: nvc++ reports a missing header as an EDG catastrophic error, which replaces
+    # the exit-status fallback.
     fixture = FIXTURE_CASES["nvcpp_missing_include"]
     runner = FakeRunner(returncode=2, stderr=fixture_text("nvcpp_missing_include"))
-    result = nvcpp.NvcppCc80(runner=runner).build(fixture.files, make_workdir(tmp_path))
+    result = nvcpp.NvcppCc80(runner=runner).build(scenario_files("nvcpp_missing_include"), make_workdir(tmp_path))
     assert result.diagnostics == fixture.expected
     assert result.artifact is None
 

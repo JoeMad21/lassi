@@ -1,0 +1,363 @@
+{
+  "commit": "ebe6b075c84d44a83d628b5227f1ecb3a5c2a1bf",
+  "date": "2026-09-23T11:21:06-07:00",
+  "dirty": false,
+  "host": "alpha01",
+  "rx_run_id": "20260923-112105-desktop-8r113ei-p0-core-ba1a",
+  "scenarios": {
+    "nvcc_clean": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3/bin/nvcc",
+        "-std=c++14",
+        "-Xcompiler",
+        "-Wall",
+        "-arch=sm_80",
+        "-O3",
+        "-o",
+        "main",
+        "main.cu"
+      ],
+      "diagnostics": 0,
+      "exit_status": 0,
+      "overrides": {},
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "toolchain": "nvcc-sm80"
+    },
+    "nvcc_fatal": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3/bin/nvcc",
+        "-std=c++14",
+        "-Xcompiler",
+        "-Wall",
+        "-arch=sm_35",
+        "-O3",
+        "-o",
+        "main",
+        "main.cu"
+      ],
+      "diagnostics": 1,
+      "exit_status": 1,
+      "overrides": {
+        "ARCH": "sm_35"
+      },
+      "stderr_bytes": 74,
+      "stderr_sha256": "2a69baf5299bdf2c2eee1fae67575d8d439e24cf4ea53e777bacdd6efb5c37b4",
+      "toolchain": "nvcc-sm80"
+    },
+    "nvcc_host_gcc_warning": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3/bin/nvcc",
+        "-std=c++14",
+        "-Xcompiler",
+        "-Wall",
+        "-arch=sm_80",
+        "-O3",
+        "-o",
+        "main",
+        "main.cu"
+      ],
+      "diagnostics": 1,
+      "exit_status": 0,
+      "overrides": {},
+      "stderr_bytes": 295,
+      "stderr_sha256": "629d05032c967aca6106ef6b58a66af2463eae83990ffa0514116f0c54e9061b",
+      "toolchain": "nvcc-sm80"
+    },
+    "nvcc_linker_error": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3/bin/nvcc",
+        "-std=c++14",
+        "-Xcompiler",
+        "-Wall",
+        "-arch=sm_80",
+        "-O3",
+        "-o",
+        "main",
+        "main.cu"
+      ],
+      "diagnostics": 2,
+      "exit_status": 1,
+      "overrides": {},
+      "stderr_bytes": 250,
+      "stderr_sha256": "1a1b01c20b33940ad9be29b5b9980ae42071134280d7f6d6bbf9eb9facb7e66c",
+      "toolchain": "nvcc-sm80"
+    },
+    "nvcc_ptxas_error": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3/bin/nvcc",
+        "-std=c++14",
+        "-Xcompiler",
+        "-Wall",
+        "-arch=sm_80",
+        "-O3",
+        "-o",
+        "main",
+        "main.cu"
+      ],
+      "diagnostics": 1,
+      "exit_status": 255,
+      "overrides": {},
+      "stderr_bytes": 104,
+      "stderr_sha256": "babd28bab2ed8dc2acff03de82e6fd1811cefae60efe89cdb1072aef80d1b657",
+      "toolchain": "nvcc-sm80"
+    },
+    "nvcc_undefined_identifier": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3/bin/nvcc",
+        "-std=c++14",
+        "-Xcompiler",
+        "-Wall",
+        "-arch=sm_80",
+        "-O3",
+        "-o",
+        "main",
+        "main.cu"
+      ],
+      "diagnostics": 1,
+      "exit_status": 2,
+      "overrides": {},
+      "stderr_bytes": 183,
+      "stderr_sha256": "46086b78deb8a4b23a9b26ea50b62d16c3acbd868b05f40bf313a397d72132e7",
+      "toolchain": "nvcc-sm80"
+    },
+    "nvcc_warning_177": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3/bin/nvcc",
+        "-std=c++14",
+        "-Xcompiler",
+        "-Wall",
+        "-arch=sm_80",
+        "-O3",
+        "-o",
+        "main",
+        "main.cu"
+      ],
+      "diagnostics": 1,
+      "exit_status": 0,
+      "overrides": {},
+      "stderr_bytes": 211,
+      "stderr_sha256": "ac543cf7f0594b454c67fee0bbd26ba4fde72f2c267d01cfeafa5a7b5a6354f2",
+      "toolchain": "nvcc-sm80"
+    },
+    "nvcpp_backend_error": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/Linux_x86_64/24.11/compilers/bin/nvc++",
+        "-Wall",
+        "-O3",
+        "-Minfo",
+        "-mp=gpu",
+        "-gpu=cc80",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 1,
+      "exit_status": 2,
+      "overrides": {},
+      "stderr_bytes": 710,
+      "stderr_sha256": "19663c010b87b0764a5affc961aa4457821abb204e078e3237988b36164a9724",
+      "toolchain": "nvcpp-cc80"
+    },
+    "nvcpp_edg_error": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/Linux_x86_64/24.11/compilers/bin/nvc++",
+        "-Wall",
+        "-O3",
+        "-Minfo",
+        "-mp=gpu",
+        "-gpu=cc80",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 1,
+      "exit_status": 2,
+      "overrides": {},
+      "stderr_bytes": 192,
+      "stderr_sha256": "615849f517770a5e4fa482bebe22370249e6fb6c74cb8ba07f95c7de00835c92",
+      "toolchain": "nvcpp-cc80"
+    },
+    "nvcpp_edg_warning": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/Linux_x86_64/24.11/compilers/bin/nvc++",
+        "-Wall",
+        "-O3",
+        "-Minfo",
+        "-mp=gpu",
+        "-gpu=cc80",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 1,
+      "exit_status": 0,
+      "overrides": {},
+      "stderr_bytes": 717,
+      "stderr_sha256": "be52e33da720723fd6acfcf970fafe71439d78062e3fd3d5d8e9dc977e107f4e",
+      "toolchain": "nvcpp-cc80"
+    },
+    "nvcpp_fatal_abort": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/Linux_x86_64/24.11/compilers/bin/nvc++",
+        "-Wall",
+        "-O3",
+        "-Minfo",
+        "-mp=gpu",
+        "-gpu=cc80",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 1,
+      "exit_status": 2,
+      "overrides": {},
+      "stderr_bytes": 177,
+      "stderr_sha256": "b01be694b94055591fa50ef111a8d6f0e416e9a572ff6994d42997a9cb6d6531",
+      "toolchain": "nvcpp-cc80"
+    },
+    "nvcpp_linker_error": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/Linux_x86_64/24.11/compilers/bin/nvc++",
+        "-Wall",
+        "-O3",
+        "-Minfo",
+        "-mp=gpu",
+        "-gpu=cc80",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 1,
+      "exit_status": 2,
+      "overrides": {},
+      "stderr_bytes": 796,
+      "stderr_sha256": "fa0e4260de94a8b8f5d1729fd42acae851b46502de603bcff48d36805f71ffe6",
+      "toolchain": "nvcpp-cc80"
+    },
+    "nvcpp_minfo_clean": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/Linux_x86_64/24.11/compilers/bin/nvc++",
+        "-Wall",
+        "-O3",
+        "-Minfo",
+        "-mp=gpu",
+        "-gpu=cc80",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 0,
+      "exit_status": 0,
+      "overrides": {},
+      "stderr_bytes": 485,
+      "stderr_sha256": "af6ca60998e7c680f0e997ba89e5af7bb3a85a155053378ee2bbcc952fc546e1",
+      "toolchain": "nvcpp-cc80"
+    },
+    "nvcpp_missing_include": {
+      "argv": [
+        "/mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/Linux_x86_64/24.11/compilers/bin/nvc++",
+        "-Wall",
+        "-O3",
+        "-Minfo",
+        "-mp=gpu",
+        "-gpu=cc80",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 1,
+      "exit_status": 2,
+      "overrides": {},
+      "stderr_bytes": 230,
+      "stderr_sha256": "f8dedc149352495100f8ead5b96924e8bc9ee6d4b24f5b627d5df037ad30966a",
+      "toolchain": "nvcpp-cc80"
+    }
+  },
+  "snapshot_of": null,
+  "toolchains": {
+    "nvcc-sm80": {
+      "environment": [
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "PATH",
+        "TMPDIR"
+      ],
+      "executable": "/mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3/bin/nvcc",
+      "locale": {
+        "LANG": "C",
+        "LC_ALL": "C"
+      },
+      "pin_files": {
+        "cuda": {
+          "EXPECT_VERSION": "Cuda compilation tools, release 12.6, V12.6.85",
+          "INSTALL_FLAGS": "--silent --toolkit --no-opengl-libs --no-man-page --no-drm --override",
+          "MD5": "29d297908c72b810c9ceaa5177142abd",
+          "NAME": "cuda",
+          "PREFIX_NAME": "cuda@12.6.3",
+          "URL": "https://developer.download.nvidia.com/compute/cuda/12.6.3/local_installers/cuda_12.6.3_560.35.05_linux.run",
+          "VERSION": "12.6.3"
+        }
+      },
+      "pins": {
+        "cuda": "12.6.3"
+      },
+      "version": [
+        "nvcc: NVIDIA (R) Cuda compiler driver",
+        "Copyright (c) 2005-2024 NVIDIA Corporation",
+        "Built on Tue_Oct_29_23:50:19_PDT_2024",
+        "Cuda compilation tools, release 12.6, V12.6.85",
+        "Build cuda_12.6.r12.6/compiler.35059454_0"
+      ],
+      "version_exit_status": 0
+    },
+    "nvcpp-cc80": {
+      "environment": [
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "NVHPC_CUDA_HOME",
+        "PATH",
+        "TMPDIR"
+      ],
+      "executable": "/mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/Linux_x86_64/24.11/compilers/bin/nvc++",
+      "locale": {
+        "LANG": "C",
+        "LC_ALL": "C"
+      },
+      "pin_files": {
+        "cuda": {
+          "EXPECT_VERSION": "Cuda compilation tools, release 12.6, V12.6.85",
+          "INSTALL_FLAGS": "--silent --toolkit --no-opengl-libs --no-man-page --no-drm --override",
+          "MD5": "29d297908c72b810c9ceaa5177142abd",
+          "NAME": "cuda",
+          "PREFIX_NAME": "cuda@12.6.3",
+          "URL": "https://developer.download.nvidia.com/compute/cuda/12.6.3/local_installers/cuda_12.6.3_560.35.05_linux.run",
+          "VERSION": "12.6.3"
+        },
+        "nvhpc": {
+          "COMPILER_SUBDIR": "Linux_x86_64/24.11/compilers/bin",
+          "CUDA_HOME_FROM": "cuda@12.6.3",
+          "EXPECT_VERSION": "nvc++ 24.11",
+          "INSTALL_FLAGS": "NVHPC_SILENT=true NVHPC_INSTALL_TYPE=single",
+          "NAME": "nvhpc",
+          "PREFIX_NAME": "nvhpc@24.11",
+          "SHA256": "39408ac062573936e0d41f34530ab065998ef4b85b6bcccb59287d71135a1920",
+          "URL": "https://developer.download.nvidia.com/hpc-sdk/24.11/nvhpc_2024_2411_Linux_x86_64_cuda_12.6.tar.gz",
+          "VERSION": "24.11"
+        }
+      },
+      "pins": {
+        "cuda": "12.6.3",
+        "nvhpc": "24.11"
+      },
+      "version": [
+        "nvc++ 24.11-0 64-bit target on x86-64 Linux -tp znver4",
+        "NVIDIA Compilers and Tools",
+        "Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES.  All rights reserved."
+      ],
+      "version_exit_status": 0
+    }
+  }
+}

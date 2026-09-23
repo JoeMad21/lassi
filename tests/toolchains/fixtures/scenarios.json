@@ -5,11 +5,11 @@
   },
   "nvcc_fatal": {
     "arch": "sm_35",
-    "scenario": "nvcc driver fatal: the clean program with the ARCH override sm_35, which CUDA 12.6 does not define",
+    "scenario": "nvcc driver fatal: the clean program built with the ARCH override sm_35. In capture rx 20260923-112105-desktop-8r113ei-p0-core-ba1a nvcc rejected sm_35 as not defined for option gpu-architecture (exit status 1)",
     "toolchain": "nvcc-sm80"
   },
   "nvcc_host_gcc_warning": {
-    "scenario": "Host GCC -Wsign-compare warning (int index against size()) through -Xcompiler -Wall. The loop line is indented on purpose: GCC compiles the host code cudafe1 regenerates and counts its column in that text (in exploratory captures the loop line lost its indent there), so the column does not index main.cu; file and line do",
+    "scenario": "Host GCC -Wsign-compare warning through -Xcompiler -Wall: main compares an int loop index with std::vector size() on an indented line. In capture rx 20260923-112105-desktop-8r113ei-p0-core-ba1a GCC named main.cu:16:19 and echoed line 16 as main.cu holds it, but column 19 is the '<' of the unindented line cudafe1 regenerated ('<' is column 23 in main.cu), so file and line index main.cu and the column does not (exit status 0)",
     "toolchain": "nvcc-sm80"
   },
   "nvcc_linker_error": {
@@ -17,7 +17,7 @@
     "toolchain": "nvcc-sm80"
   },
   "nvcc_ptxas_error": {
-    "scenario": "ptxas error: a kernel with 256 KiB of static __shared__ data, more than an sm_80 thread block can hold. The planned 64 KiB array built cleanly in exploratory captures, so the array is larger",
+    "scenario": "ptxas error: a kernel declares a static __shared__ array of 65536 floats (256 KiB), more than an sm_80 thread block can hold. In capture rx 20260923-112105-desktop-8r113ei-p0-core-ba1a ptxas reported too much shared data (0x40000 bytes, 0x29000 max) with no file or line (exit status 255)",
     "toolchain": "nvcc-sm80"
   },
   "nvcc_undefined_identifier": {
@@ -29,7 +29,7 @@
     "toolchain": "nvcc-sm80"
   },
   "nvcpp_backend_error": {
-    "scenario": "NVC++-S backend error with -Minfo and the severe-errors summary: a 1 MiB private array per thread in a target loop is over the GPU stack limit. S-0155, the planned example, was not reproduced in exploratory captures (a VLA and a function-pointer call both built)",
+    "scenario": "NVC++-S backend error: each iteration of an OpenMP target loop declares a private array of 262144 floats (1 MiB), over the GPU stack limit. In capture rx 20260923-112105-desktop-8r113ei-p0-core-ba1a nvc++ printed NVC++-S-1101 naming (main.cpp: 4), the line before the pragma, then the -Minfo report and the severe-errors summary (exit status 2)",
     "toolchain": "nvcpp-cc80"
   },
   "nvcpp_edg_error": {
@@ -41,7 +41,7 @@
     "toolchain": "nvcpp-cc80"
   },
   "nvcpp_fatal_abort": {
-    "scenario": "NVC++-F abort: a target construct nested in a target loop. In exploratory captures this gave an F-class internal compiler error whose line carries (main.cpp: 8), then the compilation aborted summary; F-0704, the planned example, was not produced, since S errors ended in the severe-errors summary instead",
+    "scenario": "NVC++-F abort: an OpenMP target construct nested inside a target teams distribute parallel for loop. In capture rx 20260923-112105-desktop-8r113ei-p0-core-ba1a nvc++ printed an NVC++-F-0000 internal compiler error naming (main.cpp: 8), the statement under the nested pragma, then the compilation aborted summary (exit status 2)",
     "toolchain": "nvcpp-cc80"
   },
   "nvcpp_linker_error": {

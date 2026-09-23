@@ -1,5 +1,5 @@
-"main.cpp", line 8: error: identifier "undefined_var" is undefined
-      y[i] = a * x[i] + undefined_var;
-                        ^
+"main.cpp", line 7: error: identifier "undefined_var" is undefined
+          y[i] = a * x[i] + undefined_var;
+                            ^
 
 1 error detected in the compilation of "main.cpp".

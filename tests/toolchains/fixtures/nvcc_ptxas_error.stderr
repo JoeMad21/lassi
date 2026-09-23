@@ -1,1 +1,1 @@
-ptxas error   : Entry function '_Z6reducePKfPfi' uses too much shared data (0x10000 bytes, 0xc000 max)
+ptxas error   : Entry function '_Z6reducePKfPfi' uses too much shared data (0x40000 bytes, 0x29000 max)

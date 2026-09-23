@@ -8,11 +8,12 @@ compile flags from the bible (Source Papers, LASSI), unchanged:
 NvccSm80 is the preset with ARCH "sm_80". parse_diagnostics reads the stderr
 of the CUDA 12 EDG front end, the host GCC (through -Xcompiler -Wall), the
 nvcc driver, ptxas, and the linker; the patterns below each show a sample
-line.
+line, from the captures in tests/toolchains/fixtures/ where one shows it.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections.abc import Mapping, Sequence
 
@@ -28,30 +29,35 @@ from lassi.toolchains._stderr import (
     LinePattern,
     compile_diagnostic,
     error_from_message,
+    fold_edg_lines,
     parse_stderr,
 )
 
-# EDG front end: "<file>(<line>): <severity>[ #<number>[-D]]: <message>", for example
-#   main.cu(8): error: identifier "undefined_var" is undefined
+# EDG front end: "<file>(<line>): <severity>[ #<number>[-D]]: <message>", for example (captures
+# nvcc_undefined_identifier and nvcc_warning_177; an error carries no number)
+#   main.cu(7): error: identifier "undefined_var" is undefined
 #   kernels/scale.cuh(5): warning #177-D: variable "unused" was declared but never referenced
+# and, a severity and a number without "-D" that no capture shows yet,
 #   main.cu(1): catastrophic error: cannot open source file "kernels/missing.cuh"
+#   main.cu(3): error #20: identifier "x" is undefined
 # The code is the number with any "-D"; a remark is a note, and a catastrophic, command-line, or
 # internal error is an error. The file holds no ": ", so a GCC line whose message contains "(3): error: "
-# is not read as EDG. Continuation lines, a source echo, and a caret line may follow.
+# is not read as EDG. Continuation lines, a source echo, and a caret line may follow. Each diagnostic
+# appears once, although nvcc runs EDG for the device and the host pass.
 _EDG = re.compile(
-    r"(?P<file>(?:(?!: ).)+?)\((?P<line>[0-9]+)\): "
+    r"(?P<file>(?:(?!: ).)+?)\((?P<line>[0-9]{1,10})\): "
     r"(?P<severity>catastrophic error|command-line error|internal error|error|warning|remark)"
     r"(?: #(?P<code>[0-9]+(?:-D)?))?"
     r": (?P<message>.*)"
 )
 
-# The nvcc driver: "nvcc fatal   : <message>", for example
-#   nvcc fatal   : Unsupported gpu architecture 'compute_80'
+# The nvcc driver: "nvcc fatal   : <message>", for example (capture nvcc_fatal)
+#   nvcc fatal   : Value 'sm_35' is not defined for option 'gpu-architecture'
 _DRIVER_FATAL = re.compile(r"nvcc fatal\s*:\s*(?P<message>.*)")
 
-# ptxas: "ptxas <severity> : <message>" with varying spacing, for example
-#   ptxas error   : Entry function '_Z6reducePKfPfi' uses too much shared data (0x10000 bytes, 0xc000 max)
-# A ptxas fatal is an error.
+# ptxas: "ptxas <severity> : <message>" with varying spacing, for example (capture nvcc_ptxas_error)
+#   ptxas error   : Entry function '_Z6reducePKfPfi' uses too much shared data (0x40000 bytes, 0x29000 max)
+# A ptxas fatal is an error; no capture shows a ptxas warning or fatal yet.
 _PTXAS = re.compile(r"ptxas\s+(?P<severity>error|warning|fatal)\s*:\s*(?P<message>.*)")
 _PTXAS_SEVERITY = {"error": "error", "warning": "warning", "fatal": "error"}
 
@@ -72,10 +78,27 @@ def _ptxas(match: re.Match[str]) -> Diagnostic:
     return compile_diagnostic(_PTXAS_SEVERITY[match["severity"]], match["message"])
 
 
+# A host GCC line keeps its file, line, flag, and message, but never its column. GCC reads a .cu file, and every
+# header it includes, twice: its preprocessor reads the file as it is, so a preprocessor column (a missing
+# include, an #error) indexes the named file, and its compiler reads the host code cudafe1 regenerated, so a
+# compiler column counts in that text. Both echo the named file's line from disk, so nothing in stderr tells
+# the two apart. Capture nvcc_host_gcc_warning shows the second:
+#   main.cu:16:19: warning: comparison of integer expressions of different signedness: ... [-Wsign-compare]
+#      16 |     for (int i = 0; i < host.size(); i++) {
+#         |                 ~~^~~~~~~~~~~~~
+# The echo is main.cu line 16 exactly, yet column 19 is the '<' of the regenerated line, which lost its
+# indent; in main.cu column 19 is the ';' and the '<' is column 23. A .cpp or .c source goes to GCC without
+# cudafe1, but no capture shows a GCC line for one yet, and cudafe1 regenerates it with any .cu file that
+# #includes it, so its column is dropped too.
+def _gcc_without_column(match: re.Match[str]) -> Diagnostic:
+    """Return the Diagnostic for a host GCC line with no column (see above)."""
+    return dataclasses.replace(GCC.build(match), column=None)
+
+
 # Tried in this order on each line; the linker pattern is last because it is the loosest.
 _PATTERNS = (
-    LinePattern(_EDG, _edg, echoed=True),
-    GCC,
+    LinePattern(_EDG, _edg, fold=fold_edg_lines),
+    LinePattern(GCC.regex, _gcc_without_column),
     LinePattern(_DRIVER_FATAL, error_from_message),
     LinePattern(_PTXAS, _ptxas),
     COLLECT2,
@@ -87,9 +110,11 @@ def parse_diagnostics(stderr: str, files: Mapping[str, str] = NO_FILES) -> list[
     """Return the compile-stage Diagnostics in nvcc's `stderr`, in order.
 
     `files` (relative path -> text) are the files built; an EDG diagnostic
-    gets its column by aligning the source echo with its line in them.
-    Lines that match no pattern are skipped: error summaries, Remark lines,
-    GCC context and source lines, and blank lines.
+    gets its column by aligning the source echo with its line in them, and a
+    linker place is kept only as a built file. A GCC diagnostic never has a
+    column (see _gcc_without_column). Lines that match no pattern are
+    skipped: error summaries, Remark lines, GCC context and source lines,
+    the linker's "in function" lines, and blank lines.
     """
     return parse_stderr(stderr, files, _PATTERNS)
 

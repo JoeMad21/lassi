@@ -111,6 +111,13 @@ Constraints for every task:
 - Files: `lassi/executors/sandbox.py`, `lassi/toolchains/_base.py` (runner kill), `tests/executors/`, `docs/BIBLE.md`.
 - Remote: `rx run -- 'LASSI_REQUIRE_SANDBOX=1 uv run pytest -q -m remote tests/executors'`. Depends: P0.10. Any task that runs generated code on the native executor depends on P0.16.
 
+### P0.17 Parse the compiler error formats the P0.15 probes found unread
+- Bible: Component Interfaces (Toolchain contract rules), Result Record (Diagnostic).
+- Seen only in exploratory dirty-tree probes during P0.15 (not reportable): nvlink in rx 20260923-104618-desktop-8r113ei-p0-core-173d, the ptxas file,line error in rx 20260923-104516-desktop-8r113ei-p0-core-5778, and `nvc++-Fatal-... TERMINATED by signal 11` in rx 20260923-104313-desktop-8r113ei-p0-core-2b22; `nvc++-Error-` appears in plans/spikes/p0-toolchains-verify.md.
+- Accept: new scenarios in `tests/toolchains/fixtures/scenarios.json`, with sources, whose captures on alpha01 (from a clean commit, as in P0.15) show an nvlink undefined reference from an OpenMP target region, a ptxas error with a PTX file and line, and an nvc++ driver error line (`nvc++-Error-` or `nvc++-Fatal-`) when one can be produced from sources with the preset flags. Each capture parses into the Diagnostics the Toolchain contract calls for, with no fall back to the "exit-status" error. The fixtures README lists each with its rx id. A format that cannot be produced is recorded in the README with the attempts.
+- Files: `tests/toolchains/fixtures/`, `tests/toolchains/test_diagnostics.py`, `lassi/toolchains/`.
+- Remote: `rx run` to capture. Depends: P0.15.
+
 ### P0.G Phase gate
 - Bible: Build Roadmap, P0 row, Gate column; AGENTS.md Phase Gate and Results.
 - Accept: (1) on alpha01 from a clean tree, `rx run -- 'uv run lassi run tests/fixtures/recipes/p0-smoke.yaml'` with the mock backend takes one HeCBench app end to end compile-only and reaches the compile stage with a built artifact; `rx pull` writes `results/p0-gate/provenance.json` and `summary.md` cites it; (2) `policy_canary.py local` output shows the seeded commit blocked locally; (3) `policy_canary.py push` and `status` show it blocked in CI. All three recorded under `results/p0-gate/`. Pass sets P0 DONE and opens a pull request `P0 Core` (needs origin).
