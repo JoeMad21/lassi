@@ -191,7 +191,13 @@ def test_model_info_is_the_trial_model_field(stub_server: StubServer, name: str)
     info = model_info(backend, SAMPLING)
     assert info == record.ModelInfo(backend=name, id=backend.model_id, sampling=SAMPLING)
     bench = record.BenchItem(suite="fixture-suite", item="fixture-item", split="eval", direction="omp-cuda")
-    trial = record.Trial(trial_id=TRIAL_ID, recipe_hash=RECIPE_HASH, bench_item=bench, model=info)
+    # Synthetic provenance, required on every Trial; the commit is not a commit of this repository.
+    provenance = record.Provenance(
+        commit="0" * 40, dirty=False, device="none (compile only)", sdk=None, date="2026-09-23T12:34:56+00:00"
+    )
+    trial = record.Trial(
+        trial_id=TRIAL_ID, recipe_hash=RECIPE_HASH, provenance=provenance, bench_item=bench, model=info
+    )
     assert record.to_dict(trial)["model"] == {
         "backend": name,
         "id": backend.model_id,

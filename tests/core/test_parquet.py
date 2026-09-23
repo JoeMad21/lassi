@@ -9,6 +9,14 @@ an empty per_input list, a trial without attempts, a numeric-looking bench
 name, and diagnostics; one more trial sets every nullable field, and its rows
 are written out by hand so each column must hold its own field. Every fixture
 value is synthetic; none is a measurement.
+
+The trials table carries each Trial's provenance (P0.18) as the columns
+provenance_commit, provenance_dirty, provenance_device, provenance_sdk, and
+provenance_date, named like the other nested fields (<field>_<key>), placed
+after the toolchain pins as the bible's Trial block orders them, and typed
+string, bool, string, string, string. Like every column they are nullable
+in the Arrow schema; a value is null where the trial's provenance is unknown,
+and date is never null because the record always sets it.
 """
 
 from __future__ import annotations
@@ -32,6 +40,13 @@ BACKSLASH = "\\"
 E_ACUTE = "\N{LATIN SMALL LETTER E WITH ACUTE}"
 
 PIN_COLUMNS = tuple(f"toolchain_pins_{name}" for name in record.TOOLCHAIN_PIN_NAMES)
+PROVENANCE_COLUMNS = (
+    "provenance_commit",
+    "provenance_dirty",
+    "provenance_device",
+    "provenance_sdk",
+    "provenance_date",
+)
 TRIAL_COLUMNS = (
     "project",
     "arm",
@@ -42,6 +57,7 @@ TRIAL_COLUMNS = (
     "run",
     "recipe_hash",
     *PIN_COLUMNS,
+    *PROVENANCE_COLUMNS,
     "bench_item_suite",
     "bench_item_item",
     "bench_item_split",
@@ -142,7 +158,14 @@ DOUBLE_COLUMNS = frozenset(
     }
 )
 BOOL_COLUMNS = frozenset(
-    {"run_hang", "run_sim_ub", "guards_host_compute", "guards_harness_tamper", "guards_oracle_access"}
+    {
+        "provenance_dirty",
+        "run_hang",
+        "run_sim_ub",
+        "guards_host_compute",
+        "guards_harness_tamper",
+        "guards_oracle_access",
+    }
 )
 LIST_DOUBLE_COLUMNS = frozenset({"alignment_per_input"})
 
@@ -160,6 +183,12 @@ PARTITION_B_OMP = f"project={PROJECT}/arm=arm-b/bench={SUITE}/direction=omp-cuda
 PARTITION_A_CUDA = f"project={PROJECT}/arm=arm-a/bench={SUITE}/direction=cuda-omp"
 PARTITION_B_CUDA = f"project={PROJECT}/arm=arm-b/bench=2024/direction=cuda-omp"
 
+# Synthetic provenance values: neither commit is a commit of this repository; dates are in started_utc format.
+FIXTURE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+FILLED_COMMIT = "fedcba9876543210fedcba9876543210fedcba98"
+FIXTURE_DATE = "2026-09-23T12:34:56+00:00"
+FILLED_DATE = "2026-09-24T01:02:03+00:00"
+
 
 # ---------------------------------------------------------------------------
 # Fixture builders
@@ -176,6 +205,19 @@ def text_ref(text: str) -> record.TextRef:
     return record.TextRef(sha256=digest, path=f"texts/{digest[:2]}/{digest}.txt")
 
 
+def fixture_provenance(**changes: Any) -> record.Provenance:
+    """Return the provenance of a compile-only run with git available and no sdk reported, with the given changes."""
+    fields: dict[str, Any] = {
+        "commit": FIXTURE_COMMIT,
+        "dirty": False,
+        "device": "none (compile only)",
+        "sdk": None,
+        "date": FIXTURE_DATE,
+    }
+    fields.update(changes)
+    return record.Provenance(**fields)
+
+
 def make_trial(trial_id: str, attempts: list[record.Attempt], **changes: Any) -> record.Trial:
     """Return a Trial whose bench item is derived from trial_id, with the given attempts and fields."""
     _, _, bench, direction, item, _ = trial_id.split("/")
@@ -183,6 +225,7 @@ def make_trial(trial_id: str, attempts: list[record.Attempt], **changes: Any) ->
     fields: dict[str, Any] = {
         "trial_id": trial_id,
         "recipe_hash": RECIPE_HASH,
+        "provenance": fixture_provenance(),
         "bench_item": record.BenchItem(suite=bench, item=item, split="eval", direction=direction),
         "model": record.ModelInfo(backend="mock", id="mock-fixture", sampling=sampling),
         "attempts": attempts,
@@ -245,8 +288,8 @@ def trial_b_omp_entropy() -> record.Trial:
 
 
 def trial_a_cuda_entropy() -> record.Trial:
-    """Return a trial without attempts in the second direction."""
-    return make_trial(ID_A_CUDA_ENTROPY, [])
+    """Return a trial without attempts in the second direction, from a run where git was unavailable."""
+    return make_trial(ID_A_CUDA_ENTROPY, [], provenance=fixture_provenance(commit=None, dirty=None))
 
 
 def trial_b_cuda_stencil() -> record.Trial:
@@ -309,6 +352,9 @@ def trial_b_omp_filled() -> record.Trial:
         ID_B_OMP_FILLED,
         filled_attempts(),
         toolchain_pins=record.ToolchainPins(**{name: f"pin-{name}" for name in record.TOOLCHAIN_PIN_NAMES}),
+        provenance=record.Provenance(
+            commit=FILLED_COMMIT, dirty=True, device="fixture-device", sdk="fixture-sdk", date=FILLED_DATE
+        ),
         model=record.ModelInfo(backend="mock", id="mock-filled", sampling=sampling),
         context=record.Context(knowledge_summary="knowledge b\n", source_description="source b\n"),
         final=record.Final(stage_reached="S4", alignment=0.25, score=0.5, corrections=1, wall_s=3.5),
@@ -383,6 +429,11 @@ def expected_trial_row_a_omp_entropy() -> dict[str, Any]:
         "run": 1,
         "recipe_hash": RECIPE_HASH,
         **pins,
+        "provenance_commit": FIXTURE_COMMIT,
+        "provenance_dirty": False,
+        "provenance_device": "none (compile only)",
+        "provenance_sdk": None,
+        "provenance_date": FIXTURE_DATE,
         "bench_item_suite": SUITE,
         "bench_item_item": "entropy",
         "bench_item_split": "eval",
@@ -502,6 +553,11 @@ def expected_trial_row_b_omp_filled() -> dict[str, Any]:
         "run": 3,
         "recipe_hash": RECIPE_HASH,
         **{f"toolchain_pins_{name}": f"pin-{name}" for name in record.TOOLCHAIN_PIN_NAMES},
+        "provenance_commit": FILLED_COMMIT,
+        "provenance_dirty": True,
+        "provenance_device": "fixture-device",
+        "provenance_sdk": "fixture-sdk",
+        "provenance_date": FILLED_DATE,
         "bench_item_suite": SUITE,
         "bench_item_item": "layout",
         "bench_item_split": "eval",
@@ -655,6 +711,35 @@ def test_trial_rows_for_trial_without_attempts() -> None:
     assert row["final_corrections"] == 0
     unset = [*PIN_COLUMNS, "final_stage_reached", "final_alignment", "final_score", "final_wall_s"]
     assert all(row[column] is None for column in unset)
+    provenance = [row[column] for column in PROVENANCE_COLUMNS]
+    assert provenance == [None, None, "none (compile only)", None, FIXTURE_DATE]
+
+
+def test_trials_schema_types_the_provenance_columns_explicitly() -> None:
+    schema = parquet.SCHEMAS["trials"]
+    assert set(PROVENANCE_COLUMNS) <= set(schema.names), schema.names
+    start = schema.names.index("provenance_commit")
+    end = start + len(PROVENANCE_COLUMNS)
+    assert tuple(schema.names[start:end]) == PROVENANCE_COLUMNS
+    assert (schema.names[start - 1], schema.names[end]) == (PIN_COLUMNS[-1], "bench_item_suite")
+    types = [schema.field(name).type for name in PROVENANCE_COLUMNS]
+    assert types == [pa.string(), pa.bool_(), pa.string(), pa.string(), pa.string()]
+
+
+def test_provenance_columns_hold_each_trials_provenance_and_read_back(tmp_path: Path) -> None:
+    trials = [*run_trials(), trial_b_omp_filled()]
+    rows = parquet.trial_rows(trials)
+    by_id = {trial.trial_id: trial.provenance for trial in trials}
+    for row in rows["trials"]:
+        provenance = by_id[row["trial_id"]]
+        expected = [provenance.commit, provenance.dirty, provenance.device, provenance.sdk, provenance.date]
+        assert [row[column] for column in PROVENANCE_COLUMNS] == expected, row["trial_id"]
+    out = tmp_path / "parquet"
+    parquet.write_run_parquet(trials, out)
+    back = parquet.read_run_parquet(out)
+    assert_rows_identical(back, rows)
+    dirty = {row["trial_id"]: row["provenance_dirty"] for row in back["trials"]}
+    assert (dirty[ID_A_CUDA_ENTROPY], dirty[ID_A_OMP_ENTROPY], dirty[ID_B_OMP_FILLED]) == (None, False, True)
 
 
 def test_trial_rows_sorted() -> None:

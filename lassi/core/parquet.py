@@ -7,7 +7,10 @@ diagnostics, each written as Hive-partitioned Parquet under
 Partition values come from the parsed trial_id and are URI-encoded in
 directory names as pyarrow does by default, so a '+' is written as `%2B` and
 read back as '+'. Response texts stay in the text store; the attempts table
-keeps only their sha256.
+keeps only their sha256. Nested record fields become `<field>_<key>` columns,
+so the trials table carries each trial's provenance (its copy of the run
+manifest) as provenance_commit, provenance_dirty, provenance_device,
+provenance_sdk, and provenance_date.
 """
 
 from __future__ import annotations
@@ -46,6 +49,11 @@ SCHEMAS = {
             ("run", _INT),
             ("recipe_hash", _STRING),
             *[(f"toolchain_pins_{name}", _STRING) for name in TOOLCHAIN_PIN_NAMES],
+            ("provenance_commit", _STRING),
+            ("provenance_dirty", _BOOL),
+            ("provenance_device", _STRING),
+            ("provenance_sdk", _STRING),
+            ("provenance_date", _STRING),
             ("bench_item_suite", _STRING),
             ("bench_item_item", _STRING),
             ("bench_item_split", _STRING),
@@ -154,7 +162,7 @@ def _ref_columns(prefix: str, ref: TextRef | None) -> dict[str, str | None]:
 def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
     """Return the trials row of one trial."""
     parsed = parse_trial_id(trial.trial_id)
-    bench, model, final = trial.bench_item, trial.model, trial.final
+    bench, model, final, provenance = trial.bench_item, trial.model, trial.final, trial.provenance
     pins = {f"toolchain_pins_{name}": getattr(trial.toolchain_pins, name) for name in TOOLCHAIN_PIN_NAMES}
     return {
         **key,
@@ -162,6 +170,11 @@ def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
         "run": parsed.run,
         "recipe_hash": trial.recipe_hash,
         **pins,
+        "provenance_commit": provenance.commit,
+        "provenance_dirty": provenance.dirty,
+        "provenance_device": provenance.device,
+        "provenance_sdk": provenance.sdk,
+        "provenance_date": provenance.date,
         "bench_item_suite": bench.suite,
         "bench_item_item": bench.item,
         "bench_item_split": bench.split,
@@ -325,7 +338,9 @@ def write_run_parquet(trials: Sequence[Trial], out_dir: Path) -> None:
 def read_run_parquet(out_dir: Path) -> dict[str, list[dict[str, Any]]]:
     """Read the tables written by write_run_parquet back into the rows trial_rows gives.
 
-    A missing table directory reads as no rows.
+    A missing table directory reads as no rows. Every column is nullable,
+    so a column a file lacks (one written before the column existed) reads
+    as null in each of that file's rows.
     """
     result: dict[str, list[dict[str, Any]]] = {}
     for table in TABLES:

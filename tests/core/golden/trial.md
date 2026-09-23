@@ -15,6 +15,16 @@
 | Corrections | 1 |
 | Wall time (s) | PLACEHOLDER |
 
+## Provenance
+
+| Field | Value |
+| --- | --- |
+| commit | 0123456789abcdef0123456789abcdef01234567 |
+| dirty | false |
+| device | fixture-device |
+| sdk | - |
+| date | 2026-09-23T12:34:56+00:00 |
+
 ## Toolchain pins
 
 | Toolchain | Pin |

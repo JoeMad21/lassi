@@ -1,10 +1,12 @@
 """Render a Trial as trial.md, the page a person reads to follow the trial without tooling.
 
-The page shows each prompt, each attempt's code, the unified diff from the
-previous attempt, the parsed diagnostics, and the score breakdown (bible
-Readability Standards, Trial row). It is plain ASCII with LF newlines; any
-non-ASCII character is written as a Python backslash escape. Every value that
-was not measured (None) shows as PLACEHOLDER.
+The page shows the trial's provenance, each prompt, each attempt's code, the
+unified diff from the previous attempt, the parsed diagnostics, and the score
+breakdown (bible Readability Standards, Trial row). It is plain ASCII with LF
+newlines; any non-ASCII character is written as a Python backslash escape.
+Every value that was not measured (None) shows as PLACEHOLDER. Provenance
+values are not measurements, so an unknown one (None) shows as "-", as a
+diagnostic without a code or location does.
 
 The page is a list of blocks (headings, lines, tables, fenced code), each
 ending with one newline and separated by one blank line. Fenced text goes
@@ -22,7 +24,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from lassi.core.files import fence_for, language_for
-from lassi.core.record import TOOLCHAIN_PIN_NAMES, Attempt, Context, Diagnostic, TextRef, Trial
+from lassi.core.record import TOOLCHAIN_PIN_NAMES, Attempt, Context, Diagnostic, Provenance, TextRef, Trial
 
 if TYPE_CHECKING:
     from lassi.core.store import TextStore
@@ -45,6 +47,11 @@ def fmt(value: object) -> str:
     if isinstance(value, TextRef):
         return f"`{value.path}`"
     return str(value)
+
+
+def fmt_provenance(value: object) -> str:
+    """Format one provenance value: an unknown one (None) as '-', since provenance is not a measurement, else fmt."""
+    return "-" if value is None else fmt(value)
 
 
 def fenced(text: str, lang: str) -> str:
@@ -102,6 +109,12 @@ def _summary_blocks(trial: Trial) -> list[str]:
         ("Wall time (s)", fmt(final.wall_s)),
     ]
     return [f"# Trial {trial.trial_id}\n", _table(("Field", "Value"), rows)]
+
+
+def _provenance_blocks(provenance: Provenance) -> list[str]:
+    """Return the provenance table, one row per field in field order; an unknown value reads '-'."""
+    rows = [(spec.name, fmt_provenance(getattr(provenance, spec.name))) for spec in dataclasses.fields(provenance)]
+    return ["## Provenance\n", _table(("Field", "Value"), rows)]
 
 
 def _pins_blocks(trial: Trial) -> list[str]:
@@ -214,7 +227,8 @@ def render_trial_md(trial: Trial, store: TextStore) -> str:
     The result is deterministic, plain ASCII (non-ASCII characters become
     backslash escapes), uses LF newlines, and ends with exactly one newline.
     """
-    blocks = _summary_blocks(trial) + _pins_blocks(trial) + _context_blocks(trial.context)
+    blocks = _summary_blocks(trial) + _provenance_blocks(trial.provenance)
+    blocks += _pins_blocks(trial) + _context_blocks(trial.context)
     for attempt in trial.attempts:
         blocks += _attempt_blocks(attempt, store)
     page = "\n".join(blocks)

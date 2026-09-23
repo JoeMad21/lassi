@@ -1,12 +1,19 @@
-"""Tests for trial.md rendering (P0.2).
+"""Tests for trial.md rendering (P0.2), including the trial's provenance (P0.18).
 
 render_trial_md in lassi/core/trial_md.py must reproduce the committed golden
 file tests/core/golden/trial.md for one fixed two-attempt Trial. The golden
-file must itself contain each prompt, each attempt's code, the unified diff,
-the parsed diagnostics, and the score breakdown (bible Readability Standards,
-Trial row), with PLACEHOLDER for every unmeasured value. Output is plain ASCII
-with LF newlines and ends with one newline. The fixture values are synthetic
-renderer inputs; no value in the fixture or the golden file is a measurement.
+file must itself contain the trial's provenance, each prompt, each attempt's
+code, the unified diff, the parsed diagnostics, and the score breakdown (bible
+Readability Standards, Trial row), with PLACEHOLDER for every unmeasured
+value. Output is plain ASCII with LF newlines and ends with one newline. The
+fixture values are synthetic renderer inputs; no value in the fixture or the
+golden file is a measurement.
+
+The provenance block (commit, dirty, device, sdk, date; the Trial's copy of
+the run manifest) is a "## Provenance" table right after the summary table,
+before the toolchain pins and the attempts. Provenance values are not
+measurements, so an unknown one (None) shows as "-", as the page shows a
+diagnostic without a code or location, and never as PLACEHOLDER.
 """
 
 from __future__ import annotations
@@ -22,6 +29,20 @@ from lassi.core import interfaces, record, store, trial_md
 GOLDEN = Path(__file__).resolve().parent / "golden" / "trial.md"
 GOLDEN_ID = "lassi-repro/mock-fixture/lassi-hecbench-10/omp-cuda/entropy/run01"
 RECIPE_HASH = "0123456789abcdef" * 4
+# Synthetic provenance values: not a commit of this repository, and a date in the runner's started_utc format.
+FIXTURE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+FIXTURE_DATE = "2026-09-23T12:34:56+00:00"
+# The provenance block of every trial built with fixture_provenance().
+PROVENANCE_BLOCK = (
+    "## Provenance\n\n"
+    "| Field | Value |\n"
+    "| --- | --- |\n"
+    f"| commit | {FIXTURE_COMMIT} |\n"
+    "| dirty | false |\n"
+    "| device | fixture-device |\n"
+    "| sdk | - |\n"
+    f"| date | {FIXTURE_DATE} |\n"
+)
 
 BACKSLASH = "\\"
 E_ACUTE = "\N{LATIN SMALL LETTER E WITH ACUTE}"
@@ -130,6 +151,19 @@ def model_info() -> record.ModelInfo:
     return record.ModelInfo(backend="mock", id="mock-fixture", sampling=sampling)
 
 
+def fixture_provenance(**changes: Any) -> record.Provenance:
+    """Return the synthetic provenance of every fixture trial here (no sdk reported), with the given changes."""
+    fields: dict[str, Any] = {
+        "commit": FIXTURE_COMMIT,
+        "dirty": False,
+        "device": "fixture-device",
+        "sdk": None,
+        "date": FIXTURE_DATE,
+    }
+    fields.update(changes)
+    return record.Provenance(**fields)
+
+
 def golden_attempts(text_store: store.TextStore) -> list[record.Attempt]:
     """Return the two golden attempts, putting their prompts and stdout in the store."""
     first = record.Attempt(
@@ -172,6 +206,7 @@ def golden_trial(text_store: store.TextStore) -> record.Trial:
         trial_id=GOLDEN_ID,
         recipe_hash=RECIPE_HASH,
         toolchain_pins=record.ToolchainPins(cuda="fixture-cuda", nvhpc="fixture-nvhpc"),
+        provenance=fixture_provenance(),
         bench_item=bench_item(),
         model=model_info(),
         context=record.Context(knowledge_summary=KNOWLEDGE),
@@ -185,6 +220,7 @@ def base_trial(attempts: list[record.Attempt], **changes: Any) -> record.Trial:
     fields: dict[str, Any] = {
         "trial_id": GOLDEN_ID,
         "recipe_hash": RECIPE_HASH,
+        "provenance": fixture_provenance(),
         "bench_item": bench_item(),
         "model": model_info(),
         "attempts": attempts,
@@ -226,6 +262,17 @@ def test_placeholder_constant() -> None:
     assert trial_md.PLACEHOLDER == "PLACEHOLDER"
 
 
+def test_fmt_provenance_shows_an_unknown_value_as_a_dash_and_formats_the_rest_like_fmt() -> None:
+    values = (None, True, False, FIXTURE_COMMIT, "none (compile only)")
+    assert [trial_md.fmt_provenance(value) for value in values] == [
+        "-",
+        "true",
+        "false",
+        FIXTURE_COMMIT,
+        "none (compile only)",
+    ]
+
+
 def test_render_matches_golden(text_store: store.TextStore) -> None:
     assert trial_md.render_trial_md(golden_trial(text_store), text_store) == read_golden()
 
@@ -249,6 +296,14 @@ def test_fixture_diff_is_the_unified_diff_of_its_files() -> None:
 
 # ---------------------------------------------------------------------------
 # Golden content: the file itself must carry every required part
+
+
+def test_golden_shows_the_provenance_before_the_pins_and_the_attempts() -> None:
+    golden = read_golden()
+    summary_end = "| Wall time (s) | PLACEHOLDER |\n\n"
+    assert summary_end + PROVENANCE_BLOCK + "\n## Toolchain pins\n" in golden
+    assert golden.count("## Provenance\n") == 1
+    assert golden.index(PROVENANCE_BLOCK) < golden.index("## Attempt 0\n")
 
 
 def test_golden_contains_each_prompt() -> None:
@@ -375,6 +430,7 @@ def test_trial_without_attempts_ends_after_context(text_store: store.TextStore) 
         "| Score | PLACEHOLDER |\n"
         "| Corrections | 0 |\n"
         "| Wall time (s) | PLACEHOLDER |\n\n"
+        f"{PROVENANCE_BLOCK}\n"
         "## Toolchain pins\n\n"
         "| Toolchain | Pin |\n"
         "| --- | --- |\n"
@@ -555,6 +611,47 @@ def test_header_rows_format_values(text_store: store.TextStore) -> None:
         "| Wall time (s) | 12.5 |\n"
     )
     assert rows in md
+
+
+def provenance_section(md: str) -> str:
+    """Return the text from the '## Provenance' heading up to the next '## ' heading."""
+    start = md.index("## Provenance\n")
+    return md[start : md.index("\n## ", start) + 1]
+
+
+def test_unknown_provenance_values_show_a_dash_never_placeholder(text_store: store.TextStore) -> None:
+    # The runner's copy when git is unavailable: no commit, no dirty flag, and no sdk reported.
+    provenance = fixture_provenance(commit=None, dirty=None, device="none (compile only)", sdk=None)
+    md = trial_md.render_trial_md(base_trial([], provenance=provenance), text_store)
+    assert provenance_section(md) == (
+        "## Provenance\n\n"
+        "| Field | Value |\n"
+        "| --- | --- |\n"
+        "| commit | - |\n"
+        "| dirty | - |\n"
+        "| device | none (compile only) |\n"
+        "| sdk | - |\n"
+        f"| date | {FIXTURE_DATE} |\n"
+        "\n"
+    )
+    assert trial_md.PLACEHOLDER not in provenance_section(md)
+
+
+def test_known_provenance_values_are_formatted_like_other_cells(text_store: store.TextStore) -> None:
+    provenance = fixture_provenance(dirty=True, device="fixture|device", sdk=f"sdk-caf{E_ACUTE}")
+    md = trial_md.render_trial_md(base_trial([], provenance=provenance), text_store)
+    assert_layout(md)
+    assert provenance_section(md) == (
+        "## Provenance\n\n"
+        "| Field | Value |\n"
+        "| --- | --- |\n"
+        f"| commit | {FIXTURE_COMMIT} |\n"
+        "| dirty | true |\n"
+        "| device | fixture\\|device |\n"
+        "| sdk | sdk-caf\\xe9 |\n"
+        f"| date | {FIXTURE_DATE} |\n"
+        "\n"
+    )
 
 
 def test_int_values_render_like_floats(text_store: store.TextStore) -> None:

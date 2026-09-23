@@ -156,7 +156,18 @@ def make_trial(model: record.ModelInfo, response_text: str) -> record.Trial:
         index=0, response_text=response_text, files={"main.cu": "int main() { return 0; }\n"}, stage_reached="S0"
     )
     bench = record.BenchItem(suite="fixture-suite", item="fixture-item", split="eval", direction="omp-cuda")
-    return record.Trial(trial_id=TRIAL_ID, recipe_hash=RECIPE_HASH, bench_item=bench, model=model, attempts=[attempt])
+    # Synthetic provenance, required on every Trial; the commit is not a commit of this repository.
+    provenance = record.Provenance(
+        commit="0" * 40, dirty=False, device="none (compile only)", sdk=None, date="2026-09-23T12:34:56+00:00"
+    )
+    return record.Trial(
+        trial_id=TRIAL_ID,
+        recipe_hash=RECIPE_HASH,
+        provenance=provenance,
+        bench_item=bench,
+        model=model,
+        attempts=[attempt],
+    )
 
 
 @pytest.fixture

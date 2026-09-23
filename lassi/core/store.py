@@ -177,7 +177,11 @@ def _check_same_trial(json_path: Path, trial_id: str) -> None:
 
 
 def read_trial(path: Path, store: TextStore) -> Trial:
-    """Read a Trial from a trial directory or its trial.json, resolving response texts through `store`."""
+    """Read a Trial from a trial directory or its trial.json, resolving response texts through `store`.
+
+    A record the file does not hold, such as a trial.json written before a
+    required field existed, raises ValueError naming the file and the field.
+    """
     path = Path(path)
     json_path = path / TRIAL_JSON if path.is_dir() else path
     data = json.loads(json_path.read_text(encoding="utf-8"))
@@ -187,7 +191,10 @@ def read_trial(path: Path, store: TextStore) -> Trial:
     for position, attempt_data in enumerate(attempts):
         where = f"{json_path}: attempts[{position}].response_text"
         attempt_data["response_text"] = _stored_text(attempt_data.get("response_text"), store, where)
-    return from_dict(Trial, data)
+    try:
+        return from_dict(Trial, data)
+    except ValueError as error:
+        raise ValueError(f"{json_path}: {error}") from error
 
 
 def _stored_text(stored: object, store: TextStore, where: str) -> str:

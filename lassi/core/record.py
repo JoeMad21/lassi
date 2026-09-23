@@ -26,6 +26,7 @@ import types
 import typing
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any, NamedTuple, NoReturn
 
 from lassi.core.interfaces import Sampling
@@ -36,6 +37,7 @@ SEVERITIES = ("error", "warning", "note")
 TOOLCHAIN_PIN_NAMES = ("llvm", "polygeist", "tt_mlir", "tt_metal", "ttsim", "furiosa_sdk", "cuda", "nvhpc", "rocm")
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_GIT_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 _SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
 _DRIVE = re.compile(r"[A-Za-z]:")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -74,6 +76,16 @@ def _check_non_empty(owner: str, name: str, value: object) -> None:
     """Require value to be a non-empty string."""
     if not isinstance(value, str) or not value:
         _fail(owner, name, value, "must be a non-empty string")
+
+
+def _check_utc(owner: str, name: str, value: str) -> None:
+    """Require value to be an ISO 8601 time with a UTC offset of zero, such as 2026-09-23T12:34:56+00:00."""
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        _fail(owner, name, value, "must be an ISO 8601 time in UTC")
+    if moment.utcoffset() != timedelta(0):
+        _fail(owner, name, value, "must be an ISO 8601 time in UTC")
 
 
 def _check_unit(owner: str, name: str, value: float | None) -> None:
@@ -323,6 +335,40 @@ class ToolchainPins:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Provenance:
+    """A trial's copy of its run manifest, so a trial read outside its run tree still says where it came from.
+
+    The run's provenance.json stays authoritative (bible Result Record,
+    Storage); the runner fills this copy from that manifest, key by key:
+    commit from "commit", dirty from "dirty", device from "device", sdk from
+    "driver", and date from "started_utc". The types are what the manifest
+    holds: commit and dirty are None when git is unavailable, device is None
+    when the executor names no device, sdk is None until an executor reports
+    an SDK or driver version, and date (the run's start, ISO 8601 UTC with
+    seconds) is always set. A known commit is a full git object id (40 or 64
+    lowercase hex characters), a known device or sdk is a non-empty string,
+    and date must parse as an ISO 8601 time in UTC. Every field is required,
+    so a missing value is never read as unknown.
+    """
+
+    commit: str | None
+    dirty: bool | None
+    device: str | None
+    sdk: str | None
+    date: str
+
+    def __post_init__(self) -> None:
+        """Check the field types the run manifest gives, a known commit, device, and sdk, and the date."""
+        _check_fields(self)
+        if self.commit is not None and not _GIT_OBJECT_ID.fullmatch(self.commit):
+            _fail("Provenance", "commit", self.commit, "must be 40 or 64 lowercase hex characters when known")
+        for name in ("device", "sdk"):
+            if getattr(self, name) is not None:
+                _check_non_empty("Provenance", name, getattr(self, name))
+        _check_utc("Provenance", "date", self.date)
+
+
+@dataclass(frozen=True, kw_only=True)
 class BenchItem:
     """The benchmark item a trial works on."""
 
@@ -385,11 +431,16 @@ class Final:
 
 @dataclass(frozen=True, kw_only=True)
 class Trial:
-    """One run of one bench item by one arm; stages return new Trials and never mutate one."""
+    """One run of one bench item by one arm; stages return new Trials and never mutate one.
+
+    `provenance` is required: a Trial without it raises TypeError naming the
+    field, and a trial.json without it fails from_dict with a ValueError.
+    """
 
     trial_id: str
     recipe_hash: str
     toolchain_pins: ToolchainPins = field(default_factory=ToolchainPins)
+    provenance: Provenance
     bench_item: BenchItem
     model: ModelInfo
     context: Context = field(default_factory=Context)

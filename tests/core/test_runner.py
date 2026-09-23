@@ -22,6 +22,12 @@ placeholder executables, with subprocess.Popen replaced so that no process
 starts (git alone, which the runner may call for provenance, runs for real).
 The bench sources are small synthetic files, not HeCBench sources. No value in
 this module is a measurement.
+
+Every trial carries a copy of the run manifest in Trial.provenance (P0.18):
+commit, dirty, and device as provenance.json records them, sdk from its
+driver, and date from its started_utc. The tests check that copy against
+provenance.json in each trial's record, trial.json, trial.md, and Parquet row,
+so the two can never disagree, and that the stages never change it.
 """
 
 from __future__ import annotations
@@ -52,6 +58,7 @@ import yaml
 from lassi import cli
 from lassi import prompts as prompts_module
 from lassi.bench import Direction, load_suite, sources_dir
+from lassi.core import record as record_module
 from lassi.core import registry as registry_module
 from lassi.core import runner as runner_module
 from lassi.core import stages
@@ -74,7 +81,7 @@ from lassi.core.registry import DEFAULT_REGISTRY, Registry
 from lassi.core.runner import RunError, RunOptions, run_recipe
 from lassi.core.stages import CompileLoopStage, GenerateStage, RunContext, diagnostic_line
 from lassi.core.store import TextStore, read_trial, trial_dir
-from lassi.core.trial_md import PLACEHOLDER, fmt
+from lassi.core.trial_md import PLACEHOLDER, fmt_provenance
 from lassi.executors import NoneExecutor, SandboxUnavailableError
 from lassi.executors.workdir import build_dir
 from lassi.llm import MockBackend, model_info
@@ -816,7 +823,9 @@ def test_provenance_and_run_md_show_no_commit_when_git_is_unavailable(
     data = json.loads(read_ascii(run_dir / "provenance.json"))
     assert (data["commit"], data["dirty"]) == (None, None)
     summary = summary_rows(read_ascii(run_dir / "run.md"))
-    assert (summary["Commit"], summary["Dirty"]) == (PLACEHOLDER, PLACEHOLDER)
+    # Provenance is not a measurement, so run.md shows an unknown value as "-", as trial.md does, never PLACEHOLDER.
+    assert (summary["Commit"], summary["Dirty"], summary["Driver"]) == ("-", "-", "-")
+    assert PLACEHOLDER not in summary.values()
 
 
 def test_run_md_shows_the_run_the_resolved_recipe_the_pins_and_the_trials(smoke_run: SmokeRun) -> None:
@@ -847,9 +856,11 @@ def test_run_md_summary_matches_provenance(smoke_run: SmokeRun) -> None:
     assert summary == {
         "Recipe": "p0-smoke",
         "Recipe hash": f"`{recipe_hash}`",
-        "Commit": fmt(provenance["commit"]),
-        "Dirty": fmt(provenance["dirty"]),
+        "Commit": fmt_provenance(provenance["commit"]),
+        "Dirty": fmt_provenance(provenance["dirty"]),
         "Executor": "none",
+        "Device": "none (compile only)",
+        "Driver": "-",
         "Started (UTC)": provenance["started_utc"],
         "Finished (UTC)": provenance["finished_utc"],
         "Trials": "1",
@@ -1016,7 +1027,10 @@ def test_provenance_is_written_before_the_trials_with_status_running(tmp_path: P
     assert "commit" in during and during["started_utc"]
     done = json.loads(read_ascii(run_dir / "provenance.json"))
     assert done["status"] == "complete" and done["finished_utc"] is not None
-    assert done["started_utc"] == during["started_utc"]
+    closing = ("status", "finished_utc")
+    assert {key: value for key, value in done.items() if key not in closing} == {
+        key: value for key, value in during.items() if key not in closing
+    }, "the final manifest changes only its status and finish time"
 
 
 def test_a_trial_that_raises_leaves_provenance_with_status_failed(
@@ -1036,6 +1050,120 @@ def test_a_trial_that_raises_leaves_provenance_with_status_failed(
     assert (data["status"], data["commit"], data["dirty"]) == ("failed", FAKE_COMMIT, False)
     assert data["finished_utc"] is not None
     assert not (run_dir / "run.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# Trial provenance: every trial's copy of the run manifest (P0.18)
+
+
+def manifest_copy(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the Trial provenance a manifest gives: commit, dirty, device, driver as sdk, started_utc as date."""
+    return {
+        "commit": manifest["commit"],
+        "dirty": manifest["dirty"],
+        "device": manifest["device"],
+        "sdk": manifest["driver"],
+        "date": manifest["started_utc"],
+    }
+
+
+def assert_trials_carry_the_manifest(run_dir: Path, trial_ids: Sequence[str]) -> dict[str, Any]:
+    """Assert that each trial's record, trial.json, and Parquet row hold the manifest's copy; return the copy."""
+    expected = manifest_copy(json.loads(read_ascii(run_dir / "provenance.json")))
+    rows = {row["trial_id"]: row for row in read_run_parquet(run_dir / "parquet")["trials"]}
+    assert sorted(rows) == sorted(trial_ids)
+    for trial_id in trial_ids:
+        assert load_trial(run_dir, trial_id).provenance == record_module.Provenance(**expected), trial_id
+        raw = json.loads(read_ascii(trial_dir(run_dir, trial_id) / "trial.json"))
+        assert raw["provenance"] == expected, trial_id
+        assert {key: rows[trial_id][f"provenance_{key}"] for key in expected} == expected, trial_id
+    return expected
+
+
+def test_every_trial_carries_a_copy_of_the_run_manifest(
+    tmp_path: Path, bench: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    patch_git(monkeypatch, FAKE_COMMIT + "\n", " M lassi/core/runner.py\n")
+    data = smoke_data(
+        directions=[{"source": "omp", "target": "cuda"}, {"source": "cuda", "target": "omp"}],
+        toolchain={"cuda": "nvcc-sm80", "omp": "nvcpp-cc80"},
+        trials={"n": 2},
+    )
+    run_dir = run(write_recipe(tmp_path, "copy-test", data), tmp_path / "runs-root", bench, make_registry(BuildLog()))
+    ids = [
+        make_trial_id("copy-test", MOCK_ID, SUITE, direction, ITEM, number)
+        for direction in ("omp-cuda", "cuda-omp")
+        for number in (1, 2)
+    ]
+    expected = assert_trials_carry_the_manifest(run_dir, ids)
+    date = expected.pop("date")
+    assert expected == {"commit": FAKE_COMMIT, "dirty": True, "device": "none (compile only)", "sdk": None}
+    assert datetime.fromisoformat(date).utcoffset() == timedelta(0), "the date is the run's start time in UTC"
+
+
+def test_trial_provenance_is_null_where_the_manifest_is_when_git_is_unavailable(
+    tmp_path: Path, bench: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(runner_module, "EnvRunner", NoGit)
+    run_dir = run(SMOKE, tmp_path / "runs-root", bench, make_registry(BuildLog()))
+    expected = assert_trials_carry_the_manifest(run_dir, [SMOKE_TRIAL])
+    assert (expected["commit"], expected["dirty"]) == (None, None)
+
+
+class DevicelessExecutor:
+    """An Executor that may run programs but names no device, so the manifest's device is what the runner makes of it.
+
+    Nothing runs on the compile-only path, so run() is never called.
+    """
+
+    capabilities = frozenset({"runs_code"})
+
+    def run(self, artifact: Path, inputs: Sequence[str], limits: Any) -> Any:
+        """Fail the test: nothing runs on the compile-only path."""
+        raise AssertionError("the compile-only path ran an executor")
+
+
+def test_trial_provenance_matches_the_manifest_for_an_executor_that_names_no_device(
+    tmp_path: Path, bench: Path
+) -> None:
+    registry = make_registry(BuildLog())
+    registry.register("Executor", "deviceless", DevicelessExecutor)
+    recipe = write_recipe(tmp_path, "deviceless", smoke_data(executor={"kind": "deviceless"}))
+    run_dir = run(recipe, tmp_path / "runs-root", bench, registry)
+    assert_trials_carry_the_manifest(run_dir, ["deviceless/mock-reference/lassi-hecbench-10/omp-cuda/layout/run01"])
+
+
+def test_the_final_manifest_keeps_the_provenance_every_trial_copied(
+    tmp_path: Path, bench: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An executor could name its device partway through a run; the final manifest still holds the device the
+    # trials copied, because it is the first manifest with only its status and finish time changed.
+    names = iter(["fixture-device-first", "fixture-device-later", "fixture-device-last"])
+    monkeypatch.setattr(runner_module, "_device", lambda executor: next(names))
+    run_dir = run(SMOKE, tmp_path / "runs-root", bench, make_registry(BuildLog()))
+    assert assert_trials_carry_the_manifest(run_dir, [SMOKE_TRIAL])["device"] == "fixture-device-first"
+    assert summary_rows(read_ascii(run_dir / "run.md"))["Device"] == "fixture-device-first"
+
+
+def test_trial_md_in_the_run_tree_shows_the_manifest_provenance(
+    tmp_path: Path, bench: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    patch_git(monkeypatch, FAKE_COMMIT + "\n", "")
+    run_dir = run(SMOKE, tmp_path / "runs-root", bench, make_registry(BuildLog()))
+    manifest = json.loads(read_ascii(run_dir / "provenance.json"))
+    md = read_ascii(trial_dir(run_dir, SMOKE_TRIAL) / "trial.md")
+    block = (
+        "## Provenance\n\n"
+        "| Field | Value |\n"
+        "| --- | --- |\n"
+        f"| commit | {FAKE_COMMIT} |\n"
+        "| dirty | false |\n"
+        "| device | none (compile only) |\n"
+        "| sdk | - |\n"
+        f"| date | {manifest['started_utc']} |\n"
+    )
+    assert block in md
+    assert md.index(block) < md.index("## Attempt 0\n")
 
 
 class RecordingExecutor:
@@ -1329,12 +1457,20 @@ def stage_context(
     )
 
 
+def stage_provenance() -> record_module.Provenance:
+    """Return the synthetic Provenance of every trial the stage tests build: FAKE_COMMIT, clean, compile only."""
+    return record_module.Provenance(
+        commit=FAKE_COMMIT, dirty=False, device="none (compile only)", sdk=None, date="2026-09-23T12:34:56+00:00"
+    )
+
+
 def fresh_trial(context: RunContext) -> Trial:
     """Return a Trial with no attempts for the context's item, direction, and backend."""
     trial_id = make_trial_id("stage-test", context.backend.model_id, SUITE, context.direction.name, ITEM, 1)
     return Trial(
         trial_id=trial_id,
         recipe_hash=context.recipe.recipe_hash,
+        provenance=stage_provenance(),
         bench_item=context.suite.bench_item(ITEM, context.direction),
         model=model_info(context.backend, SAMPLING),
     )
@@ -1437,6 +1573,7 @@ def test_compile_loop_stage_stays_pure_through_a_correction(tmp_path: Path, benc
     trial_id = generated.trial_id
     expected = [build_dir(context.build_root, trial_id, index).resolve() for index in (0, 1)]
     assert log.workdirs() == expected
+    assert generated.provenance == corrected.provenance == stage_provenance(), "stages never change the provenance"
 
 
 def test_compile_loop_stage_uncapped_context_keeps_correcting(tmp_path: Path, bench: Path) -> None:

@@ -242,6 +242,7 @@ Trial:
   trial_id: <project>/<arm>/<bench>/<direction>/<item>/run<NN>
   recipe_hash: sha256 of the resolved recipe
   toolchain_pins: {llvm, polygeist, tt_mlir, tt_metal, ttsim, furiosa_sdk, cuda, nvhpc, rocm}
+  provenance: {commit, dirty, device, sdk, date}   # copy of the run manifest, filled by the runner
   bench_item: {suite, item, split, direction}
   model: {backend, id, sampling: {temperature, top_p, max_tokens}}
   context: {knowledge_summary, source_description}
@@ -268,7 +269,7 @@ Diagnostic:
   code, file, line, column, message
 ```
 
-Storage: one JSON file and one `trial.md` per trial under the run tree, aggregated into Hive-partitioned Parquet per run. Large texts (responses, stdout) are stored once by hash and referenced.
+Storage: one JSON file and one `trial.md` per trial under the run tree, aggregated into Hive-partitioned Parquet per run. Large texts (responses, stdout) are stored once by hash and referenced. The run manifest (`provenance.json` and `run.md`) is authoritative for provenance; each Trial's `provenance` is a copy of it, shown in `trial.md` and the trials table, so a trial read outside its run tree still carries its provenance (Agent Rule 1).
 
 ## Project Recipes
 
@@ -775,7 +776,7 @@ A person must be able to follow any trial, IR file, or config without tooling; m
 | --- | --- |
 | MLIR | Custom assembly format only; locations in a sidecar file; `lassi report --view` interleaves each source line with the IR it produced |
 | df dialect | Named SSA results via `getAsmResultNames`; verifier messages phrased as instructions |
-| Trial | `trial.md` with each prompt, each attempt's code, the unified diff from the previous attempt, parsed diagnostics, and the score breakdown |
+| Trial | `trial.md` with the trial's provenance, each prompt, each attempt's code, the unified diff from the previous attempt, parsed diagnostics, and the score breakdown |
 | Run | `run.md` with the resolved recipe, toolchain pins, per-arm tables, and links to every `trial.md` |
 | Config | YAML with a comment on every non-default value; the resolved recipe saved per run |
 | Prompts | One template file per prompt under `assets/prompts/<set>/`, readable as plain text |

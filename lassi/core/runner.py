@@ -41,8 +41,14 @@ host), resolve inside it (Agent Rule 7). The tree holds:
   start and end times (UTC), recipe hash, pin versions, and a status. It is
   written before the first trial with status "running", and again at the
   end with "complete", or with "failed" when a trial or a write raised, so
-  every trial.json in the tree has a commit and a date beside it;
-- run.md: the page a person reads (Readability Standards, Run row);
+  every trial.json in the tree has a commit and a date beside it. Each
+  trial's provenance copies the commit, dirty flag, device, driver (as sdk),
+  and started_utc (as date) of the manifest written first, and the final
+  manifest is that same manifest with only its status and finish time
+  changed, so a trial and its manifest never disagree;
+- run.md: the page a person reads (Readability Standards, Run row). Its
+  summary shows the manifest's provenance, with an unknown value (null) as
+  "-" as trial.md shows it, since provenance is not a measurement;
 - one directory per trial (one level per trial_id segment) with trial.json,
   trial.md, and attempt<NN>/build, each attempt's fresh build directory
   (the run directory is the stages' build root, so a rerun of the recipe
@@ -84,11 +90,19 @@ from lassi.bench import Direction, Suite, load_suite, sources_dir
 from lassi.core.interfaces import Executor, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
 from lassi.core.recipe import UNCAPPED, Recipe, RecipeError, load_recipe, resolved_data, resolved_yaml
-from lassi.core.record import TOOLCHAIN_PIN_NAMES, Final, ToolchainPins, Trial, json_text, make_trial_id
+from lassi.core.record import (
+    TOOLCHAIN_PIN_NAMES,
+    Final,
+    Provenance,
+    ToolchainPins,
+    Trial,
+    json_text,
+    make_trial_id,
+)
 from lassi.core.registry import DEFAULT_REGISTRY, Registry
 from lassi.core.stages import PURPOSE, RunContext
 from lassi.core.store import TextStore, write_trial
-from lassi.core.trial_md import fenced, fmt
+from lassi.core.trial_md import fenced, fmt, fmt_provenance
 from lassi.executors import workdir
 from lassi.llm import model_info
 from lassi.prompts import render
@@ -232,14 +246,15 @@ def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
     run_dir = run.run_dir
     _write(run_dir / RESOLVED_RECIPE, resolved_yaml(run.recipe))
     _write(run_dir / TOOLCHAINS_JSON, json_text(_toolchains_record(run.toolchains)))
-    _write(run_dir / PROVENANCE_JSON, json_text(_provenance(run, RUNNING, None)))
+    manifest = _provenance(run)
+    _write(run_dir / PROVENANCE_JSON, json_text(manifest))
     try:
-        trials = _run_trials(run)
-        provenance = _provenance(run, COMPLETE, datetime.now(timezone.utc))
+        trials = _run_trials(run, _trial_provenance(manifest))
+        provenance = _final_provenance(manifest, COMPLETE)
         _write(run_dir / RUN_MD, _run_md(run, provenance, trials))
         write_run_parquet(trials, run_dir / PARQUET_DIR)
     except BaseException:
-        _write(run_dir / PROVENANCE_JSON, json_text(_provenance(run, FAILED, datetime.now(timezone.utc))))
+        _write(run_dir / PROVENANCE_JSON, json_text(_final_provenance(manifest, FAILED)))
         raise
     _write(run_dir / PROVENANCE_JSON, json_text(provenance))
     print(f"run directory: {run_dir}", flush=True)
@@ -697,13 +712,13 @@ def _toolchains_record(toolchains: Sequence[BuiltToolchain]) -> dict[str, Any]:
 # Trials
 
 
-def _run_trials(run: _Run) -> list[Trial]:
-    """Run and write every trial: directions in recipe order, items sorted, then runs 1 to trials.n."""
+def _run_trials(run: _Run, provenance: Provenance) -> list[Trial]:
+    """Run and write every trial, each with `provenance`: directions in recipe order, items sorted, runs 1 to n."""
     trials: list[Trial] = []
     for direction in run.settings.directions:
         for item in run.bench.items:
             for number in range(1, run.settings.trials + 1):
-                trial = _run_trial(run, direction, item, number)
+                trial = _run_trial(run, provenance, direction, item, number)
                 write_trial(trial, run.run_dir, run.store)
                 trials.append(trial)
                 final = trial.final
@@ -715,7 +730,7 @@ def _run_trials(run: _Run) -> list[Trial]:
     return trials
 
 
-def _run_trial(run: _Run, direction: Direction, item: str, number: int) -> Trial:
+def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: str, number: int) -> Trial:
     """Run the recipe's stages on one new trial, each built on a fresh RunContext, and set its final block."""
     settings, suite = run.settings, run.bench.suite
     backend = run.backend
@@ -725,6 +740,7 @@ def _run_trial(run: _Run, direction: Direction, item: str, number: int) -> Trial
         trial_id=make_trial_id(run.recipe.name, settings.model_id, suite.name, direction.name, item, number),
         recipe_hash=run.recipe.recipe_hash,
         toolchain_pins=run.target_pins[direction.target],
+        provenance=provenance,
         bench_item=suite.bench_item(item, direction),
         model=model_info(backend, settings.sampling),
     )
@@ -789,16 +805,17 @@ def _device(executor: Executor) -> str | None:
     return "none (compile only)" if "compile_only" in getattr(executor, "capabilities", ()) else None
 
 
-def _provenance(run: _Run, status: str, finished: datetime | None) -> dict[str, Any]:
-    """Return provenance.json: where the run came from, when it ran, what it ran on, the pins, and its status.
+def _provenance(run: _Run) -> dict[str, Any]:
+    """Return provenance.json as first written: where the run came from, when it started, what it ran on, the pins.
 
-    `driver` (an SDK or driver version) stays null until an executor that
-    runs programs reports one; `finished_utc` is null while the run runs.
+    Its status is "running" and `finished_utc` is null until
+    _final_provenance closes it. `driver` (an SDK or driver version) stays
+    null until an executor that runs programs reports one.
     """
     pins = dataclasses.asdict(run.pins)
     return {
         "run_id": run.run_dir.name,
-        "status": status,
+        "status": RUNNING,
         "recipe": run.recipe.name,
         "recipe_path": Path(run.recipe.path).as_posix(),
         "recipe_chain": list(run.recipe.chain),
@@ -812,9 +829,36 @@ def _provenance(run: _Run, status: str, finished: datetime | None) -> dict[str, 
         "device": _device(run.executor),
         "driver": None,
         "started_utc": _utc(run.started),
-        "finished_utc": None if finished is None else _utc(finished),
+        "finished_utc": None,
         "pins": {name: version for name, version in pins.items() if version is not None},
     }
+
+
+def _final_provenance(manifest: Mapping[str, Any], status: str) -> dict[str, Any]:
+    """Return the first-written manifest with its final `status` and the finish time; every other value stays.
+
+    The trials copied their provenance from that first manifest, so building
+    the final one from it (not from the run again) keeps every trial's copy
+    equal to provenance.json.
+    """
+    return {**manifest, "status": status, "finished_utc": _utc(datetime.now(timezone.utc))}
+
+
+def _trial_provenance(manifest: Mapping[str, Any]) -> Provenance:
+    """Return the Trial provenance a run manifest gives, so every trial carries a copy of provenance.json.
+
+    commit, dirty, and device keep their manifest keys; sdk is the manifest's
+    "driver" and date its "started_utc". A key the manifest lacks raises
+    KeyError, and a value of the wrong type raises ValueError: the copy never
+    fills in a value the manifest does not hold.
+    """
+    return Provenance(
+        commit=manifest["commit"],
+        dirty=manifest["dirty"],
+        device=manifest["device"],
+        sdk=manifest["driver"],
+        date=manifest["started_utc"],
+    )
 
 
 def _md_table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
@@ -873,9 +917,11 @@ def _run_md(run: _Run, provenance: Mapping[str, Any], trials: Sequence[Trial]) -
     summary = [
         ("Recipe", run.recipe.name),
         ("Recipe hash", f"`{run.recipe.recipe_hash}`"),
-        ("Commit", fmt(provenance["commit"])),
-        ("Dirty", fmt(provenance["dirty"])),
+        ("Commit", fmt_provenance(provenance["commit"])),
+        ("Dirty", fmt_provenance(provenance["dirty"])),
         ("Executor", provenance["executor"]),
+        ("Device", fmt_provenance(provenance["device"])),
+        ("Driver", fmt_provenance(provenance["driver"])),
         ("Started (UTC)", provenance["started_utc"]),
         ("Finished (UTC)", fmt(provenance["finished_utc"])),
         ("Trials", str(len(trials))),

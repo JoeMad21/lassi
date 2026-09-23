@@ -1,4 +1,4 @@
-"""Tests for the Result record, trial naming, JSON, and the text store (P0.2).
+"""Tests for the Result record, trial naming, JSON, and the text store (P0.2), and Trial provenance (P0.18).
 
 The expected field names come from the Result Record yaml block in
 docs/BIBLE.md, so drift between the bible and lassi/core/record.py fails in
@@ -8,6 +8,12 @@ the sha256 text store in lassi/core/store.py, and write_trial and read_trial.
 One test checks that the four P0.2 core modules have docstrings and type hints
 on every public class and function and plain ASCII source (Readability
 Standards). Every fixture value is synthetic and fixed; none is a measurement.
+
+Trial.provenance (P0.18, the OQ-008 decision) is a copy of the run manifest:
+a Provenance record of commit, dirty, device, sdk, and date, typed as
+provenance.json holds them (commit, dirty, device, and sdk may be null there;
+date may not). It is required: a Trial built without it, and a trial.json that
+lacks it or one of its keys, are refused with a message naming the field.
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ import types
 import typing
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +47,12 @@ SHA_EMPTY = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 SHA_ABC = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 VALID_SHA = "a" * 64
 
+# Synthetic provenance values: FIXTURE_COMMIT is not a commit of this repository, and FIXTURE_DATE is in the
+# format the runner writes started_utc (ISO 8601, seconds, UTC offset).
+FIXTURE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+FIXTURE_DATE = "2026-09-23T12:34:56+00:00"
+PROVENANCE_FIELDS = ("commit", "dirty", "device", "sdk", "date")
+
 # Bible mappings whose keys are data (paths, component names), not record fields.
 DICT_VALUED = frozenset({"Attempt.files", "Attempt.score.components"})
 
@@ -48,6 +61,7 @@ NESTED_RECORDS = {
     "Trial": [
         "Trial",
         "Trial.toolchain_pins",
+        "Trial.provenance",
         "Trial.bench_item",
         "Trial.model",
         "Trial.model.sampling",
@@ -79,6 +93,7 @@ RECORD_CLASSES: tuple[type, ...] = (
     record.ScoreBreakdown,
     record.Attempt,
     record.ToolchainPins,
+    record.Provenance,
     record.BenchItem,
     record.ModelInfo,
     record.Context,
@@ -257,14 +272,48 @@ def model_with(**sampling_changes: Any) -> record.ModelInfo:
     return record.ModelInfo(backend="mock", id="mock-fixture", sampling=sampling)
 
 
-def trial_with(**changes: Any) -> record.Trial:
-    """Construct a Trial from the required fields for EXAMPLE_ID, with the given fields changed."""
+def example_provenance(**changes: Any) -> record.Provenance:
+    """Return the provenance of a compile-only run with git available, with the given fields changed.
+
+    The sdk is None, as the runner writes the manifest's driver until an
+    executor reports one.
+    """
     fields: dict[str, Any] = {
+        "commit": FIXTURE_COMMIT,
+        "dirty": False,
+        "device": "none (compile only)",
+        "sdk": None,
+        "date": FIXTURE_DATE,
+    }
+    fields.update(changes)
+    return record.Provenance(**fields)
+
+
+def full_provenance() -> record.Provenance:
+    """Return a Provenance with every field set to a synthetic value."""
+    return record.Provenance(
+        commit=FIXTURE_COMMIT, dirty=True, device="fixture-device", sdk="fixture-sdk", date=FIXTURE_DATE
+    )
+
+
+def unknown_provenance() -> record.Provenance:
+    """Return the provenance of a run where git was unavailable and the executor named no device or SDK."""
+    return record.Provenance(commit=None, dirty=None, device=None, sdk=None, date=FIXTURE_DATE)
+
+
+def required_trial_fields() -> dict[str, Any]:
+    """Return the required Trial fields for EXAMPLE_ID other than provenance."""
+    return {
         "trial_id": EXAMPLE_ID,
         "recipe_hash": RECIPE_HASH,
         "bench_item": example_bench(),
         "model": example_model(),
     }
+
+
+def trial_with(**changes: Any) -> record.Trial:
+    """Construct a Trial from the required fields for EXAMPLE_ID, with the given fields changed."""
+    fields: dict[str, Any] = {**required_trial_fields(), "provenance": example_provenance()}
     fields.update(changes)
     return record.Trial(**fields)
 
@@ -319,6 +368,7 @@ def full_trial(prompt_refs: tuple[record.TextRef, record.TextRef], stdout_ref: r
         trial_id=EXAMPLE_ID,
         recipe_hash=RECIPE_HASH,
         toolchain_pins=record.ToolchainPins(cuda="fixture-cuda", nvhpc="fixture-nvhpc"),
+        provenance=full_provenance(),
         bench_item=example_bench(),
         model=example_model(),
         context=record.Context(knowledge_summary=f"Target offload maps to a grid; na{I_DIAERESIS}ve copy.\n"),
@@ -414,6 +464,86 @@ def test_toolchain_pin_names_match_bible() -> None:
     assert pins is not None
     assert record.TOOLCHAIN_PIN_NAMES == tuple(pins)
     assert [f.name for f in dataclasses.fields(record.ToolchainPins)] == list(record.TOOLCHAIN_PIN_NAMES)
+
+
+# ---------------------------------------------------------------------------
+# Provenance (P0.18)
+
+
+def test_provenance_fields_are_the_bible_fields_in_order() -> None:
+    bible = inline_keys(bible_record_fields()["Trial"]["provenance"])
+    assert bible is not None and tuple(bible) == PROVENANCE_FIELDS
+    assert [f.name for f in dataclasses.fields(record.Provenance)] == list(PROVENANCE_FIELDS)
+
+
+def test_provenance_is_frozen_keyword_only_and_every_field_is_required() -> None:
+    cls = record.Provenance
+    assert dataclasses.is_dataclass(cls)
+    assert cls.__dataclass_params__.frozen, "Provenance is not frozen"
+    assert all(f.kw_only for f in dataclasses.fields(cls)), "Provenance has positional fields"
+    for spec in dataclasses.fields(cls):
+        assert spec.default is dataclasses.MISSING, f"Provenance.{spec.name} has a default"
+        assert spec.default_factory is dataclasses.MISSING, f"Provenance.{spec.name} has a default factory"
+
+
+@pytest.mark.parametrize("name", PROVENANCE_FIELDS)
+def test_provenance_without_a_field_is_refused_naming_it(name: str) -> None:
+    fields = record.to_dict(example_provenance())
+    del fields[name]
+    with pytest.raises((TypeError, ValueError)) as info:
+        record.Provenance(**fields)
+    assert name in str(info.value)
+
+
+def test_provenance_holds_the_values_of_a_run_manifest() -> None:
+    known = example_provenance()
+    assert (known.commit, known.dirty, known.device, known.sdk, known.date) == (
+        FIXTURE_COMMIT,
+        False,
+        "none (compile only)",
+        None,
+        FIXTURE_DATE,
+    )
+    # provenance.json holds null for the commit and the dirty flag when git is unavailable, for the device when
+    # the executor names none, and for the driver (the sdk here) until an executor reports one.
+    unknown = unknown_provenance()
+    assert (unknown.commit, unknown.dirty, unknown.device, unknown.sdk, unknown.date) == (
+        None,
+        None,
+        None,
+        None,
+        FIXTURE_DATE,
+    )
+
+
+def test_provenance_takes_a_sha1_or_sha256_commit_and_the_runner_date_format() -> None:
+    # git object ids are 40 hex characters, or 64 in a SHA-256 repository; the runner writes started_utc with
+    # datetime.isoformat(timespec="seconds") on a UTC time.
+    assert example_provenance(commit="ab" * 32).commit == "ab" * 32
+    date = datetime(2026, 9, 23, 12, 34, 56, tzinfo=timezone.utc).isoformat(timespec="seconds")
+    assert example_provenance(date=date).date == date == FIXTURE_DATE
+
+
+def test_trial_provenance_is_a_required_provenance_record() -> None:
+    names = [f.name for f in dataclasses.fields(record.Trial)]
+    assert names.index("provenance") == names.index("toolchain_pins") + 1
+    spec = {f.name: f for f in dataclasses.fields(record.Trial)}["provenance"]
+    assert spec.default is dataclasses.MISSING, "Trial.provenance has a default"
+    assert spec.default_factory is dataclasses.MISSING, "Trial.provenance has a default factory"
+    assert typing.get_type_hints(record.Trial)["provenance"] is record.Provenance, "Trial.provenance is optional"
+
+
+def test_trial_without_provenance_is_refused_naming_the_field() -> None:
+    with pytest.raises((TypeError, ValueError)) as info:
+        record.Trial(**required_trial_fields())
+    assert "provenance" in str(info.value)
+
+
+def test_trial_keeps_the_provenance_it_was_given() -> None:
+    assert trial_with().provenance == example_provenance()
+    assert trial_with(provenance=unknown_provenance()).provenance == unknown_provenance()
+    trial = trial_with(provenance=full_provenance())
+    assert trial.with_attempt(record.Attempt(index=0, stage_reached="S0")).provenance == full_provenance()
 
 
 # ---------------------------------------------------------------------------
@@ -592,6 +722,31 @@ FIELD_ERRORS = [
     pytest.param(lambda: trial_with(recipe_hash="abc"), "recipe_hash", "abc", id="recipe-hash-short"),
     pytest.param(lambda: trial_with(recipe_hash="AB" * 32), "recipe_hash", "AB" * 32, id="recipe-hash-upper"),
     pytest.param(lambda: trial_with(trial_id="not/a/trial"), "trial_id", "not/a/trial", id="trial-id"),
+    pytest.param(lambda: example_provenance(commit=""), "commit", "", id="provenance-commit-empty"),
+    pytest.param(lambda: example_provenance(commit="0123abc"), "commit", "0123abc", id="provenance-commit-short"),
+    pytest.param(
+        lambda: example_provenance(commit=FIXTURE_COMMIT.upper()),
+        "commit",
+        FIXTURE_COMMIT.upper(),
+        id="provenance-commit-upper",
+    ),
+    pytest.param(lambda: example_provenance(commit="g" * 40), "commit", "g" * 40, id="provenance-commit-not-hex"),
+    pytest.param(lambda: example_provenance(device=""), "device", "", id="provenance-device-empty"),
+    pytest.param(lambda: example_provenance(sdk=""), "sdk", "", id="provenance-sdk-empty"),
+    pytest.param(lambda: example_provenance(date=""), "date", "", id="provenance-date-empty"),
+    pytest.param(lambda: example_provenance(date="yesterday"), "date", "yesterday", id="provenance-date-text"),
+    pytest.param(
+        lambda: example_provenance(date="2026-09-23T12:34:56"),
+        "date",
+        "2026-09-23T12:34:56",
+        id="provenance-date-no-offset",
+    ),
+    pytest.param(
+        lambda: example_provenance(date="2026-09-23T14:34:56+02:00"),
+        "date",
+        "2026-09-23T14:34:56+02:00",
+        id="provenance-date-not-utc",
+    ),
 ]
 
 # Wrong types: the constructors take exactly what from_dict gives back, so every
@@ -637,6 +792,20 @@ TYPE_ERRORS = [
         "attempts",
         (record.Attempt(index=0, stage_reached="S0"),),
         id="trial-attempts-tuple",
+    ),
+    pytest.param(lambda: example_provenance(commit=5), "commit", 5, id="provenance-commit-int"),
+    pytest.param(lambda: example_provenance(dirty="false"), "dirty", "false", id="provenance-dirty-str"),
+    pytest.param(lambda: example_provenance(dirty=0), "dirty", 0, id="provenance-dirty-int"),
+    pytest.param(lambda: example_provenance(device=3), "device", 3, id="provenance-device-int"),
+    pytest.param(lambda: example_provenance(sdk=12.6), "sdk", 12.6, id="provenance-sdk-float"),
+    pytest.param(lambda: example_provenance(date=None), "date", None, id="provenance-date-none"),
+    pytest.param(lambda: example_provenance(date=20260923), "date", 20260923, id="provenance-date-int"),
+    pytest.param(lambda: trial_with(provenance=None), "provenance", None, id="trial-provenance-none"),
+    pytest.param(
+        lambda: trial_with(provenance={"commit": FIXTURE_COMMIT}),
+        "provenance",
+        {"commit": FIXTURE_COMMIT},
+        id="trial-provenance-dict",
     ),
 ]
 
@@ -1007,6 +1176,9 @@ def test_to_json_format() -> None:
         pytest.param(lambda: json_trial().attempts[1], id="attempt-run"),
         pytest.param(minimal_trial, id="trial-min"),
         pytest.param(json_trial, id="trial-full"),
+        pytest.param(example_provenance, id="provenance"),
+        pytest.param(unknown_provenance, id="provenance-unknown"),
+        pytest.param(lambda: trial_with(provenance=unknown_provenance()), id="trial-unknown-provenance"),
     ],
 )
 def test_json_round_trip(build: Callable[[], Any]) -> None:
@@ -1020,12 +1192,56 @@ def test_round_trip_rebuilds_nested_types() -> None:
     assert isinstance(trial.model.sampling, interfaces.Sampling)
     assert isinstance(trial.bench_item, record.BenchItem)
     assert isinstance(trial.toolchain_pins, record.ToolchainPins)
+    assert isinstance(trial.provenance, record.Provenance)
+    assert trial.provenance == full_provenance()
     assert isinstance(trial.final, record.Final)
     assert all(isinstance(a, record.Attempt) for a in trial.attempts)
     assert all(isinstance(d, record.Diagnostic) for d in trial.attempts[0].diagnostics)
     assert isinstance(trial.attempts[0].prompt_ref, record.TextRef)
     assert isinstance(trial.attempts[1].run.stdout_ref, record.TextRef)
     assert trial.attempts[1].run.outputs_ref is None
+
+
+def test_trial_json_carries_the_provenance_as_the_bible_names_it() -> None:
+    data = record.to_dict(minimal_trial())
+    assert list(data)[:5] == ["trial_id", "recipe_hash", "toolchain_pins", "provenance", "bench_item"]
+    assert data["provenance"] == {
+        "commit": FIXTURE_COMMIT,
+        "dirty": False,
+        "device": "none (compile only)",
+        "sdk": None,
+        "date": FIXTURE_DATE,
+    }
+    assert list(data["provenance"]) == list(PROVENANCE_FIELDS)
+    text = record.to_json(trial_with(provenance=unknown_provenance()))
+    assert '"provenance": {\n    "commit": null,\n    "dirty": null,\n    "device": null,\n    "sdk": null,\n' in text
+
+
+def test_from_dict_refuses_a_null_provenance() -> None:
+    data = record.to_dict(minimal_trial())
+    data["provenance"] = None
+    with pytest.raises(ValueError) as info:
+        record.from_dict(record.Trial, data)
+    assert "provenance" in str(info.value)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        pytest.param("commit", 5, id="commit-int"),
+        pytest.param("dirty", "false", id="dirty-str"),
+        pytest.param("dirty", 1, id="dirty-int"),
+        pytest.param("device", ["none"], id="device-list"),
+        pytest.param("sdk", 12.6, id="sdk-float"),
+        pytest.param("date", None, id="date-null"),
+    ],
+)
+def test_from_dict_checks_provenance_types(key: str, value: Any) -> None:
+    data = record.to_dict(minimal_trial())
+    data["provenance"][key] = value
+    with pytest.raises(ValueError) as info:
+        record.from_dict(record.Trial, data)
+    assert f"provenance.{key}" in str(info.value)
 
 
 def diagnostic_data(**changes: Any) -> dict[str, Any]:
@@ -1049,6 +1265,7 @@ def test_from_dict_rejects_unknown_key() -> None:
         pytest.param(("model", "sampling"), "seed", "Sampling", id="sampling"),
         pytest.param(("attempts", 0, "diagnostics", 0), "hint", "Diagnostic", id="diagnostic"),
         pytest.param((), "notes", "Trial", id="trial"),
+        pytest.param(("provenance",), "host", "Provenance", id="provenance"),
     ],
 )
 def test_from_dict_rejects_unknown_nested_key(path: tuple[Any, ...], key: str, owner: str) -> None:
@@ -1071,6 +1288,12 @@ def test_from_dict_rejects_unknown_nested_key(path: tuple[Any, ...], key: str, o
         pytest.param(("model", "sampling"), "top_p", id="sampling-top-p"),
         pytest.param(("attempts", 0), "stage_reached", id="attempt-stage"),
         pytest.param(("attempts", 0, "diagnostics", 0), "severity", id="diagnostic-severity"),
+        pytest.param((), "provenance", id="trial-provenance"),
+        pytest.param(("provenance",), "commit", id="provenance-commit"),
+        pytest.param(("provenance",), "dirty", id="provenance-dirty"),
+        pytest.param(("provenance",), "device", id="provenance-device"),
+        pytest.param(("provenance",), "sdk", id="provenance-sdk"),
+        pytest.param(("provenance",), "date", id="provenance-date"),
     ],
 )
 def test_from_dict_rejects_missing_required_key(path: tuple[Any, ...], key: str) -> None:
@@ -1385,6 +1608,47 @@ def test_read_trial_round_trip(tmp_path: Path, text_store: store.TextStore, targ
     back = store.read_trial(path, text_store)
     assert back == trial
     assert back.attempts[0].response_text == RESPONSES[0]
+
+
+def test_trial_json_round_trips_the_provenance(tmp_path: Path, text_store: store.TextStore) -> None:
+    trial = stored_trial(text_store)
+    out = store.write_trial(trial, tmp_path / "runs", text_store)
+    data = json.loads((out / "trial.json").read_text(encoding="ascii"))
+    assert data["provenance"] == {
+        "commit": FIXTURE_COMMIT,
+        "dirty": True,
+        "device": "fixture-device",
+        "sdk": "fixture-sdk",
+        "date": FIXTURE_DATE,
+    }
+    assert store.read_trial(out, text_store).provenance == full_provenance()
+    unknown = trial_with(provenance=unknown_provenance())
+    other = store.write_trial(unknown, tmp_path / "other-runs", text_store)
+    assert store.read_trial(other, text_store).provenance == unknown_provenance()
+
+
+@pytest.mark.parametrize(
+    ("path", "key"),
+    [
+        pytest.param((), "provenance", id="provenance"),
+        pytest.param(("provenance",), "commit", id="provenance-commit"),
+        pytest.param(("provenance",), "date", id="provenance-date"),
+    ],
+)
+def test_read_trial_refuses_a_trial_json_without_provenance(
+    tmp_path: Path, text_store: store.TextStore, path: tuple[str, ...], key: str
+) -> None:
+    out = store.write_trial(stored_trial(text_store), tmp_path / "runs", text_store)
+    data = json.loads((out / "trial.json").read_text(encoding="ascii"))
+    target = data
+    for step in path:
+        target = target[step]
+    del target[key]
+    (out / "trial.json").write_bytes(json.dumps(data).encode("ascii"))
+    with pytest.raises(ValueError) as info:
+        store.read_trial(out, text_store)
+    assert key in str(info.value)
+    assert str(out / "trial.json") in str(info.value), "the error names the trial.json that lacks the field"
 
 
 def test_read_trial_missing_response_text(tmp_path: Path, text_store: store.TextStore) -> None:
