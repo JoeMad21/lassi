@@ -18,36 +18,16 @@ store.
 from __future__ import annotations
 
 import dataclasses
-import re
 from collections.abc import Mapping, Sequence
-from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
+from lassi.core.files import fence_for, language_for
 from lassi.core.record import TOOLCHAIN_PIN_NAMES, Attempt, Context, Diagnostic, TextRef, Trial
 
 if TYPE_CHECKING:
     from lassi.core.store import TextStore
 
 PLACEHOLDER = "PLACEHOLDER"
-
-_LANGUAGES = {
-    ".cu": "cuda",
-    ".cuh": "cuda",
-    ".c": "c",
-    ".h": "cpp",
-    ".hpp": "cpp",
-    ".cpp": "cpp",
-    ".cc": "cpp",
-    ".cxx": "cpp",
-    ".f": "fortran",
-    ".f90": "fortran",
-    ".f95": "fortran",
-    ".py": "python",
-    ".rs": "rust",
-    ".cs": "csharp",
-    ".mlir": "mlir",
-}
-_BACKTICK_RUN = re.compile(r"`+")
 
 
 # ---------------------------------------------------------------------------
@@ -73,15 +53,9 @@ def fenced(text: str, lang: str) -> str:
     CRLF and lone CR line breaks become LF; everything else is kept as is.
     """
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    longest = max((len(run) for run in _BACKTICK_RUN.findall(text)), default=0)
-    fence = "`" * max(3, longest + 1)
+    fence = fence_for(text)
     body = text if text.endswith("\n") else text + "\n"
     return f"{fence}{lang}\n{body}{fence}\n"
-
-
-def _language_for(path: str) -> str:
-    """Return the fenced-block language for a file path, from its lowercased suffix."""
-    return _LANGUAGES.get(PurePosixPath(path).suffix.lower(), "text")
 
 
 def _cell(text: str) -> str:
@@ -161,7 +135,7 @@ def _code_blocks(files: Mapping[str, str]) -> list[str]:
         return ["### Code\n", "None.\n"]
     blocks = ["### Code\n"]
     for path in sorted(files):
-        blocks += [f"#### `{path}`\n", fenced(files[path], _language_for(path))]
+        blocks += [f"#### `{path}`\n", fenced(files[path], language_for(path))]
     return blocks
 
 

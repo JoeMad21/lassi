@@ -34,7 +34,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.1 | DONE | Package skeleton and the twelve interfaces | - | 87c0d17; pushed to origin/p0-core |
 | P0.2 | DONE | Result record, text store, trial.md, Parquet mirror | P0.1 | record, store, trial.md, Parquet mirror; tests split per module; P0.3 adds pyyaml; OQ-008 provenance |
 | P0.3 | DONE | Recipe loader with capability validation | P0.1 | loader, registry, base.yaml; P0.4 relaxes empty-registry test, sets constructor convention; P0.11 imports components, maps arms |
-| P0.4 | READY | LLM backends: mock, openai_compat, ollama | P0.1,P0.2 |  |
+| P0.4 | DONE | LLM backends: mock, openai_compat, ollama | P0.1,P0.2 | mock, openai_compat, ollama; files.py renderer for P0.5; handoffs in PHASE-NOTES |
 | P0.5 | READY | FILE-block parser and nvcc, nvc++ toolchain adapters | P0.2 |  |
 | P0.6 | READY | Spike: nvcc and nvc++ on alpha01 | - | remote: rx doctor, rx exec |
 | P0.7 | READY | Pin CUDA and NVHPC under LASSI_TOOLCHAINS | P0.6 | remote: big job if install needed |

@@ -18,12 +18,16 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - Sandbox executor: spike which unprivileged isolation works on alpha01 without sudo (bubblewrap, `unshare -rn`, Apptainer, `systemd-run --user`). Record the choice with evidence; if none isolates the network, that is an owner-queue item.
 - Mock LLM backend: returns the reference target for a bench item; it is the P0 gate driver and the P1 dry-run driver.
 - `trial.md` and the Result record follow the bible's Result Record and Readability Standards exactly.
+- `lassi/core/files.py` exists since P0.4 with `render_file_blocks`, `FILE_MARKER`, `language_for`, and `fence_for`; P0.5 adds the parser there. Split on "\n" only (not `splitlines`), close a block only on a fence at least as long as the opening one, and add a round trip from `render_file_blocks` through the parser (four-backtick fence, CRLF, form feed). `_check_path` is stricter than "reject absolute and .." (it refuses `./main.cu`); decide explicitly whether model output goes through it.
+- Runner (P0.11): import `lassi.llm` when the runner or CLI module loads, never lazily, so the backends register in the real DEFAULT_REGISTRY. A backend declaring `needs_reference` (the mock) must get the bench item's reference target through `with_reference` before each trial. `Sampling.max_tokens` is required but `projects/base.yaml` has none: fail loudly when a recipe gives no value, never pick one. The recipe `model` section holds only backend and id; HTTP settings (base_url, api_key_env, timeout_s) keep their defaults until a recipe key for them is designed, and a recipe may only ever name the key's environment variable.
 
 ## P1 Faithful LASSI
 
 - Prefer `third_party/LASSI` as a git submodule pinned at 74b4681: upstream stays untouched and its text stays out of the policy scan. If it must be vendored, pattern hits inside it go to the owner queue; never edit upstream text.
 - HeCBench sources are pinned by commit in `assets/bench/`; `entropy` needs `reference.h` from pinned HeCBench (bible, upstream quirks).
 - The notebook replay gate needs recorded responses; capture them as fixtures under `tests/`.
+- The mock tags `.cu` blocks as cuda; under the faithful fence quirk that tag becomes "uda". Decide whether mock dry runs go through faithful fence stripping, and record the choice.
+- The bible's lassi-df recipe binds `model.backend: furiosa`, which is not registered. furiosa-llm speaks the OpenAI API, so decide between an alias of openai_compat and a separate backend before P3.
 
 ## P2 Scoring
 

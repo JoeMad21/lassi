@@ -94,7 +94,7 @@ REQUIRED = (
 KIND_SECTIONS = {"executor": "Executor", "oracle": "Oracle", "profiler": "Profiler", "adversary": "Agent"}
 
 # Names that belong to projects and must never appear in the shared loader or registry source.
-PROJECT_NAMES = ("lassi-repro", "lassi-ee", "lassi-df", "hecbench", "qwen", "a100", "mi300x")
+PROJECT_NAMES = ("lassi-repro", "lassi-ee", "lassi-df", "hecbench", "qwen", "wizardcoder", "a100", "mi300x", "gpt-oss")
 
 E_ACUTE = "\N{LATIN SMALL LETTER E WITH ACUTE}"
 
@@ -753,12 +753,25 @@ def test_register_rejects_bad_names_and_factories(
     assert registry.names("Stage") == []
 
 
-def test_default_registry_holds_nothing_real_in_p0_3(registry_module: ModuleType) -> None:
-    # A P0.3-only invariant (P0.3 registers nothing real). Relax it when a later task registers
-    # real components. It reads the real DEFAULT_REGISTRY, never the default_registry fixture's stand-in.
-    assert {name: registry_module.DEFAULT_REGISTRY.names(name) for name in registry_module.INTERFACES} == {
-        name: [] for name in registry_module.INTERFACES
-    }
+def foreign_factories(registry_module: ModuleType) -> list[str]:
+    """Return 'interface name module' for each DEFAULT_REGISTRY factory defined outside the lassi package."""
+    registry = registry_module.DEFAULT_REGISTRY
+    found: list[str] = []
+    for interface in registry_module.INTERFACES:
+        for name in registry.names(interface):
+            module = registry.get(interface, name).factory.__module__
+            if not module.startswith("lassi."):
+                found.append(f"{interface} {name} {module}")
+    return found
+
+
+def test_default_registry_holds_only_package_components(registry_module: ModuleType) -> None:
+    # No test fake leaks into the default registry: every factory comes from a module under lassi., whether or not
+    # lassi.llm was imported first. It reads the real DEFAULT_REGISTRY, never the default_registry fixture's stand-in.
+    assert foreign_factories(registry_module) == []
+    importlib.import_module("lassi.llm")
+    assert {"mock", "ollama", "openai_compat"} <= set(registry_module.DEFAULT_REGISTRY.names("LLMBackend"))
+    assert foreign_factories(registry_module) == []
 
 
 def test_register_rejects_duplicate_but_allows_same_name_elsewhere(registry_module: ModuleType) -> None:
