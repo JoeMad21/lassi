@@ -19,7 +19,10 @@ def env(tmp_path):
                                                                ".pytest_cache"))
     scratch = tmp_path / "scratch"
     scratch.mkdir()
-    e = dict(os.environ, RX_TRANSPORT="local", RX_SCRATCH=str(scratch), RX_MACHINE="t",
+    # Drop the LASSI_* variables a gate sets (LASSI_SCRATCH above all) so the gate under test uses
+    # this scratch, not the scratch of the gate that runs the suite on the build host.
+    base = {k: v for k, v in os.environ.items() if not k.startswith("LASSI_")}
+    e = dict(base, RX_TRANSPORT="local", RX_SCRATCH=str(scratch), RX_MACHINE="t",
              GIT_AUTHOR_NAME="T", GIT_AUTHOR_EMAIL="t@example.com", GIT_COMMITTER_NAME="T",
              GIT_COMMITTER_EMAIL="t@example.com")
     for cmd in (["git", "init", "-q", "-b", "main"], ["git", "add", "-A"], ["git", "commit", "-qm", "base"]):
