@@ -102,3 +102,13 @@ Question: The CUDA runfile installer cannot write /var/log as a user, so it writ
 Options: (a) grant a narrow exception for this transient installer log, cleared by the trap; (b) switch cuda.sh to NVIDIA's per-component redistributable archives (published sha256, no installer, nothing outside the scratch disk) and reinstall cuda@12.6.3 that way; (c) keep the current install and forbid further runfile installs until (b) exists.
 Recommendation: (b); it removes the root-filesystem write entirely and gives a published checksum per component, at the cost of one reinstall (download size PROJECTED; the runfile is 4,446,722,669 bytes per rx 20260923-043558-exec-a651, and the installed tree measured 7.0G in plans/spikes/p0-nvcc.md).
 Answer:
+
+## OQ-011 Sandbox CPU Quota And Separate Uid
+State: OPEN
+Kind: decision
+Blocks: none (P0.10 builds on the measured mechanism)
+Evidence: plans/spikes/p0-sandbox.md; docs/BIBLE.md Sandbox and Decision Log (2026-09-23)
+Question: The bible's Sandbox asks for a separate uid or container and cgroup limits on CPU, memory, and wall time. On alpha01, unprivileged, the P0.9 spike found that the user systemd manager delegates only the memory and pids controllers, so CPU can be capped only as CPU time (prlimit --cpu), not as a cgroup quota; and the sandbox is a user-namespace container whose processes keep the host uid. Do these meet the bible's intent?
+Options: (a) accept both: CPU time cap via RLIMIT_CPU and a user-namespace container count as meeting the Sandbox rules; (b) grant access: a root drop-in delegating the cpu controller to user@1025.service (Delegate=cpu cpuset io memory pids) so the scope enforces CPUQuota; (c) require a separate host uid, which needs a newuidmap-based helper that was not tested.
+Recommendation: (a) for P0, with (b) later if CPU contention between parallel trials shows up; network isolation, memory, wall time, and the read-only harness already hold. Please also confirm that sandboxed runs may use systemd-run --user through the gate, which refuses the systemctl command pattern.
+Answer:

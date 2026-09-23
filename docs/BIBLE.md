@@ -1,6 +1,6 @@
 # LASSI Project Bible
 
-Repository mirror of the project bible, master revision 50 (2026-09-23). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
+Repository mirror of the project bible, master revision 52 (2026-09-23). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
 
 ## Purpose And Scope
 
@@ -568,6 +568,7 @@ Source: [tenstorrent/ttsim](https://github.com/tenstorrent/ttsim).
 ### Sandbox
 
 - Separate uid or container, no network, cgroup limits on CPU, memory, and wall time.
+- Mechanism on alpha01 (P0.9): systemd-run --user --scope with MemoryMax, MemorySwapMax=0, and RuntimeMaxSec, wrapping unshare -rnmpf --mount-proc (user, pid, mount, and network namespaces; a connect attempt fails inside), read-only remounts except a writable per-trial directory (verified on a scratch test directory), prlimit --cpu for CPU time, and an outer timeout; bubblewrap and Apptainer are not installed [MEASURED 2026-09-23]. Open gaps (OQ-011): the cgroup cpu controller is not delegated to the user, so CPU is capped as CPU time rather than a cgroup quota, and the host uid is unchanged inside the user-namespace container.
 - Harness mounted read-only; oracle and expected outputs outside the sandbox.
 - Per-trial build directory and JIT kernel cache under `/mnt/nvme10/joseph_ufl/lassi-runs/`.
 
@@ -909,10 +910,11 @@ Open questions:
 
 ## Decision Log
 
-Twenty-eight decisions have been made: twenty-six on 2026-09-22 and two on 2026-09-23; add new entries at the top, newest first.
+Twenty-nine decisions have been made: twenty-six on 2026-09-22 and three on 2026-09-23; add new entries at the top, newest first.
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-23 | Sandbox on alpha01: systemd-run --user --scope (MemoryMax, MemorySwapMax=0, RuntimeMaxSec) wrapping unshare -rnmpf --mount-proc with read-only remounts except a writable per-trial directory, prlimit --cpu for CPU time, and an outer timeout; the CPU-quota and separate-uid gaps go to OQ-011 | Spike plans/spikes/p0-sandbox.md, 2026-09-23: a connect attempt is blocked inside the namespaces against a connecting baseline, a 256 MiB allocation is killed under a 64M scope, wall limits stop runs, and a harness write fails as read-only; bubblewrap and Apptainer are absent and docker needs group membership |
 | 2026-09-23 | Pin CUDA 12.6.3 (runfile, toolkit only) and NVHPC 24.11 (single-CUDA 12.6 tarball) in user space under $LASSI_TOOLCHAINS as cuda@12.6.3 and nvhpc@24.11; nvc++ builds for cc80 with NVHPC_CUDA_HOME set to the pinned CUDA, so the LASSI compile flags stay unchanged | 12.6.3 matches the nvcc measured on alpha01; 24.11 is the 2024 NVHPC release whose bundled CUDA is closest to it, and it postdates the LASSI paper. Evidence: plans/spikes/p0-toolchains-verify.md |
 | 2026-09-23 | Executor none is partial on alpha01: nvcc V12.6.85 from the CUDA 12.6.3 toolkit at /mnt/nvme10/joseph_ufl/cuda-12.6.3 builds sm_80 code without a GPU; no nvc++ was found (bounded search), so P0.7 installs NVHPC 2024 under $LASSI_TOOLCHAINS | Spike plans/spikes/p0-nvcc.md measured both on 2026-09-23; the Available status held only for nvcc |
 | 2026-09-22 | Agents run the roadmap work order unattended: each session takes the next ready task, and phase branches stack while earlier phases await merge. [OPEN] items and owner reviews go to plans/OWNER-QUEUE.md with evidence while work continues on unblocked tasks; only J merges into main | Owner wants minimal supervision; decisions stay with J without stalling the queue |
