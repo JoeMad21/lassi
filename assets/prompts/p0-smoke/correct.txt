@@ -1,0 +1,14 @@
+Your $target_language program did not build. The files from your last answer are below, each in a
+fenced code block whose first line is // FILE: <path>. If there are none, your answer held no usable
+file block.
+
+$files
+The build reported these problems, one per line (severity, file:line:column, [code], message):
+$diagnostics
+
+Fix every error and return the complete corrected $target_language program as these files: $target_files.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

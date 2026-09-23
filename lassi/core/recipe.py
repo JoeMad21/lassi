@@ -382,6 +382,17 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     )
 
 
+def resolved_data(path: Path, *, roots: Sequence[Path] | None = None) -> dict[str, Any]:
+    """Return the resolved mapping of the recipe at `path` (steps 1 to 6) without the type or binding checks.
+
+    It lets a caller explain why a recipe that load_recipe refused cannot
+    run (for example arms without a model, which fails the binding check).
+    A file that cannot be read or merged raises RecipeError, as in load_recipe.
+    """
+    search = tuple(Path(root) for root in (default_roots() if roots is None else roots))
+    return _resolve(_load_chain(Path(path), search))
+
+
 def resolved_yaml(recipe: Recipe) -> str:
     """Return the resolved recipe text a run saves: two header comment lines, then the canonical YAML."""
     chain = " -> ".join(_ascii(name) for name in recipe.chain)

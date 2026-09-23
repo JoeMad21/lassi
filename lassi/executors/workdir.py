@@ -1,10 +1,13 @@
-"""Per-trial build directories under the runs root (bible Sandbox; Agent Rule 7).
+"""Per-trial build directories under a run's directory (bible Sandbox; Agent Rule 7).
 
 Each attempt of a trial builds in its own fresh directory,
-`<runs root>/<trial_id segments>/attempt<NN>/build`, so no attempt sees
-another's files and toolchains get the fresh workdir they expect. The runs
-root is $LASSI_RUNS_ROOT, which the gate sets under /mnt/nvme10; build
-directories never sit inside the repository.
+`<root>/<trial_id segments>/attempt<NN>/build`, so no attempt sees another's
+files and toolchains get the fresh workdir they expect. The stage runner
+passes the run directory, `<runs root>/runs/<run_id>`, as the root, so each
+attempt builds beside its trial's trial.json, and a second run of the same
+recipe (same trial ids) never meets the first run's build directories. The
+runs root is $LASSI_RUNS_ROOT (runs_root()), which the gate sets under
+/mnt/nvme10; build directories never sit inside the repository.
 """
 
 from __future__ import annotations

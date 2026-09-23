@@ -291,6 +291,11 @@ BAD_PATHS = [
     pytest.param("-", id="bare-dash"),
     pytest.param("@rsp.cpp", id="response-file"),
     pytest.param("-dir/a.cu", id="dash-directory"),
+    # A segment longer than NAME_MAX (255 bytes in UTF-8) cannot be written as a file name on the build host.
+    pytest.param("k" * 253 + ".cu", id="long-segment"),
+    pytest.param("src/" + E_ACUTE * 127 + ".c", id="long-multibyte-segment"),
+    # A lone surrogate is not Unicode text, so it can be neither encoded nor written as a file name.
+    pytest.param("a" + chr(0xD83D) + ".cu", id="lone-surrogate"),
 ]
 
 
@@ -586,7 +591,19 @@ BAD_PARSED_PATHS = [
     pytest.param("./-o.cu", id="dot-slash-dash"),
     pytest.param("-Xcompiler=-specs=evil.c", id="host-compiler-flag"),
     pytest.param("@rsp.cpp", id="response-file"),
+    # Names the build host cannot write: a segment over 255 bytes in UTF-8, and a lone surrogate.
+    pytest.param("k" * 300 + ".cuh", id="long-segment"),
+    pytest.param("src/" + E_ACUTE * 128 + ".cu", id="long-multibyte-segment"),
+    pytest.param("a" + chr(0xD83D) + ".cu", id="lone-surrogate"),
 ]
+
+
+def test_a_segment_of_exactly_255_bytes_is_allowed() -> None:
+    long_ascii = "k" * 252 + ".cu"
+    long_multibyte = E_ACUTE * 126 + ".cu"
+    assert len(long_ascii.encode("utf-8")) == len(long_multibyte.encode("utf-8")) == file_blocks.MAX_SEGMENT_BYTES
+    files = {long_ascii: "int a;\n", f"src/{long_multibyte}": "int b;\n"}
+    assert file_blocks.parse_file_blocks(render_file_blocks(files)).files == files
 
 
 @pytest.mark.parametrize("path", BAD_PARSED_PATHS)

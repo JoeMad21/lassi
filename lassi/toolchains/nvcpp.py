@@ -131,3 +131,6 @@ class NvcppCc80(NvcppToolchain):
 
     name = "nvcpp-cc80"
     GPU = "cc80"
+    # The pinned nvc++: toolchains/nvhpc.pin, at <toolchains root>/<PREFIX_NAME>/<COMPILER_SUBDIR>/nvc++.
+    PIN = "nvhpc"
+    PIN_BIN = "{COMPILER_SUBDIR}/nvc++"

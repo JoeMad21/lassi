@@ -123,3 +123,6 @@ class NvccSm80(NvccToolchain):
 
     name = "nvcc-sm80"
     ARCH = "sm_80"
+    # The pinned nvcc: toolchains/cuda.pin, at <toolchains root>/<PREFIX_NAME>/bin/nvcc (see lassi.toolchains).
+    PIN = "cuda"
+    PIN_BIN = "bin/nvcc"

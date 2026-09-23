@@ -1,7 +1,7 @@
-"""The command runner and the build steps shared by the compiler toolchains.
+"""The command runners and the build steps shared by the compiler toolchains.
 
 lassi.toolchains re-exports CommandResult, CommandRunner, subprocess_runner,
-and STDERR_ATTACHMENT from here. The adapters in lassi.toolchains.nvcc and
+EnvRunner, and STDERR_ATTACHMENT from here. The adapters in lassi.toolchains.nvcc and
 lassi.toolchains.nvcpp subclass CompilerToolchain, which holds build().
 """
 
@@ -55,11 +55,41 @@ def subprocess_runner(argv: Sequence[str], cwd: Path, timeout_s: float) -> Comma
     When the command runs past `timeout_s`, it and every process it started
     (a compiler driver starts its stages, such as cicc, ptxas, and the host
     compiler) are killed, and the result has returncode -1 and the stderr
-    captured so far, followed by a last line "timed out after N s".
+    captured so far, followed by a last line "timed out after N s". The
+    command inherits the parent's environment; EnvRunner gives it a chosen one.
     """
+    return _run_command(argv, cwd, timeout_s, None)
+
+
+class EnvRunner:
+    """A CommandRunner that behaves like subprocess_runner but gives the command exactly `env` as its environment.
+
+    Nothing from the parent's environment reaches the command unless `env`
+    holds it, so variables that change a compile silently (NVCC_PREPEND_FLAGS,
+    NVCC_APPEND_FLAGS, CPATH, and the like) stay out. The stage runner builds
+    each pinned toolchain with one (lassi.core.runner). A copy of `env` is
+    kept, so a later change to the caller's mapping changes nothing.
+    """
+
+    def __init__(self, env: Mapping[str, str]) -> None:
+        """Keep a copy of the environment every command gets."""
+        self.env: dict[str, str] = dict(env)
+
+    def __repr__(self) -> str:
+        """Show the class and the environment's variable names only, never their values."""
+        return f"{type(self).__name__}(names={sorted(self.env)!r})"
+
+    def __call__(self, argv: Sequence[str], cwd: Path, timeout_s: float) -> CommandResult:
+        """Run `argv` in `cwd` as subprocess_runner does, with this runner's environment and nothing else."""
+        return _run_command(argv, cwd, timeout_s, self.env)
+
+
+def _run_command(argv: Sequence[str], cwd: Path, timeout_s: float, env: Mapping[str, str] | None) -> CommandResult:
+    """Run `argv` as subprocess_runner describes; `env` None inherits the parent's environment."""
     process = subprocess.Popen(
         list(argv),
         cwd=cwd,
+        env=None if env is None else dict(env),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

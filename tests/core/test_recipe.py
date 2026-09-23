@@ -1700,6 +1700,19 @@ def test_faithful_applies_to_the_resolved_value(load: Callable[..., Any], tmp_pa
     assert inherited["fixes"] == {"fence_tag": False}
 
 
+def test_resolved_data_is_the_loaded_mapping_without_the_binding_check(
+    load: Callable[..., Any], recipe_module: ModuleType, tmp_path: Path
+) -> None:
+    resolved = recipe_module.resolved_data(FIXTURES / "faithful-child.yaml", roots=[FIXTURES])
+    assert resolved == load("faithful-child.yaml").data
+    unbound = write(tmp_path, "unbound.yaml", "extends: child\nstages: [never_registered]\n")
+    with pytest.raises(recipe_module.RecipeError, match="never_registered"):
+        load(unbound)
+    assert recipe_module.resolved_data(unbound, roots=[FIXTURES])["stages"] == ["never_registered"]
+    with pytest.raises(recipe_module.RecipeError, match="cannot read"):
+        recipe_module.resolved_data(tmp_path / "absent.yaml", roots=[FIXTURES])
+
+
 def test_explicit_fix_off_keeps_the_cap(load: Callable[..., Any]) -> None:
     data = load("fix-off.yaml").data
     assert data["faithful"] is False

@@ -26,7 +26,10 @@ leading or trailing whitespace, and no control character or line separator
 (the FILE line must stay one line for any line splitter, str.splitlines
 included). It also does not start with "-" or "@": a toolchain puts source
 paths on a compiler command line, where such a word is read as an option or
-a response file, so a file name could change the compile flags.
+a response file, so a file name could change the compile flags. It holds no
+lone surrogate (not Unicode text, so it cannot be written as a file name), and
+no segment is longer than MAX_SEGMENT_BYTES in UTF-8, the longest file name
+Linux accepts (NAME_MAX).
 
 parse_file_blocks reads model output back into files. It splits the text on
 "\\n" only, so "\\r", form feeds, and other line breaks stay inside a line. A
@@ -57,6 +60,8 @@ from pathlib import PurePosixPath
 from lassi.core.record import Diagnostic
 
 FILE_MARKER = "// FILE: "
+# The longest path segment in UTF-8 bytes: NAME_MAX on Linux, where the build host writes the files.
+MAX_SEGMENT_BYTES = 255
 
 _LANGUAGES = {
     ".cu": "cuda",
@@ -79,6 +84,8 @@ _BACKTICK_RUN = re.compile(r"`+")
 _DRIVE = re.compile(r"[A-Za-z]:")
 # C0 and C1 controls (NEL, U+0085, among them) and the Unicode line and paragraph separators.
 _LINE_BREAKING = re.compile(r"[\x00-\x1f\x7f-\x9f\N{LINE SEPARATOR}\N{PARAGRAPH SEPARATOR}]")
+# A lone surrogate code point, which JSON can decode from a model reply but which is not Unicode text.
+_SURROGATE = re.compile("[\ud800-\udfff]")
 
 # An opening fence, matched against a whole line: up to 3 spaces, 3 or more backticks, and an
 # info string without backticks, for example "```cuda" or "   ````".
@@ -113,6 +120,8 @@ def _check_path(path: str) -> None:
         raise ValueError(f"file path {path!r} contains a backslash; use '/' between segments")
     if _LINE_BREAKING.search(path):
         raise ValueError(f"file path {path!r} contains a control character or line separator")
+    if _SURROGATE.search(path):
+        raise ValueError(f"file path {path!r} contains a lone surrogate, which is not Unicode text")
     if path != path.strip():
         raise ValueError(f"file path {path!r} has leading or trailing whitespace")
     if path.startswith(_OPTION_STARTS):
@@ -125,6 +134,11 @@ def _check_path(path: str) -> None:
         raise ValueError(f"file path {path!r} has a '..' segment")
     if "" in segments or "." in segments:
         raise ValueError(f"file path {path!r} is not normalized: it has an empty or '.' segment")
+    longest = max(len(segment.encode("utf-8")) for segment in segments)
+    if longest > MAX_SEGMENT_BYTES:
+        raise ValueError(
+            f"file path {path!r} has a segment of {longest} bytes in UTF-8; the limit is {MAX_SEGMENT_BYTES}"
+        )
 
 
 def render_file_blocks(files: Mapping[str, str]) -> str:

@@ -19,23 +19,31 @@ from pathlib import Path
 
 import pytest
 
+from lassi.toolchains.pins import PINS_DIR, read_pin
+
 REPO = Path(__file__).resolve().parents[2]
 TOOLCHAINS = REPO / "toolchains"
 NAMES = ("cuda", "nvhpc")
 REQUIRED_KEYS = ("NAME", "VERSION", "URL", "INSTALL_FLAGS", "PREFIX_NAME", "EXPECT_VERSION")
 
 
-def read_pin(name: str) -> dict[str, str]:
-    """Return the KEY=value pairs of toolchains/<name>.pin, with surrounding quotes removed."""
-    pairs: dict[str, str] = {}
-    for line in (TOOLCHAINS / f"{name}.pin").read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        match = re.fullmatch(r"([A-Z][A-Z0-9_]*)=(\"[^\"]*\"|[^\s\"#]*)(\s+#.*)?", stripped)
-        assert match, f"{name}.pin: not a KEY=value line: {line!r}"
-        pairs[match.group(1)] = match.group(2).strip('"')
-    return pairs
+def test_pin_parser_reads_the_committed_pin_files() -> None:
+    # read_pin (lassi.toolchains.pins, which the stage runner uses) parses the files these tests check.
+    assert PINS_DIR.resolve() == TOOLCHAINS.resolve()
+
+
+def test_pin_parser_refuses_a_bad_line_and_a_name_outside_the_pin_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from lassi.toolchains import pins
+
+    (tmp_path / "broken.pin").write_bytes(b"# fixture pin\nNAME=broken\nnot a pin line\n")
+    monkeypatch.setattr(pins, "PINS_DIR", tmp_path)
+    with pytest.raises(ValueError, match=r"broken\.pin:3"):
+        pins.read_pin("broken")
+    for name in ("../cuda", "sub/cuda", ""):
+        with pytest.raises(ValueError, match="pin name"):
+            pins.read_pin(name)
 
 
 def script_text(name: str) -> str:

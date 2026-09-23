@@ -9,6 +9,9 @@ dependencies = [
     "pyyaml>=6.0.3",
 ]
 
+[project.scripts]
+lassi = "lassi.cli:main"
+
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
 

@@ -16,7 +16,11 @@ whose components do not fit together fails before any backend is constructed.
 The runner, never the registry, constructs components. A component bound by a
 kind section is built as `factory(**binding.config)`; an LLM backend as
 `factory(model_id)`, with keyword settings left at their defaults unless the
-caller passes them.
+caller passes them. A stage is built as `factory(context=<RunContext>)`, one
+stage object per trial (lassi.core.stages). A toolchain that declares a pin
+(PIN and PIN_BIN) is built as `factory(executable=<pinned path>,
+runner=EnvRunner(<clean environment>))`, and one without as `factory()`
+(lassi.core.runner).
 """
 
 from __future__ import annotations

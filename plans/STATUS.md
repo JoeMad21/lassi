@@ -41,10 +41,10 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.8 | DONE | Bench registry and one pinned HeCBench app | P0.1 | layout at HeCBench 7d2d3c5; eval refused to training; fetch exercised by rx 20260923-050731-desktop-8r113ei-p0-core-cecf (exploratory) |
 | P0.9 | DONE | Spike: sandbox isolation on alpha01 | - | unshare -rnmpf in a systemd-run --user scope; network blocked; OQ-011 CPU quota and uid |
 | P0.10 | DONE | Sandbox and the none and native executors | P0.1,P0.9 | sandbox and native executor; 23/23 remote tests from f57c90a; gaps to P0.16 |
-| P0.11 | READY | Stage runner and lassi run compile-only path | P0.2,P0.3,P0.4,P0.5,P0.8,P0.10 |  |
+| P0.11 | DONE | Stage runner and lassi run compile-only path | P0.2,P0.3,P0.4,P0.5,P0.8,P0.10 | stage runner, lassi run compile-only path, p0-smoke recipe; stage ladder per bible (S4 compiles) |
 | P0.12 | READY | Verify text-policy tooling, local half | - |  |
 | P0.13 | OWNER | Verify text-policy tooling, CI half | P0.12 | OQ-005 no origin remote; OQ-007 Actions variable and branch protection |
-| P0.G | READY | Phase gate: mock LLM compile-only run and text-policy canary | P0.7,P0.11,P0.12,P0.13 | also needs P0.14 (fast suite green) |
+| P0.G | READY | Phase gate: mock LLM compile-only run and text-policy canary | P0.7,P0.11,P0.12,P0.13 | also needs P0.14 (fast suite green); first run to write records, per-trial provenance awaits OQ-008 |
 | P0.14 | READY | Fix rx local-transport tests on Windows | - | 5 test_rx_gate errors at baseline |
 | P0.15 | READY | Replace toolchain stderr fixtures with alpha01 captures | P0.7 | fixtures in tests/toolchains/fixtures are PLACEHOLDER |
 | P0.16 | READY | Sandbox hardening before native runs of generated code | P0.10 | private /dev, recursive read-only mounts, default-deny view, output and disk caps, core dumps, runner kill |
