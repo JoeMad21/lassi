@@ -42,7 +42,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.9 | DONE | Spike: sandbox isolation on alpha01 | - | unshare -rnmpf in a systemd-run --user scope; network blocked; OQ-011 CPU quota and uid |
 | P0.10 | DONE | Sandbox and the none and native executors | P0.1,P0.9 | sandbox and native executor; 23/23 remote tests from f57c90a; gaps to P0.16 |
 | P0.11 | DONE | Stage runner and lassi run compile-only path | P0.2,P0.3,P0.4,P0.5,P0.8,P0.10 | stage runner, lassi run compile-only path, p0-smoke recipe; stage ladder per bible (S4 compiles) |
-| P0.12 | READY | Verify text-policy tooling, local half | - |  |
+| P0.12 | DONE | Verify text-policy tooling, local half | - | check_setup 15 PASS; canary local blocks both commits; --history clean; tests added for --message, --history, canary local |
 | P0.13 | OWNER | Verify text-policy tooling, CI half | P0.12 | OQ-005 no origin remote; OQ-007 Actions variable and branch protection |
 | P0.G | READY | Phase gate: mock LLM compile-only run and text-policy canary | P0.7,P0.11,P0.12,P0.13 | also needs P0.14 (fast suite green); first run to write records, per-trial provenance awaits OQ-008 |
 | P0.14 | READY | Fix rx local-transport tests on Windows | - | 5 test_rx_gate errors at baseline |
