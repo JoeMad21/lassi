@@ -6,8 +6,9 @@ Enforces three rules on every repository surface:
 1. Pattern rule: no line matches a pattern from the owner's pattern list.
    The list lives outside git. Local hooks read ``~/.config/lassi/text-policy.txt``
    (override with ``LASSI_TEXT_POLICY_FILE``); CI reads the ``TEXT_POLICY_PATTERNS``
-   environment variable, filled from a repository Actions variable. One regex per
-   line; blank lines and lines starting with ``#`` are ignored. A built-in canary
+   environment variable, filled from a repository Actions secret, which Actions masks
+   in run logs. One regex per line; blank lines and lines starting with ``#`` are
+   ignored. A built-in canary
    pattern is always active so gates can seed a violation without committing any
    listed string (``--print-canary`` prints it).
 2. ASCII rule: text in repository artifacts is plain ASCII (``third_party/`` exempt).
@@ -235,7 +236,7 @@ def ci_range() -> tuple:
 
 def run_ci(patterns: Sequence[re.Pattern]) -> List[Violation]:
     if not os.environ.get("TEXT_POLICY_PATTERNS", "").strip():
-        raise ConfigError("TEXT_POLICY_PATTERNS is empty; set the repository Actions variable")
+        raise ConfigError("TEXT_POLICY_PATTERNS is empty; set the repository Actions secret")
     after = os.environ.get("AFTER_SHA", "")
     if after == ZERO_SHA:
         print("branch deletion; nothing to check")
