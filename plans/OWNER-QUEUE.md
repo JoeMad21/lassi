@@ -125,11 +125,12 @@ Answer: Go with A, I cannot be clear enough about this, you will not get root ac
 Applied: 2026-09-23. Recorded in the bible (Sandbox, Decision Log). No option that needs root will be proposed again.
 
 ## OQ-012 Scratch Cleanup Candidates
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: none (usage is 108G of the 120G cap, rx 20260923-121133-exec-e28f)
 Evidence: rx 20260923-120802-exec-c07d and rx 20260923-120813-exec-70cc (du of /mnt/nvme10/joseph_ufl on 2026-09-23); bible Decision Log (scratch cap)
 Question: Agents may not delete files under /mnt/nvme10/joseph_ufl. These are the remaining candidates for deletion or for a backup to the workstation. The removed installer downloads are done. Which should go?
 Options: (a) `.cache/pip` (7.8G), pip's download cache: `python3 -m pip cache purge`; the only cost is slower installs. (b) `cuda-12.6.3/` (7.0G, dated 2026-07-08), an older CUDA 12.6.3 tree; LASSI uses `toolchains/cuda@12.6.3` and does not need it. Remove it only if nothing outside LASSI uses it. (c) `amd/` (18G: extracted_rocm 15G, debs 3.9G), with AMD deferred (OQ-002): an agent backs it up to the workstation as a tar.gz, but only after you approve that and say whether the host copy then goes. (d) keep everything for now.
 Recommendation: (a) now, (b) if unused elsewhere, and (c) when space is next needed. Keep `.cache/huggingface` (23G) and `furiosa-venv` (8G), which RNGD serving may need.
-Answer:
+Answer:Give me a command to delete the pip cache.
+Applied: 2026-09-23. The owner removed `.cache/pip` (pip cache purge, then the older entries it left); usage is 100G (rx 20260923-140158-exec-791b, 2026-09-23T14:01:58-07:00). Options (b) and (c) were not chosen, so `cuda-12.6.3/` and `amd/` stay.
