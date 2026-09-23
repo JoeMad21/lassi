@@ -1,0 +1,4 @@
+NVC++-S-0155-Compiler failed to translate accelerator region (see -Minfo messages): Could not find allocated-variable index for symbol - tmp (main.cpp: 21)
+reduce(const float *, float *, int):
+     21, Accelerator restriction: size of the GPU copy of tmp is unknown
+NVC++/x86-64 Linux PLACEHOLDER: compilation completed with severe errors

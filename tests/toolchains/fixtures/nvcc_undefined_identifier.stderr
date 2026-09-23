@@ -1,0 +1,5 @@
+main.cu(8): error: identifier "undefined_var" is undefined
+          y[i] = a * x[i] + undefined_var;
+                            ^
+
+1 error detected in the compilation of "main.cu".

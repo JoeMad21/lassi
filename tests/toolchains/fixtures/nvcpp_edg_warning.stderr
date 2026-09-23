@@ -1,0 +1,12 @@
+"main.cpp", line 14: warning: variable "unused" was declared but never referenced [declared_but_not_referenced]
+    int unused = 0;
+        ^
+
+Remark: individual warnings can be suppressed with "--diag_suppress <warning-name>"
+
+saxpy(int, float, const float *, float *):
+      6, #omp target teams distribute parallel for
+          6, Generating "nvkernel__Z5saxpyifPKfPf_F1L6_2" GPU kernel
+          7, Loop parallelized across teams and threads(128), schedule(static)
+      6, Generating map(to:x[:n])
+         Generating map(tofrom:y[:n])

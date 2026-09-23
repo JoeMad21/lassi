@@ -1,0 +1,6 @@
+"main.cpp", line 2: catastrophic error: cannot open source file "kernels/scale.h"
+  #include "kernels/scale.h"
+           ^
+
+1 catastrophic error detected in the compilation of "main.cpp".
+Compilation terminated.
