@@ -40,7 +40,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.7 | DONE | Pin CUDA and NVHPC under LASSI_TOOLCHAINS | P0.6 | cuda@12.6.3 and nvhpc@24.11 pinned and verified from 4ef46ee; nvc++ needs NVHPC_CUDA_HOME; OQ-010 |
 | P0.8 | DONE | Bench registry and one pinned HeCBench app | P0.1 | layout at HeCBench 7d2d3c5; eval refused to training; fetch exercised by rx 20260923-050731-desktop-8r113ei-p0-core-cecf (exploratory) |
 | P0.9 | DONE | Spike: sandbox isolation on alpha01 | - | unshare -rnmpf in a systemd-run --user scope; network blocked; OQ-011 CPU quota and uid |
-| P0.10 | READY | Sandbox and the none and native executors | P0.1,P0.9 |  |
+| P0.10 | ACTIVE | Sandbox and the none and native executors | P0.1,P0.9 | none executor done; sandbox module, native executor, remote tests pending (see plans/spikes/p0-sandbox.md) |
 | P0.11 | READY | Stage runner and lassi run compile-only path | P0.2,P0.3,P0.4,P0.5,P0.8,P0.10 |  |
 | P0.12 | READY | Verify text-policy tooling, local half | - |  |
 | P0.13 | OWNER | Verify text-policy tooling, CI half | P0.12 | OQ-005 no origin remote; OQ-007 Actions variable and branch protection |
