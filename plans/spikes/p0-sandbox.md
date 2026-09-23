@@ -417,3 +417,52 @@ Findings [MEASURED] for the composite as written above:
 - Wall time: NOT enforced. With RuntimeMaxSec=3 and an outer `timeout 13`, `sleep 30` ran to completion: the probe returned only after 30 s, with rc 124 from `timeout`. Inference, not measured: neither the outer timeout's signal nor RuntimeMaxSec stopped the process inside the namespaces in this composition; one possible cause is that the command runs as PID 1 of the new pid namespace, which ignores SIGTERM without a handler. This differs from probe 2 above, where RuntimeMaxSec alone stopped a scope (rc 143, inferred).
 
 Consequence for P0.10: enforce wall time inside the namespaces, for example `timeout --kill-after=<grace> <wall>` as the command's innermost wrapper, or kill the whole scope on expiry, and prove it with the remote test "a sleep past wall time sets hang" before relying on it. The bible Sandbox bullet, which lists RuntimeMaxSec and an outer timeout as the wall limit, must be corrected when P0.10 settles the mechanism.
+
+### Second addendum probe: wall time by an innermost timeout
+
+rx id 20260923-053016-exec-2413 (`rx exec`, no checkout), 2026-09-23T05:30:16-07:00. Same composite without RuntimeMaxSec, with `timeout --kill-after=2 <wall>` as the innermost wrapper inside the namespaces; sent base64-encoded to `$TMPDIR`, run, and removed.
+
+```
+#!/usr/bin/env bash
+# P0.10 second addendum probe: wall time enforced by an innermost timeout inside the namespaces. Scratch only.
+set -u
+date -Is
+W="$TMPDIR/sbx-probe2.$$"
+mkdir -p "$W/harness" "$W/trial"
+sandbox() {
+  local wall="$1"; shift
+  timeout $((wall + 10)) systemd-run --user --scope --quiet \
+    -p MemoryMax=64M -p MemorySwapMax=0 \
+    unshare -rnmpf --mount-proc sh -c '
+      set -e
+      mount --bind "$0/trial" "$0/trial"
+      mount --rbind "$0" "$0"
+      mount -o remount,bind,ro "$0"
+      mount --bind "$0/harness" "$0/harness"
+      mount -o remount,bind,ro "$0/harness"
+      wall="$1"; shift
+      exec prlimit --cpu=20 -- timeout --kill-after=2 "$wall" "$@"' "$W" "$wall" "$@"
+}
+echo "=== wall (sleep 30 under inner timeout 3)"
+start=$(date +%s); sandbox 3 sleep 30; echo "rc=$? elapsed_s=$(( $(date +%s) - start ))"
+echo "=== wall, TERM ignored (trap on TERM, sleep 30)"
+start=$(date +%s); sandbox 3 sh -c 'trap "" TERM; sleep 30'; echo "rc=$? elapsed_s=$(( $(date +%s) - start ))"
+echo "=== normal run"
+sandbox 5 sh -c 'echo OK; exit 3'; echo "rc=$?"
+rm -rf "$W"; echo "cleanup rc=$? exists=$( [ -e "$W" ] && echo yes || echo no )"
+```
+
+Output (the first line, the date stamp above, is omitted):
+
+```
+=== wall (sleep 30 under inner timeout 3)
+rc=124 elapsed_s=3
+=== wall, TERM ignored (trap on TERM, sleep 30)
+rc=124 elapsed_s=5
+=== normal run
+OK
+rc=3
+cleanup rc=0 exists=no
+```
+
+Findings [MEASURED]: with the innermost `timeout --kill-after=2 3`, `sleep 30` stopped after 3 s (rc 124); a command ignoring SIGTERM stopped after 5 s (rc 124; consistent with the wall time plus the 2 s kill-after grace, an inference, since no signal was captured); a normal exit still passes through (rc 3). Elapsed times come from `date +%s` and are accurate to about 1 s. This is the wall-time form P0.10 should adopt and prove with its remote test.
