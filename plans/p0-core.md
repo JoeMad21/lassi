@@ -99,6 +99,18 @@ Constraints for every task:
 - Files: `tools/rx.py`, `tests/tools/test_rx_gate.py`.
 - Remote: none. Depends: none.
 
+### P0.15 Replace toolchain stderr fixtures with alpha01 captures
+- Bible: Component Interfaces (Toolchain contract rules), Result Record (Diagnostic).
+- Accept: every file in `tests/toolchains/fixtures/` is replaced by stderr captured on alpha01 with the pinned compilers under `LC_ALL=C` (see plans/spikes/p0-toolchains-verify.md), each with its rx id in the fixtures README; the expected Diagnostic lists and parsers are updated to match; the README no longer says PLACEHOLDER.
+- Files: `tests/toolchains/fixtures/`, `tests/toolchains/test_diagnostics.py`, `lassi/toolchains/` if a format differs.
+- Remote: `rx run` to capture. Depends: P0.7.
+
+### P0.16 Sandbox hardening before native runs of generated code
+- Bible: Sandbox, Agent Rules 5, 6, 7, 9, 12; plans/spikes/p0-sandbox-verify.md and the Known limits in lassi/executors/sandbox.py.
+- Accept: `remote` tests on alpha01 show, inside the sandbox: only null, zero, full, random, urandom, tty, a private devpts, and shm exist under /dev (no accelerator or other host device node); every mount except the workdir and the private tmpfs mounts is read-only, checked from /proc/self/mountinfo, and setup fails closed otherwise; $HOME and the scratch root are hidden except the workdir, the harness, and the pinned toolchains; stdout and stderr are capped with a truncation flag; workdir disk use is capped; a crashing program leaves no core with the host handler; when the runner's timeout fires, no process of the sandbox survives. Local tests pin the new setup steps; the bible Sandbox bullet and Decision Log are updated.
+- Files: `lassi/executors/sandbox.py`, `lassi/toolchains/_base.py` (runner kill), `tests/executors/`, `docs/BIBLE.md`.
+- Remote: `rx run -- 'LASSI_REQUIRE_SANDBOX=1 uv run pytest -q -m remote tests/executors'`. Depends: P0.10. Any task that runs generated code on the native executor depends on P0.16.
+
 ### P0.G Phase gate
 - Bible: Build Roadmap, P0 row, Gate column; AGENTS.md Phase Gate and Results.
 - Accept: (1) on alpha01 from a clean tree, `rx run -- 'uv run lassi run tests/fixtures/recipes/p0-smoke.yaml'` with the mock backend takes one HeCBench app end to end compile-only and reaches the compile stage with a built artifact; `rx pull` writes `results/p0-gate/provenance.json` and `summary.md` cites it; (2) `policy_canary.py local` output shows the seeded commit blocked locally; (3) `policy_canary.py push` and `status` show it blocked in CI. All three recorded under `results/p0-gate/`. Pass sets P0 DONE and opens a pull request `P0 Core` (needs origin).
