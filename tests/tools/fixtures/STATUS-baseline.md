@@ -30,19 +30,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 
 | ID | State | Title | Depends | Note |
 | --- | --- | --- | --- | --- |
-| P0.0 | DONE | Plan phase P0 into plans/p0-core.md and add its tasks here | - | plan committed; push pending OQ-005 |
-| P0.1 | READY | Package skeleton and the twelve interfaces | - |  |
-| P0.2 | READY | Result record, text store, trial.md, Parquet mirror | P0.1 |  |
-| P0.3 | READY | Recipe loader with capability validation | P0.1 |  |
-| P0.4 | READY | LLM backends: mock, openai_compat, ollama | P0.1,P0.2 |  |
-| P0.5 | READY | FILE-block parser and nvcc, nvc++ toolchain adapters | P0.2 |  |
-| P0.6 | READY | Spike: nvcc and nvc++ on alpha01 | - | remote: rx doctor, rx exec |
-| P0.7 | READY | Pin CUDA and NVHPC under LASSI_TOOLCHAINS | P0.6 | remote: big job if install needed |
-| P0.8 | READY | Bench registry and one pinned HeCBench app | P0.1 |  |
-| P0.9 | READY | Spike: sandbox isolation on alpha01 | - | remote: rx run |
-| P0.10 | READY | Sandbox and the none and native executors | P0.1,P0.9 |  |
-| P0.11 | READY | Stage runner and lassi run compile-only path | P0.2,P0.3,P0.4,P0.5,P0.8,P0.10 |  |
-| P0.12 | READY | Verify text-policy tooling, local half | - |  |
-| P0.13 | OWNER | Verify text-policy tooling, CI half | P0.12 | OQ-005 no origin remote; OQ-007 Actions variable and branch protection |
-| P0.G | READY | Phase gate: mock LLM compile-only run and text-policy canary | P0.7,P0.11,P0.12,P0.13 | also needs P0.14 (fast suite green) |
-| P0.14 | READY | Fix rx local-transport tests on Windows | - | 5 test_rx_gate errors at baseline |
+| P0.0 | READY | Plan phase P0 into plans/p0-core.md and add its tasks here | - | read plans/PHASE-NOTES.md first |

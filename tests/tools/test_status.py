@@ -10,8 +10,9 @@ import status  # noqa: E402
 
 
 def fresh(tmp_path):
+    """Copy a fixed baseline STATUS.md so tests do not track live plan state."""
     dst = tmp_path / "STATUS.md"
-    shutil.copy(REPO / "plans" / "STATUS.md", dst)
+    shutil.copy(REPO / "tests" / "tools" / "fixtures" / "STATUS-baseline.md", dst)
     return dst
 
 

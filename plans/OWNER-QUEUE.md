@@ -46,7 +46,7 @@ Answer:
 ## OQ-005 Monorepo Path And Remote
 State: OPEN
 Kind: decision
-Blocks: none (the setup guide assumes the recommendation)
+Blocks: P0.13, P0.G, every branch push (no origin remote is configured)
 Evidence: docs/BIBLE.md, Agent Rules workflow and question 3
 Question: Local repository path and remote name for the monorepo.
 Options: (a) C:\dev\lassi on Windows, ~/dev/lassi on Linux, origin = private github.com/JoeMad21/lassi; (b) other.
@@ -66,7 +66,7 @@ Answer:
 ## OQ-007 GitHub Enforcement Settings
 State: OPEN
 Kind: access
-Blocks: P0 gate, CI half
+Blocks: P0.13, P0.G (CI half of the text-policy gate)
 Evidence: docs/BIBLE.md, Attribution Policy, Enforcement items 2 and 3
 Question: Set the repository Actions variable TEXT_POLICY_PATTERNS to the pattern list, and protect main with the text-policy check required. Agents cannot change repository settings.
 Options: (a) set both; (b) variable only (branch protection on private repositories needs a paid or education plan).
