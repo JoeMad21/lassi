@@ -136,7 +136,7 @@ Answer:Give me a command to delete the pip cache.
 Applied: 2026-09-23. The owner removed `.cache/pip` (pip cache purge, then the older entries it left); usage is 100G (rx 20260923-140158-exec-791b, 2026-09-23T14:01:58-07:00). Options (b) and (c) were not chosen, so `cuda-12.6.3/` and `amd/` stay.
 
 ## OQ-013 Pattern List Visible In Public Actions Logs
-State: ANSWERED
+State: CLOSED
 Kind: policy
 Blocks: none
 Evidence: CI run https://github.com/JoeMad21/lassi/actions/runs/35921343647 (the P0.13 canary, 2026-09-23): the log of the step "Check commits, files, branch, and pull request text" prints the step environment, including the full TEXT_POLICY_PATTERNS value; .github/workflows/text-policy.yml passes it as `vars.TEXT_POLICY_PATTERNS`, and Actions variables are not masked. The repository is public (OQ-005), so every run log shows the list.
@@ -144,3 +144,4 @@ Question: The text-policy pattern list is kept out of git by design, but the CI 
 Options: (a) move it: create an Actions secret TEXT_POLICY_PATTERNS with the same value, change the workflow's env line to `secrets.TEXT_POLICY_PATTERNS`, delete the variable, and optionally delete old run logs; an agent can make the one-line workflow change (it does not weaken the check) once you create the secret, and a canary run proves it still fails. (b) keep the variable; the list is not a credential and is also derivable from what the check refuses. (c) move it and also make the repository private sooner.
 Recommendation: (a); it keeps the list out of public view at no cost to enforcement. Secrets need you to set them (repository settings are owner actions).
 Answer: (a). (Given by the owner in the working session on 2026-09-23: "I agree with the fix." The owner set the Actions secret the same day.)
+Applied: 2026-09-23. The owner set the Actions secret (last from the variable through a bash pipe, updated 21:28:26Z); the workflow reads it since ba90a9c. Canary run https://github.com/JoeMad21/lassi/actions/runs/35922699182 (commit 42ea4b6) failed on the canary in the commit message and in canary.txt, and its log shows TEXT_POLICY_PATTERNS as ***. Left for the owner: delete the variable after the P0 pull request merges (main's workflow reads it until then), and optionally delete the older run logs that show the list. Not verified: whether Actions masks each line of the multi-line secret; a real violation prints the matching pattern, so such a line could appear in a failure log.
