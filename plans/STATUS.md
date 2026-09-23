@@ -36,7 +36,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.3 | DONE | Recipe loader with capability validation | P0.1 | loader, registry, base.yaml; P0.4 relaxes empty-registry test, sets constructor convention; P0.11 imports components, maps arms |
 | P0.4 | DONE | LLM backends: mock, openai_compat, ollama | P0.1,P0.2 | mock, openai_compat, ollama; files.py renderer for P0.5; handoffs in PHASE-NOTES |
 | P0.5 | DONE | FILE-block parser and nvcc, nvc++ toolchain adapters | P0.2 | FILE-block parser, nvcc-sm80 and nvcpp-cc80 adapters; hand-written stderr fixtures pending P0.7 captures |
-| P0.6 | READY | Spike: nvcc and nvc++ on alpha01 | - | remote: rx doctor, rx exec |
+| P0.6 | DONE | Spike: nvcc and nvc++ on alpha01 | - | nvcc V12.6.85 at /mnt/nvme10/joseph_ufl/cuda-12.6.3 builds sm_80 without a GPU; no nvc++ found (P0.7) |
 | P0.7 | READY | Pin CUDA and NVHPC under LASSI_TOOLCHAINS | P0.6 | remote: big job if install needed |
 | P0.8 | READY | Bench registry and one pinned HeCBench app | P0.1 |  |
 | P0.9 | READY | Spike: sandbox isolation on alpha01 | - | remote: rx run |

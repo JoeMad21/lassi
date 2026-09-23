@@ -82,3 +82,13 @@ Question: Agent Rules 1 and 2 require every number to carry commit, toolchain pi
 Options: (a) run level only: run.md and the run's provenance manifest (P0.11) carry them for every trial in the run, and trial.md links to run.md; no record change, but a trial file read outside its run tree has no provenance. (b) add `provenance: {commit, dirty, device, sdk, date}` to Trial in the bible's Result Record (Decision Log entry), filled by the runner and shown in trial.md and the trials table; a small schema change now, before any real run writes records. (c) both: the run manifest stays authoritative and each Trial carries a copy.
 Recommendation: (c); every artifact that shows a number then carries its provenance (Rule 1) while the run manifest stays the source (AGENTS.md, Results), and the change is cheapest before real runs exist.
 Answer:
+
+## OQ-009 Stale Storage Row In Environment State
+State: OPEN
+Kind: review
+Blocks: none
+Evidence: plans/spikes/p0-nvcc.md (finding 4); docs/BIBLE.md Environment State, Storage row
+Question: The bible's Environment State (dated 2026-09-22) says "Root filesystem full", but the P0.6 spike measured 300G available on `/` (82% used; rx doctor root_free_gb 321.3) on 2026-09-23. Should the row be updated with the measured value?
+Options: (a) an agent updates the Storage row with the 2026-09-23 measurement and a Decision Log entry at the next bible sync; Agent Rule 7 stays as it is either way. (b) keep the row as the 2026-09-22 record and add a dated note beside it. (c) leave it.
+Recommendation: (a); the Environment State should match the latest measurement, and Rule 7 keeps everything off the root filesystem regardless of free space.
+Answer:
