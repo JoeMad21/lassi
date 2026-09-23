@@ -4,7 +4,9 @@ version = "0.0.0"
 description = "One codebase that reproduces LASSI and LASSI-EE and builds LASSI-DF"
 readme = "README.md"
 requires-python = ">=3.10,<3.11"
-dependencies = []
+dependencies = [
+    "pyarrow>=25.0.1",
+]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]

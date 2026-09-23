@@ -32,7 +32,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | --- | --- | --- | --- | --- |
 | P0.0 | DONE | Plan phase P0 into plans/p0-core.md and add its tasks here | - | plan committed; push pending OQ-005 |
 | P0.1 | DONE | Package skeleton and the twelve interfaces | - | 87c0d17; pushed to origin/p0-core |
-| P0.2 | READY | Result record, text store, trial.md, Parquet mirror | P0.1 |  |
+| P0.2 | DONE | Result record, text store, trial.md, Parquet mirror | P0.1 | record, store, trial.md, Parquet mirror; tests split per module; P0.3 adds pyyaml; OQ-008 provenance |
 | P0.3 | READY | Recipe loader with capability validation | P0.1 |  |
 | P0.4 | READY | LLM backends: mock, openai_compat, ollama | P0.1,P0.2 |  |
 | P0.5 | READY | FILE-block parser and nvcc, nvc++ toolchain adapters | P0.2 |  |

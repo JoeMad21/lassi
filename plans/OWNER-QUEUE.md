@@ -72,3 +72,13 @@ Question: Set the repository Actions variable TEXT_POLICY_PATTERNS to the patter
 Options: (a) set both; (b) variable only (branch protection on private repositories needs a paid or education plan).
 Recommendation: (a).
 Answer:
+
+## OQ-008 Provenance In The Result Record
+State: OPEN
+Kind: decision
+Blocks: none yet; needed before P0.11 writes records from real runs
+Evidence: docs/BIBLE.md (Agent Rules 1 and 2, Result Record); lassi/core/record.py; lassi/core/trial_md.py
+Question: Agent Rules 1 and 2 require every number to carry commit, toolchain pins, device, SDK or driver version, and date, and require a simulator result to name the simulator as the device. The bible's Result Record gives each Trial recipe_hash and toolchain_pins, but no commit, device, SDK or driver version, or date, so trial.json, trial.md, and the Parquet rows cannot show them on their own. Where should they live?
+Options: (a) run level only: run.md and the run's provenance manifest (P0.11) carry them for every trial in the run, and trial.md links to run.md; no record change, but a trial file read outside its run tree has no provenance. (b) add `provenance: {commit, dirty, device, sdk, date}` to Trial in the bible's Result Record (Decision Log entry), filled by the runner and shown in trial.md and the trials table; a small schema change now, before any real run writes records. (c) both: the run manifest stays authoritative and each Trial carries a copy.
+Recommendation: (c); every artifact that shows a number then carries its provenance (Rule 1) while the run manifest stays the source (AGENTS.md, Results), and the change is cheapest before real runs exist.
+Answer:
