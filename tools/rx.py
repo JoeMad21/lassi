@@ -78,6 +78,12 @@ def die(msg: str, code: int = 2) -> None:
 
 
 def ssh_bin() -> str:
+    override = os.environ.get("RX_SSH")
+    if override:
+        return override
+    win = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32" / "OpenSSH" / "ssh.exe"
+    if platform.system() == "Windows" and win.is_file():
+        return str(win)
     found = shutil.which("ssh")
     if not found:
         die("ssh not found on PATH")
