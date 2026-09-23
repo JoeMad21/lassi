@@ -92,3 +92,13 @@ Question: The bible's Environment State (dated 2026-09-22) says "Root filesystem
 Options: (a) an agent updates the Storage row with the 2026-09-23 measurement and a Decision Log entry at the next bible sync; Agent Rule 7 stays as it is either way. (b) keep the row as the 2026-09-22 record and add a dated note beside it. (c) leave it.
 Recommendation: (a); the Environment State should match the latest measurement, and Rule 7 keeps everything off the root filesystem regardless of free space.
 Answer:
+
+## OQ-010 CUDA Runfile Installer Log On The Root Filesystem
+State: OPEN
+Kind: policy
+Blocks: none (P0.7 proceeds; the next CUDA reinstall follows the answer)
+Evidence: toolchains/cuda.sh; install job 20260923-043820-toolchains-p07-dc38; its log, moved to $LASSI_TOOLCHAINS/cuda@12.6.3/cuda-installer.log
+Question: The CUDA runfile installer cannot write /var/log as a user, so it writes /tmp/cuda-installer.log (18,820 bytes in this job) on the alpha01 root filesystem while it runs. Job 20260923-043820-toolchains-p07-dc38 did this once; the script moved the log into the install prefix and no file remains in /tmp or /var/tmp. Agent Rule 7 allows nothing on the root filesystem, and only you can grant an exception. cuda.sh now clears the log with an EXIT trap on every exit path except SIGKILL, which the gate sends 10 s after SIGTERM when it kills a job.
+Options: (a) grant a narrow exception for this transient installer log, cleared by the trap; (b) switch cuda.sh to NVIDIA's per-component redistributable archives (published sha256, no installer, nothing outside the scratch disk) and reinstall cuda@12.6.3 that way; (c) keep the current install and forbid further runfile installs until (b) exists.
+Recommendation: (b); it removes the root-filesystem write entirely and gives a published checksum per component, at the cost of one reinstall (download size PROJECTED; the runfile is 4,446,722,669 bytes per rx 20260923-043558-exec-a651, and the installed tree measured 7.0G in plans/spikes/p0-nvcc.md).
+Answer:

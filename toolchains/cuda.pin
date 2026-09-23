@@ -1,0 +1,10 @@
+# CUDA toolkit pin (task P0.7; bible Toolchain Pins). Shell-sourced by toolchains/cuda.sh.
+# The NVIDIA runfile installs the toolkit only (no driver) in user space under $LASSI_TOOLCHAINS/$PREFIX_NAME.
+# 12.6.3 matches the nvcc measured on alpha01 in the P0.6 spike (plans/spikes/p0-nvcc.md).
+NAME=cuda
+VERSION=12.6.3
+URL=https://developer.download.nvidia.com/compute/cuda/12.6.3/local_installers/cuda_12.6.3_560.35.05_linux.run
+MD5=29d297908c72b810c9ceaa5177142abd  # NVIDIA md5sum.txt for 12.6.3, fetched on alpha01 2026-09-23 (rx 20260923-043558-exec-a651)
+INSTALL_FLAGS="--silent --toolkit --no-opengl-libs --no-man-page --no-drm --override"
+PREFIX_NAME=cuda@12.6.3
+EXPECT_VERSION="Cuda compilation tools, release 12.6, V12.6.85"

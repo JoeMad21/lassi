@@ -37,7 +37,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.4 | DONE | LLM backends: mock, openai_compat, ollama | P0.1,P0.2 | mock, openai_compat, ollama; files.py renderer for P0.5; handoffs in PHASE-NOTES |
 | P0.5 | DONE | FILE-block parser and nvcc, nvc++ toolchain adapters | P0.2 | FILE-block parser, nvcc-sm80 and nvcpp-cc80 adapters; hand-written stderr fixtures pending P0.7 captures |
 | P0.6 | DONE | Spike: nvcc and nvc++ on alpha01 | - | nvcc V12.6.85 at /mnt/nvme10/joseph_ufl/cuda-12.6.3 builds sm_80 without a GPU; no nvc++ found (P0.7) |
-| P0.7 | READY | Pin CUDA and NVHPC under LASSI_TOOLCHAINS | P0.6 | remote: big job if install needed |
+| P0.7 | ACTIVE | Pin CUDA and NVHPC under LASSI_TOOLCHAINS | P0.6 | job 20260923-043820-toolchains-p07-dc38 done rc=0 (snapshot dce23ba); clean-tree rx run, nvhpc sha256, Decision Log pending; OQ-010 |
 | P0.8 | READY | Bench registry and one pinned HeCBench app | P0.1 |  |
 | P0.9 | READY | Spike: sandbox isolation on alpha01 | - | remote: rx run |
 | P0.10 | READY | Sandbox and the none and native executors | P0.1,P0.9 |  |
