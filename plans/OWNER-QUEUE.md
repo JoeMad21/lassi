@@ -134,3 +134,13 @@ Options: (a) `.cache/pip` (7.8G), pip's download cache: `python3 -m pip cache pu
 Recommendation: (a) now, (b) if unused elsewhere, and (c) when space is next needed. Keep `.cache/huggingface` (23G) and `furiosa-venv` (8G), which RNGD serving may need.
 Answer:Give me a command to delete the pip cache.
 Applied: 2026-09-23. The owner removed `.cache/pip` (pip cache purge, then the older entries it left); usage is 100G (rx 20260923-140158-exec-791b, 2026-09-23T14:01:58-07:00). Options (b) and (c) were not chosen, so `cuda-12.6.3/` and `amd/` stay.
+
+## OQ-013 Pattern List Visible In Public Actions Logs
+State: OPEN
+Kind: policy
+Blocks: none
+Evidence: CI run https://github.com/JoeMad21/lassi/actions/runs/35921343647 (the P0.13 canary, 2026-09-23): the log of the step "Check commits, files, branch, and pull request text" prints the step environment, including the full TEXT_POLICY_PATTERNS value; .github/workflows/text-policy.yml passes it as `vars.TEXT_POLICY_PATTERNS`, and Actions variables are not masked. The repository is public (OQ-005), so every run log shows the list.
+Question: The text-policy pattern list is kept out of git by design, but the CI logs of this public repository publish it on every run. Should it move to an Actions secret, which Actions masks in logs?
+Options: (a) move it: create an Actions secret TEXT_POLICY_PATTERNS with the same value, change the workflow's env line to `secrets.TEXT_POLICY_PATTERNS`, delete the variable, and optionally delete old run logs; an agent can make the one-line workflow change (it does not weaken the check) once you create the secret, and a canary run proves it still fails. (b) keep the variable; the list is not a credential and is also derivable from what the check refuses. (c) move it and also make the repository private sooner.
+Recommendation: (a); it keeps the list out of public view at no cost to enforcement. Secrets need you to set them (repository settings are owner actions).
+Answer:
