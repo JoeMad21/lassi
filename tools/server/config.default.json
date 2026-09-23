@@ -1,0 +1,45 @@
+{
+  "min_free_gb": 5,
+  "min_free_gb_big": 60,
+  "max_jobs": 3,
+  "max_big_jobs": 1,
+  "run_timeout_default_s": 1800,
+  "run_timeout_max_s": 7200,
+  "job_timeout_max_s": 172800,
+  "max_build_jobs": 32,
+  "nice": 10,
+  "tt_guard": true,
+  "deny_patterns": [
+    "\\bsudo\\b",
+    "\\bsu\\s",
+    "\\bmkfs",
+    "\\bdd\\s+if=",
+    "\\b(shutdown|reboot|poweroff|halt)\\b",
+    "\\bkill\\s+-9\\s+-1\\b",
+    "\\bcrontab\\b",
+    "\\bsystemctl\\b",
+    "\\b(ssh|scp|rsync|sftp)\\s",
+    "lassi-gate",
+    "lassi\\.git/hooks",
+    "\\brm\\s+(-\\S+\\s+)*(/|~/?|\\$HOME/?|/mnt/nvme10/joseph_ufl/?)\\*?(\\s|$)",
+    "\\bchmod\\s+(-R\\s+)?[0-7]*7[0-7]*\\s+/(\\s|$)"
+  ],
+  "devices": {
+    "rngd": {
+      "enabled": false,
+      "patterns": ["furiosa-llm\\s+serve", "\\bfuriosa-smi\\s+(?!info\\b|ps\\b)\\S", "/dev/rngd", "--devices\\s+npu", "\\bnpu:\\d"]
+    },
+    "tt_silicon": {
+      "enabled": false,
+      "patterns": ["\\btt-smi\\b", "/dev/tenstorrent", "\\btt-flash\\b", "\\btt-topology\\b"]
+    },
+    "rocm_gpu": {
+      "enabled": false,
+      "patterns": ["/dev/kfd", "/dev/dri", "\\brocminfo\\b", "\\brocm-smi\\b", "\\bamd-smi\\b", "\\brocm_smoke\\b"]
+    },
+    "nvidia_gpu": {
+      "enabled": false,
+      "patterns": ["\\bnvidia-smi\\b", "CUDA_VISIBLE_DEVICES"]
+    }
+  }
+}

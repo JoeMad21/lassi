@@ -1,0 +1,5 @@
+#!/bin/sh
+# Blocks commit messages that violate the text policy (patterns, ASCII).
+. "$(git rev-parse --show-toplevel)/.githooks/lib.sh"
+ROOT="$(repo_root)"
+run_py "$ROOT/tools/check_text_policy.py" --message "$1"

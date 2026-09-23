@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Remote execution cache and local settings
+.rx/
+.rx.json
+
+# Stop file for unattended runs
+.rip-stop
+
+# Raw run trees never enter git (docs/BIBLE.md, Repository Layout)
+lassi-runs/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Bare-repository guard on the remote build host: only refs/wip/* may be
+# created, updated, or deleted. Branches and tags live on the hosted remote.
+status=0
+while read -r old new ref; do
+  case "$ref" in
+    refs/wip/*) ;;
+    *) echo "gate: refusing $ref; only refs/wip/* are accepted here" >&2; status=1 ;;
+  esac
+done
+exit $status

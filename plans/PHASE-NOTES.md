@@ -1,0 +1,50 @@
+# Phase Notes
+
+Repository-specific hints for planning. The bible stays authoritative; these notes only say what already exists and where the traps are.
+
+## All Phases
+
+- Python 3.10 through uv (`uv sync`, `uv run`); the pipeline control plane targets 3.10 to match the Furiosa SDK environment.
+- Anything that needs a compiler, simulator, or SDK runs on alpha01 through `tools/rx.py`. Pure Python logic and unit tests run locally.
+- Long builds are `rx job start --big`; plan tasks so local work continues while a job runs.
+- Check scratch space with `rx doctor` before any build; storage was reported exhausted on 2026-09-17.
+- Keep plans lean: cite bible sections instead of copying them.
+
+## P0 Core
+
+- Already provided: AGENTS.md, docs/BIBLE.md, `.githooks/`, `.github/workflows/text-policy.yml`, `tools/check_text_policy.py`, `tools/policy_canary.py`, `tools/status.py`, `tools/rx.py`, `tools/server/`, and tests under `tests/tools/`. P0 verifies and extends them; it does not rewrite them.
+- Text-policy gate evidence: `uv run tools/policy_canary.py local` (both commits must be blocked), then `push`, `status` (the CI run on branch p0-canary must fail), and `cleanup`. The CI half needs OQ-007.
+- Compile-only HeCBench needs nvcc or nvc++ on alpha01. Spike first (`rx exec -- 'command -v nvcc nvc++; ls /usr/local /opt'`). If absent, install user-space: the CUDA runfile in toolkit-only mode and the NVHPC tarball, both under `$LASSI_TOOLCHAINS`, each with a pin file. Record the result in the bible (Execution Backends).
+- Sandbox executor: spike which unprivileged isolation works on alpha01 without sudo (bubblewrap, `unshare -rn`, Apptainer, `systemd-run --user`). Record the choice with evidence; if none isolates the network, that is an owner-queue item.
+- Mock LLM backend: returns the reference target for a bench item; it is the P0 gate driver and the P1 dry-run driver.
+- `trial.md` and the Result record follow the bible's Result Record and Readability Standards exactly.
+
+## P1 Faithful LASSI
+
+- Prefer `third_party/LASSI` as a git submodule pinned at 74b4681: upstream stays untouched and its text stays out of the policy scan. If it must be vendored, pattern hits inside it go to the owner queue; never edit upstream text.
+- HeCBench sources are pinned by commit in `assets/bench/`; `entropy` needs `reference.h` from pinned HeCBench (bible, upstream quirks).
+- The notebook replay gate needs recorded responses; capture them as fixtures under `tests/`.
+
+## P2 Scoring
+
+- The gate is an owner review: prepare a packet (one full run, score components per trial) and add a review item; set the phase GATE-OWNER and move to P4.
+
+## P4 ttsim Execution
+
+- An existing tt-metal checkout is at `/mnt/nvme10/joseph_ufl/tt-metal`. Record its commit before reuse; build a pinned copy under `$LASSI_TOOLCHAINS` if it does not match the tt-mlir pin.
+- ttsim needs `TT_METAL_SIMULATOR`, the SoC descriptor beside the library, slow dispatch, and single chip (bible, Execution Backends). Never open silicon; the gate refuses device commands.
+- Check every reference kernel against the Wormhole `unpack_to_dest` issue before it enters a suite.
+
+## P5 IR Levels
+
+- Polygeist and tt-mlir each pin an LLVM; never mix pins in one module (bible, Toolchain Pins). Each LLVM build is a big job of several hours; run one at a time.
+- Migrate mlir-corpus-pipeline v0 per the bible's Review Of v0. First spike: compare the alpha01 copy with GitHub commit 3ccd280 (bible question 8).
+
+## P11 Dataflow Dialect
+
+- Before P5 is done, only design notes: op set, type system, lowering sketch, as proposals in the owner queue (bible question 7 is a choice).
+
+## P12 Language Frontends
+
+- rustup and dotnet install without root: rustup with CARGO_HOME and RUSTUP_HOME in scratch (the gate sets both), dotnet through dotnet-install.sh with `--install-dir $LASSI_TOOLCHAINS/dotnet@<ver>`.
+- Publish each subset frontend's accepted subset in its docstring and module docs (bible, Frontend Rules).

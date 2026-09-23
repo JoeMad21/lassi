@@ -1,0 +1,10 @@
+#!/bin/sh
+# Blocks commits whose staged paths or contents violate the text policy,
+# and commits made on a branch whose name violates the branch rule.
+. "$(git rev-parse --show-toplevel)/.githooks/lib.sh"
+ROOT="$(repo_root)"
+BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+if [ -n "$BRANCH" ]; then
+  run_py "$ROOT/tools/check_text_policy.py" --branch "$BRANCH" || exit 1
+fi
+run_py "$ROOT/tools/check_text_policy.py" --staged

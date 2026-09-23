@@ -1,0 +1,27 @@
+[project]
+name = "lassi"
+version = "0.0.0"
+description = "One codebase that reproduces LASSI and LASSI-EE and builds LASSI-DF"
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "slow: long-running tests, excluded from the fast suite",
+  "remote: needs the remote build host through tools/rx.py",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"tools/server/gate.py" = ["UP"]
