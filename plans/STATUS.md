@@ -31,7 +31,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | ID | State | Title | Depends | Note |
 | --- | --- | --- | --- | --- |
 | P0.0 | DONE | Plan phase P0 into plans/p0-core.md and add its tasks here | - | plan committed; push pending OQ-005 |
-| P0.1 | READY | Package skeleton and the twelve interfaces | - |  |
+| P0.1 | DONE | Package skeleton and the twelve interfaces | - | package skeleton, 12 Protocols, capabilities; push pending OQ-005 |
 | P0.2 | READY | Result record, text store, trial.md, Parquet mirror | P0.1 |  |
 | P0.3 | READY | Recipe loader with capability validation | P0.1 |  |
 | P0.4 | READY | LLM backends: mock, openai_compat, ollama | P0.1,P0.2 |  |
