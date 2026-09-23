@@ -314,3 +314,106 @@ Inferences, not measured:
   - fail with a clear message if `unshare -rn` fails, and never run unsandboxed.
 - P0.10 remote tests: the four checks in P0.10 (connect fails, memory hog killed, sleep past wall sets hang, write to the harness mount fails) have direct equivalents above, so they are expected to pass on alpha01.
 - Apptainer and bubblewrap: neither is installed. Installing either needs root, so there is no reason to request it.
+
+## Addendum (P0.10): end-to-end probe of the composite command
+
+rx id 20260923-052616-exec-d654 (`rx exec`, no checkout; no repository code took part), 2026-09-23T05:26:16-07:00. The script below was sent base64-encoded to `$TMPDIR/sbx-probe.sh`, run with bash, and removed; its work directory under `$TMPDIR` was removed too (`exists=no`).
+
+```
+#!/usr/bin/env bash
+# P0.10 end-to-end probe of the P0.9 sandbox composite, run through rx exec on alpha01.
+# Scratch only: everything lives under $TMPDIR and is removed at the end.
+set -u
+date -Is
+W="$TMPDIR/sbx-probe.$$"
+mkdir -p "$W/harness" "$W/trial"
+echo harness > "$W/harness/f"
+
+# sandbox <wall_s> <cmd...>: scope limits, namespaces, read-only layout except trial/, CPU-time cap.
+sandbox() {
+  local wall="$1"; shift
+  timeout $((wall + 10)) systemd-run --user --scope --quiet \
+    -p MemoryMax=64M -p MemorySwapMax=0 -p RuntimeMaxSec="$wall" \
+    unshare -rnmpf --mount-proc sh -c '
+      set -e
+      mount --bind "$0/trial" "$0/trial"
+      mount --rbind "$0" "$0"
+      mount -o remount,bind,ro "$0"
+      mount --bind "$0/harness" "$0/harness"
+      mount -o remount,bind,ro "$0/harness"
+      exec prlimit --cpu=2 -- "$@"' "$W" "$@"
+}
+
+echo "=== baseline connect (host)"
+timeout 5 bash -c 'exec 3<>/dev/tcp/1.1.1.1/443' 2>/dev/null && echo CONNECTED || echo BLOCKED
+
+echo "=== 1 network inside"
+sandbox 10 bash -c 'timeout 5 bash -c "exec 3<>/dev/tcp/1.1.1.1/443" 2>&1 && echo CONNECTED || echo BLOCKED'
+echo "rc=$?"
+
+echo "=== 2 writes inside"
+sandbox 10 sh -c 'touch "$1/top" 2>/dev/null && echo TOP_WROTE || echo TOP_READONLY; touch "$1/harness/h" 2>/dev/null && echo HARNESS_WROTE || echo HARNESS_READONLY; touch "$1/trial/t" && echo TRIAL_WROTE' sh "$W"
+echo "rc=$?"
+echo "host sees: $(ls "$W" | tr '\n' ' ')| harness: $(ls "$W/harness" | tr '\n' ' ')| trial: $(ls "$W/trial" | tr '\n' ' ')"
+
+echo "=== 3 memory hog (256 MiB under 64M)"
+sandbox 10 python3 -c 'b = bytearray(256 * 1024 * 1024); print("ALLOCATED", len(b))'
+echo "rc=$?"
+
+echo "=== 4 wall (sleep 30 under RuntimeMaxSec=3)"
+start=$(date +%s)
+sandbox 3 sleep 30
+echo "rc=$? elapsed_s=$(( $(date +%s) - start ))"
+
+echo "=== 5 cpu (busy loop under prlimit --cpu=2)"
+sandbox 20 python3 -c 'while True: pass'
+echo "rc=$?"
+
+echo "=== 6 normal run"
+sandbox 10 sh -c 'echo OK; exit 3'
+echo "rc=$?"
+
+rm -rf "$W"
+echo "cleanup rc=$? exists=$( [ -e "$W" ] && echo yes || echo no )"
+```
+
+Output (the first line, the `date -Is` stamp 2026-09-23T05:26:16-07:00, is omitted, and the shell's multi-line "Killed" job notices for probes 3 and 5 are trimmed to their first line):
+
+```
+=== baseline connect (host)
+CONNECTED
+=== 1 network inside
+bash: connect: Network is unreachable
+bash: line 1: /dev/tcp/1.1.1.1/443: Network is unreachable
+BLOCKED
+rc=0
+=== 2 writes inside
+TOP_READONLY
+HARNESS_READONLY
+TRIAL_WROTE
+rc=0
+host sees: harness trial | harness: f | trial: t
+=== 3 memory hog (256 MiB under 64M)
+[... line 11: 445476 Killed  timeout $((wall + 10)) systemd-run --user --scope ... (trimmed) ...]
+rc=137
+=== 4 wall (sleep 30 under RuntimeMaxSec=3)
+rc=124 elapsed_s=30
+=== 5 cpu (busy loop under prlimit --cpu=2)
+[... line 11: 475481 Killed  timeout $((wall + 10)) systemd-run --user --scope ... (trimmed) ...]
+rc=137
+=== 6 normal run
+OK
+rc=3
+cleanup rc=0 exists=no
+```
+
+Findings [MEASURED] for the composite as written above:
+
+- Network: blocked inside, against a connecting host baseline.
+- Mount layout: the top directory and the harness are read-only, the trial directory is writable, and the host sees only the trial write.
+- Memory: a 256 MiB allocation under MemoryMax=64M is killed (rc 137).
+- CPU: a busy loop under `prlimit --cpu=2` is killed (rc 137).
+- Normal exit: the command's own status passes through (rc 3).
+- Wall time: NOT enforced. With RuntimeMaxSec=3 and an outer `timeout 13`, `sleep 30` ran to completion: the probe returned only after 30 s, with rc 124 from `timeout`. Inference, not measured: neither the outer timeout's signal nor RuntimeMaxSec stopped the process inside the namespaces in this composition; one possible cause is that the command runs as PID 1 of the new pid namespace, which ignores SIGTERM without a handler. This differs from probe 2 above, where RuntimeMaxSec alone stopped a scope (rc 143, inferred).
+
+Consequence for P0.10: enforce wall time inside the namespaces, for example `timeout --kill-after=<grace> <wall>` as the command's innermost wrapper, or kill the whole scope on expiry, and prove it with the remote test "a sleep past wall time sets hang" before relying on it. The bible Sandbox bullet, which lists RuntimeMaxSec and an outer timeout as the wall limit, must be corrected when P0.10 settles the mechanism.
