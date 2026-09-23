@@ -1,0 +1,73 @@
+# Resolved recipe child (chain: fixture-base -> parent -> child)
+# recipe_hash: f62fcef7d400815920bfea49f7a4efa64faedc01f5c8fb33a2f343d487a5d1c1 is the sha256 of the YAML below these comment lines
+adversary:
+  budget:
+    inputs: 64
+  kind: fuzzer
+agents:
+  fixer:
+    model: same_as_generator
+  generator:
+    model: fixture-model
+arms:
+- fixture-arm
+bench:
+  split: eval
+  suite: fixture-suite
+context: []
+directions:
+- source: omp
+  target: cuda
+executor:
+  kind: native
+faithful: false
+fixes:
+  fence_tag: true
+judges:
+  efficiency:
+    mode: predict
+    model: judge-model
+    rubric: efficiency-v1
+    use: metric
+  equivalence:
+    model: judge-model
+    rubric: equivalence-v1
+    use: screen
+llm:
+  sampling:
+    max_tokens: 2048
+    temperature: 0.2
+    top_p: 0.95
+loop:
+  max_corrections: 3
+metrics:
+- correct
+- first_try
+model:
+  backend: mock_llm
+  id: fixture-model
+oracle:
+  kind: stdout_mask
+  passfail: false
+profiler:
+  interval_ms: 10
+  kind: timer
+prompts: fixture-prompts
+report:
+  parquet: true
+  trial_md: true
+runs_root: fixture-runs
+sandbox:
+  mem_gb: 32
+  network: false
+  wall_s: 120
+score: eval_metrics
+stages:
+- generate
+- compile_loop
+- run_loop
+toolchain:
+  cuda: fake_cc
+  omp: fake_cxx
+trials:
+  n: 2

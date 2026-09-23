@@ -1,0 +1,17 @@
+# Root of the three-level chain (fixture-base -> parent -> child): every base key, like projects/base.yaml.
+llm:
+  sampling:
+    temperature: 0.2
+    top_p: 0.9
+loop:
+  max_corrections: 10
+trials:
+  n: 5
+runs_root: fixture-runs
+sandbox:
+  network: false
+  wall_s: baseline_x10
+  mem_gb: 16
+report:
+  trial_md: true
+  parquet: true

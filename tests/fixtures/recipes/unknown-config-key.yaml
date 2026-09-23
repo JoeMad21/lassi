@@ -1,0 +1,4 @@
+# A key the bound oracle does not accept (oracle.treshold): caught when the bindings are checked.
+extends: child
+oracle:
+  treshold: 0.5

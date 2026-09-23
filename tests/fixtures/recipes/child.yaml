@@ -1,0 +1,31 @@
+# Leaf of the three-level chain: the child wins; mappings merge, lists and scalars replace.
+extends: parent
+llm:
+  sampling:
+    top_p: 0.95             # temperature stays 0.2 from fixture-base
+    max_tokens: 2048
+trials:
+  n: 2
+sandbox:
+  wall_s: 120               # an int replaces the inherited string
+directions:                 # replaces both parent directions; lists never merge
+  - {source: omp, target: cuda}
+context: []                 # an empty list still replaces
+stages: [generate, compile_loop, run_loop]
+oracle:
+  passfail: false           # kind stays stdout_mask from the parent
+profiler:
+  kind: timer
+  interval_ms: 10
+adversary:
+  kind: fuzzer
+  budget: {inputs: 64}
+score: eval_metrics
+agents:                     # written generator first; bindings follow sorted keys
+  generator: {model: fixture-model}
+  fixer: {model: same_as_generator}
+judges:
+  equivalence: {model: judge-model, rubric: equivalence-v1, use: screen}
+  efficiency: {model: judge-model, rubric: efficiency-v1, mode: predict, use: metric}
+arms: [fixture-arm]
+metrics: [correct, first_try]

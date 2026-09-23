@@ -1,0 +1,4 @@
+# A required choice set to null: executor.kind has no value and must never fall back to the parent's kind.
+extends: child
+executor:
+  kind: null

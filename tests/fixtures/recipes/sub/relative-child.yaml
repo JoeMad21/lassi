@@ -1,0 +1,4 @@
+# Extends by a path relative to this file's directory, not by a name looked up in the roots.
+extends: ../parent.yaml
+trials:
+  n: 4

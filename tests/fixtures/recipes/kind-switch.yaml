@@ -1,0 +1,5 @@
+# A child that names another kind replaces the inherited kind section: host does not carry over to none.
+extends: kind-host-parent
+executor:
+  kind: none                # compile-only, like the bible's tier-1 {kind: none}
+stages: [generate, compile_loop]  # run_loop needs an executor that runs code

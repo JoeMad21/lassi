@@ -1,0 +1,4 @@
+# A recipe stored as <name>/recipe.yaml: its name is the directory name, dir-parent.
+extends: parent
+trials:
+  n: 7

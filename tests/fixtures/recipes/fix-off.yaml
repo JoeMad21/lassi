@@ -1,0 +1,4 @@
+# A fix turned off explicitly without faithful: the parent's loop cap stays.
+extends: parent
+fixes:
+  fence_tag: false

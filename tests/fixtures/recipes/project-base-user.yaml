@@ -1,0 +1,10 @@
+# Extends the repository's projects/base.yaml through the default roots and adds what base leaves open.
+extends: base
+bench:
+  suite: fixture-suite
+  split: eval
+directions:
+  - {source: omp, target: cuda}
+stages: [run_loop, report]
+executor:
+  kind: native

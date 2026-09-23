@@ -1,0 +1,4 @@
+# Extends dir-parent, which the roots hold only as dir-parent/recipe.yaml (there is no dir-parent.yaml).
+extends: dir-parent
+sandbox:
+  mem_gb: 8

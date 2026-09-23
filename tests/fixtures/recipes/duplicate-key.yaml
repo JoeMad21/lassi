@@ -1,0 +1,5 @@
+# A key repeated inside one mapping: plain YAML keeps the last value silently, so loading must fail.
+extends: child
+sandbox:
+  mem_gb: 8
+  mem_gb: 64

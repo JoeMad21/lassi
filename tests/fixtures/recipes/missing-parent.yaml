@@ -1,0 +1,2 @@
+# Extends a name that no root holds: loading must fail and list every path tried.
+extends: no-such-recipe
