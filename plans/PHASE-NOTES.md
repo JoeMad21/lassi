@@ -28,6 +28,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 
 - Prefer `third_party/LASSI` as a git submodule pinned at 74b4681: upstream stays untouched and its text stays out of the policy scan. If it must be vendored, pattern hits inside it go to the owner queue; never edit upstream text.
 - HeCBench sources are pinned by commit in `assets/bench/`; `entropy` needs `reference.h` from pinned HeCBench (bible, upstream quirks).
+- `assets/bench/lassi-hecbench-10.yaml` (since P0.8) pins HeCBench master of 2026-09-23 and lists only `layout`. Before adding the other nine apps, compare the pin with the sources upstream LASSI copied (its 20 `*_main` files) and re-pin if they differ; `uv run tools/fetch_bench.py <manifest>` on alpha01 fetches the listed directories under `$LASSI_SCRATCH/bench/`.
 - The notebook replay gate needs recorded responses; capture them as fixtures under `tests/`.
 - The mock tags `.cu` blocks as cuda; under the faithful fence quirk that tag becomes "uda". Decide whether mock dry runs go through faithful fence stripping, and record the choice.
 - The bible's lassi-df recipe binds `model.backend: furiosa`, which is not registered. furiosa-llm speaks the OpenAI API, so decide between an alias of openai_compat and a separate backend before P3.

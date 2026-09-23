@@ -38,7 +38,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.5 | DONE | FILE-block parser and nvcc, nvc++ toolchain adapters | P0.2 | FILE-block parser, nvcc-sm80 and nvcpp-cc80 adapters; hand-written stderr fixtures pending P0.7 captures |
 | P0.6 | DONE | Spike: nvcc and nvc++ on alpha01 | - | nvcc V12.6.85 at /mnt/nvme10/joseph_ufl/cuda-12.6.3 builds sm_80 without a GPU; no nvc++ found (P0.7) |
 | P0.7 | DONE | Pin CUDA and NVHPC under LASSI_TOOLCHAINS | P0.6 | cuda@12.6.3 and nvhpc@24.11 pinned and verified from 4ef46ee; nvc++ needs NVHPC_CUDA_HOME; OQ-010 |
-| P0.8 | READY | Bench registry and one pinned HeCBench app | P0.1 |  |
+| P0.8 | DONE | Bench registry and one pinned HeCBench app | P0.1 | layout at HeCBench 7d2d3c5; eval refused to training; fetch exercised by rx 20260923-050731-desktop-8r113ei-p0-core-cecf (exploratory) |
 | P0.9 | READY | Spike: sandbox isolation on alpha01 | - | remote: rx run |
 | P0.10 | READY | Sandbox and the none and native executors | P0.1,P0.9 |  |
 | P0.11 | READY | Stage runner and lassi run compile-only path | P0.2,P0.3,P0.4,P0.5,P0.8,P0.10 |  |
