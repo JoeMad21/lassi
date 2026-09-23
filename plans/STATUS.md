@@ -46,5 +46,5 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.13 | OWNER | Verify text-policy tooling, CI half | P0.12 | OQ-005 no origin remote; OQ-007 Actions variable and branch protection |
 | P0.G | READY | Phase gate: mock LLM compile-only run and text-policy canary | P0.7,P0.11,P0.12,P0.13 | also needs P0.14 (fast suite green); first run to write records, per-trial provenance awaits OQ-008 |
 | P0.14 | DONE | Fix rx local-transport tests on Windows | - | rx local transport works on Windows; also touches tools/server/gate.py (Windows-only branches, refusals unchanged) and adds tests/tools/test_gate_windows.py; gate tests pass on Windows and on alpha01 (rx 20260923-101115-desktop-8r113ei-p0-core-d7ce) |
-| P0.15 | READY | Replace toolchain stderr fixtures with alpha01 captures | P0.7 | fixtures in tests/toolchains/fixtures are PLACEHOLDER |
+| P0.15 | ACTIVE | Replace toolchain stderr fixtures with alpha01 captures | P0.7 | stage A committed (capture tool tools/capture_toolchain_fixtures.py, scenario sources, public lassi.core.runner.build_toolchain); fixtures still hand-written PLACEHOLDER until the capture from this commit replaces them |
 | P0.16 | READY | Sandbox hardening before native runs of generated code | P0.10 | private /dev, recursive read-only mounts, default-deny view, output and disk caps, core dumps, runner kill |

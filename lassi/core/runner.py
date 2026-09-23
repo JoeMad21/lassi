@@ -58,11 +58,13 @@ and LC_ALL=C (ASCII diagnostics), HOME when set, TMPDIR (required, so no
 compiler writes temporary files to /tmp on the root filesystem), and each
 variable the pin names (NVHPC_CUDA_HOME for toolchains/nvhpc.pin); nothing
 else, so a variable such as NVCC_PREPEND_FLAGS never reaches a compile. A
-class without PIN (a test fake) is built as factory(). A trial's
-toolchain_pins records the pins of the toolchain that builds its target
-language; provenance.json records every bound toolchain's pins. git, for the
-commit and dirty flag, runs through lassi.toolchains.EnvRunner, the audited
-command runner, so this module starts no process itself.
+class without PIN (a test fake) is built as factory(). build_toolchain is
+that construction for one registry name, public so that a tool compiles
+exactly as a run does; the runner builds every bound toolchain with it. A
+trial's toolchain_pins records the pins of the toolchain that builds its
+target language; provenance.json records every bound toolchain's pins.
+git, for the commit and dirty flag, runs through lassi.toolchains.EnvRunner,
+the audited command runner, so this module starts no process itself.
 """
 
 from __future__ import annotations
@@ -176,11 +178,13 @@ class _Bench:
 
 
 @dataclass(frozen=True)
-class _BuiltToolchain:
-    """One toolchain a recipe binds: its registry name, languages, the built object, and how it was pinned.
+class BuiltToolchain:
+    """One built toolchain: its registry name, the languages a recipe binds it for, the object, and its pins.
 
-    `executable` and `environment` are None for a toolchain without a pin;
-    `pins` maps each pin it uses to the pin file's pairs.
+    build_toolchain returns one with no languages; the runner fills them in
+    for each toolchain a recipe binds. `executable` and `environment` are
+    None for a toolchain without a pin; `pins` maps each pin it uses to the
+    pin file's pairs.
     """
 
     name: str
@@ -205,7 +209,7 @@ class _Run:
     bench: _Bench
     backend: Any
     executor: Executor
-    toolchains: tuple[_BuiltToolchain, ...]
+    toolchains: tuple[BuiltToolchain, ...]
     pins: ToolchainPins
     target_pins: Mapping[str, ToolchainPins]
     run_dir: Path
@@ -560,22 +564,37 @@ def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
 # Toolchains and pins
 
 
-def _toolchains(recipe: Recipe, registry: Registry, root: Path | None) -> tuple[_BuiltToolchain, ...]:
-    """Build each toolchain the recipe binds, once per registry name, pinned when its class declares a pin."""
+def _toolchains(recipe: Recipe, registry: Registry, root: Path | None) -> tuple[BuiltToolchain, ...]:
+    """Build each toolchain the recipe binds, once per registry name, with build_toolchain, and set its languages."""
     languages: dict[str, list[str]] = {}
     for language, name in sorted(recipe.data.get("toolchain", {}).items()):
         languages.setdefault(name, []).append(language)
-    built: list[_BuiltToolchain] = []
-    for name, bound in languages.items():
-        factory = registry.get("Toolchain", name).factory
-        if getattr(factory, "PIN", None) is None:
-            built.append(_BuiltToolchain(name, tuple(bound), factory(), None, None, {}))
-        else:
-            built.append(_pinned_toolchain(name, tuple(bound), factory, root))
-    return tuple(built)
+    return tuple(
+        dataclasses.replace(build_toolchain(name, root, registry), languages=tuple(bound))
+        for name, bound in languages.items()
+    )
 
 
-def _pinned_toolchain(name: str, languages: tuple[str, ...], factory: type, root: Path | None) -> _BuiltToolchain:
+def build_toolchain(name: str, root: Path | None, registry: Registry = DEFAULT_REGISTRY) -> BuiltToolchain:
+    """Build the toolchain registered as `name` exactly as the stage runner builds it, with no languages.
+
+    A class that declares PIN gets its pinned executable under the
+    toolchains root `root` (None means none is set, which is refused), a
+    clean compile environment, and the linked prefixes its pin names, run
+    through EnvRunner (see the module docstring); a class without PIN is
+    built as factory(). Raises RunError, saying what to install or set,
+    when the pin file, the root, the executable, a linked prefix, or TMPDIR
+    is missing. The runner builds every bound toolchain through this, so a
+    tool that calls it compiles with the same command, executable, and
+    environment as a run.
+    """
+    factory = registry.get("Toolchain", name).factory
+    if getattr(factory, "PIN", None) is None:
+        return BuiltToolchain(name, (), factory(), None, None, {})
+    return _pinned_toolchain(name, factory, root)
+
+
+def _pinned_toolchain(name: str, factory: type, root: Path | None) -> BuiltToolchain:
     """Build a toolchain with its pinned executable and a clean compile environment; RunError says what is missing."""
     pin_name = factory.PIN
     pin = _pin(pin_name)
@@ -614,7 +633,7 @@ def _pinned_toolchain(name: str, languages: tuple[str, ...], factory: type, root
         environment[variable] = str(home)
         pins[linked_name] = linked
     toolchain = factory(executable=str(executable), runner=EnvRunner(environment))
-    return _BuiltToolchain(name, languages, toolchain, str(executable), environment, pins)
+    return BuiltToolchain(name, (), toolchain, str(executable), environment, pins)
 
 
 def _pin(name: str) -> dict[str, str]:
@@ -649,7 +668,7 @@ def _compile_environment() -> dict[str, str]:
     return environment
 
 
-def _trial_pins(toolchains: Iterable[_BuiltToolchain]) -> ToolchainPins:
+def _trial_pins(toolchains: Iterable[BuiltToolchain]) -> ToolchainPins:
     """Return the VERSION of every pin the given toolchains use, under the matching ToolchainPins field."""
     versions: dict[str, str] = {}
     for built in toolchains:
@@ -661,7 +680,7 @@ def _trial_pins(toolchains: Iterable[_BuiltToolchain]) -> ToolchainPins:
     return ToolchainPins(**versions)
 
 
-def _toolchains_record(toolchains: Sequence[_BuiltToolchain]) -> dict[str, Any]:
+def _toolchains_record(toolchains: Sequence[BuiltToolchain]) -> dict[str, Any]:
     """Return toolchains.json: per toolchain name, its languages, executable, environment, and pin files."""
     return {
         built.name: {
@@ -808,7 +827,7 @@ def _md_table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
     return "".join("| " + " | ".join(cell(text) for text in line) + " |\n" for line in lines)
 
 
-def _pin_rows(toolchains: Sequence[_BuiltToolchain]) -> list[tuple[str, ...]]:
+def _pin_rows(toolchains: Sequence[BuiltToolchain]) -> list[tuple[str, ...]]:
     """Return one run.md row per pin each toolchain uses, or one 'not pinned' row for a toolchain without one."""
     rows: list[tuple[str, ...]] = []
     for built in toolchains:

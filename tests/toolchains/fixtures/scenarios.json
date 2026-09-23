@@ -1,0 +1,59 @@
+{
+  "nvcc_clean": {
+    "scenario": "A kernel and a host main that build with no output",
+    "toolchain": "nvcc-sm80"
+  },
+  "nvcc_fatal": {
+    "arch": "sm_35",
+    "scenario": "nvcc driver fatal: the clean program with the ARCH override sm_35, which CUDA 12.6 does not define",
+    "toolchain": "nvcc-sm80"
+  },
+  "nvcc_host_gcc_warning": {
+    "scenario": "Host GCC -Wsign-compare warning (int index against size()) through -Xcompiler -Wall. The loop line is indented on purpose: GCC compiles the host code cudafe1 regenerates and counts its column in that text (in exploratory captures the loop line lost its indent there), so the column does not index main.cu; file and line do",
+    "toolchain": "nvcc-sm80"
+  },
+  "nvcc_linker_error": {
+    "scenario": "Host linker undefined reference: main calls helper(float *, int), which is never defined",
+    "toolchain": "nvcc-sm80"
+  },
+  "nvcc_ptxas_error": {
+    "scenario": "ptxas error: a kernel with 256 KiB of static __shared__ data, more than an sm_80 thread block can hold. The planned 64 KiB array built cleanly in exploratory captures, so the array is larger",
+    "toolchain": "nvcc-sm80"
+  },
+  "nvcc_undefined_identifier": {
+    "scenario": "EDG error: a kernel uses an undefined identifier, with source echo and caret",
+    "toolchain": "nvcc-sm80"
+  },
+  "nvcc_warning_177": {
+    "scenario": "EDG warning #177-D: an unused variable in a __device__ function in an included header",
+    "toolchain": "nvcc-sm80"
+  },
+  "nvcpp_backend_error": {
+    "scenario": "NVC++-S backend error with -Minfo and the severe-errors summary: a 1 MiB private array per thread in a target loop is over the GPU stack limit. S-0155, the planned example, was not reproduced in exploratory captures (a VLA and a function-pointer call both built)",
+    "toolchain": "nvcpp-cc80"
+  },
+  "nvcpp_edg_error": {
+    "scenario": "EDG error: an OpenMP target loop uses an undefined identifier, with source echo and caret",
+    "toolchain": "nvcpp-cc80"
+  },
+  "nvcpp_edg_warning": {
+    "scenario": "EDG warning for an unused variable in main, then the -Minfo report of the target region",
+    "toolchain": "nvcpp-cc80"
+  },
+  "nvcpp_fatal_abort": {
+    "scenario": "NVC++-F abort: a target construct nested in a target loop. In exploratory captures this gave an F-class internal compiler error whose line carries (main.cpp: 8), then the compilation aborted summary; F-0704, the planned example, was not produced, since S errors ended in the severe-errors summary instead",
+    "toolchain": "nvcpp-cc80"
+  },
+  "nvcpp_linker_error": {
+    "scenario": "Host linker undefined reference through the nvc++ link step: helper is never defined",
+    "toolchain": "nvcpp-cc80"
+  },
+  "nvcpp_minfo_clean": {
+    "scenario": "A clean OpenMP target saxpy: -Minfo report only, exit status 0",
+    "toolchain": "nvcpp-cc80"
+  },
+  "nvcpp_missing_include": {
+    "scenario": "EDG catastrophic error: main.cpp includes kernels/scale.h, which is not in the tree",
+    "toolchain": "nvcpp-cc80"
+  }
+}

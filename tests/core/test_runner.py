@@ -9,6 +9,9 @@ run.md, one trial.json and one trial.md per trial, and the Parquet mirror
 Recipes; Readability Standards, Run and Config rows; Design Principles 3 and 5;
 Agent Rules 1, 7, 10, and 12). `lassi run <recipe>` (lassi/cli.py) is its
 command line, and tests/fixtures/recipes/p0-smoke.yaml is the P0 gate recipe.
+build_toolchain (P0.15), the public function that builds one registered
+toolchain with its pinned compiler and clean environment, is checked against
+the runner's own construction, which goes through it.
 
 No test here runs a compiler, a sandbox, or the network. The end-to-end runs
 use the real mock backend, stages, and none executor, with a fake toolchain
@@ -28,6 +31,7 @@ import copy
 import dataclasses
 import errno
 import importlib.util
+import inspect
 import json
 import os
 import platform
@@ -54,7 +58,7 @@ from lassi.core import stages
 from lassi.core.files import parse_file_blocks, render_file_blocks
 from lassi.core.interfaces import BuildResult, Completion, Message, Sampling
 from lassi.core.parquet import read_run_parquet
-from lassi.core.recipe import RecipeError, load_recipe, resolved_yaml
+from lassi.core.recipe import Recipe, RecipeError, load_recipe, resolved_yaml
 from lassi.core.record import (
     BenchItem,
     Diagnostic,
@@ -1935,6 +1939,136 @@ def test_every_default_toolchain_declares_a_pin_the_runner_can_read() -> None:
         pin = read_pin(factory.PIN)
         assert pin["VERSION"] and pin["PREFIX_NAME"], name
         factory.PIN_BIN.format_map(pin)
+
+
+# ---------------------------------------------------------------------------
+# build_toolchain: one toolchain built as the runner builds it (P0.15)
+
+
+def both_toolchains_recipe(directory: Path) -> Recipe:
+    """Return a loaded recipe that binds nvcc-sm80 for cuda and nvcpp-cc80 for omp."""
+    data = smoke_data(
+        directions=[{"source": "omp", "target": "cuda"}, {"source": "cuda", "target": "omp"}],
+        toolchain={"cuda": "nvcc-sm80", "omp": "nvcpp-cc80"},
+    )
+    return load_recipe(write_recipe(directory, "both-ways", data))
+
+
+def built_fields(built: Any) -> tuple[Any, ...]:
+    """Return what a built toolchain holds, with the toolchain object reduced to its class, executable, and runner.
+
+    The runner is reduced to its class and its environment (EnvRunner.env),
+    so two separately built toolchains compare equal when they were built
+    the same way.
+    """
+    toolchain = built.toolchain
+    runner = getattr(toolchain, "runner", None)
+    return (
+        built.name,
+        type(toolchain),
+        getattr(toolchain, "executable", None),
+        type(runner),
+        getattr(runner, "env", None),
+        built.executable,
+        built.environment,
+        built.pins,
+    )
+
+
+def test_build_toolchain_builds_each_pinned_preset_as_the_runner_does(
+    tmp_path: Path, parent_env: dict[str, str]
+) -> None:
+    root = pinned_root(tmp_path, NVCC_BIN, NVCPP_BIN)
+    built_by_runner = runner_module._toolchains(both_toolchains_recipe(tmp_path), DEFAULT_REGISTRY, root)
+    from_recipe = {built.name: built for built in built_by_runner}
+    for name, language in (("nvcc-sm80", "cuda"), ("nvcpp-cc80", "omp")):
+        built = runner_module.build_toolchain(name, root)
+        assert isinstance(built, runner_module.BuiltToolchain), name
+        assert isinstance(from_recipe[name], runner_module.BuiltToolchain), name
+        assert built.languages == (), "a toolchain built outside a recipe builds no recipe language"
+        assert from_recipe[name].languages == (language,)
+        assert built_fields(built) == built_fields(from_recipe[name]), name
+
+
+def test_build_toolchain_gives_the_pinned_executable_the_clean_environment_and_the_pins(
+    tmp_path: Path, parent_env: dict[str, str]
+) -> None:
+    root = pinned_root(tmp_path, NVCC_BIN, NVCPP_BIN)
+    nvcc = runner_module.build_toolchain("nvcc-sm80", root)
+    assert nvcc.name == "nvcc-sm80"
+    assert isinstance(nvcc.toolchain, NvccSm80) and isinstance(nvcc.toolchain.runner, EnvRunner)
+    assert nvcc.executable == nvcc.toolchain.executable == str(root / NVCC_BIN)
+    assert nvcc.environment == nvcc.toolchain.runner.env == parent_env
+    assert nvcc.pins == {"cuda": read_pin("cuda")}
+    nvcpp = runner_module.build_toolchain("nvcpp-cc80", root, DEFAULT_REGISTRY)
+    assert isinstance(nvcpp.toolchain, NvcppCc80) and isinstance(nvcpp.toolchain.runner, EnvRunner)
+    assert nvcpp.executable == nvcpp.toolchain.executable == str(root / NVCPP_BIN)
+    assert nvcpp.environment is not None and nvcpp.toolchain.runner.env == nvcpp.environment
+    environment = dict(nvcpp.environment)
+    assert Path(environment.pop("NVHPC_CUDA_HOME")) == root / CUDA_PREFIX
+    assert environment == parent_env
+    assert nvcpp.pins == {"nvhpc": read_pin("nvhpc"), "cuda": read_pin("cuda")}
+
+
+def test_the_runner_builds_each_bound_toolchain_through_build_toolchain(
+    tmp_path: Path, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # One construction path: _toolchains calls the public function, so the capture tool builds the same thing.
+    root = pinned_root(tmp_path, NVCC_BIN, NVCPP_BIN)
+    original = runner_module.build_toolchain
+    signature = inspect.signature(original)
+    calls: list[tuple[str, Any, Any]] = []
+
+    def spy(*args: Any, **kwargs: Any) -> Any:
+        bound = signature.bind(*args, **kwargs)
+        bound.apply_defaults()
+        calls.append((bound.arguments["name"], bound.arguments["root"], bound.arguments["registry"]))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(runner_module, "build_toolchain", spy)
+    built = runner_module._toolchains(both_toolchains_recipe(tmp_path), DEFAULT_REGISTRY, root)
+    assert sorted(item.name for item in built) == ["nvcc-sm80", "nvcpp-cc80"]
+    assert sorted(calls, key=lambda call: call[0]) == [
+        ("nvcc-sm80", root, DEFAULT_REGISTRY),
+        ("nvcpp-cc80", root, DEFAULT_REGISTRY),
+    ]
+
+
+def test_build_toolchain_builds_a_toolchain_without_a_pin_as_its_bare_factory() -> None:
+    registry = make_registry(BuildLog())
+    built = runner_module.build_toolchain("nvcc-sm80", None, registry)
+    assert isinstance(built, runner_module.BuiltToolchain)
+    assert type(built.toolchain) is registry.get("Toolchain", "nvcc-sm80").factory
+    assert (built.name, built.languages, built.executable, built.environment, built.pins) == (
+        "nvcc-sm80",
+        (),
+        None,
+        None,
+        {},
+    )
+
+
+def test_build_toolchain_registry_defaults_to_the_default_registry() -> None:
+    parameters = inspect.signature(runner_module.build_toolchain).parameters
+    assert list(parameters)[:3] == ["name", "root", "registry"]
+    assert parameters["registry"].default is DEFAULT_REGISTRY
+
+
+def test_build_toolchain_refuses_what_the_runner_refuses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(RunError, match="LASSI_TOOLCHAINS"):
+        runner_module.build_toolchain("nvcc-sm80", None)
+    with pytest.raises(RunError, match="absolute"):
+        runner_module.build_toolchain("nvcc-sm80", Path("relative-toolchains"))
+    empty = tmp_path / "empty-toolchains"
+    empty.mkdir()
+    with pytest.raises(RunError, match="toolchains/cuda.sh"):
+        runner_module.build_toolchain("nvcc-sm80", empty)
+    root = pinned_root(tmp_path, NVCC_BIN)
+    with pytest.raises(RunError, match="toolchains/nvhpc.sh"):
+        runner_module.build_toolchain("nvcpp-cc80", root)
+    monkeypatch.delenv("TMPDIR")
+    with pytest.raises(RunError, match="TMPDIR is not set"):
+        runner_module.build_toolchain("nvcc-sm80", root)
 
 
 # ---------------------------------------------------------------------------
