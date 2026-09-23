@@ -133,9 +133,10 @@ The remote build host is alpha01 on the I/ONX cluster. Reach it only through `uv
 - Anything that may take longer than about 20 minutes (LLVM, Polygeist, tt-mlir, tt-metal, CUDA or NVHPC installs, large runs) is a job: `rx job start --big --name <n> -- '<cmd>'`, then `rx job wait <id> --timeout 600` or `rx job status`, doing local work between polls.
 - `rx exec -- '<cmd>'` inspects the host from the scratch root without a checkout.
 - `rx doctor` before big work; the gate enforces free-space floors, one big job at a time, and a cap on running jobs. Remove stale slots with `rx slot-rm`.
+- Keep `du -sh /mnt/nvme10/joseph_ufl` under 120G as far as you can (owner decision, bible Decision Log). Check it before installs and big jobs. Never delete files there. To save space, back files up to the workstation (zipped); a large folder moves off the host only after the owner approves its backup, and removing any host copy after a backup needs the owner's approval. Recommend deletions through the owner queue.
 - The gate sets a scratch-only environment: TMPDIR, caches, CARGO_HOME, RUSTUP_HOME, HF_HOME under `/mnt/nvme10/joseph_ufl`, plus `LASSI_SCRATCH`, `LASSI_RUNS_ROOT`, `LASSI_TOOLCHAINS`, and `LASSI_JOBS` (use it for `-j`).
 - Toolchains install under `$LASSI_TOOLCHAINS/<name>@<pin>` through scripts in `toolchains/`, never inside a slot. Each has `toolchains/<name>.pin` recording commit or version, build flags, and install path (bible, Toolchain Pins).
-- Device classes (RNGD, Tenstorrent silicon, AMD and NVIDIA GPUs) are disabled in the gate by the owner. A device refusal is final; record the need in the owner queue. `rx devcheck` is the read-only inventory for re-verifying the bible's Environment State.
+- Device classes (RNGD, Tenstorrent silicon, AMD and NVIDIA GPUs) are enabled or disabled in the gate by the owner only; check `rx doctor` (devices_enabled) before device work. A device refusal is final; record the need in the owner queue. `rx devcheck` is the read-only inventory for re-verifying the bible's Environment State.
 - Raw run trees go under `$LASSI_RUNS_ROOT`; only summaries and provenance come back into `results/`.
 
 ## Results

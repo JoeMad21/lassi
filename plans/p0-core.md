@@ -8,7 +8,8 @@ P0 builds the shared core named in the P0 row of the bible's Build Roadmap: the 
 
 Constraints for every task:
 
-- No origin remote is configured, so the per-task push in AGENTS.md (Task Lifecycle step 8) cannot happen until OQ-005 is answered; commit locally and note "push pending OQ-005" in the task note.
+- The origin is github.com/JoeMad21/lassi (OQ-005, answered 2026-09-23); push the phase branch after every task (AGENTS.md, Task Lifecycle step 8).
+- Keep `du -sh /mnt/nvme10/joseph_ufl` under 120G as far as possible (owner cap, 2026-09-23; bible Decision Log). Check it before any install or big job, never delete files there, back files up to the workstation to save space (a large folder only with the owner's approval; removing a host copy after a backup also needs it), and recommend deletions in the owner queue.
 - Remote tasks go through `uv run tools/rx.py` only. The first remote task runs `rx doctor`; if the gate is unreachable or not installed, set every remote task BLOCKED with that evidence and add an access item to the owner queue.
 - No project-specific code in `lassi/` (Agent Rules 3); test fixtures and recipes live under `tests/` and `projects/`.
 
@@ -86,11 +87,11 @@ Constraints for every task:
 - Files: `tests/tools/` additions only if gaps are found.
 - Remote: none. Depends: none.
 
-### P0.13 Verify text-policy tooling, CI half (OWNER)
+### P0.13 Verify text-policy tooling, CI half
 - Bible: Attribution Policy, Enforcement item 2.
 - Accept: `uv run tools/policy_canary.py push`, then `status` shows the CI run on branch `p0-canary` failed, then `cleanup` removes it.
 - Files: none (evidence goes under `results/p0-gate/` in P0.G).
-- Blocker: OQ-005 (no origin remote configured) and OQ-007 (Actions variable and branch protection).
+- Unblocked 2026-09-23: origin exists (OQ-005), the Actions variable is set and main requires the text-policy check (OQ-007).
 - Remote: GitHub only. Depends: P0.12.
 
 ### P0.14 Fix rx local-transport tests on Windows
@@ -118,8 +119,29 @@ Constraints for every task:
 - Files: `tests/toolchains/fixtures/`, `tests/toolchains/test_diagnostics.py`, `lassi/toolchains/`.
 - Remote: `rx run` to capture. Depends: P0.15.
 
+### P0.18 Carry run provenance in each Trial
+- Bible: Result Record (Trial provenance, OQ-008 decision of 2026-09-23), Agent Rules 1 and 2; AGENTS.md Results.
+- Accept:
+  - `Trial` in `lassi/core/record.py` gains `provenance` as the bible's Result Record defines it (commit, dirty, device, sdk, date), strictly typed like the other record fields.
+  - The runner fills it from the same values it writes to the run's provenance.json, so the two can never disagree; a test checks every trial's copy against the manifest.
+  - trial.json round-trips it. trial.md shows it. The Parquet trials table carries it as columns.
+  - A record without provenance is refused, with a clear message.
+- Files: `lassi/core/record.py`, `lassi/core/runner.py`, `lassi/core/trial_md.py`, `lassi/core/parquet.py`, `lassi/core/store.py` if trial.json changes, tests.
+- Remote: none. Depends: P0.11. P0.G depends on it, since the gate run is the first to write records.
+
+### P0.19 Install CUDA 12.6.3 from the redistributable archives
+- Bible: Toolchain Pins (OQ-010 decision of 2026-09-23), Agent Rules 7 and 10.
+- Accept:
+  - `toolchains/cuda.sh` installs the toolkit components the pinned nvcc path and the nvcc-sm80 compiles need from NVIDIA's per-component redistributable archives for 12.6.3, each checked against the sha256 in NVIDIA's published redistrib manifest. No runfile or other installer runs, and nothing is written outside the scratch disk; the job checks this with a find over /tmp and /var/tmp.
+  - `toolchains/cuda.pin` records the manifest URL and its checksum, the component list with versions and sha256, and the install layout. PREFIX_NAME and EXPECT_VERSION stay the same.
+  - The install goes to a staging prefix first. It replaces `$LASSI_TOOLCHAINS/cuda@12.6.3` only after nvcc reports EXPECT_VERSION and the pinned nvcc compiles the P0.7 run 2 checks again: sm_80 for nvcc, and as NVHPC_CUDA_HOME for nvc++ -gpu=cc80. The runfile install is kept aside until the new one passes; agents may not delete it, so its removal goes to the owner queue.
+  - The P0.15 fixture capture, rerun with the new install from a clean commit, gives byte-identical stderr for the 12 byte-stable scenarios. Any difference is recorded.
+  - The pin change is a Decision Log entry.
+- Files: `toolchains/cuda.sh`, `toolchains/cuda.pin`, `tests/toolchains/test_pins.py` (its checks of the runfile URL, MD5, and log trap change), `docs/BIBLE.md`, `plans/spikes/p0-cuda-redist.md`.
+- Remote: `rx doctor` and `du -sh /mnt/nvme10/joseph_ufl` first; the archive downloads plus the staging prefix plus current use must stay under the 120G cap, else free space through the owner queue before the job. Then `rx job start --big`. Depends: P0.7.
+
 ### P0.G Phase gate
 - Bible: Build Roadmap, P0 row, Gate column; AGENTS.md Phase Gate and Results.
 - Accept: (1) on alpha01 from a clean tree, `rx run -- 'uv run lassi run tests/fixtures/recipes/p0-smoke.yaml'` with the mock backend takes one HeCBench app end to end compile-only and reaches the compile stage with a built artifact; `rx pull` writes `results/p0-gate/provenance.json` and `summary.md` cites it; (2) `policy_canary.py local` output shows the seeded commit blocked locally; (3) `policy_canary.py push` and `status` show it blocked in CI. All three recorded under `results/p0-gate/`. Pass sets P0 DONE and opens a pull request `P0 Core` (needs origin).
 - Files: `results/p0-gate/`.
-- Remote: `rx run`, `rx pull`. Depends: P0.7, P0.11, P0.12, P0.13, P0.14 (P0.14 is tracked in the STATUS note, since status.py cannot edit dependencies).
+- Remote: `rx run`, `rx pull`. Depends: P0.7, P0.11, P0.12, P0.13, P0.14, P0.18 (P0.14 and P0.18 are tracked in the STATUS note, since status.py cannot edit dependencies).

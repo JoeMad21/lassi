@@ -11,18 +11,18 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0 Core | p0-core | ACTIVE | base: main |
 | P1 Faithful LASSI | p1-faithful | NOT-STARTED | - |
 | P2 Scoring | p2-scoring | NOT-STARTED | gate needs owner review |
-| P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host (OQ-001) |
+| P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001: alpha01, gate rngd enabled 2026-09-23); the owner records here when the phase may start |
 | P4 ttsim Execution | p4-ttsim | NOT-STARTED | - |
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
-| P7 Offline Training | p7-offline | BLOCKED | P3, training GPUs (OQ-002) |
-| P8 Online Training | p8-online | BLOCKED | MI300X access (OQ-002) |
-| P9 LASSI-EE | p9-ee | BLOCKED | MI300X access (OQ-002) |
-| P10 Full LASSI | p10-full | BLOCKED | A100 host (OQ-003) |
+| P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
+| P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23) |
+| P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23) |
+| P10 Full LASSI | p10-full | BLOCKED | no NVIDIA host (OQ-003, 2026-09-23); compile-only tier and -mp=multicore proxy meanwhile |
 | P11 Dataflow Dialect | p11-df | NOT-STARTED | full scope needs P5; design notes may start earlier |
 | P12 Language Frontends | p12-frontends | NOT-STARTED | - |
-| P13 Cerebras Target | p13-cerebras | BLOCKED | Cerebras SDK access (OQ-004) |
-| P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host, TCL authoring (OQ-001) |
+| P13 Cerebras Target | p13-cerebras | BLOCKED | Cerebras SDK access incoming on the owner's side (OQ-004, 2026-09-23) |
+| P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
 | P16 Adversarial | p16-adversarial | BLOCKED | P4, P8 for training |
 
@@ -37,15 +37,17 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.4 | DONE | LLM backends: mock, openai_compat, ollama | P0.1,P0.2 | mock, openai_compat, ollama; files.py renderer for P0.5; handoffs in PHASE-NOTES |
 | P0.5 | DONE | FILE-block parser and nvcc, nvc++ toolchain adapters | P0.2 | FILE-block parser, nvcc-sm80 and nvcpp-cc80 adapters; hand-written stderr fixtures pending P0.7 captures |
 | P0.6 | DONE | Spike: nvcc and nvc++ on alpha01 | - | nvcc V12.6.85 at /mnt/nvme10/joseph_ufl/cuda-12.6.3 builds sm_80 without a GPU; no nvc++ found (P0.7) |
-| P0.7 | DONE | Pin CUDA and NVHPC under LASSI_TOOLCHAINS | P0.6 | cuda@12.6.3 and nvhpc@24.11 pinned and verified from 4ef46ee; nvc++ needs NVHPC_CUDA_HOME; OQ-010 |
+| P0.7 | DONE | Pin CUDA and NVHPC under LASSI_TOOLCHAINS | P0.6 | cuda@12.6.3 and nvhpc@24.11 pinned and verified from 4ef46ee; nvc++ needs NVHPC_CUDA_HOME; OQ-010 answered: redistributable reinstall is P0.19 |
 | P0.8 | DONE | Bench registry and one pinned HeCBench app | P0.1 | layout at HeCBench 7d2d3c5; eval refused to training; fetch exercised by rx 20260923-050731-desktop-8r113ei-p0-core-cecf (exploratory) |
 | P0.9 | DONE | Spike: sandbox isolation on alpha01 | - | unshare -rnmpf in a systemd-run --user scope; network blocked; OQ-011 CPU quota and uid |
 | P0.10 | DONE | Sandbox and the none and native executors | P0.1,P0.9 | sandbox and native executor; 23/23 remote tests from f57c90a; gaps to P0.16 |
 | P0.11 | DONE | Stage runner and lassi run compile-only path | P0.2,P0.3,P0.4,P0.5,P0.8,P0.10 | stage runner, lassi run compile-only path, p0-smoke recipe; stage ladder per bible (S4 compiles) |
 | P0.12 | DONE | Verify text-policy tooling, local half | - | check_setup 15 PASS; canary local blocks both commits; --history clean; tests added for --message, --history, canary local |
-| P0.13 | OWNER | Verify text-policy tooling, CI half | P0.12 | OQ-005 no origin remote; OQ-007 Actions variable and branch protection |
-| P0.G | READY | Phase gate: mock LLM compile-only run and text-policy canary | P0.7,P0.11,P0.12,P0.13 | also needs P0.14 (fast suite green); first run to write records, per-trial provenance awaits OQ-008 |
+| P0.13 | READY | Verify text-policy tooling, CI half | P0.12 | unblocked 2026-09-23: origin exists (OQ-005); TEXT_POLICY_PATTERNS set and main requires the text-policy check (OQ-007) |
+| P0.G | READY | Phase gate: mock LLM compile-only run and text-policy canary | P0.7,P0.11,P0.12,P0.13 | also needs P0.14 (done) and P0.18 (per-trial provenance, OQ-008) before the first run writes records |
 | P0.14 | DONE | Fix rx local-transport tests on Windows | - | rx local transport works on Windows; also touches tools/server/gate.py (Windows-only branches, refusals unchanged) and adds tests/tools/test_gate_windows.py; gate tests pass on Windows and on alpha01 (rx 20260923-101115-desktop-8r113ei-p0-core-d7ce) |
 | P0.15 | DONE | Replace toolchain stderr fixtures with alpha01 captures | P0.7 | fixtures are alpha01 captures (rx 20260923-112105-desktop-8r113ei-p0-core-ba1a from clean ebe6b07); expected lists hand-derived; nvcc drops GCC columns, nvc++ backend and linker places fixed; results/p0-toolchain-fixtures; unparsed formats to P0.17 |
 | P0.16 | READY | Sandbox hardening before native runs of generated code | P0.10 | private /dev, recursive read-only mounts, default-deny view, output and disk caps, core dumps, runner kill |
 | P0.17 | READY | Parse the compiler error formats the P0.15 probes found unread | P0.15 | nvlink undefined reference, ptxas file-line error, nvc++ driver error lines; seen only in exploratory P0.15 probes (rx ids in plans/p0-core.md P0.17) |
+| P0.18 | ACTIVE | Carry run provenance in each Trial | P0.11 | OQ-008 answered (c) both, 2026-09-23; P0.G depends on it; implementing |
+| P0.19 | READY | Install CUDA 12.6.3 from the redistributable archives | P0.7 | OQ-010 answered (b), 2026-09-23; check the 120G scratch cap before staging |
