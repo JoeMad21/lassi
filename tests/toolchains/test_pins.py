@@ -66,7 +66,8 @@ def test_cuda_pin_carries_the_published_md5_and_the_spike_version() -> None:
 def test_nvhpc_pin_is_a_2024_release_with_a_checksum_slot() -> None:
     pin = read_pin("nvhpc")
     assert pin["VERSION"].startswith("24.")
-    assert re.fullmatch(r"[0-9a-f]{64}|PLACEHOLDER", pin["SHA256"])
+    assert re.fullmatch(r"[0-9a-f]{64}", pin["SHA256"])
+    assert pin["CUDA_HOME_FROM"] == read_pin("cuda")["PREFIX_NAME"]
     assert pin["COMPILER_SUBDIR"] == f"Linux_x86_64/{pin['VERSION']}/compilers/bin"
     assert "NVHPC_SILENT=true" in pin["INSTALL_FLAGS"].split()
 
