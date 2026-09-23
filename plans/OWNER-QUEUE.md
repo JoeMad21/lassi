@@ -145,3 +145,13 @@ Options: (a) move it: create an Actions secret TEXT_POLICY_PATTERNS with the sam
 Recommendation: (a); it keeps the list out of public view at no cost to enforcement. Secrets need you to set them (repository settings are owner actions).
 Answer: (a). (Given by the owner in the working session on 2026-09-23: "I agree with the fix." The owner set the Actions secret the same day.)
 Applied: 2026-09-23. The owner set the Actions secret (last from the variable through a bash pipe, updated 21:28:26Z); the workflow reads it since ba90a9c. Canary run https://github.com/JoeMad21/lassi/actions/runs/35922699182 (commit 42ea4b6) failed on the canary in the commit message and in canary.txt, and its log shows TEXT_POLICY_PATTERNS as ***. Left for the owner: delete the variable after the P0 pull request merges (main's workflow reads it until then), and optionally delete the older run logs that show the list. Not verified: whether Actions masks each line of the multi-line secret; a real violation prints the matching pattern, so such a line could appear in a failure log.
+
+## OQ-014 Core Files On The alpha01 Root Filesystem
+State: OPEN
+Kind: access
+Blocks: none
+Evidence: plans/spikes/p0-sandbox-hardening.md (probes F2 and G1, exploratory rx exec runs on 2026-09-23); plans/p0-core.md P0.17 (nvcpfe TERMINATED by signal 11 in dirty-tree rx 20260923-104313-desktop-8r113ei-p0-core-2b22 and ...-173d)
+Question: Agent probes on 2026-09-23 caused systemd-coredump to store four core files under /var/lib/systemd/coredump on the alpha01 root filesystem, against Agent Rule 7: /usr/bin/unshare (about 20K) and /usr/bin/dash (about 21K) from the sandbox probes, and two nvcpfe cores (about 500K each) from P0.15 compiler probes. They are root-owned, so this account cannot remove them, and agents may not delete files anyway. The P0.16 sandbox now keeps crashes away from that handler (prlimit --core=1 and a seccomp filter; no core since, per coredumpctl). Compiles still run at the host's core limit of 0, which systemd-coredump ignores; a later task runs them under --core=1 too. How should the four files be handled?
+Options: (a) leave them: systemd-coredump's default cleanup (systemd-tmpfiles, about 3 days) removes them. (b) ask an administrator to delete them now. (c) record only.
+Recommendation: (a); they are small and expire on their own. For awareness, outside LASSI: the spike found /var/lib/amd-metrics-exporter/amdgpu_device_metrics_exporter_grpc.socket at mode 777, so any user on alpha01 can reach that GPU metrics exporter; the sandbox hides it, and the host setting is an administrator's matter.
+Answer:
