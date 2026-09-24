@@ -10,7 +10,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | --- | --- | --- | --- |
 | P0 Core | p0-core | DONE | base: main; gate passed 2026-09-23 (results/p0-gate); merged into main as c3cf248 (PR 1) |
 | P1 Faithful LASSI | p1-faithful | DONE | base: main at c3cf248 (P0 merged, PR 1); plan plans/p1-faithful.md; owner 2026-09-23: scope fixed at planning, P2 follows without pause; owner 2026-09-24: curated LASSI demo at 15:00 EDT |
-| P2 Scoring | p2-scoring | NOT-STARTED | gate needs owner review |
+| P2 Scoring | p2-scoring | ACTIVE | base: p1-faithful at 5d5fd0c (P1 DONE, PR 2 open, not merged); plan plans/p2-scoring.md; gate is an owner review on run demo-rngd-cpu-1, then GATE-OWNER and P4 |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
 | P4 ttsim Execution | p4-ttsim | NOT-STARTED | - |
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
@@ -66,3 +66,15 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1.11 | DONE | Toolchain follow-ups deferred from P0 | - | toolchain follow-ups from the P0 freeze: backend place without a line, inline asm place, sample lines tied to the fixtures; one review, PASS |
 | P1.12 | OWNER | Apply OQ-018: upstream text in the repository | P1.3 | waits on OQ-018; the gate does not depend on it |
 | P1.G | DONE | Phase gate: notebook replay and mock dry run 20/20 | P1.9,P1.10,P1.11 | PASS: replay 47 passed, 32 cases match (rx 20260924-104048-desktop-8r113ei-p1-faithful-5fd3); mock dry run 20/20 at S4 attempt 0 (rx 20260924-104105-desktop-8r113ei-p1-faithful-c002); fe01ab1 clean; results/p1-gate |
+| P2.0 | DONE | Plan phase P2 into plans/p2-scoring.md and add its tasks here | - | plan plans/p2-scoring.md; base p1-faithful 5d5fd0c |
+| P2.1 | READY | Record every model request | - |  |
+| P2.2 | READY | Record the reference run's flags | - |  |
+| P2.3 | READY | Readings the scores rest on: stage ladder and final alignment | - |  |
+| P2.4 | READY | Spike: the paper's LASSI metric definitions | - |  |
+| P2.5 | READY | Spike: stability of the reference output under the proxy | - | start first: rx job runs while P2.1 to P2.4 proceed |
+| P2.6 | READY | df-v0 score profile | P2.3 |  |
+| P2.7 | READY | lassi score profile | P2.3,P2.4 |  |
+| P2.8 | READY | Run metrics per arm and direction | P2.6,P2.7 |  |
+| P2.9 | READY | lassi score: score a finished run and write the review packet | P2.2,P2.8 |  |
+| P2.10 | READY | Recipes bind score and metrics in lassi run | P2.9 |  |
+| P2.G | READY | Phase gate: owner review of score components on run demo-rngd-cpu-1 | P2.1,P2.2,P2.5,P2.9,P2.10 |  |

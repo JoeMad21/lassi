@@ -67,15 +67,15 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 
 ## P2 Scoring
 
-- Stage ladder reading (from P0.11): an attempt whose FILE blocks have any error, including one missing expected file, records S0 even when other files were extracted. S0 and S1 carry different rewards (bible Reward Function), so confirm this reading and record it in the bible. Compile diagnostics also carry model-facing hints written in lassi/core/stages.py; move instruction wording into the prompt set if a prompt review wants it there (Design Principle 3).
+- Stage ladder reading (from P0.11): an attempt whose FILE blocks have any error, including one missing expected file, records S0 even when other files were extracted. S0 and S1 carry different rewards (bible Reward Function), so confirm this reading and record it in the bible (P2.3; the Harness Contract calls a missing file a build error).
 - The gate is an owner review: prepare a packet (one full run, score components per trial) and add a review item; set the phase GATE-OWNER and move to P4.
 - Prompts under a fragment set (from the P1.4 review): a faithful trial sends three requests and two system prompts, but the record keeps only generate's user prompt and the context replies. Add every request with its system message to the Result Record (for example a prompt ref per model call) through a bible edit, so trial.md meets the Readability Standards Trial row. Trial.context has no diagnostics; the invalid-text warning for a context reply rides on attempt 0 until the record gains a place for it.
 - stdout_mask (from P1.7): the rule ignores exit code and hang, so a candidate that crashes after printing the reference's stdout scores 1.0; a fix that also requires exit 0 is a candidate. randomAccess lists passfail [cuda] only, so a CUDA to OpenMP translation is scored by stdout_mask alone. Before any stdout_mask result for jacobi is reported, check whether its CUDA reference prints the "Error after iteration" line identically across runs (a float atomicAdd reduction); if not, correct translations can score 0.0.
 - C-aware Sim-T (from P1.8): its design choices (the C lexer rules, autojunk off, 1.0 for two texts with no C tokens) are documented only in lassi/scoring/similarity.py. Record them in the bible's Decision Log when metrics wire the measure in.
-- Generated asset trees (from the P1.3 review): lassi/prompts/assets.py names tools/extract_lassi_assets.py in every error and rejects '@' in names, which later pack names use (ttkernel-ods@PIN, csl@PIN, tcl@PIN). Add a generator field to MANIFEST.yaml and allow '@' before a second generator exists.
 - Reference run flags (from the P1.6 review): the baseline drops the reference run's stdout_truncated, stderr_truncated, and workdir_incomplete, because Trial.reference_run (RunInfo) has no place for them, so an attempt can be aligned against a truncated reference stdout with no record of the cut. Decide the record change (RunInfo flag fields, or trial-level diagnostics) through a bible edit before native runs feed scores.
 - Final alignment (from P1.7; not done in P1.10): the runner rebuilds Final at the end of each trial, so final.alignment stays unset; derive it (for example from the attempt whose stdout stands as the trial's output) with a runner edit.
-- Run handoff (from the P1.6 review): compile_loop passes built programs to run_loop in memory through RunContext.artifacts; a resume or rerun from the record cannot run an attempt. A record decision could add an Attempt artifact field. projects/base.yaml's sandbox.wall_s comment omits the 30 s floor (RUN_WALL_FLOOR_S) and the no-reference case.
+- projects/base.yaml's sandbox.wall_s comment omits the 30 s floor (RUN_WALL_FLOOR_S) and the no-reference case (from the P1.6 review; P2.2).
+- Plan plans/p2-scoring.md maps every item above to a task. Three items moved at P2 planning: the compile-diagnostic hint wording and the Attempt artifact field to P3, generated asset trees to P5.
 
 ## P3 RNGD Serving
 
@@ -83,6 +83,8 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - RNGD serving (spike plans/spikes/p3-rngd-demo.md, 2026-09-24, exploratory): the 2026.2.1 venv serves furiosa-ai/Llama-3.1-8B-Instruct@v2026.2 on one card with HF_HOME set to /mnt/nvme10/joseph_ufl/.cache/huggingface and HF_HUB_OFFLINE=1 (the gate's HF_HOME is empty). `rx job kill` stops only the job runner, since the gate starts the command in its own session; until tools/server/gate.py kills the command's process group too (and the owner reinstalls the gate), start servers through the spike's watchdog wrapper and verify every stop with furiosa-smi status. The spike's proposed bible Host Facts and Decision Log text waits for the next bible sync.
 - A faithful LASSI loop has no correction cap, so a real model that never compiles needs a stop budget, recorded as a cap hit (from P1 planning).
 - Responses recorded from a real model can later join the P1 replay fixtures as a regression (from P1 planning).
+- Compile-diagnostic hints (from P0.11, moved from P2): compile diagnostics carry model-facing hints written in lassi/core/stages.py; move instruction wording into the prompt set if a prompt review wants it there (Design Principle 3).
+- Run handoff (from the P1.6 review, moved from P2): compile_loop passes built programs to run_loop in memory through RunContext.artifacts, so a resume or rerun from the record cannot run an attempt. Long real-model runs make resumes matter; a record decision could add an Attempt artifact field (bible Component Interfaces already calls it a later record decision).
 - Ollama ids with a tag (`name:tag`) cannot form a trial id: arm_segment maps only '/', and a segment does not allow ':' (from P1.6). The trial-start unload is sent before the backend's model check, so a server without the model fails at the unload with an unclear error.
 
 ## P4 ttsim Execution
@@ -94,6 +96,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 ## P5 IR Levels
 
 - Polygeist and tt-mlir each pin an LLVM; never mix pins in one module (bible, Toolchain Pins). Each LLVM build is a big job of several hours; run one at a time.
+- Generated asset trees (from the P1.3 review, moved from P2): lassi/prompts/assets.py names tools/extract_lassi_assets.py in every error and rejects '@' in names, which later pack names use (ttkernel-ods@PIN, csl@PIN, tcl@PIN). Add a generator field to MANIFEST.yaml and allow '@' before a second generator exists.
 - Migrate mlir-corpus-pipeline v0 per the bible's Review Of v0. First spike: compare the alpha01 copy with GitHub commit 3ccd280 (bible question 8).
 
 ## P11 Dataflow Dialect
