@@ -1,5 +1,5 @@
 # Resolved recipe child (chain: fixture-base -> parent -> child)
-# recipe_hash: 45e3bfb03bc30ff7b91ebbd087011c6339546b8355923c4e3c6faee7f295df2e is the sha256 of the YAML below these comment lines
+# recipe_hash: c9923e7743128f3e21d11fc67e2ed146c9bab0a7adad5d52fb868e1b446d84bd is the sha256 of the YAML below these comment lines
 adversary:
   budget:
     inputs: 64
@@ -23,6 +23,7 @@ executor:
 faithful: false
 fixes:
   baseline_both: true
+  execution_gate: true
   fence_tag: true
   parsed_diagnostics: true
   prompt_newlines: true

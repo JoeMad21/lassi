@@ -1,4 +1,4 @@
-"""The stages of the compile-only path: baseline, summarize_context, describe_source, generate, and compile_loop.
+"""The LASSI stages: baseline, summarize_context, describe_source, generate, compile_loop, and run_loop.
 
 Bible Component Interfaces, Stage row. Stages are pure over the trial record
 (Stage contract rules): a stage reads the Trial's fields, appends an attempt,
@@ -50,6 +50,30 @@ The runner checks either kind before any model is asked.
   capped at DIAGNOSTIC_COUNT_CAP diagnostics and DIAGNOSTIC_BYTES_CAP bytes
   of whole lines, with a line saying how many were left out when any were
   (diagnostics_text).
+- run_loop continues compile_loop's loop (it runs compile_loop first, which
+  changes nothing when compile_loop already ran) and, when the executor runs
+  programs (capability `runs_code`), runs each compiling attempt from its
+  build directory with the item's run arguments and attempt_limits. The run
+  is kept in Attempt.run (exit code, hang flag, wall time, and stdout in the
+  text store); a clean run (exit status 0, no hang) is S5, and a failed one
+  stays S4 with a run-stage `run-error` Diagnostic. A failed run is fed back
+  with the execute-error prompt, whose error text (run_error_text) is, under
+  a fragment set, upstream's report of the run (its execute_code
+  return_result, joined from the execute.* fragments), and under a template
+  set this project's wording, which correct.txt carries. The reply is built
+  and corrected as compile_loop does. Model-generated code runs only in the
+  sandbox (Agent Rule 6): run_loop refuses an executor that runs programs
+  but does not declare `sandboxed`, and so does the runner, before any
+  directory exists (`runs_model_code`). Run and compile corrections share
+  one count and the cap: a run error left when the cap is reached ends the
+  trial with `correction-cap`. Each RunResult flag becomes a run-stage warning
+  (RUN_FLAGS). With a compile-only executor run_loop runs nothing, so the
+  trial ends at its first compiling attempt. A backend that declares
+  `unload_before_run` (lassi.core.capabilities) is asked to unload right
+  before each run of an attempt; the runner asks it once more at trial
+  start. compile_loop hands each built program to run_loop through the
+  trial's RunContext (RunContext.artifacts), in memory and not in the
+  record, so an attempt cannot be run again from the record alone.
 
 A context stage names the Trial.context field it fills in `fills_context`,
 and generate names the fields its fragment prompt joins, when a pack serves
@@ -87,6 +111,14 @@ never on the recipe's `faithful` flag:
 - `prompt_newlines` off: every line feed is removed from a correction
   prompt before it is stored and sent (a carriage return stays), as
   upstream removes them.
+- `execution_gate` off: run_loop runs a compiling attempt only while its
+  correction count (its index) is at most EXECUTION_GATE_CORRECTIONS (7),
+  as upstream's loop does. A compiling attempt with a higher count ends the
+  trial unexecuted. When an earlier attempt ran, the last such attempt's
+  stdout stands as the trial's output, and the last attempt carries a
+  run-stage `stale-output` warning naming it; when none ran, the trial ends
+  with `upstream-crash`, where upstream's notebook raises. With the fix on,
+  every compiling attempt runs, within the correction cap.
 
 Stage reached (Result Record, Attempt.stage_reached) is the bible's stage
 ladder (Training Module, Reward Function), the one scale every record, metric,
@@ -104,11 +136,10 @@ and reward reads (Design Principle 2):
   hang; the run loop records it.
 
 Output agreement with the oracle is never a stage: it is Attempt.alignment
-and Final.alignment, which the reward weighs separately. These stages only
-compile attempts, so they reach at most S4. No attempt runs, so every
-attempt keeps RunInfo at its defaults (None); only baseline runs a program,
-the reference, and a compile-only executor's placeholder values are never
-copied into the record.
+and Final.alignment, which the reward weighs separately. Only run_loop runs
+an attempt, and only on an executor that runs programs; any other attempt
+keeps RunInfo at its defaults (None) and reaches at most S4, and a
+compile-only executor's placeholder values are never copied into the record.
 """
 
 from __future__ import annotations
@@ -122,8 +153,9 @@ from pathlib import Path
 
 from lassi.bench import Direction, Suite
 from lassi.core import fragments as fragment_text
+from lassi.core.capabilities import declares, unload_before_run
 from lassi.core.files import parse_file_blocks, render_file_blocks
-from lassi.core.interfaces import BuildResult, Executor, Limits, LLMBackend, Message, Sampling, Toolchain
+from lassi.core.interfaces import BuildResult, Executor, Limits, LLMBackend, Message, RunResult, Sampling, Toolchain
 from lassi.core.recipe import Recipe
 from lassi.core.record import Attempt, Context, Diagnostic, EndReason, RunInfo, TextRef, Trial, unified_diff
 from lassi.core.registry import register
@@ -138,14 +170,19 @@ PURPOSE = "eval"
 NO_OUTPUT = "S0"
 PARSED = "S1"
 COMPILED = "S4"
+RAN_CLEAN = "S5"
 
 # The end codes these stages set in final.end_reason (lassi.core.record END_REASONS).
 BASELINE_COMPILE = "baseline-compile"
 BASELINE_RUN = "baseline-run"
 CORRECTION_CAP = "correction-cap"
+UPSTREAM_CRASH = "upstream-crash"
 
 # The capability of an executor that runs programs; baseline runs a reference only on such an executor.
 RUNS_CODE = "runs_code"
+# The capability of an executor that runs programs only inside the sandbox (Execution Backends, Sandbox). A stage
+# that runs model-generated code (`runs_model_code`) needs it whenever the executor runs programs (Agent Rule 6).
+SANDBOXED = "sandboxed"
 
 # The caps on the parsed diagnostics one correction prompt carries [DESIGN]: at most DIAGNOSTIC_COUNT_CAP
 # diagnostics, whose lines take at most DIAGNOSTIC_BYTES_CAP bytes of UTF-8 (one line feed after each line counted).
@@ -159,6 +196,69 @@ DIAGNOSTIC_BYTES_CAP = 16384
 # (baseline_x10) is derived from this run's wall time, so it cannot bound the run itself.
 REFERENCE_WALL_S = 600.0
 REFERENCE_CPUS = 16
+
+# The highest correction count at which upstream's loop runs a compiling attempt: the execution gate that
+# fixes.execution_gate turns off. A compiling attempt with a higher count ends the loop unexecuted.
+EXECUTION_GATE_CORRECTIONS = 7
+
+# The sandbox.wall_s value (projects/base.yaml) that makes an attempt's run wall limit BASELINE_FACTOR times the
+# wall time of the trial's reference run (Trial.reference_run.wall_s); a number there is the limit in seconds.
+BASELINE_X10 = "baseline_x10"
+BASELINE_FACTOR = 10
+# The least wall limit of an attempt run under baseline_x10, in seconds [DESIGN]. Ten times a reference run of a few
+# milliseconds would stop a correct program on start-up noise, and a trial whose reference did not run (a
+# compile-only baseline, or no baseline stage) has no wall time to multiply, so its limit is this floor.
+RUN_WALL_FLOOR_S = 30.0
+# The CPU count of an attempt run [DESIGN]: the reference run's, so a translation runs with the threads its
+# reference had (an executor sets OMP_NUM_THREADS to Limits.cpus).
+RUN_CPUS = REFERENCE_CPUS
+
+# The run-stage Diagnostic codes run_loop sets: a failed run (error) and stale output (warning).
+RUN_ERROR = "run-error"
+STALE_OUTPUT = "stale-output"
+# Each RunResult flag run_loop records, with the code and the message of the run-stage warning it becomes.
+RUN_FLAGS = {
+    "stdout_truncated": (
+        "stdout-truncated",
+        "the run's stdout passed the executor's output cap, so only the part kept is recorded and aligned",
+    ),
+    "stderr_truncated": (
+        "stderr-truncated",
+        "the run's stderr passed the executor's output cap, so only the part kept is fed back",
+    ),
+    "workdir_incomplete": (
+        "workdir-incomplete",
+        "the executor returned only part of what the run wrote in its workdir, because the run passed a cap or limit",
+    ),
+}
+
+# The fragment keys of upstream's execute-error prompt: the lead before and after its compiler and flag text.
+CORRECT_RUN_HEAD = "correct.run_error_head"
+CORRECT_RUN_TAIL = "correct.run_error_tail"
+# The fragment keys of upstream's report of a failed run, the error text of its execute-error prompt (the notebook's
+# execute_code return_result, tools/extract_lassi_assets.py): the lead before the return code, the note added for
+# POPEN_SEGFAULT, and the lead before the stderr. The report's other literals (its success value and its exception
+# lead) have no counterpart here: a run that ends reports no exception.
+RUN_REPORT_EXIT = "execute.exit_lead"
+RUN_REPORT_SEGFAULT = "execute.segfault"
+RUN_REPORT_STDERR = "execute.stderr_lead"
+# The return code Popen gives a death by SIGSEGV, for which upstream's report adds its segfault note.
+POPEN_SEGFAULT = -11
+# An executor that runs programs reports a death by signal N as SHELL_SIGNAL_BASE + N, the shell's form
+# (lassi.executors.sandbox SandboxResult.returncode); Popen, which upstream reads, gives -N. Signal numbers run to
+# MAX_SIGNAL (Linux, real-time signals included).
+SHELL_SIGNAL_BASE = 128
+MAX_SIGNAL = 64
+# The fragment keys run_loop reads: compile_loop's, for the compile errors it corrects, the execute-error lead, and
+# the run report.
+RUN_LOOP_KEYS = (
+    *fragment_text.CORRECT_KEYS,
+    CORRECT_RUN_HEAD,
+    CORRECT_RUN_TAIL,
+    RUN_REPORT_EXIT,
+    RUN_REPORT_SEGFAULT,
+    RUN_REPORT_STDERR,
+)
 
 # The fields each prompt template gets; a template may use any of them and no other.
 GENERATE_FIELDS = ("source_language", "target_language", "source_files", "target_files")
@@ -183,7 +283,10 @@ class RunContext:
     `max_corrections` the correction cap (None means uncapped). `fragments`
     holds the fragments of a fragment prompt set (empty for a template set),
     and `packs` the recipe's context packs, keyed by the language each
-    serves.
+    serves. `artifacts` maps the index of each attempt a build turned into a
+    program to that program (BuildResult.artifact): compile_loop fills it and
+    run_loop runs from it. The runner builds one RunContext per trial, so it
+    never carries an artifact from one trial to the next.
     """
 
     recipe: Recipe
@@ -201,6 +304,7 @@ class RunContext:
     max_corrections: int | None
     fragments: Mapping[str, str] = field(default_factory=dict)
     packs: Mapping[str, str] = field(default_factory=dict)
+    artifacts: dict[int, Path] = field(default_factory=dict)
 
 
 def target_files(context: RunContext) -> list[str]:
@@ -774,15 +878,19 @@ class CompileLoopStage:
         """Return `trial` with its last attempt built, and the build's raw stderr as text mode reads it.
 
         The trial comes back unchanged, with None, when the last attempt is
-        not buildable. The stderr is read only with fixes.parsed_diagnostics
-        off, the one case a prompt carries it, and is None otherwise or when
-        the build kept no attachment (BuildResult.stderr_ref).
+        not buildable. A built program is kept in RunContext.artifacts under
+        the attempt's index. The stderr is read only with
+        fixes.parsed_diagnostics off, the one case a prompt carries it, and
+        is None otherwise or when the build kept no attachment
+        (BuildResult.stderr_ref).
         """
         attempt = trial.attempts[-1]
         if not self._buildable(attempt):
             return trial, None
         workdir = fresh_build_dir(self.context.build_root, trial.trial_id, attempt.index)
         result = self._build(attempt.files, workdir)
+        if result.artifact is not None:
+            self.context.artifacts[attempt.index] = Path(result.artifact)
         diagnostics = [*attempt.diagnostics, *result.diagnostics]
         if result.artifact is None and not _has_error(result.diagnostics):
             message = "the build produced no program and the toolchain reported no error; return the complete files"
@@ -822,48 +930,283 @@ class CompileLoopStage:
         return BuildResult(artifact=None, diagnostics=[_compile_error("unwritable", message)])
 
     def _correction(self, previous: Attempt, expected: Sequence[str], stderr: str | None) -> Attempt:
-        """Return the next attempt: the correction prompt for `previous` sent, the reply read, and the diff.
-
-        With fixes.prompt_newlines off every line feed is removed from the
-        prompt before it is stored and sent. The reply is read as generate
-        reads attempt 0: FILE blocks with fixes.fence_tag on, the first fenced
-        block with it off.
-        """
-        system, prompt = self._correction_prompt(previous, expected, stderr)
-        if not fix_on(self.context, "prompt_newlines"):
-            prompt = prompt.replace("\n", "")
-        ref, reply = _ask(self.context, prompt, system)
-        if fix_on(self.context, "fence_tag"):
-            attempt = _parsed_attempt(previous.index + 1, ref, reply, expected)
-        else:
-            attempt = _fenced_attempt(previous.index + 1, ref, reply, expected)
-        return dataclasses.replace(attempt, diff_from_previous=unified_diff(previous.files, attempt.files))
-
-    def _correction_prompt(
-        self, previous: Attempt, expected: Sequence[str], stderr: str | None
-    ) -> tuple[str | None, str]:
-        """Return the system prompt (None for a template set) and the correction prompt for `previous`.
+        """Return the next attempt for a compile error of `previous` (_corrected).
 
         The error text is the raw stderr (`stderr`, which _build_last reads
         only with fixes.parsed_diagnostics off) when it is not empty, else
         diagnostics_text of the attempt's diagnostics: upstream reads an empty
         stderr as a success, so a failed build that left none (a sandbox
-        timeout, say) has no upstream counterpart. A template set gives
-        correct.txt; a fragment set gives the direction's system prompt and
-        upstream's correction prompt, whose code is the previous target file
-        (FILE blocks when the target has more than one file).
+        timeout, say) has no upstream counterpart.
+        """
+        errors = stderr if stderr else diagnostics_text(previous.diagnostics)
+        return _corrected(self.context, previous, expected, errors, run_error=False)
+
+
+@register("Stage", "run_loop")
+class RunLoopStage:
+    """Runs each compiling attempt and asks for a correction while its run fails, sharing compile_loop's count and cap.
+
+    It declares `compiles` because it builds and corrects the attempts its
+    execute-error prompts yield, as compile_loop does. It requires no
+    capability of the executor: with a compile-only executor it runs nothing.
+    It runs model-generated code (`runs_model_code`), so an executor that
+    runs programs must declare SANDBOXED; the runner refuses one that does
+    not before any directory exists, and the stage refuses it too.
+    """
+
+    name = "run_loop"
+    capabilities = frozenset({"compiles"})
+    requires = {"Toolchain": {"diagnostics"}}
+    prompt_fields = {"correct": CORRECT_FIELDS}
+    fragment_keys = RUN_LOOP_KEYS
+    reproduces = frozenset({"execution_gate", "fence_tag", "prompt_newlines", "parsed_diagnostics"})
+    runs_model_code = True
+
+    def __init__(self, *, context: RunContext) -> None:
+        """Keep the trial's run context."""
+        self.context = context
+
+    def __call__(self, trial: Trial) -> Trial:
+        """Return `trial` with its compiling attempts run and any corrections appended.
+
+        compile_loop runs first (a no-op when it already ran). With a
+        compile-only executor that is all; an executor that runs programs
+        but does not declare SANDBOXED raises ValueError before anything
+        runs (Agent Rule 6). Otherwise, while the last attempt
+        is S4 and the trial has not ended: past the execution gate (fix off)
+        the trial ends unexecuted (_past_gate); else the attempt runs
+        (_run_last). A clean run ends the loop. A failed run with the cap
+        reached ends the trial with `correction-cap`; below it, the
+        execute-error correction is appended and compile_loop builds and
+        corrects it.
         """
         context = self.context
-        errors = stderr if stderr else diagnostics_text(previous.diagnostics)
-        if not context.fragments:
-            fields = {
-                "target_language": context.direction.target,
-                "files": render_file_blocks(previous.files) if previous.files else "",
-                "diagnostics": errors,
-                "target_files": ", ".join(expected),
-            }
-            return None, render(context.prompts, "correct", fields)
-        direction = context.direction
-        code = previous.files.get(expected[0], "") if len(expected) == 1 else render_file_blocks(previous.files)
-        prompt = fragment_text.correction_prompt(context.fragments, direction, code, errors)
-        return context.fragments[fragment_text.fragment_key(fragment_text.DIRECTION_SYSTEM, direction)], prompt
+        compile_loop = CompileLoopStage(context=context)
+        trial = compile_loop(trial)
+        if not declares(context.executor, RUNS_CODE):
+            return trial
+        if not declares(context.executor, SANDBOXED):
+            raise ValueError(
+                f"{trial.trial_id}: the executor runs programs but does not declare {SANDBOXED!r}; run_loop runs "
+                "model-generated code only in the sandbox (Agent Rule 6)"
+            )
+        cap = context.max_corrections
+        while trial.final.end_reason is None and trial.attempts[-1].stage_reached == COMPILED:
+            index = trial.attempts[-1].index
+            if not fix_on(context, "execution_gate") and index > EXECUTION_GATE_CORRECTIONS:
+                return _past_gate(trial)
+            trial, run, limits = self._run_last(trial)
+            if trial.attempts[-1].stage_reached == RAN_CLEAN:
+                break
+            if cap is not None and index >= cap:
+                message = f"a run error remained after {cap} correction(s), the cap loop.max_corrections sets"
+                return _ended(trial, CORRECTION_CAP, message)
+            errors = run_error_text(run, limits, context.fragments)
+            correction = _corrected(context, trial.attempts[-1], target_files(context), errors, run_error=True)
+            trial = compile_loop(trial.with_attempt(correction))
+        return trial
+
+    def describe(self) -> str:
+        """Return a one-line description of the stage."""
+        context = self.context
+        if not declares(context.executor, RUNS_CODE):
+            return "run_loop: the executor runs no programs, so no attempt runs"
+        gate = (
+            "every compiling attempt"
+            if fix_on(context, "execution_gate")
+            else f"a compiling attempt while its correction count is at most {EXECUTION_GATE_CORRECTIONS}"
+        )
+        return f"run_loop: run {gate} and correct each failed run, sharing compile_loop's correction count"
+
+    def _run_last(self, trial: Trial) -> tuple[Trial, RunResult, Limits]:
+        """Run the last attempt's program; return the trial with its run recorded, the RunResult, and the limits.
+
+        A backend that declares `unload_before_run` is asked to unload first.
+        The attempt keeps the run in Attempt.run (stdout in the text store),
+        gains one warning per RunResult flag (RUN_FLAGS), and is S5 after a
+        clean run; after a failed one it stays S4 with a `run-error`.
+        """
+        context = self.context
+        attempt = trial.attempts[-1]
+        artifact = context.artifacts.get(attempt.index)
+        if artifact is None:
+            raise ValueError(
+                f"{trial.trial_id}: attempt {attempt.index} compiled, but this trial kept no program for it; "
+                "list compile_loop or run_loop, which build the attempts, before any stage that appends one"
+            )
+        limits = attempt_limits(context, trial)
+        run_args = list(context.suite.item(context.item, purpose=PURPOSE).run_args)
+        unload_before_run(context.backend)
+        run = context.executor.run(artifact, run_args, limits)
+        stdout_ref = context.store.put(run.stdout)
+        info = RunInfo(exit_code=run.exit_code, hang=run.hang, wall_s=run.wall_s, stdout_ref=stdout_ref)
+        diagnostics = [*attempt.diagnostics, *_run_flag_warnings(run)]
+        clean = run.exit_code == 0 and not run.hang
+        if not clean:
+            status = _run_status(run, limits)
+            diagnostics.append(Diagnostic(stage="run", severity="error", code=RUN_ERROR, message=status))
+        ran = dataclasses.replace(
+            attempt, run=info, diagnostics=diagnostics, stage_reached=RAN_CLEAN if clean else COMPILED
+        )
+        return dataclasses.replace(trial, attempts=[*trial.attempts[:-1], ran]), run, limits
+
+
+def attempt_limits(context: RunContext, trial: Trial) -> Limits:
+    """Return the limits of an attempt run: the recipe's sandbox wall rule, its sandbox.mem_gb, and RUN_CPUS.
+
+    With sandbox.wall_s BASELINE_X10 the wall limit is BASELINE_FACTOR times
+    Trial.reference_run.wall_s, never less than RUN_WALL_FLOOR_S, which is
+    also the limit when no reference ran; a number there is the limit
+    itself. Any other value raises ValueError (the runner refuses it first).
+    """
+    sandbox = context.recipe.data["sandbox"]
+    rule = sandbox["wall_s"]
+    if rule == BASELINE_X10:
+        reference = trial.reference_run.wall_s
+        wall_s = RUN_WALL_FLOOR_S if reference is None else max(BASELINE_FACTOR * reference, RUN_WALL_FLOOR_S)
+    elif isinstance(rule, (int, float)) and not isinstance(rule, bool) and rule > 0:
+        wall_s = float(rule)
+    else:
+        raise ValueError(f"sandbox.wall_s must be a number of seconds above 0 or {BASELINE_X10!r}, not {rule!r}")
+    return Limits(wall_s=wall_s, memory_mb=round(float(sandbox["mem_gb"]) * 1024), cpus=RUN_CPUS)
+
+
+def run_error_text(run: RunResult, limits: Limits, fragments: Mapping[str, str]) -> str:
+    """Return the error text of the execute-error prompt for the failed run `run`.
+
+    With a fragment set (`fragments` not empty) it is upstream's report of
+    the run, the notebook's execute_code return_result: RUN_REPORT_EXIT, the
+    return code as Popen gives it (popen_return_code), one space,
+    RUN_REPORT_SEGFAULT when that code is POPEN_SEGFAULT, then, when the run
+    wrote any stderr, RUN_REPORT_STDERR and the stderr. A hang has no
+    upstream counterpart (upstream waits for the program without a limit);
+    its report is built the same way from the status the executor gives.
+    With a template set it is this project's wording [DESIGN]: how the run
+    ended, then the stderr when there is any. Either way the stderr is whole
+    (the executor caps it) and read as text mode reads it, as upstream reads
+    the program's output.
+    """
+    stderr = fragment_text.as_text_mode(run.stderr)
+    if not fragments:
+        status = _run_status(run, limits)
+        return f"{status}; its standard error follows:\n{stderr}" if stderr else status
+    code = popen_return_code(run.exit_code)
+    report = fragments[RUN_REPORT_EXIT] + str(code) + " "
+    if code == POPEN_SEGFAULT:
+        report += fragments[RUN_REPORT_SEGFAULT]
+    if stderr:
+        report += fragments[RUN_REPORT_STDERR] + stderr
+    return report
+
+
+def popen_return_code(exit_code: int | None) -> int | None:
+    """Return the return code Popen would give for an executor's exit status: -N for a death by signal N.
+
+    An executor that runs programs reports such a death in the shell's form,
+    SHELL_SIGNAL_BASE + N (N from 1 to MAX_SIGNAL); any other status, and
+    None, comes back unchanged. A program that exits with such a status
+    itself reads the same, since the status cannot tell the two apart.
+    """
+    if exit_code is not None and SHELL_SIGNAL_BASE < exit_code <= SHELL_SIGNAL_BASE + MAX_SIGNAL:
+        return SHELL_SIGNAL_BASE - exit_code
+    return exit_code
+
+
+def _run_status(run: RunResult, limits: Limits) -> str:
+    """Return one sentence saying how a failed run ended: stopped at its wall limit, no exit status, or its status."""
+    if run.hang:
+        return f"the program was stopped at its wall limit of {limits.wall_s:g} s"
+    if run.exit_code is None:
+        return "the program ended with no exit status"
+    return f"the program exited with status {run.exit_code}"
+
+
+def _run_flag_warnings(run: RunResult) -> list[Diagnostic]:
+    """Return one run-stage warning per RunResult flag that is set, in RUN_FLAGS order."""
+    return [
+        Diagnostic(stage="run", severity="warning", code=code, message=message)
+        for flag, (code, message) in RUN_FLAGS.items()
+        if getattr(run, flag)
+    ]
+
+
+def _past_gate(trial: Trial) -> Trial:
+    """Return `trial` ended at a compiling attempt past the execution gate, as upstream's loop ends there.
+
+    When an earlier attempt ran, the last attempt gains a `stale-output`
+    warning naming the last attempt that ran, whose stdout stands as the
+    trial's output. When none ran, the trial ends with `upstream-crash`.
+    """
+    last = trial.attempts[-1]
+    head = (
+        f"attempt {last.index} compiled after {last.index} correction(s), past upstream's execution gate (a "
+        f"compiling attempt runs only while its correction count is at most {EXECUTION_GATE_CORRECTIONS}), so it "
+        "was not run"
+    )
+    ran = [attempt.index for attempt in trial.attempts[:-1] if attempt.run.stdout_ref is not None]
+    if not ran:
+        message = f"{head}; no earlier attempt ran, so upstream's notebook has no run output to read and raises there"
+        return _ended(trial, UPSTREAM_CRASH, message)
+    message = f"{head}; the stdout of attempt {ran[-1]}, the last attempt that ran, stands as the trial's output"
+    warning = Diagnostic(stage="run", severity="warning", code=STALE_OUTPUT, message=message)
+    stale = dataclasses.replace(last, diagnostics=[*last.diagnostics, warning])
+    return dataclasses.replace(trial, attempts=[*trial.attempts[:-1], stale])
+
+
+def _corrected(
+    context: RunContext, previous: Attempt, expected: Sequence[str], errors: str, *, run_error: bool
+) -> Attempt:
+    """Return the next attempt: the correction prompt for `previous` with `errors` sent, the reply read, and the diff.
+
+    The prompt comes from _correction_messages. With fixes.prompt_newlines
+    off every line feed is removed from it before it is stored and sent. The
+    reply is read as generate reads attempt 0: FILE blocks with
+    fixes.fence_tag on, the first fenced block with it off.
+    """
+    system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error)
+    if not fix_on(context, "prompt_newlines"):
+        prompt = prompt.replace("\n", "")
+    ref, reply = _ask(context, prompt, system)
+    if fix_on(context, "fence_tag"):
+        attempt = _parsed_attempt(previous.index + 1, ref, reply, expected)
+    else:
+        attempt = _fenced_attempt(previous.index + 1, ref, reply, expected)
+    return dataclasses.replace(attempt, diff_from_previous=unified_diff(previous.files, attempt.files))
+
+
+def _correction_messages(
+    context: RunContext, previous: Attempt, expected: Sequence[str], errors: str, *, run_error: bool
+) -> tuple[str | None, str]:
+    """Return the system prompt (None for a template set) and the correction prompt for `previous` with `errors`.
+
+    A template set gives correct.txt, with `errors` as its diagnostics. A
+    fragment set gives the direction's system prompt and upstream's
+    correction prompt, whose code is the previous target file (FILE blocks
+    when the target has more than one file): the compile-error form, or
+    with `run_error` the execute-error form, which joins the execute-error
+    lead (CORRECT_RUN_HEAD, CORRECT_RUN_TAIL) around the same compiler and
+    flag text.
+    """
+    if not context.fragments:
+        fields = {
+            "target_language": context.direction.target,
+            "files": render_file_blocks(previous.files) if previous.files else "",
+            "diagnostics": errors,
+            "target_files": ", ".join(expected),
+        }
+        return None, render(context.prompts, "correct", fields)
+    direction, fragments = context.direction, context.fragments
+    code = previous.files.get(expected[0], "") if len(expected) == 1 else render_file_blocks(previous.files)
+    if run_error:
+        setup = (
+            fragments[fragment_text.fragment_key(fragment_text.SETUP_COMPILER, direction)]
+            + " "
+            + fragments[fragment_text.fragment_key(fragment_text.SETUP_FLAGS, direction)]
+        )
+        prompt = (
+            code + fragments[CORRECT_RUN_HEAD] + setup + fragments[CORRECT_RUN_TAIL] + errors
+            + fragments[fragment_text.CORRECT_OUTRO]
+        )
+    else:
+        prompt = fragment_text.correction_prompt(fragments, direction, code, errors)
+    return fragments[fragment_text.fragment_key(fragment_text.DIRECTION_SYSTEM, direction)], prompt

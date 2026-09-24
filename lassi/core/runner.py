@@ -32,8 +32,14 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    one target file with fixes.fence_tag off, since each reads one file; and
    an oracle section that no listed stage uses (none names Oracle in
    `requires`) or that its Oracle refuses (factory(**config) raises
-   ValueError, as for an unset oracle.passfail). A stage it does not
-   implement already fails at load, unregistered;
+   ValueError, as for an unset oracle.passfail); a backend that declares
+   `unload_before_run` but has no unload(); and, when the executor runs
+   programs, a sandbox.wall_s that is neither a number of seconds above 0
+   nor `baseline_x10`, or a sandbox.mem_gb that is not above 0 (the limits
+   of every run, lassi.core.stages attempt_limits and reference_limits), and
+   an executor without `sandboxed` when a listed stage declares
+   `runs_model_code` (Agent Rule 6).
+   A stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id), each toolchain
    with its pinned compiler and a clean environment (below), and the
    executor as factory(**config);
@@ -42,11 +48,13 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
 5. runs every trial, direction by direction in recipe order, item by item in
    sorted order (the items bench.items selects, else every item of the
    recipe's split; an unknown item, one outside the split, or a repeat is a
-   RunError before anything is written), then run 1 to trials.n: the
-   stages in recipe order on a fresh RunContext (which carries the prompt
-   set's fragments and the context packs by language), then the trial's
-   final block. A stage that sets final.end_reason ends the trial: no later
-   stage runs, and the final block keeps the end reason;
+   RunError before anything is written), then run 1 to trials.n: a backend
+   that declares `unload_before_run` is asked to unload (upstream's setup
+   unload, lassi.core.capabilities), then the stages run in recipe order on
+   a fresh RunContext (which carries the prompt set's fragments and the
+   context packs by language), then the trial's final block. A stage that
+   sets final.end_reason ends the trial: no later stage runs, and the final
+   block keeps the end reason;
 6. writes the run tree and prints one line per trial and the run directory.
 
 The run tree is <runs root>/runs/<run_id>, where the runs root is the
@@ -132,6 +140,7 @@ from typing import Any
 
 from lassi.bench import Direction, Suite, load_suite, sources_dir
 from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
+from lassi.core.capabilities import UNLOAD_BEFORE_RUN, declares, unload_before_run
 from lassi.core.fragments import fragment_key, pack_language
 from lassi.core.interfaces import Executor, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
@@ -147,7 +156,7 @@ from lassi.core.record import (
     make_trial_id,
 )
 from lassi.core.registry import DEFAULT_REGISTRY, Registry
-from lassi.core.stages import PURPOSE, RunContext
+from lassi.core.stages import BASELINE_X10, PURPOSE, RUNS_CODE, SANDBOXED, RunContext
 from lassi.core.store import TextStore, write_trial
 from lassi.core.trial_md import fenced, fmt, fmt_provenance
 from lassi.executors import workdir
@@ -348,6 +357,8 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id)
     if "needs_reference" in backend.capabilities and not hasattr(backend, "with_reference"):
         raise RunError(f"LLMBackend {settings.backend!r} needs the reference target but has no with_reference()")
+    if declares(backend, UNLOAD_BEFORE_RUN) and not callable(getattr(backend, "unload", None)):
+        raise RunError(f"LLMBackend {settings.backend!r} declares {UNLOAD_BEFORE_RUN!r} but has no unload()")
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
     pins = _trial_pins(toolchains)
     target_pins = {
@@ -355,7 +366,11 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         for direction in settings.directions
     }
     executor_binding = next(binding for binding in recipe.bindings if binding.interface == "Executor")
-    executor = registry.get("Executor", executor_binding.name).factory(**executor_binding.config)
+    executor_entry = registry.get("Executor", executor_binding.name)
+    if RUNS_CODE in executor_entry.capabilities:
+        _check_sandbox(recipe)
+        _check_sandboxed(recipe, registry, executor_binding.name, executor_entry.capabilities)
+    executor = executor_entry.factory(**executor_binding.config)
     commit, dirty = _git_state()
     try:
         run_dir.mkdir(parents=True)
@@ -641,6 +656,45 @@ def _sources_root(suite: Suite, options: RunOptions) -> Path:
     if not root.is_dir():
         raise RunError(f"the sources of {suite.name} are not at {root}; {_fetch_hint(suite)}")
     return root
+
+
+def _check_sandbox(recipe: Recipe) -> None:
+    """Refuse run limits the stages cannot apply: sandbox.wall_s and sandbox.mem_gb, read for every run of a program.
+
+    wall_s is a number of seconds above 0 or BASELINE_X10 (ten times the
+    reference run's wall time, lassi.core.stages attempt_limits), and mem_gb
+    a number of GB above 0.
+    """
+    sandbox = recipe.data.get("sandbox", {})
+    wall = sandbox.get("wall_s")
+    if wall != BASELINE_X10 and not (isinstance(wall, (int, float)) and not isinstance(wall, bool) and wall > 0):
+        raise RunError(
+            f"{recipe.path}: sandbox.wall_s is {wall!r}, but an executor that runs programs needs a number of seconds "
+            f"above 0 or {BASELINE_X10!r}; set it in the recipe"
+        )
+    memory = sandbox.get("mem_gb")
+    if not (isinstance(memory, (int, float)) and not isinstance(memory, bool) and memory > 0):
+        raise RunError(
+            f"{recipe.path}: sandbox.mem_gb is {memory!r}, but an executor that runs programs needs a number of GB "
+            "above 0; set it in the recipe"
+        )
+
+
+def _check_sandboxed(recipe: Recipe, registry: Registry, executor: str, capabilities: frozenset[str]) -> None:
+    """Refuse an executor that runs programs outside the sandbox when a listed stage runs model-generated code.
+
+    Such a stage declares `runs_model_code` (run_loop); the executor must
+    then declare SANDBOXED (Agent Rule 6). baseline runs only bench
+    references, so it needs no such declaration.
+    """
+    if SANDBOXED in capabilities:
+        return
+    for name in recipe.data["stages"]:
+        if getattr(registry.get("Stage", name).factory, "runs_model_code", False):
+            raise RunError(
+                f"{recipe.path}: stage {name!r} runs model-generated code, but Executor {executor!r} runs programs "
+                f"without declaring {SANDBOXED!r}; model-generated code runs only in the sandbox (Agent Rule 6)"
+            )
 
 
 def _check_plan(recipe: Recipe, registry: Registry, settings: _Settings, bench: _Bench) -> None:
@@ -1207,8 +1261,10 @@ def _run_trials(run: _Run, provenance: Provenance) -> list[Trial]:
 def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: str, number: int) -> Trial:
     """Run the recipe's stages on one new trial, each built on a fresh RunContext, and set its final block.
 
-    A stage that sets final.end_reason ends the trial: no later stage runs,
-    and the final block keeps the end reason.
+    A backend that declares `unload_before_run` is asked to unload first, as
+    upstream's setup unloads the model before anything runs. A stage that
+    sets final.end_reason ends the trial: no later stage runs, and the final
+    block keeps the end reason.
     """
     settings, suite = run.settings, run.bench.suite
     backend = run.backend
@@ -1242,6 +1298,7 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
         packs=settings.packs,
     )
     started = time.monotonic()
+    unload_before_run(backend)
     stages = [run.registry.get("Stage", name).factory(context=context) for name in run.recipe.data["stages"]]
     for stage in stages:
         trial = stage(trial)

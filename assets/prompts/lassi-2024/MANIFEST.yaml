@@ -168,6 +168,26 @@ entries:
   source: LASSI_pipeline_v0.ipynb
   cell: fdb5b82f-b135-4226-92ff-056d69e17903
   sha256: 74babeee46ca505f7ff3e60625ade8b844f898a3352261b8f3c6a61194f797d2
+- key: execute.ok
+  source: LASSI_pipeline_v0.ipynb
+  cell: 976745b6-f871-4500-9527-950a7f30c91f
+  sha256: 5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
+- key: execute.exit_lead
+  source: LASSI_pipeline_v0.ipynb
+  cell: 976745b6-f871-4500-9527-950a7f30c91f
+  sha256: a54c7be8cdf228985f38633c55fdb3ff0bcb314b1c057cdc33e7b68f062e8d74
+- key: execute.segfault
+  source: LASSI_pipeline_v0.ipynb
+  cell: 976745b6-f871-4500-9527-950a7f30c91f
+  sha256: ac0b8a23d92e735d307c19a974f6610a10ca23b748c2063587f11b8a5de01002
+- key: execute.exception_lead
+  source: LASSI_pipeline_v0.ipynb
+  cell: 976745b6-f871-4500-9527-950a7f30c91f
+  sha256: 45c0c00cbd2f6c5a3b6d5b236e3e0ec4f0751993c699149b10694792712c0c04
+- key: execute.stderr_lead
+  source: LASSI_pipeline_v0.ipynb
+  cell: 976745b6-f871-4500-9527-950a7f30c91f
+  sha256: a95d4d6d8839e5f72dbe9ae433d6858cb2daa54b80e137e89e1028b6432fa460
 - key: setup.cuda.compiler
   source: LASSI_pipeline_v0.ipynb
   cell: 62e4eab8-7be4-4423-9e74-c420ef8f51a6

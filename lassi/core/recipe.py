@@ -55,6 +55,11 @@ FIXES: dict[str, str] = {
         "send the parsed compile diagnostics, capped in count and bytes, in a correction prompt;"
         " off keeps upstream's behavior of sending the whole raw compiler stderr, read in text mode"
     ),
+    "execution_gate": (
+        "run every compiling attempt within the correction cap;"
+        " off keeps upstream's quirk that runs a compiling attempt only while its correction count is at most 7,"
+        " so a later compiling attempt ends the trial unexecuted, with an earlier run's stdout as stale output"
+    ),
 }
 
 

@@ -102,6 +102,13 @@ NOTEBOOK_KEYS: dict[tuple[str, str], tuple[str, ...]] = {
     ("auto_code_llmgeneration_pipeline", "error_correction_prompt_outro"): (
         "correct.outro",  # after the error text
     ),
+    ("execute_code", "return_result"): (
+        "execute.ok",  # the report of a clean run, which no prompt carries
+        "execute.exit_lead",  # a failed run's report (the run error text), before the return code
+        "execute.segfault",  # appended when the return code is -11
+        "execute.exception_lead",  # before an exception raised while reading the run's output
+        "execute.stderr_lead",  # before the run's stderr, when it wrote any
+    ),
     ("experimental_setup", "code_compiler"): (
         "setup.cuda.compiler",  # CUDA target branch
         "setup.omp.compiler",  # OpenMP target branch

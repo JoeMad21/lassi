@@ -37,8 +37,10 @@ SEVERITIES = ("error", "warning", "note")
 TOOLCHAIN_PIN_NAMES = ("llvm", "polygeist", "tt_mlir", "tt_metal", "ttsim", "furiosa_sdk", "cuda", "nvhpc", "rocm")
 # The fixed codes of Final.end_reason: why a trial ended early. baseline-compile and baseline-run end a trial
 # before any model call (a reference program did not build, or its run exited nonzero or hung); correction-cap
-# means an error remained when loop.max_corrections stopped the correction loop.
-END_REASONS = ("baseline-compile", "baseline-run", "correction-cap")
+# means an error remained when loop.max_corrections stopped the correction loop; upstream-crash means that, with
+# fixes.execution_gate off, a compiling attempt came past upstream's execution gate when no earlier attempt had run,
+# where upstream's notebook raises (it reads run output that was never set).
+END_REASONS = ("baseline-compile", "baseline-run", "correction-cap", "upstream-crash")
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")

@@ -109,7 +109,8 @@ ITEM = "layout"
 MODEL_ID = "scripted-fixture"
 PROMPT_SET = "lassi-2024"
 P0_PROMPT_SET = "p0-smoke"
-FAITHFUL_STAGES = ("baseline", "summarize_context", "describe_source", "generate", "compile_loop")
+# run_loop reproduces fixes.execution_gate (P1.6), which faithful: true turns off, so the faithful list names it.
+FAITHFUL_STAGES = ("baseline", "summarize_context", "describe_source", "generate", "compile_loop", "run_loop")
 # The fake toolchain bound for each target language, registered under the preset's name (compiles nothing).
 TOOLCHAIN_OF = {"cuda": "nvcc-sm80", "omp": "nvcpp-cc80"}
 # The pack upstream's experimental setup selects for each target language (its context knowledge entry).

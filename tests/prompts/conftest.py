@@ -24,12 +24,13 @@ This module provides five fixtures:
 
 The oracle's view of what the stages use (the `required` literals) is the
 set of non-blank string literals that are direct operands of the
-assignments building a prompt or a compile command (`content_prompt`,
-`content`, the correction intro and outro, `code_compiler`,
-`code_compiler_kwds`) inside the notebook functions that build the summary
-and description prompts, assemble the translation and correction prompts,
-and set up the experiment (each function's own body, not the rest of its
-cell). Whitespace-only joiners are left to the stages.
+assignments building a prompt, a compile command, or the report of a run
+(`content_prompt`, `content`, the correction intro and outro,
+`code_compiler`, `code_compiler_kwds`, `return_result`) inside the notebook
+functions that build the summary and description prompts, assemble the
+translation and correction prompts, report a run (the error text of the
+execute-error prompt), and set up the experiment (each function's own body,
+not the rest of its cell). Whitespace-only joiners are left to the stages.
 
 The oracle names every fragment by its key alone (Upstream.value_of): a
 dictionary key is `<dictionary>.<entry>`, and a notebook key is the stage
@@ -79,11 +80,11 @@ KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 # The notebook functions whose literals the stages use, and the names their prompt text is assigned to.
-STAGE_FUNCTIONS = ("code_knowledge_llm", "code_description_llm", "auto_code_llmgeneration_pipeline")
+STAGE_FUNCTIONS = ("code_knowledge_llm", "code_description_llm", "auto_code_llmgeneration_pipeline", "execute_code")
 SETUP_FUNCTION = "experimental_setup"
 PROMPT_TARGETS = frozenset({
     "content_prompt", "content", "error_correction_prompt_intro", "error_correction_prompt_outro",
-    "code_compiler", "code_compiler_kwds",
+    "code_compiler", "code_compiler_kwds", "return_result",
 })
 
 # The stage-facing key of each notebook literal, per (function, assigned name): key i names the i-th non-blank
@@ -99,6 +100,8 @@ NOTEBOOK_KEYS: dict[tuple[str, str], tuple[str, ...]] = {
         "correct.run_error_head", "correct.run_error_tail", "correct.compile_error_head",
         "correct.compile_error_tail"),
     ("auto_code_llmgeneration_pipeline", "error_correction_prompt_outro"): ("correct.outro",),
+    ("execute_code", "return_result"): (
+        "execute.ok", "execute.exit_lead", "execute.segfault", "execute.exception_lead", "execute.stderr_lead"),
     ("experimental_setup", "code_compiler"): ("setup.cuda.compiler", "setup.omp.compiler"),
     ("experimental_setup", "code_compiler_kwds"): ("setup.cuda.flags", "setup.omp.flags"),
 }

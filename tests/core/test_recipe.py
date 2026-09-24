@@ -46,7 +46,7 @@ NEW_MODULES = ("lassi.core.recipe", "lassi.core.registry")
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 # sha256 of canonical(EXPECTED_CHILD); computed once from the data below, never from a loader run.
-CHILD_HASH = "45e3bfb03bc30ff7b91ebbd087011c6339546b8355923c4e3c6faee7f295df2e"
+CHILD_HASH = "c9923e7743128f3e21d11fc67e2ed146c9bab0a7adad5d52fb868e1b446d84bd"
 CHILD_CHAIN = ("fixture-base", "parent", "child")
 
 FENCE_TAG_DESCRIPTION = (
@@ -68,12 +68,20 @@ PARSED_DIAGNOSTICS_DESCRIPTION = (
     "send the parsed compile diagnostics, capped in count and bytes, in a correction prompt;"
     " off keeps upstream's behavior of sending the whole raw compiler stderr, read in text mode"
 )
+EXECUTION_GATE_DESCRIPTION = (
+    "run every compiling attempt within the correction cap;"
+    " off keeps upstream's quirk that runs a compiling attempt only while its correction count is at most 7,"
+    " so a later compiling attempt ends the trial unexecuted, with an earlier run's stdout as stale output"
+)
 
 # Every named fix in lassi.core.recipe.FIXES: P0's fence tag fix, P1.4's prompt_spaces (on keeps the runs of spaces
-# in the generation prompt; off collapses each run to one space, as upstream does), and P1.5's baseline_both (on
+# in the generation prompt; off collapses each run to one space, as upstream does), P1.5's baseline_both (on
 # builds and runs the source reference too), prompt_newlines (on keeps a correction prompt's line feeds), and
-# parsed_diagnostics (on sends capped parsed diagnostics in place of the raw compiler stderr).
-FIX_NAMES = ("fence_tag", "prompt_spaces", "baseline_both", "prompt_newlines", "parsed_diagnostics")
+# parsed_diagnostics (on sends capped parsed diagnostics in place of the raw compiler stderr), and P1.6's
+# execution_gate (on runs every compiling attempt; off runs one only while its correction count is at most 7).
+FIX_NAMES = (
+    "fence_tag", "prompt_spaces", "baseline_both", "prompt_newlines", "parsed_diagnostics", "execution_gate"
+)
 
 
 def all_fixes(on: bool) -> dict[str, bool]:
@@ -1687,6 +1695,7 @@ def test_fixes_table_and_uncapped(recipe_module: ModuleType) -> None:
         "baseline_both": BASELINE_BOTH_DESCRIPTION,
         "prompt_newlines": PROMPT_NEWLINES_DESCRIPTION,
         "parsed_diagnostics": PARSED_DIAGNOSTICS_DESCRIPTION,
+        "execution_gate": EXECUTION_GATE_DESCRIPTION,
     }
     assert tuple(recipe_module.FIXES) == FIX_NAMES
 

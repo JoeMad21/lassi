@@ -118,7 +118,8 @@ TOOLCHAINS = {"cuda": "nvcc-sm80", "omp": "nvcpp-cc80"}
 PACK_OF = {"omp": "openmp-4.0-card", "cuda": "cuda-12.5-ch5"}
 # Upstream's dictionary entry name for each direction: `<SOURCE>_to_<TARGET>` in upstream's language spelling.
 DIRECTION_KEY = {("omp", "cuda"): "OMP_to_CUDA", ("cuda", "omp"): "CUDA_to_OMP"}
-FAITHFUL_STAGES = ["baseline", "summarize_context", "describe_source", "generate", "compile_loop"]
+# run_loop reproduces fixes.execution_gate (P1.6), which faithful: true turns off, so every faithful list names it.
+FAITHFUL_STAGES = ["baseline", "summarize_context", "describe_source", "generate", "compile_loop", "run_loop"]
 TEMPLATE_STAGES = ["generate", "compile_loop"]
 CORRECTION_FIXES = ("prompt_newlines", "parsed_diagnostics")
 COUNT_CAP = "DIAGNOSTIC_COUNT_CAP"
@@ -338,7 +339,7 @@ def scripted_executor(log: Log) -> type:
         """Records each run's inputs and returns the SYNTHETIC RunResult of the artifact's language."""
 
         name = "scripted"
-        capabilities = frozenset({"runs_code"})
+        capabilities = frozenset({"runs_code", "sandboxed"})
 
         def run(self, artifact: Path, inputs: Sequence[str], limits: Limits) -> RunResult:
             """Record the inputs and return the scripted result."""
@@ -676,7 +677,7 @@ def test_parsed_diagnostics_off_keeps_a_stderr_of_only_whitespace_as_upstream_do
 def test_faithful_true_runs_the_baseline_and_the_loop_over_the_template_set(tmp_path: Path) -> None:
     # The fragment-set runs skip without third_party/LASSI; this one keeps `faithful: true` covered end to end.
     log = Log(replies=[fenced(TEMPLATE_BAD), fenced(GOOD_CODE)])
-    data = {**template_recipe(stages=["baseline", "generate", "compile_loop"]), "faithful": True}
+    data = {**template_recipe(stages=["baseline", "generate", "compile_loop", "run_loop"]), "faithful": True}
     outcome = run_one(tmp_path, write_bench(tmp_path / "bench"), "faithful-template", data, log)
     resolved = yaml.safe_load((outcome.run_dir / "recipe.resolved.yaml").read_text(encoding="utf-8"))
     assert resolved["fixes"] == {name: False for name in FIXES}, "faithful: true turns every fix off"
@@ -895,7 +896,8 @@ def test_all_fixes_off_with_a_numeric_cap_behaves_exactly_as_faithful(
     built = [[(build.files, build.harness) for build in outcome.log.builds] for outcome in (faithful, unfaithful)]
     assert built[0] == built[1]
     assert unfaithful.log.runs == faithful.log.runs
-    assert [attempt.stage_reached for attempt in faithful.trial.attempts] == ["S0", "S1", COMPILED]
+    # run_loop runs the compiling attempt on this executor (P1.6), and its SYNTHETIC run exits 0: S5.
+    assert [attempt.stage_reached for attempt in faithful.trial.attempts] == ["S0", "S1", "S5"]
 
 
 def test_all_fixes_off_stops_at_the_numeric_cap_with_correction_cap(
