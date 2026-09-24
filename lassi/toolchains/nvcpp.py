@@ -256,3 +256,32 @@ class NvcppCc80(NvcppToolchain):
     # The pinned nvc++: toolchains/nvhpc.pin, at <toolchains root>/<PREFIX_NAME>/<COMPILER_SUBDIR>/nvc++.
     PIN = "nvhpc"
     PIN_BIN = "{COMPILER_SUBDIR}/nvc++"
+
+
+@register("Toolchain", "nvcpp-multicore")
+class NvcppMulticore(NvcppToolchain):
+    """nvc++ building OpenMP target regions for the host CPU: the multicore proxy of the Harness Contract.
+
+    The bible's Harness Contract (Execution Backends) names a CUDA -> OMP
+    proxy without a GPU: a second binary built with nvc++ -mp=multicore, so
+    target regions run on the host. This preset builds it with the
+    nvcpp-cc80 command, -mp=gpu replaced by -mp=multicore and no -gpu target:
+
+        nvc++ -Wall -O3 -Minfo -mp=multicore -o main <sources>
+
+    It shares nvcpp-cc80's pin (PIN and PIN_BIN) and stderr parser. Its
+    capabilities hold "openmp_multicore" in place of "openmp_offload", so a
+    component that requires offload never gets it. It is a proxy: it never
+    appears in faithful recipes, and a run of its binary checks outputs only
+    and never yields runtime numbers.
+    """
+
+    name = "nvcpp-multicore"
+    capabilities = frozenset({"openmp_multicore", "emits_warnings", "diagnostics"})
+    PIN = NvcppCc80.PIN
+    PIN_BIN = NvcppCc80.PIN_BIN
+
+    def command(self, sources: Sequence[str]) -> list[str]:
+        """Return the proxy command line: the LASSI flags with -mp=multicore and no -gpu target, then `sources`."""
+        flags = ["-Wall", "-O3", "-Minfo", "-mp=multicore"]
+        return [self.executable, *flags, "-o", OUTPUT, *sources]
