@@ -2092,8 +2092,10 @@ def test_refuses_a_pinned_toolchain_without_a_toolchains_root(
 def test_read_pin_parses_the_committed_pin_files() -> None:
     cuda, nvhpc = read_pin("cuda"), read_pin("nvhpc")
     assert (cuda["NAME"], cuda["VERSION"], cuda["PREFIX_NAME"]) == ("cuda", "12.6.3", "cuda@12.6.3")
-    assert cuda["INSTALL_FLAGS"] == "--silent --toolkit --no-opengl-libs --no-man-page --no-drm --override"
-    assert cuda["MD5"] == "29d297908c72b810c9ceaa5177142abd", "a trailing comment is not part of the value"
+    assert cuda["COMPONENTS"] == "cuda_nvcc cuda_cudart cuda_cccl cuda_cuobjdump"
+    assert cuda["MANIFEST_SHA256"] == "9c598598457a6463eb92889080c16b2b9dc04150e501b8bfc1536d403ba70aaf", (
+        "a trailing comment is not part of the value"
+    )
     assert cuda["EXPECT_VERSION"] == "Cuda compilation tools, release 12.6, V12.6.85"
     assert (nvhpc["NAME"], nvhpc["VERSION"], nvhpc["PREFIX_NAME"]) == ("nvhpc", "24.11", "nvhpc@24.11")
     assert nvhpc["COMPILER_SUBDIR"] == "Linux_x86_64/24.11/compilers/bin"
