@@ -23,7 +23,7 @@ Decisions taken at planning (the named task records each one in the Decision Log
 - The resolved recipe carries its project name in an explicit `project` key (P1.10). This changes every recipe hash from P1 on.
 - Faithful mode follows the notebook where the bible's pipeline summary differs: the baseline builds and runs only the target reference, and the correction prompt renders upstream's compiler text (P1.5).
 
-PHASE-NOTES P1 items, by task: rerun ids, P1.10; p0-smoke to one item, P1.2; the upstream submodule, P1.1; the HeCBench pin, the nine other apps, and `reference.h`, P1.1 and P1.2; CUDA components, P1.2; recorded responses, P1.9; compiler output facts, P1.5 and P1.9; the mock fence quirk, P1.10; run flags, P1.6; correction prompt diagnostics, P1.5; toolchain follow-ups, P1.11. Not taken: the furiosa backend choice (P3 scope).
+PHASE-NOTES P1 items, by task: rerun ids, P1.10; p0-smoke to one item, P1.2; the upstream pin, P1.1; the HeCBench pin, the nine other apps, and `reference.h`, P1.1 and P1.2; CUDA components, P1.2; recorded responses, P1.9; compiler output facts, P1.5 and P1.9; the mock fence quirk, P1.10; run flags, P1.6; correction prompt diagnostics, P1.5; toolchain follow-ups, P1.11. Not taken: the furiosa backend choice (P3 scope).
 
 Owner queue: OQ-018 (upstream LASSI text in the public repository) blocks only P1.12.
 
@@ -31,9 +31,9 @@ Owner queue: OQ-018 (upstream LASSI text in the public repository) blocks only P
 
 ### P1.1 Pin upstream LASSI and check the HeCBench pin against its sources
 - Bible: Source Papers (LASSI: upstream repository line; quirk table, entropy row), Repository Layout (`third_party/`), Benchmark Suites, Toolchain Pins, Agent Rules 4 and 10.
-- Accept: `git submodule status third_party/LASSI` shows 74b4681. `rx run -- 'git submodule update --init third_party/LASSI && git -C third_party/LASSI rev-parse HEAD'` prints the same hash; if the gate refuses it, a fetch of the pinned commit under `$LASSI_SCRATCH` replaces the submodule on alpha01 and the refusal is recorded. `plans/spikes/p1-hecbench-pin.md` lists, for each of the 20 upstream `*_main` files, its blob id and whether HeCBench 7d2d3c5 holds it at `src/<app>-<omp|cuda>/main.*`, plus any HeCBench commits holding all 20, with commands and outputs. The spike names the source of each model-facing file and the HeCBench pin for support files; a pin change is a Decision Log entry.
-- Files: `.gitmodules`, `third_party/LASSI` (gitlink), `plans/spikes/p1-hecbench-pin.md`, `docs/BIBLE.md` if the pin changes.
-- Remote: `rx run` for the submodule check; a blobless HeCBench clone, locally or under `$LASSI_SCRATCH` after the space check. Depends: none.
+- Accept: `assets/upstream/lassi.yaml` pins upstream at 74b4681 and `uv run tools/fetch_upstream.py` checks it out into the gitignored `third_party/LASSI` (Decision Log, 2026-09-24: a manifest and a fetch tool replace the submodule, because the text-policy check refuses a staged gitlink; OQ-020). `rx run -- 'uv run tools/fetch_upstream.py && git -C third_party/LASSI rev-parse HEAD'` prints the same hash. `plans/spikes/p1-hecbench-pin.md` lists, for each of the 20 upstream `*_main` files, its blob id and whether HeCBench 7d2d3c5 holds it at `src/<app>-<omp|cuda>/main.*`, plus any HeCBench commits holding all 20, with commands and outputs. The spike names the source of each model-facing file and the HeCBench pin for support files; a pin change is a Decision Log entry.
+- Files: `assets/upstream/lassi.yaml`, `tools/fetch_upstream.py`, `tests/bench/test_upstream_pin.py`, `.gitignore`, `plans/spikes/p1-hecbench-pin.md`, `docs/BIBLE.md` if the pin changes.
+- Remote: `rx run` for the fetch check; a blobless HeCBench clone, locally or under `$LASSI_SCRATCH` after the space check. Depends: none.
 
 ### P1.2 Ten-app bench manifest, support files, and item selection
 - Bible: Benchmark Suites (lassi-hecbench-10, split rules), Source Papers (LASSI quirk table: entropy and PASS/FAIL rows), Harness Contract, Design Principle 3, Agent Rule 5.
@@ -48,9 +48,9 @@ Owner queue: OQ-018 (upstream LASSI text in the public repository) blocks only P
 ### P1.3 lassi-2024 prompt set and context packs from pinned upstream
 - Bible: Source Papers (LASSI pipeline steps 2 to 4), Design Principles 3 and 4, Readability Standards (Prompts row), Repository Layout (`assets/prompts`, `assets/context`).
 - Accept:
-  - `tools/extract_lassi_assets.py` refuses a submodule not at 74b4681. Without importing anything from upstream, it writes the `prompt_dictionary.py` values and the notebook literals the stages use (summary and description prompts, assembly wrappers, correction intro and outro, and the compiler and flag text of `experimental_setup`), parsed from the cells with `ast`, as named fragments under `assets/prompts/lassi-2024/`, and the packs under `assets/context/openmp-4.0-card/` and `assets/context/cuda-12.5-ch5/`. Each tree has a committed `MANIFEST.yaml` (key, source file and cell id, sha256). Rerunning it changes nothing.
+  - `tools/extract_lassi_assets.py` refuses a checkout not at 74b4681. Without importing anything from upstream, it writes the `prompt_dictionary.py` values and the notebook literals the stages use (summary and description prompts, assembly wrappers, correction intro and outro, and the compiler and flag text of `experimental_setup`), parsed from the cells with `ast`, as named fragments under `assets/prompts/lassi-2024/`, and the packs under `assets/context/openmp-4.0-card/` and `assets/context/cuda-12.5-ch5/`. Each tree has a committed `MANIFEST.yaml` (key, source file and cell id, sha256). Rerunning it changes nothing.
   - `.gitignore` ignores those trees except `MANIFEST.yaml`: `git ls-files assets/prompts/lassi-2024 assets/context` lists only the manifests, and a test fails if any tracked file outside `third_party/` contains a generated fragment of 40 or more characters.
-  - A test renders every fragment and compares it byte for byte with the value parsed from the submodule.
+  - A test renders every fragment and compares it byte for byte with the value parsed from the pinned checkout.
   - The loader returns the packs and fragments a recipe names. It fails, naming the tool, when a file is missing or its sha256 differs from the manifest, and fails loudly on an unknown pack.
 - Files: `tools/extract_lassi_assets.py`, `assets/prompts/lassi-2024/MANIFEST.yaml`, `assets/context/*/MANIFEST.yaml`, `lassi/prompts/`, `.gitignore`, `tests/prompts/`.
 - Remote: none. Depends: P1.1.
@@ -143,8 +143,8 @@ Owner queue: OQ-018 (upstream LASSI text in the public repository) blocks only P
 ### P1.G Phase gate
 - Bible: Build Roadmap (P1 row, Gate column), Evaluation Protocol (Acceptance Criteria, compile-only tier label); AGENTS.md Phase Gate and Results.
 - Accept, from one clean commit on alpha01:
-  - (1) `rx run -- 'git submodule update --init third_party/LASSI && uv run tools/extract_lassi_assets.py && uv run pytest -q -rs tests/replay'` exits 0 with no skipped test, and every scenario's decisions match upstream's.
-  - (2) `rx run` (or `rx job` if it will pass 20 minutes) of `git submodule update --init third_party/LASSI && uv run tools/extract_lassi_assets.py && uv run tools/fetch_bench.py assets/bench/lassi-hecbench-10.yaml && uv run lassi run tests/fixtures/recipes/p1-dry-run.yaml` ends with 20 of 20 trials (10 apps, 2 directions) at S4 on attempt 0 and 20 of 20 baseline target references compiled.
+  - (1) `rx run -- 'uv run tools/fetch_upstream.py && uv run tools/extract_lassi_assets.py && uv run pytest -q -rs tests/replay'` exits 0 with no skipped test, and every scenario's decisions match upstream's.
+  - (2) `rx run` (or `rx job` if it will pass 20 minutes) of `uv run tools/fetch_upstream.py && uv run tools/extract_lassi_assets.py && uv run tools/fetch_bench.py assets/bench/lassi-hecbench-10.yaml && uv run lassi run tests/fixtures/recipes/p1-dry-run.yaml` ends with 20 of 20 trials (10 apps, 2 directions) at S4 on attempt 0 and 20 of 20 baseline target references compiled.
   - `rx pull` writes `results/p1-gate/replay/` and `results/p1-gate/dry-run/` with provenance. `summary.md` cites both, says the replay responses are synthetic and its fence-quirk count is not a reproduction metric, and labels the dry run a compile-stage run with the mock, never compared with the paper.
   - On a pass, set P1 DONE and open the pull request `P1 Faithful LASSI` from `p1-faithful` to `main`.
 - Remote: `rx doctor`, `rx run` or `rx job`, `rx pull`. Depends: P1.9, P1.10, P1.11.

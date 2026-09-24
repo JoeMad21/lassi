@@ -23,3 +23,7 @@ lassi-runs/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Upstream LASSI checkout, fetched at its pinned commit by tools/fetch_upstream.py (not tracked; OQ-018)
+third_party/LASSI/
+
