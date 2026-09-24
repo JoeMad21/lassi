@@ -62,6 +62,8 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - Baseline on this host (from P1.5): alpha01 has no GPU, so with an executor that runs programs, any trial whose baseline runs a CUDA reference ends baseline-run: every OpenMP to CUDA trial, and every CUDA to OpenMP trial with baseline_both on. Run OpenMP to CUDA with executor none. The reference run's limits are REFERENCE_WALL_S = 600 s and REFERENCE_CPUS = 16 in lassi/core/stages.py, with no recipe key yet.
 - For P1.6 (from P1.5): derive the recipe's baseline_x10 run limit from Trial.reference_run.wall_s; add upstream-crash to lassi.core.record.END_REASONS (stages._ended sets any end reason); record a truncated reference stdout and an incomplete workdir with the other run flags.
 - For P1.10 (from P1.5): the lassi-repro recipe lists baseline first (the runner refuses any other order); run.md's trials table has no end-reason column yet. lassi/core/interfaces.py's module docstring restates the Toolchain contract rule without the faithful raw-stderr exception.
+- Run report fragments (from P1.6): the extractor also writes `execute.*` (execute_code's return_result: ok, exit_lead, segfault, exception_lead, stderr_lead). For P1.9: run_loop maps the executor's shell-form status (128 + N) to Popen's -N before upstream's segfault check, so the replay's stub of upstream's execute_code (or of Popen) must hand the notebook Popen's form for both reports to match; upstream's execute_code has no timeout, so a hang has no replay counterpart. Every faithful: true recipe must list run_loop (it reproduces execution_gate).
+- Demo recipes (projects/lassi-demo): the correction prompts of rngd-cpu.yaml name upstream's compiler and flags (-mp=gpu), while the proxy builds with -mp=multicore.
 
 ## P2 Scoring
 
@@ -71,6 +73,8 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - stdout_mask (from P1.7): the rule ignores exit code and hang, so a candidate that crashes after printing the reference's stdout scores 1.0; a fix that also requires exit 0 is a candidate. randomAccess lists passfail [cuda] only, so a CUDA to OpenMP translation is scored by stdout_mask alone. Before any stdout_mask result for jacobi is reported, check whether its CUDA reference prints the "Error after iteration" line identically across runs (a float atomicAdd reduction); if not, correct translations can score 0.0.
 - C-aware Sim-T (from P1.8): its design choices (the C lexer rules, autojunk off, 1.0 for two texts with no C tokens) are documented only in lassi/scoring/similarity.py. Record them in the bible's Decision Log when metrics wire the measure in.
 - Generated asset trees (from the P1.3 review): lassi/prompts/assets.py names tools/extract_lassi_assets.py in every error and rejects '@' in names, which later pack names use (ttkernel-ods@PIN, csl@PIN, tcl@PIN). Add a generator field to MANIFEST.yaml and allow '@' before a second generator exists.
+- Reference run flags (from the P1.6 review): the baseline drops the reference run's stdout_truncated, stderr_truncated, and workdir_incomplete, because Trial.reference_run (RunInfo) has no place for them, so an attempt can be aligned against a truncated reference stdout with no record of the cut. Decide the record change (RunInfo flag fields, or trial-level diagnostics) through a bible edit before native runs feed scores.
+- Run handoff (from the P1.6 review): compile_loop passes built programs to run_loop in memory through RunContext.artifacts; a resume or rerun from the record cannot run an attempt. A record decision could add an Attempt artifact field. projects/base.yaml's sandbox.wall_s comment omits the 30 s floor (RUN_WALL_FLOOR_S) and the no-reference case.
 
 ## P3 RNGD Serving
 
@@ -78,6 +82,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - RNGD serving (spike plans/spikes/p3-rngd-demo.md, 2026-09-24, exploratory): the 2026.2.1 venv serves furiosa-ai/Llama-3.1-8B-Instruct@v2026.2 on one card with HF_HOME set to /mnt/nvme10/joseph_ufl/.cache/huggingface and HF_HUB_OFFLINE=1 (the gate's HF_HOME is empty). `rx job kill` stops only the job runner, since the gate starts the command in its own session; until tools/server/gate.py kills the command's process group too (and the owner reinstalls the gate), start servers through the spike's watchdog wrapper and verify every stop with furiosa-smi status. The spike's proposed bible Host Facts and Decision Log text waits for the next bible sync.
 - A faithful LASSI loop has no correction cap, so a real model that never compiles needs a stop budget, recorded as a cap hit (from P1 planning).
 - Responses recorded from a real model can later join the P1 replay fixtures as a regression (from P1 planning).
+- Ollama ids with a tag (`name:tag`) cannot form a trial id: arm_segment maps only '/', and a segment does not allow ':' (from P1.6). The trial-start unload is sent before the backend's model check, so a server without the model fails at the unload with an unclear error.
 
 ## P4 ttsim Execution
 
