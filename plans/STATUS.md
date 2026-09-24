@@ -74,7 +74,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2.5 | DONE | Spike: stability of the reference output under the proxy | - | rx job 20260924-133017-p2-proxy-3a3a from 207e4dd: every item's masked reference stdout stable over 3 runs; dense-embedding not scorable under the proxy; results/p2-proxy-stability |
 | P2.6 | DONE | df-v0 score profile | P2.3 | df-v0 ScoreProfile, weights in assets/scoring/df-v0.yaml; 65 tests; W, A, guard, R_final, single and multi-turn readings recorded in the bible |
 | P2.7 | DONE | lassi score profile | P2.3,P2.4 | lassi profile: 12 components, correct needs a clean run; bible rev 148 |
-| P2.8 | READY | Run metrics per arm and direction | P2.6,P2.7 |  |
+| P2.8 | DONE | Run metrics per arm and direction | P2.6,P2.7 | lassi.analysis metrics per arm and direction; bible rev 151 |
 | P2.9 | READY | lassi score: score a finished run and write the review packet | P2.2,P2.8 |  |
 | P2.10 | READY | Recipes bind score and metrics in lassi run | P2.9 |  |
 | P2.G | READY | Phase gate: owner review of score components on run demo-rngd-cpu-1 | P2.1,P2.2,P2.5,P2.9,P2.10 |  |

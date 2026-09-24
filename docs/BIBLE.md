@@ -1,6 +1,6 @@
 # LASSI Project Bible
 
-Repository mirror of the project bible, master revision 148 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
+Repository mirror of the project bible, master revision 152 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
 
 ## Purpose And Scope
 
@@ -173,7 +173,7 @@ lassi/                            # monorepo root
     bench/       # item registry with splits, held-out inputs, references
     corpus/      # build, gate, Parquet schema (absorbs mlir-corpus-pipeline)
     train/       # sft, rft, dpo, grpo, gspo, ppo, adversarial; weights: full, lora, qlora, dora
-    analysis/    # pass@k, energy-reduction@k, judge calibration, reports
+    analysis/    # Wilson intervals and pass@k, paper reference values, metric tables per arm and direction; later energy-reduction@k, judge calibration, reports
     cli.py       # lassi run | train | corpus | export | report
   assets/
     prompts/     # lassi-2024/ (generated locally from pinned upstream; only MANIFEST.yaml tracked), lassi-ee-2026/, lassi-df-v0/
@@ -182,7 +182,7 @@ lassi/                            # monorepo root
     bench/       # suite manifests; sources pinned by commit
     upstream/    # upstream LASSI pin manifest (lassi.yaml), read by tools/fetch_upstream.py
     harness/     # lassi_io bindings: c/, rust/, csharp/, python/; host generators; masking rules
-    scoring/     # score profile files: df-v0.yaml (weights), lassi.yaml (component order and notes)
+    scoring/     # score profile files: df-v0.yaml (weights), lassi.yaml (component order and notes), lassi-paper.yaml (the LASSI paper's reference values)
   projects/
     lassi-repro/recipe.yaml
     lassi-ee/recipe.yaml
@@ -848,6 +848,24 @@ C-aware Sim-T (sim_t_c), design choices of task P1.8; the tests pin the lexer ru
 - The value is the matched-token ratio 2M/T of difflib's SequenceMatcher over the token strings, reference first, with autojunk off. With autojunk on, difflib ignores as match seeds every token that occurs more than len/100 + 1 times (integer division) in a candidate of 200 or more tokens; in C that is the common punctuation and keywords, so matched runs of them would go uncounted. The faithful Sim-T's positional tokens are nearly all distinct, which is why autojunk hardly acts there.
 - Two texts with no C tokens score 1.0, difflib's value for two empty sequences.
 
+### Run Metrics
+
+lassi.analysis (task P2.8) gives one metric table per arm and direction, in Markdown and Parquet, from the lassi profile's scores and the trial records; it never rescores. Each table gives the trial count, n trials per scenario, and the devices of its trials, and shows the paper's values from assets/scoring/lassi-paper.yaml next to each row the paper reports. Every interval is the Wilson 95% score interval without continuity correction, over the population below. The stage-reached and correction distributions are counts over all trials. [DESIGN]
+
+| Row | Population and interval |
+| --- | --- |
+| compile_rate, run_rate, correct_rate, cap_hit_rate, fence_quirk_rate | All trials of the arm and direction. run_rate reads the last attempt's stage (S5); the others read the lassi components (compiled, correct, and cap_hit equal to 1; fence_quirk above 0, with the total hit count in the note) |
+| first_try_rate, sim_t_ge_0.6_rate | The correct trials (correct = 1), the paper's denominator. sim_t_ge_0.6_rate compares the faithful sim_t, unrounded, with 0.6; the paper prints Sim-T to two decimals and states no tokenizer ([OPEN], OQ-022), and the row's note says so |
+| within_10pct_rate | Not computed: PLACEHOLDER until a timing profiler exists (P10) |
+| pass@1, pass@3 | Per scenario (bench item), the unbiased pass@k (Chen et al. 2021, arXiv:2107.03374) over its trials whose correct is not null, averaged over the scenarios. The interval is Wilson on the sum of the per-scenario values over the scenario count, so the scenario is the unit. Null, with n and k in the note, when any scenario has fewer than k such trials |
+| Paper values | The published value and the recount (and the alternate recount where LASSI Paper Metrics gives one), each with its Wilson interval on the paper's own count and denominator, citing LASSI Paper Metrics. The B0 criterion's interval is Wilson on the paper's WizardCoder correct count |
+
+Rules:
+
+- A trial whose component a row reads is null is excluded from that row's numerator and denominator, and the row's note gives the number excluded. A value that cannot be computed, such as a rate over an empty population, is null with a note and has no counts and no interval.
+- A run in which every trial's correct is null with the compile-stage note is labeled a compile-stage reproduction. Its correctness rows (correct, first try, Sim-T >= 0.6, pass@1, pass@3) are null with that label, and the table shows no paper value.
+- The tables hold names, counts, rates, and notes only: no prompt, source, context, or model text (OQ-018).
+
 ### Acceptance Criteria
 
 LASSI reproduction:
@@ -1023,10 +1041,11 @@ Open questions:
 
 ## Decision Log
 
-Seventy decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and twenty-four on 2026-09-24; add new entries at the top, newest first.
+Seventy-one decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and twenty-five on 2026-09-24; add new entries at the top, newest first.
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-24 | Run metrics per arm and direction (task P2.8). lassi.analysis gives one metric table per arm and direction, in Markdown and Parquet, from the lassi profile's scores and the trial records, never rescoring, with the populations of Evaluation Protocol, Run Metrics. Trial rates (compile, run, correct, cap hit, fence quirk) cover all trials of the arm and direction. First try and Sim-T >= 0.6 cover the correct trials, the paper's denominator. pass@k is the unbiased per-scenario estimate averaged over scenarios, with its Wilson 95% interval on the scenario count. Paper values carry Wilson 95% intervals on the paper's own count and denominator. A trial whose component is null is excluded and counted in the row's note. within_10pct is PLACEHOLDER until P10. A compile-only run is labeled a compile-stage reproduction and shows no paper value. The published values, the recounts (the OMP -> CUDA within-10% alternate 24/32 included), the per-model correct counts, and the B0 model live in assets/scoring/lassi-paper.yaml, which joins the Repository Layout | The Evaluation Protocol asked for Wilson 95% intervals without saying over which population. LASSI Paper Metrics requires a rate shown next to a paper value to use the paper's denominator, so first try and Sim-T >= 0.6 are shares of the correct trials. The trials of one scenario share its difficulty and are not independent draws, so pass@k counts the scenario as its unit; an interval over trials would overstate the precision. Excluding a null keeps a value that was not measured from counting as a failure (the P2.7 decision). The Wilson interval stays inside [0, 1] and stays informative at 0 and n successes; the tests check it against Newcombe 1998's worked values. Both the published values and the recounts are shown, as OQ-021 recommends, without choosing for the owner. Keeping paper values in YAML keeps numbers out of the code, as with the score profiles' weights |
 | 2026-09-24 | The lassi score profile (task P2.7). The ScoreProfile lassi (lassi.scoring.lassi_profile) gives each trial the components of Evaluation Protocol, LASSI Score Profile, in the order assets/scoring/lassi.yaml lists them, with correct as the scalar and every note text in that file. correct is 1 only when the output that stands came from a clean run (exit status 0, no hang) that the oracle aligned at 1, so an oracle match from a crashed, failed, or hung run is 0. correct is null, with a note, for a compile-only trial (a compile-stage reproduction), for a trial with no attempt that ended at the baseline, and for a clean standing run the oracle never aligned; correct_paper is never computed, and within_10pct stays null until a timing profiler exists. The similarity values compare the last attempt's target file with the reference target read in text mode, and each notes the interpreter version. A missing reference file is an error naming its path. Score (Component Interfaces) gains notes, a map from component name to a plain ASCII note, empty by default, and its components and scalar may be null. assets/scoring/lassi.yaml joins the Repository Layout | stdout_mask ignores exit status and hang, so a program that crashes after printing the reference's stdout aligns at 1 (PHASE-NOTES P2, stdout_mask), while the paper's correct output also required exit status 0 (LASSI Paper Metrics); the profile therefore asks for a clean run (plans/p2-scoring.md, the planning decision on correct). A null with its reason keeps a value that was not measured (no run, no alignment, no baseline, no profiler, a manual criterion) apart from a measured 0, so no rate counts it as a failure. Reading the reference in text mode and comparing the last attempt's file is what the notebook does, so sim_t and sim_l equal its values on the P1.9 replay records (tests/scoring/test_lassi_profile_replay.py); Python's tokenize changes between interpreter versions, so each value names the one that computed it |
 | 2026-09-24 | The C-aware Sim-T's design choices join the Evaluation Protocol, LASSI Score Profile (task P2.7, from P1.8): a C lexer that drops layout and comments and keeps literals, preprocessing numbers, and longest-match operators (the CUDA launch brackets included) as one token each; difflib's 2M/T over the token strings with autojunk off; 1.0 for two texts with no C tokens. sim_t_c is its own component, never reported as Sim-T | The quirk table keeps the faithful Python-tokenize Sim-T and asks for a C-aware one. The choices were documented only in lassi.scoring.similarity (PHASE-NOTES P2, C-aware Sim-T); with the lassi profile they reach metrics, so they belong in the bible. With autojunk on, difflib drops C's frequent punctuation and keywords as match seeds in any candidate of 200 or more tokens, so matched runs of them would go uncounted |
 | 2026-09-24 | The df-v0 score profile and its readings of the Result Record (task P2.6). The ScoreProfile df-v0 (lassi.scoring.df_v0) reads every Reward Function weight from assets/scoring/df-v0.yaml (stage_base, warning_weight, warning_cap, alignment_weight, guard_violation, correction_penalty), holds none in code, and refuses a file missing a weight. W counts the compile- and jit-stage warnings of an attempt at S4 or S5, unique by (code, file, line, column); parse- and run-stage pipeline warnings are not code warnings. A counts only at S5, and an S5 attempt never aligned scores no alignment term and is marked alignment_missing. The guard component is 1, 0, or null (not every guard checked), and only a true guard sets R = -1. R_final is the last attempt's R, a guard violation or a stale-output attempt included. The trial's components are single_turn (attempt 0's R) and multi_turn (R_final - 0.05 x corrections), final.score is the multi-turn value, and a trial with no attempts has no score. assets/scoring/ joins the Repository Layout | The Reward Function names W, A, and the guards without saying which record fields they read. A parse- or run-stage warning (a fence quirk, a stale output, a cut stream) says nothing about the code the compiler saw, so charging it would penalize the pipeline, not the translation (plans/p2-scoring.md, the planning decision on W). A null alignment at S5 is no evidence of correct output, so it earns nothing, and the mark keeps it apart from an output that aligned at 0. A null guard was not checked, so it neither violates nor clears. Episodes default to single_turn (Algorithms), but a trial record holds the whole correction loop, so final.score takes the multi-turn value and attempt 0's R stays as the single-turn component (plans/p2-scoring.md, the planning decision on final.score). Weights in YAML let the P2.G review change one by a file edit and a Decision Log entry, with no code change |

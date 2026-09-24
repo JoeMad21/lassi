@@ -78,6 +78,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - Reference run flags (from the P1.6 review): settled by P2.2. RunInfo records the three flags, and the oracle stage never aligns against a truncated reference stdout.
 - Final alignment (from P1.7): settled by P2.3. lassi.core.record.standing_attempt names the output that stands, and the runner sets final.alignment from it; a trial that ends at correction-cap keeps it null.
 - projects/base.yaml's sandbox.wall_s comment names the 30 s floor and the no-reference case (done in 21131f7; P2.2 guards it with a test).
+- P2.G review questions from the P2.7 and P2.8 audits: the lassi profile's null readings (a clean run never aligned, a trial ended at the baseline, a trial with no attempt); run_rate counts a trial with no attempt as not run while compile_rate and correct_rate exclude a baseline-ended trial; one scenario with no scored trial makes pass@k null for its whole arm and direction; the Sim-T >= 0.6 row compares the unrounded sim_t while the paper prints two decimals (OQ-022 open); where the B0 criterion's interval (lassi.analysis.paper b0_interval) is shown.
 - Plan plans/p2-scoring.md maps every item above to a task. Three items moved at P2 planning: the compile-diagnostic hint wording and the Attempt artifact field to P3, generated asset trees to P5.
 
 ## P3 RNGD Serving
