@@ -155,3 +155,13 @@ Question: Agent probes on 2026-09-23 caused systemd-coredump to store four core 
 Options: (a) leave them: systemd-coredump's default cleanup (systemd-tmpfiles, about 3 days) removes them. (b) ask an administrator to delete them now. (c) record only.
 Recommendation: (a); they are small and expire on their own. For awareness, outside LASSI: the spike found /var/lib/amd-metrics-exporter/amdgpu_device_metrics_exporter_grpc.socket at mode 777, so any user on alpha01 can reach that GPU metrics exporter; the sandbox hides it, and the host setting is an administrator's matter.
 Answer:
+
+## OQ-015 Git Hooks Not Executable On Linux
+State: OPEN
+Kind: policy
+Blocks: none (CI still enforces the text policy on every push)
+Evidence: `git ls-tree -r HEAD` shows .githooks/commit-msg, .githooks/pre-commit, and .githooks/pre-push stored as mode 100644. The fast suite from the clean commit 1de7db6 on alpha01 (rx 20260923-195751-desktop-8r113ei-p0-core-7f98) failed only tests/tools/test_text_policy_modes.py::test_canary_local_blocks_both_seeded_commits; a rerun (rx 20260923-200253-desktop-8r113ei-p0-core-0d3e) showed the seeded canary commit going through. results/p0-compile-hardening/summary.md.
+Question: The hooks were committed from Windows, where Git Bash runs a hook whatever its mode. Git on Linux and macOS ignores a hook without the executable bit, so on alpha01 or any Linux clone the local text-policy hooks never run. Agents may not change .githooks/. Should the three hooks be marked executable?
+Options: (a) mark them executable. In Git Bash at C:\dev\lassi on branch p0-core, run `git update-index --chmod=+x .githooks/commit-msg .githooks/pre-commit .githooks/pre-push`, then `git commit -m "P0: Mark the git hooks executable"` and `git push`. Only the file modes change, and lib.sh is sourced, so it needs no bit. (b) leave them; CI alone enforces on Linux clones, and the canary test keeps failing there.
+Recommendation: (a); it restores local enforcement on every platform. After it, an agent reruns the fast suite on alpha01 to show the canary test passes.
+Answer:
