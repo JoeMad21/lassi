@@ -15,7 +15,11 @@ byte to <out>/<scenario>.stderr and writes the provenance manifest
 Result Record, Diagnostic; Agent Rules 1, 7, and 10).
 tests/toolchains/fixtures/scenarios.json names each scenario's toolchain, an
 optional ARCH or GPU override of the preset, and a one-line description; its
-names are those of the .stderr fixtures.
+names are those of the .stderr fixtures plus the scenarios in
+AWAITING_CAPTURE. P0.17 stage A added those two scenarios and their sources
+before any capture from a clean commit; stage B copies their .stderr
+fixtures and empties the set. Until then the fake compiler answers them with
+PLACEHOLDER stderr.
 
 The manifest layout these tests pin (the interface the tool follows):
 
@@ -86,6 +90,14 @@ SOURCES = FIXTURES / "sources"
 CAPTURES = FIXTURES / "captures.json"
 # The fixture names today; the scenario manifest and the source trees follow them.
 FIXTURE_NAMES = sorted(path.stem for path in FIXTURES.glob("*.stderr"))
+# P0.17 stage A: scenarios in scenarios.json, each with its source tree, whose .stderr fixture does not exist yet.
+# Stage B captures them from a clean commit, copies each .stderr, and removes the name from this set. The set lists
+# names exactly; a scenario missing its fixture that is not named here fails the name test.
+AWAITING_CAPTURE = frozenset({"nvcc_ptxas_inline_asm", "nvcpp_nvlink_error"})
+# Every scenario scenarios.json must list: the fixtures and the scenarios awaiting their capture.
+SCENARIO_NAMES = sorted({*FIXTURE_NAMES, *AWAITING_CAPTURE})
+# What the fake compiler prints for a scenario awaiting its capture; no stderr of it is recorded yet.
+AWAITING_STDERR = b"PLACEHOLDER stderr of a scenario awaiting its capture (P0.17 stage B)\n"
 # The fixtures whose stderr names per-run text (temporary file names, the absolute workdir), per the README; every
 # other fixture must come back byte for byte from a recapture (P0.20 A6).
 RUN_DEPENDENT = frozenset({"nvcc_linker_error", "nvcpp_linker_error"})
@@ -223,8 +235,17 @@ def parsed_count(entry: Mapping[str, Any], name: str, stderr: bytes) -> int:
 
 
 def test_scenario_names_match_the_stderr_fixtures() -> None:
+    # Stage A allowance (P0.17): the names are the fixtures plus exactly the scenarios in AWAITING_CAPTURE, and a
+    # scenario that has its fixture must leave AWAITING_CAPTURE.
     assert FIXTURE_NAMES, f"no .stderr fixtures in {FIXTURES}"
-    assert sorted(load_scenarios()) == FIXTURE_NAMES
+    assert not AWAITING_CAPTURE & set(FIXTURE_NAMES), "a scenario with a .stderr fixture no longer awaits its capture"
+    assert sorted(load_scenarios()) == SCENARIO_NAMES
+
+
+def test_the_scenarios_awaiting_their_capture_have_no_capture_record_yet() -> None:
+    # Stage A adds no captures.json entry; stage B adds the entries and the .stderr files from one clean-commit capture.
+    recorded = json.loads(CAPTURES.read_bytes().decode("ascii"))["scenarios"]
+    assert not AWAITING_CAPTURE & set(recorded)
 
 
 def test_the_source_trees_are_exactly_the_scenarios() -> None:
@@ -233,7 +254,7 @@ def test_the_source_trees_are_exactly_the_scenarios() -> None:
     assert all((SOURCES / name).is_dir() for name in trees)
 
 
-@pytest.mark.parametrize("name", FIXTURE_NAMES)
+@pytest.mark.parametrize("name", SCENARIO_NAMES)
 def test_scenario_names_its_toolchain_and_one_line(name: str) -> None:
     entry = load_scenarios()[name]
     assert set(entry) <= ENTRY_KEYS, f"{name}: unknown keys {sorted(set(entry) - ENTRY_KEYS)}"
@@ -245,7 +266,7 @@ def test_scenario_names_its_toolchain_and_one_line(name: str) -> None:
     assert description.isascii() and "\n" not in description and "\r" not in description, name
 
 
-@pytest.mark.parametrize("name", FIXTURE_NAMES)
+@pytest.mark.parametrize("name", SCENARIO_NAMES)
 def test_scenario_overrides_only_its_presets_attribute(name: str) -> None:
     entry = load_scenarios()[name]
     key, attribute = OVERRIDES[entry["toolchain"]]
@@ -259,7 +280,7 @@ def test_scenario_overrides_only_its_presets_attribute(name: str) -> None:
     assert value != getattr(preset, attribute), f"{name}: an override equal to the preset's {attribute} is not one"
 
 
-@pytest.mark.parametrize("name", FIXTURE_NAMES)
+@pytest.mark.parametrize("name", SCENARIO_NAMES)
 def test_every_scenario_has_a_source_tree_of_relative_ascii_files(name: str) -> None:
     entry = load_scenarios()[name]
     tree = SOURCES / name
@@ -556,9 +577,16 @@ def run_tool(tool: ModuleType, argv: Sequence[str], capsys: pytest.CaptureFixtur
 
 
 def fixture_replies(scenarios: Mapping[str, Mapping[str, Any]]) -> dict[str, Reply]:
-    """Return a Reply per scenario: its current .stderr fixture, with FAILED when that parses into an error."""
+    """Return a Reply per scenario: its current .stderr fixture, with FAILED when that parses into an error.
+
+    A scenario in AWAITING_CAPTURE has no fixture yet; it gets AWAITING_STDERR
+    with FAILED, since each of them is an error scenario that exits nonzero.
+    """
     replies: dict[str, Reply] = {}
     for name, entry in scenarios.items():
+        if name in AWAITING_CAPTURE:
+            replies[name] = Reply(FAILED, AWAITING_STDERR)
+            continue
         stderr = (FIXTURES / f"{name}.stderr").read_bytes()
         diagnostics = PRESETS[entry["toolchain"]]().parse(stderr.decode("utf-8"), source_texts(name))
         failed = any(diagnostic.severity == "error" for diagnostic in diagnostics)

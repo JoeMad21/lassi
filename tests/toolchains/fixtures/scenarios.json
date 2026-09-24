@@ -20,6 +20,10 @@
     "scenario": "ptxas error: a kernel declares a static __shared__ array of 65536 floats (256 KiB), more than an sm_80 thread block can hold. In capture rx 20260923-112105-desktop-8r113ei-p0-core-ba1a ptxas reported too much shared data (0x40000 bytes, 0x29000 max) with no file or line (exit status 255)",
     "toolchain": "nvcc-sm80"
   },
+  "nvcc_ptxas_inline_asm": {
+    "scenario": "ptxas error with a PTX file and line: a kernel's inline PTX asm uses the unknown modifier .bogus (add.bogus.s32), so ptxas names the temporary .ptx nvcc wrote under the compile's private TMPDIR, which is no built file, then prints its fatal line",
+    "toolchain": "nvcc-sm80"
+  },
   "nvcc_undefined_identifier": {
     "scenario": "EDG error: a kernel uses an undefined identifier, with source echo and caret",
     "toolchain": "nvcc-sm80"
@@ -54,6 +58,10 @@
   },
   "nvcpp_missing_include": {
     "scenario": "EDG catastrophic error: main.cpp includes kernels/scale.h, which is not in the tree",
+    "toolchain": "nvcpp-cc80"
+  },
+  "nvcpp_nvlink_error": {
+    "scenario": "nvlink undefined reference: an OpenMP target loop calls twice(float), which helper.cpp defines for the host only (no declare target), so the device link finds no device definition; nvlink names a temporary object, then pgacclnk gives nvdd's exit status",
     "toolchain": "nvcpp-cc80"
   }
 }

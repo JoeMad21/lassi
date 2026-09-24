@@ -1,4 +1,4 @@
-"""Tests for the nvcc and nvc++ toolchain adapters in lassi/toolchains/ (P0.5, P0.15).
+"""Tests for the nvcc and nvc++ toolchain adapters in lassi/toolchains/ (P0.5, P0.15, P0.17).
 
 A Toolchain turns files into an artifact plus diagnostics parsed into records
 of (severity, code, file, line, column, message, stage); the raw stderr is kept
@@ -16,6 +16,15 @@ README there). Each expected Diagnostic list below is derived by hand from the
 raw stderr and the Toolchain contract, never copied from a parser's output;
 the comment above each case gives the reasoning. The one-pattern sample lines
 either come from a capture or say that no capture shows their format yet.
+
+P0.17 stage A adds the ptxas place format (a PTX file and line) and the
+nvlink format before their fixtures exist. Their texts are exploratory
+captures of a dirty-tree snapshot (EXPLORATORY_CAPTURES), checked against the
+sha256 that run recorded. They are exploratory and never [MEASURED], and stage
+B replaces them with clean-commit fixtures. It also adds the nvc++ driver
+format (nvc++-Error-, nvc++-Fatal-), which no scenario produces without
+crashing a compiler; its line tests use the lines on record
+(NVCPP_DRIVER_ERROR, NVCPFE_CRASH_STDERR).
 
 No test here runs a compiler: parse_diagnostics reads the fixtures, build gets
 a fake command runner that records its call and returns canned stderr, and
@@ -115,6 +124,94 @@ VTABLE_UNDEFINED = "undefined reference to `vtable for Foo'"
 STACK_LIMIT = "The maximum stack size for a GPU kernel or procedure is limited to 524288 bytes: 1048676"
 # As printed, with the four blanks before the internal number; only the blanks before "(main.cpp: 8)" go.
 TINFO_ICE = "Internal compiler error. child tinfo should have been created at outlining function for host    1198"
+
+# P0.17 stage A. Scenarios nvcc_ptxas_inline_asm and nvcpp_nvlink_error have sources under fixtures/sources/ but no
+# .stderr fixture yet. Their text below is copied byte for byte from exploratory captures of a dirty-tree snapshot,
+# rx 20260923-202909-desktop-8r113ei-p0-core-09c6. These are exploratory, not fixtures, and never [MEASURED].
+# test_the_exploratory_captures_are_copied_byte_for_byte checks each text against the sha256 and byte count that
+# run recorded. Each text names that run's absolute workdir, so a new capture changes it. Stage B adds the
+# clean-commit captures as fixtures with FIXTURE_CASES entries derived again by hand.
+EXPLORATORY_RUN = "20260923-202909-desktop-8r113ei-p0-core-09c6"
+# The temporary .ptx that nvcc wrote in the compile's private TMPDIR, and the temporary object nvc++ gave nvlink.
+PTX_FILE = (
+    "/mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-202909-desktop-8r113ei-p0-core-09c6/work/"
+    "nvcc_ptxas_inline_asm/@lassi-tmp/tmpxft_00000002_00000000-6_main.ptx"
+)
+NVLINK_OBJECT = (
+    "/mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-202909-desktop-8r113ei-p0-core-09c6/work/"
+    "nvcpp_nvlink_error/@lassi-tmp/nvc++8c0N0-iy_9.o"
+)
+PTXAS_PLACE_LINE = "ptxas " + PTX_FILE + ", line 28; error   : Unknown modifier '.bogus'"
+PTXAS_ABORTED_LINE = "ptxas fatal   : Ptx assembly aborted due to errors"
+NVLINK_LINE = "nvlink error   : Undefined reference to '_Z5twicef' in '" + NVLINK_OBJECT + "'"
+NVDD_STATUS_LINE = (
+    "pgacclnk: child process exit status 2: "
+    "/mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/Linux_x86_64/24.11/compilers/bin/tools/nvdd"
+)
+EXPLORATORY_PTXAS_STDERR = PTXAS_PLACE_LINE + "\n" + PTXAS_ABORTED_LINE + "\n"
+EXPLORATORY_NVLINK_STDERR = (
+    "helper.cpp:\n"
+    "main.cpp:\n"
+    "scale(int, float const*, float*):\n"
+    "      6, #omp target teams distribute parallel for\n"
+    '          6, Generating "nvkernel__Z5scaleiPKfPf_F1L6_2" GPU kernel\n'
+    "          8, Loop parallelized across teams and threads(128), schedule(static)\n"
+    "      6, Generating map(from:y[:n]) \n"
+    "         Generating map(to:x[:n]) \n"
+    "      8, Loop not vectorized/parallelized: contains call\n"
+    "main:\n"
+    "     16, Generated vector simd code for the loop\n" + NVLINK_LINE + "\n" + NVDD_STATUS_LINE + "\n"
+)
+# Scenario -> (stderr, the byte count and sha256 the exploratory run recorded for it, the exit status it logged).
+EXPLORATORY_CAPTURES: dict[str, tuple[str, int, str, int]] = {
+    "nvcc_ptxas_inline_asm": (
+        EXPLORATORY_PTXAS_STDERR,
+        273,
+        "6d83317df72ea88bd91811cb6d81a0f737b1f8e7e4b3a6f4f42c5a830b0caf44",
+        255,
+    ),
+    "nvcpp_nvlink_error": (
+        EXPLORATORY_NVLINK_STDERR,
+        773,
+        "a50a44a2da167b58b4fa3f806c272b521ab2dabb0a669fecf0caf9d2278c89cb",
+        2,
+    ),
+}
+# The ptxas place names the temporary .ptx and a line of it, which index no built file. So file and line are None,
+# and the message keeps the place as printed in front of ptxas's message. The ": " stands where ptxas printed
+# "; error   : ", because the severity has its own field.
+PTXAS_PLACE_MESSAGE = PTX_FILE + ", line 28: Unknown modifier '.bogus'"
+# nvlink names the symbol and a temporary object, no source line. The message is the text after "nvlink error   : ",
+# as printed, the object path included.
+NVLINK_MESSAGE = "Undefined reference to '_Z5twicef' in '" + NVLINK_OBJECT + "'"
+# The shortened form of the .ptx path for the sample lines that no capture shows (the workdir becomes /w).
+SHORT_PTX = "/w/@lassi-tmp/tmpxft_00000002_00000000-6_main.ptx"
+# nvcc names its PTX after the source stem, which the model chooses. These stems hold an EDG and a GCC style place.
+EDG_STEM_PTX = "/w/@lassi-tmp/tmpxft_00000002_00000000-6_x(3): error: y.ptx"
+GCC_STEM_PTX = "/w/@lassi-tmp/tmpxft_00000002_00000000-6_ab:1:2: error: b.ptx"
+
+# P0.17, the nvc++ driver format (nvc++-Error-, nvc++-Fatal-). No scenario produces it from sources with the preset
+# flags without crashing a compiler, so its line tests use the two lines on record, copied verbatim. The first is
+# from a clean-commit run, plans/spikes/p0-toolchains-verify.md run 2a (rx
+# 20260923-045538-desktop-8r113ei-p0-core-bde2), before the CUDA home was set. The second is the whole stderr (200
+# bytes) of scenario nvcpp_backend_error in the P0.15 exploratory dirty-tree probe rx
+# 20260923-104313-desktop-8r113ei-p0-core-2b22, whose source of that time crashed the front end by accident. That
+# probe is exploratory and never [MEASURED].
+NVCPP_DRIVER_ERROR = (
+    "nvc++-Error-A CUDA toolkit matching the current driver version (0) or a supported older version (11.8) was not "
+    "installed with this HPC SDK."
+)
+NVCPFE = "/mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/Linux_x86_64/24.11/compilers/bin/tools/nvcpfe"
+NVCPFE_CRASH_STDERR = (
+    "NVC++-S-0155-for must have the ordered clause specified  (main.cpp: 32)\n"
+    "nvc++-Fatal-" + NVCPFE + " TERMINATED by signal 11\n"
+)
+# The Diagnostics of NVCPFE_CRASH_STDERR: the backend error keeps its place as printed, and the driver fatal is an
+# error with no place whose message is the text after "nvc++-Fatal-", the toolchain path included.
+NVCPFE_CRASH_DIAGNOSTICS = [
+    compile_diag("error", "S-0155", "main.cpp", 32, None, "for must have the ordered clause specified"),
+    compile_diag("error", None, None, None, None, NVCPFE + " TERMINATED by signal 11"),
+]
 
 FIXTURE_CASES: dict[str, FixtureCase] = {
     # main.cu line 7 is "        y[i] = a * x[i] + undefined_var;". The echo adds 2 blanks in front and the
@@ -222,6 +319,25 @@ FIXTURE_CASES: dict[str, FixtureCase] = {
     "nvcpp_missing_include": FixtureCase(
         nvcpp, [compile_diag("error", None, "main.cpp", 2, 27, 'cannot open source file "kernels/scale.h"')]
     ),
+}
+
+# P0.17 stage A: the exploratory captures (EXPLORATORY_CAPTURES), each parsed with its scenario's source tree.
+EXPLORATORY_CASES: dict[str, FixtureCase] = {
+    # ptxas names the temporary main.ptx under @lassi-tmp and its line 28. That file is nvcc's own PTX, never a
+    # built file (nvcc gets no .ptx source), so file and line are None. The place stays in the message
+    # (PTXAS_PLACE_MESSAGE). The fatal line is a second error, as ptxas fatal lines already are. ptxas gives no
+    # column. The build exited 255.
+    "nvcc_ptxas_inline_asm": FixtureCase(
+        nvcc,
+        [
+            compile_diag("error", None, None, None, None, PTXAS_PLACE_MESSAGE),
+            compile_diag("error", None, None, None, None, "Ptx assembly aborted due to errors"),
+        ],
+    ),
+    # The file header lines ("helper.cpp:", "main.cpp:") that nvc++ prints for several sources, the -Minfo report,
+    # and the pgacclnk status line naming nvdd are no diagnostics. nvlink names a temporary object, no built file and
+    # no line, so the one error has no file, line, or column (NVLINK_MESSAGE). The build exited 2.
+    "nvcpp_nvlink_error": FixtureCase(nvcpp, [compile_diag("error", None, None, None, None, NVLINK_MESSAGE)]),
 }
 
 # The preset each adapter module registers, which the capture built for that module's scenarios.
@@ -333,6 +449,25 @@ def test_no_column_or_linker_place_without_the_file_text(name: str) -> None:
         expected = [dataclasses.replace(diagnostic, column=None) for diagnostic in case.expected]
     assert case.module.parse_diagnostics(fixture_text(name)) == expected
     assert case.module.parse_diagnostics(fixture_text(name), {}) == expected
+
+
+def test_the_exploratory_captures_are_copied_byte_for_byte() -> None:
+    # The oracle for the P0.17 stage A texts: the byte count and sha256 that rx EXPLORATORY_RUN recorded.
+    for name, (stderr, size, digest, _status) in EXPLORATORY_CAPTURES.items():
+        raw = stderr.encode("ascii")
+        assert (len(raw), hashlib.sha256(raw).hexdigest()) == (size, digest), name
+        assert raw.endswith(b"\n") and b"\r" not in raw, name
+    assert sorted(EXPLORATORY_CAPTURES) == sorted(EXPLORATORY_CASES)
+    assert EXPLORATORY_RUN in PTX_FILE and EXPLORATORY_RUN in NVLINK_OBJECT
+
+
+@pytest.mark.parametrize("name", sorted(EXPLORATORY_CASES))
+def test_an_exploratory_capture_parses_into_the_exact_diagnostics(name: str) -> None:
+    # No place in these captures needs the file text, so the result is the same without it.
+    case = EXPLORATORY_CASES[name]
+    stderr = EXPLORATORY_CAPTURES[name][0]
+    assert case.module.parse_diagnostics(stderr, scenario_files(name)) == case.expected
+    assert case.module.parse_diagnostics(stderr) == case.expected
 
 
 @pytest.mark.parametrize("module", [nvcc, nvcpp], ids=["nvcc", "nvcpp"])
@@ -459,11 +594,102 @@ NVCC_LINES = [
         [compile_diag("error", None, None, None, None, "Unresolved extern function '_Z6helperPfi'")],
         id="ptxas-fatal-is-error",
     ),
+    # P0.17, the ptxas line of exploratory capture nvcc_ptxas_inline_asm (see EXPLORATORY_CAPTURES). A PTX place
+    # indexes no built file, so file and line are None and the message keeps the place (PTXAS_PLACE_MESSAGE).
+    pytest.param(
+        PTXAS_PLACE_LINE + "\n",
+        [compile_diag("error", None, None, None, None, PTXAS_PLACE_MESSAGE)],
+        id="ptxas-ptx-file-and-line",
+    ),
+    # P0.17, from exploratory scenario nvcc_ptxas_ptx_error (dirty-tree rx
+    # 20260923-202434-desktop-8r113ei-p0-core-0586). The unknown instruction 'bogus.op.s32 %0, %0;' gave two
+    # errors on one PTX line, and each is kept. Only the path is shortened: the workdir becomes /w (SHORT_PTX).
+    pytest.param(
+        "ptxas " + SHORT_PTX + ", line 28; error   : Unknown modifier '.op'\n"
+        "ptxas " + SHORT_PTX + ", line 28; error   : Not a name of any known instruction: 'bogus'\n"
+        "ptxas fatal   : Ptx assembly aborted due to errors\n",
+        [
+            compile_diag("error", None, None, None, None, SHORT_PTX + ", line 28: Unknown modifier '.op'"),
+            compile_diag(
+                "error", None, None, None, None, SHORT_PTX + ", line 28: Not a name of any known instruction: 'bogus'"
+            ),
+            compile_diag("error", None, None, None, None, "Ptx assembly aborted due to errors"),
+        ],
+        id="ptxas-two-errors-on-one-ptx-line",
+    ),
+    # No capture shows the two lines below yet. The first is a ptxas warning with a PTX place, whose severity comes
+    # from the line. The second has the longest line number the parser reads, 10 digits.
+    pytest.param(
+        "ptxas " + SHORT_PTX + ", line 57; warning : Instruction 'vote' without '.sync' is deprecated\n",
+        [
+            compile_diag(
+                "warning",
+                None,
+                None,
+                None,
+                None,
+                SHORT_PTX + ", line 57: Instruction 'vote' without '.sync' is deprecated",
+            )
+        ],
+        id="ptxas-ptx-warning",
+    ),
+    pytest.param(
+        "ptxas " + SHORT_PTX + ", line 2147483647; error   : Unknown modifier '.bogus'\n",
+        [compile_diag("error", None, None, None, None, SHORT_PTX + ", line 2147483647: Unknown modifier '.bogus'")],
+        id="ptxas-ptx-line-ten-digits",
+    ),
+    # No capture shows a ptxas fatal with a PTX place yet. A fatal is an error, as on a ptxas line with no place.
+    pytest.param(
+        "ptxas " + SHORT_PTX + ", line 28; fatal   : Parsing error near '.bogus': syntax error\n",
+        [
+            compile_diag(
+                "error", None, None, None, None, SHORT_PTX + ", line 28: Parsing error near '.bogus': syntax error"
+            )
+        ],
+        id="ptxas-ptx-fatal-is-error",
+    ),
+    # No capture shows this line. The place is the shortest text that ends in ", line <line>" before
+    # "; <severity>", so a message that holds that text again stays whole.
+    pytest.param(
+        "ptxas " + SHORT_PTX + ", line 28; error   : x, line 3; error : y\n",
+        [compile_diag("error", None, None, None, None, SHORT_PTX + ", line 28: x, line 3; error : y")],
+        id="ptxas-ptx-shortest-place",
+    ),
+    # No capture shows the lines below. Both ptxas patterns are tried before the EDG and GCC ones, so text shaped
+    # like an EDG or GCC place in a ptxas message, or in the source stem nvcc puts in its PTX name (EDG_STEM_PTX,
+    # GCC_STEM_PTX), never becomes a file and line. They stay None, and the message keeps the text whole.
+    pytest.param(
+        "ptxas error   : Unresolved extern function 'a:1:2: error: b'\n",
+        [compile_diag("error", None, None, None, None, "Unresolved extern function 'a:1:2: error: b'")],
+        id="ptxas-message-with-a-gcc-place",
+    ),
+    pytest.param(
+        "ptxas " + SHORT_PTX + ", line 28; error   : Unknown symbol 'a:1:2: error: b'\n",
+        [compile_diag("error", None, None, None, None, SHORT_PTX + ", line 28: Unknown symbol 'a:1:2: error: b'")],
+        id="ptxas-ptx-message-with-a-gcc-place",
+    ),
+    pytest.param(
+        "ptxas " + EDG_STEM_PTX + ", line 28; error   : Unknown modifier '.bogus'\n",
+        [compile_diag("error", None, None, None, None, EDG_STEM_PTX + ", line 28: Unknown modifier '.bogus'")],
+        id="ptxas-ptx-stem-with-an-edg-place",
+    ),
+    pytest.param(
+        "ptxas " + GCC_STEM_PTX + ", line 28; error   : Unknown modifier '.bogus'\n",
+        [compile_diag("error", None, None, None, None, GCC_STEM_PTX + ", line 28: Unknown modifier '.bogus'")],
+        id="ptxas-ptx-stem-with-a-gcc-place",
+    ),
     # The driver format is the one capture nvcc_fatal shows; this message is another driver fatal.
     pytest.param(
         "nvcc fatal   : Don't know what to do with 'kernels/scale.cuh'\n",
         [compile_diag("error", None, None, None, None, "Don't know what to do with 'kernels/scale.cuh'")],
         id="driver-fatal",
+    ),
+    # No capture shows this line. A driver fatal may quote a file the model named, and the name may hold a GCC style
+    # place. The driver pattern is tried before the GCC one, so the line has no file or line and the message is whole.
+    pytest.param(
+        "nvcc fatal   : Could not open input file 'ab:1:2: error: b.cu'\n",
+        [compile_diag("error", None, None, None, None, "Could not open input file 'ab:1:2: error: b.cu'")],
+        id="driver-fatal-with-a-gcc-place",
     ),
     # No capture shows a catastrophic or internal EDG error from nvcc yet.
     pytest.param(
@@ -612,6 +838,80 @@ NVCPP_LINES = [
         [compile_diag("error", None, "<inline asm>", 1, None, "invalid instruction mnemonic 'bogus.op.s32'")],
         id="llvm-inline-asm-error",
     ),
+    # P0.17, the last two lines of exploratory capture nvcpp_nvlink_error (see EXPLORATORY_CAPTURES). nvlink names a
+    # temporary object and no line, so file and line are None (NVLINK_MESSAGE). The pgacclnk line after it names
+    # nvdd and only restates the failure, so it is no diagnostic, like the one naming /usr/bin/ld.
+    pytest.param(
+        NVLINK_LINE + "\n" + NVDD_STATUS_LINE + "\n",
+        [compile_diag("error", None, None, None, None, NVLINK_MESSAGE)],
+        id="nvlink-undefined-reference",
+    ),
+    # No capture shows an nvlink warning yet; its severity comes from the line.
+    pytest.param(
+        "nvlink warning : Stack size for entry function 'nvkernel__Z5scaleiPKfPf_F1L6_2' cannot be statically "
+        "determined\n",
+        [
+            compile_diag(
+                "warning",
+                None,
+                None,
+                None,
+                None,
+                "Stack size for entry function 'nvkernel__Z5scaleiPKfPf_F1L6_2' cannot be statically determined",
+            )
+        ],
+        id="nvlink-warning",
+    ),
+    # No capture shows this line. An asm label ('float twice(float) asm("...");') can make a symbol name any text,
+    # a GCC style place included, and nvlink quotes it. The line is still nvlink's: no file or line, message whole.
+    pytest.param(
+        "nvlink error   : Undefined reference to 'a.cpp:1:2: error: b' in '/w/@lassi-tmp/nvc++Vcnd0BZwBe.o'\n",
+        [
+            compile_diag(
+                "error",
+                None,
+                None,
+                None,
+                None,
+                "Undefined reference to 'a.cpp:1:2: error: b' in '/w/@lassi-tmp/nvc++Vcnd0BZwBe.o'",
+            )
+        ],
+        id="nvlink-symbol-with-a-gcc-place",
+    ),
+    # No capture shows an nvlink fatal yet. A fatal is an error, as for ptxas.
+    pytest.param(
+        "nvlink fatal   : Could not open input file '/w/@lassi-tmp/nvc++Vcnd0BZwBe.o'\n",
+        [compile_diag("error", None, None, None, None, "Could not open input file '/w/@lassi-tmp/nvc++Vcnd0BZwBe.o'")],
+        id="nvlink-fatal-is-error",
+    ),
+    # P0.17, the nvc++ driver line of plans/spikes/p0-toolchains-verify.md run 2a (NVCPP_DRIVER_ERROR). The driver
+    # names no file or line, so the Diagnostic has none, and the message is the text after "nvc++-Error-".
+    pytest.param(
+        NVCPP_DRIVER_ERROR + "\n",
+        [compile_diag("error", None, None, None, None, NVCPP_DRIVER_ERROR.removeprefix("nvc++-Error-"))],
+        id="driver-error",
+    ),
+    # P0.17, the stderr of exploratory probe rx 20260923-104313-desktop-8r113ei-p0-core-2b22 (NVCPFE_CRASH_STDERR):
+    # a backend error, then the driver's fatal line naming the front end that crashed. A driver fatal is an error.
+    pytest.param(NVCPFE_CRASH_STDERR, NVCPFE_CRASH_DIAGNOSTICS, id="driver-fatal-after-a-backend-error"),
+    # No capture shows a driver warning yet; its severity comes from the line.
+    pytest.param(
+        "nvc++-Warning-CUDA_HOME has been deprecated. Please, use NVHPC_CUDA_HOME instead.\n",
+        [
+            compile_diag(
+                "warning", None, None, None, None, "CUDA_HOME has been deprecated. Please, use NVHPC_CUDA_HOME instead."
+            )
+        ],
+        id="driver-warning",
+    ),
+    # No capture shows this line; its message is made up. A driver message may quote a source name, and the model
+    # names the sources, so it may hold a GCC style place. The driver pattern is tried before the GCC style one, so
+    # the line is still the driver's: no file or line, and the message whole.
+    pytest.param(
+        "nvc++-Error-Unable to access file ab:1:2: error: b.cpp\n",
+        [compile_diag("error", None, None, None, None, "Unable to access file ab:1:2: error: b.cpp")],
+        id="driver-message-with-a-gcc-place",
+    ),
 ]
 
 
@@ -673,11 +973,22 @@ SKIPPED_LINES = [
         id="nvcpp-ld-context",
     ),
     pytest.param(nvcpp, "pgacclnk: child process exit status 1: /usr/bin/ld", id="nvcpp-link-status"),
+    # From exploratory capture nvcpp_nvlink_error (P0.17 stage A): the file header nvc++ prints for each of several
+    # sources, an -Minfo line with ": " in it, and the pgacclnk line naming nvdd rather than ld.
+    pytest.param(nvcpp, "helper.cpp:", id="nvcpp-file-header"),
+    pytest.param(nvcpp, "      8, Loop not vectorized/parallelized: contains call", id="nvcpp-minfo-contains-call"),
+    pytest.param(nvcpp, NVDD_STATUS_LINE, id="nvcpp-nvdd-status"),
     # No capture shows these yet.
     pytest.param(nvcc, '2 errors detected in the compilation of "main.cu".', id="nvcc-errors-summary"),
     pytest.param(nvcc, "compilation terminated.", id="nvcc-gcc-terminated"),
     pytest.param(
         nvcpp, "     21, Accelerator restriction: size of the GPU copy of tmp is unknown", id="nvcpp-minfo-note"
+    ),
+    # No capture shows these either: ptxas prints info lines only with -v or --resource-usage, which the preset does
+    # not pass. An info line is no diagnostic, and one holding ", line <line>; error : " is still no PTX place.
+    pytest.param(nvcc, "ptxas info    : Used 8 registers, 360 bytes cmem[0]", id="nvcc-ptxas-info"),
+    pytest.param(
+        nvcc, "ptxas info    : Function properties for f, line 3; error : y", id="nvcc-ptxas-info-with-a-place"
     ),
     # Echoed source text never becomes a diagnostic, even when it looks like a linker or GCC line.
     pytest.param(nvcc, '   21 |     printf("undefined reference to %d", name);', id="nvcc-gcc-echo-linker-phrase"),
@@ -732,6 +1043,64 @@ def test_a_backend_line_with_a_long_blank_run_parses_in_linear_time() -> None:
     assert nvcpp.parse_diagnostics(f"NVC++-S-0155-{message} (main.cpp: 3)\n") == [
         compile_diag("error", "S-0155", "main.cpp", 3, None, message)
     ]
+    assert time.monotonic() - began < 2.0
+
+
+def test_a_long_ptxas_place_line_parses_in_linear_time() -> None:
+    # P0.17. Model-written inline PTX reaches a ptxas message, so a ptxas line can be very long. Each case below
+    # repeats a piece of the place format: places with no severity after them, a long blank run before the ":"
+    # (ptxas pads its severity word), and a message that holds many "; error   : ". A linear parser takes milliseconds.
+    # A blank run with no ":" after it makes the pattern give the run back one blank at a time before it fails, and
+    # a padded info word makes the lookahead that refuses a severity word read the run once.
+    places = "ptxas " + f"{SHORT_PTX}, line 28; " * 20_000
+    blank_run = f"ptxas {SHORT_PTX}, line 28; error" + " " * 50_000 + ": x"
+    blank_run_no_colon = f"ptxas {SHORT_PTX}, line 28; error" + " " * 50_000 + "x"
+    info_blank_run = "ptxas info" + " " * 50_000 + f": x {SHORT_PTX}, line 28; error : y"
+    separators = "a; error   : b" * 20_000
+    began = time.monotonic()
+    assert nvcc.parse_diagnostics(places + "\n") == []
+    assert nvcc.parse_diagnostics(blank_run + "\n") == [
+        compile_diag("error", None, None, None, None, f"{SHORT_PTX}, line 28: x")
+    ]
+    assert nvcc.parse_diagnostics(blank_run_no_colon + "\n") == []
+    assert nvcc.parse_diagnostics(info_blank_run + "\n") == []
+    assert nvcc.parse_diagnostics(f"ptxas {SHORT_PTX}, line 28; error   : {separators}\n") == [
+        compile_diag("error", None, None, None, None, f"{SHORT_PTX}, line 28: {separators}")
+    ]
+    assert time.monotonic() - began < 2.0
+
+
+def test_a_long_nvlink_line_parses_in_linear_time() -> None:
+    # P0.17. A symbol name and an object path reach an nvlink message, so an nvlink line can be very long. The cases
+    # below are a long blank run before the ":", a message with many ": ", and a line that repeats the tool and
+    # severity words with no ":" after them.
+    blank_run = "nvlink error" + " " * 50_000 + ": x"
+    blank_run_no_colon = "nvlink error" + " " * 50_000 + "x"
+    message = "Undefined reference to '_Z1fv' in '" + "x: " * 40_000 + "o'"
+    no_colon = "nvlink error " * 30_000
+    began = time.monotonic()
+    assert nvcpp.parse_diagnostics(blank_run + "\n") == [compile_diag("error", None, None, None, None, "x")]
+    assert nvcpp.parse_diagnostics(blank_run_no_colon + "\n") == []
+    assert nvcpp.parse_diagnostics(f"nvlink error   : {message}\n") == [
+        compile_diag("error", None, None, None, None, message)
+    ]
+    assert nvcpp.parse_diagnostics(no_colon + "\n") == []
+    assert time.monotonic() - began < 2.0
+
+
+def test_a_long_nvcpp_driver_line_parses_in_linear_time() -> None:
+    # P0.17. A driver message can quote model-chosen text, so a driver line can be very long. The cases below are a
+    # message with many GCC style places, one with a long blank run, and a line that repeats the driver prefix with
+    # no "-" after the severity word.
+    places = "a:1:2: error: b " * 20_000
+    blanks = "a" + " " * 50_000 + "b"
+    no_dash = "nvc++-Error " * 30_000
+    began = time.monotonic()
+    assert nvcpp.parse_diagnostics(f"nvc++-Fatal-{places}\n") == [
+        compile_diag("error", None, None, None, None, places.rstrip())
+    ]
+    assert nvcpp.parse_diagnostics(f"nvc++-Error-{blanks}\n") == [compile_diag("error", None, None, None, None, blanks)]
+    assert nvcpp.parse_diagnostics(no_dash + "\n") == []
     assert time.monotonic() - began < 2.0
 
 
@@ -859,6 +1228,16 @@ def test_linker_place_is_kept_only_as_a_built_file(
     assert module.parse_diagnostics(stderr, files) == [compile_diag("error", None, file, line, None, HELPER_UNDEFINED)]
 
 
+def test_a_ptx_place_is_no_built_file_even_when_a_built_file_has_its_name() -> None:
+    # P0.17. ptxas reads the PTX nvcc wrote under @lassi-tmp, the compile's private TMPDIR, which build() never
+    # writes, and nvcc is never given a .ptx source. So a built file at the workdir root with the same name, even one
+    # with a line 28, is another file. File and line stay None, and the place stays in the message.
+    files = {"main.cu": "int x;\n", "tmpxft_00000002_00000000-6_main.ptx": "// PLACEHOLDER\n" * 40}
+    assert nvcc.parse_diagnostics(PTXAS_PLACE_LINE + "\n", files) == [
+        compile_diag("error", None, None, None, None, PTXAS_PLACE_MESSAGE)
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Numbers too long to be a line
 
@@ -884,6 +1263,26 @@ HUGE = "5" * 5000
             f"/work/main.cpp:{HUGE}: {HELPER_UNDEFINED}\n",
             [compile_diag("error", None, None, None, None, HELPER_UNDEFINED)],
             id="nvcpp-linker-line",
+        ),
+        # P0.17. The PTX place is part of the ptxas place format, as the place is part of the EDG and GCC formats.
+        # A line number past 10 digits is no place, so the line is not read as that format, and no other pattern
+        # reads it. The 10-digit line is in NVCC_LINES (ptxas-ptx-line-ten-digits).
+        pytest.param(nvcc, f"ptxas {SHORT_PTX}, line {HUGE}; error   : x\n", [], id="nvcc-ptxas-ptx-line"),
+        # P0.17. nvlink names objects, never a source line. An object path that ends like "<built file>:<number>"
+        # stays in the message, and no place is read from it.
+        pytest.param(
+            nvcpp,
+            f"nvlink error   : Undefined reference to 'x' in '/work/main.cpp:{HUGE}'\n",
+            [compile_diag("error", None, None, None, None, f"Undefined reference to 'x' in '/work/main.cpp:{HUGE}'")],
+            id="nvcpp-nvlink-object",
+        ),
+        # P0.17. The nvc++ driver line names no place. A GCC style place in its message stays in the message, and no
+        # line or column is read from it, however long its numbers.
+        pytest.param(
+            nvcpp,
+            f"nvc++-Error-main.cpp:{HUGE}:1: error: x\n",
+            [compile_diag("error", None, None, None, None, f"main.cpp:{HUGE}:1: error: x")],
+            id="nvcpp-driver-message",
         ),
     ],
 )
@@ -1524,6 +1923,43 @@ def test_a_missing_header_reaches_the_model_as_a_located_error(tmp_path: Path) -
     runner = FakeRunner(returncode=2, stderr=fixture_text("nvcpp_missing_include"))
     result = nvcpp.NvcppCc80(runner=runner).build(scenario_files("nvcpp_missing_include"), make_workdir(tmp_path))
     assert result.diagnostics == fixture.expected
+    assert result.artifact is None
+
+
+@pytest.mark.parametrize("name", sorted(EXPLORATORY_CASES))
+def test_an_exploratory_capture_builds_without_the_exit_status_error(name: str, tmp_path: Path) -> None:
+    # P0.17 acceptance: each capture parses into its errors, so the build never falls back to "exit-status". The
+    # fake compiler returns the capture's stderr with the exit status the exploratory run logged (255 for ptxas
+    # under nvcc, 2 for nvlink under nvc++).
+    case = EXPLORATORY_CASES[name]
+    stderr, _size, _digest, status = EXPLORATORY_CAPTURES[name]
+    runner = FakeRunner(returncode=status, stderr=stderr)
+    result = PRESET_OF[case.module](runner=runner).build(scenario_files(name), make_workdir(tmp_path))
+    assert result.diagnostics == case.expected
+    assert all(diagnostic.code != "exit-status" for diagnostic in result.diagnostics)
+    assert result.artifact is None
+
+
+@pytest.mark.parametrize(
+    ("stderr", "status", "expected"),
+    [
+        pytest.param(
+            NVCPP_DRIVER_ERROR + "\n",
+            1,
+            [compile_diag("error", None, None, None, None, NVCPP_DRIVER_ERROR.removeprefix("nvc++-Error-"))],
+            id="driver-error",
+        ),
+        pytest.param(NVCPFE_CRASH_STDERR, 2, NVCPFE_CRASH_DIAGNOSTICS, id="driver-fatal"),
+    ],
+)
+def test_an_nvcpp_driver_line_replaces_the_exit_status_error(
+    stderr: str, status: int, expected: list[Diagnostic], tmp_path: Path
+) -> None:
+    # P0.17 acceptance: the driver's own message reaches the model as the error, not the "exit-status" fallback.
+    # The status is the one on record: 1 in plans/spikes/p0-toolchains-verify.md run 2a, 2 in the probe capture.
+    runner = FakeRunner(returncode=status, stderr=stderr)
+    result = nvcpp.NvcppCc80(runner=runner).build({"main.cpp": "int main() { return 0; }\n"}, make_workdir(tmp_path))
+    assert result.diagnostics == expected
     assert result.artifact is None
 
 

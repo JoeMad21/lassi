@@ -25,6 +25,7 @@ reach stderr, and int() refuses a digit string past 4300 digits, so a longer
 number never becomes a place.
 
 This module also holds what both adapters share: the EDG severity words,
+the severity words of the CUDA tools (ptxas under nvcc, nvlink under nvc++),
 and the patterns for host GCC style lines and the linker lines.
 """
 
@@ -217,6 +218,16 @@ EDG_SEVERITY: Mapping[str, str] = MappingProxyType(
 def error_from_message(match: re.Match[str]) -> Diagnostic:
     """Return an error with only the match's `message` group set, for lines that name no file."""
     return compile_diagnostic("error", match["message"])
+
+
+# The Diagnostic severity of each severity word the CUDA tools print after their name, as in "ptxas error   : ..."
+# and "nvlink error   : ..."; a fatal is an error.
+CUDA_TOOL_SEVERITY: Mapping[str, str] = MappingProxyType({"error": "error", "warning": "warning", "fatal": "error"})
+
+
+def cuda_tool_diagnostic(match: re.Match[str]) -> Diagnostic:
+    """Return the Diagnostic for a CUDA tool line from its `severity` and `message` groups; it names no file."""
+    return compile_diagnostic(CUDA_TOOL_SEVERITY[match["severity"]], match["message"])
 
 
 # Host GCC style: "<file>:<line>:<column>: <severity>: <message>", with an optional trailing

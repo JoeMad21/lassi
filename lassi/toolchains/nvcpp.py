@@ -7,11 +7,12 @@ unchanged:
     nvc++ -Wall -O3 -Minfo -mp=gpu -gpu=<GPU> -o main <sources>
 
 NvcppCc80 is the preset with GPU "cc80". parse_diagnostics reads the stderr
-of the NVHPC EDG front end, the NVC++ backend, and GCC style and linker lines
-(nvc++ runs the link step itself); the patterns below each show a sample
-line, from the captures in tests/toolchains/fixtures/ where one shows it. The
--Minfo report goes to stderr too and matches no pattern, so it yields no
-diagnostics; for example (capture nvcpp_minfo_clean)
+of the NVHPC EDG front end, the NVC++ backend, the nvc++ driver, GCC style
+and linker lines (nvc++ runs the link step itself), and nvlink, the device
+linker; the patterns below each show a sample line, from the captures in
+tests/toolchains/fixtures/ where one shows it. The -Minfo report goes to
+stderr too and matches no pattern, so it yields no diagnostics; for example
+(capture nvcpp_minfo_clean)
     saxpy(int, float, float const*, float*):
           4, #omp target teams distribute parallel for
               4, Generating "nvkernel__Z5saxpyifPKfPf_F1L4_2" GPU kernel
@@ -35,6 +36,7 @@ from lassi.toolchains._stderr import (
     UNDEFINED_REFERENCE,
     LinePattern,
     compile_diagnostic,
+    cuda_tool_diagnostic,
     fold_edg_lines,
     parse_stderr,
 )
@@ -70,6 +72,34 @@ _BACKEND = re.compile(
 )
 _BACKEND_SEVERITY = {"I": "note", "W": "warning", "S": "error", "F": "error"}
 
+# nvlink, the CUDA device linker: "nvlink <severity> : <message>" with varying spacing, for example (exploratory
+# capture nvcpp_nvlink_error, from an OpenMP target region calling a function with no device definition, in
+# dirty-tree rx 20260923-202909-desktop-8r113ei-p0-core-09c6; the workdir and toolchain paths shortened with "...")
+#   nvlink error   : Undefined reference to '_Z5twicef' in '/mnt/nvme10/.../@lassi-tmp/nvc++8c0N0-iy_9.o'
+#   pgacclnk: child process exit status 2: /mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/.../bin/tools/nvdd
+# nvlink names a symbol and an object, never a source line, and the object is a temporary one in the compile's
+# private TMPDIR (@lassi-tmp). So the Diagnostic has no file, line, or column, and the message is the text after
+# the ":" as printed, the object path included; a path ending in "<file>:<number>" is never read as a place. A
+# fatal is an error; no capture shows an nvlink warning or fatal yet. The pgacclnk line after it matches no pattern.
+# It is tried before the GCC style pattern: an asm label can make a symbol name any text, "a:1:2: error: b" too.
+# The object path is kept as printed, although it names the run's workdir: it is the tool's text.
+_NVLINK = re.compile(r"nvlink\s+(?P<severity>error|warning|fatal)\s*:\s*(?P<message>.*)")
+
+# The nvc++ driver: "nvc++-<Severity>-<message>", with no place, for example (plans/spikes/p0-toolchains-verify.md
+# run 2a, rx 20260923-045538-desktop-8r113ei-p0-core-bde2 from a clean commit, before the CUDA home was set; then
+# the P0.15 exploratory dirty-tree probe rx 20260923-104313-desktop-8r113ei-p0-core-2b22, whose source crashed the
+# front end by accident; both shortened with "...")
+#   nvc++-Error-A CUDA toolkit matching the current driver version (0) or a supported older version (11.8) was ...
+#   nvc++-Fatal-/mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/.../bin/tools/nvcpfe TERMINATED by signal 11
+# The Diagnostic has no file, line, column, or code, and the message is the text after the second "-" as printed.
+# Error and Fatal are errors; Warning is a warning, and no capture shows one yet. No source compiled with the preset
+# flags gave a driver line without crashing a compiler (P0.17). The line holds no number, so no 10-digit bound
+# applies. It is tried before the GCC style pattern, since a driver message may quote a source name the model chose,
+# and that name may hold "a:1:2: error: b". A GCC style line is read as a driver line only when a built file is
+# itself named "nvc++-Error-..." or the like, and its place then becomes None, the safe side of the rule.
+_DRIVER = re.compile(r"nvc\+\+-(?P<severity>Error|Fatal|Warning)-(?P<message>.*)")
+_DRIVER_SEVERITY = {"Error": "error", "Fatal": "error", "Warning": "warning"}
+
 
 def _edg(match: re.Match[str]) -> Diagnostic:
     """Return the Diagnostic for an EDG line; parse_stderr sets the column from the echo and caret."""
@@ -80,6 +110,11 @@ def _edg(match: re.Match[str]) -> Diagnostic:
         file=match["file"],
         line=int(match["line"]),
     )
+
+
+def _driver(match: re.Match[str]) -> Diagnostic:
+    """Return the Diagnostic for an nvc++ driver line, which names no file."""
+    return compile_diagnostic(_DRIVER_SEVERITY[match["severity"]], match["message"])
 
 
 def _backend(match: re.Match[str]) -> Diagnostic:
@@ -110,10 +145,13 @@ def _gcc_column(
     return dataclasses.replace(diagnostic, column=None), index
 
 
-# Tried in this order on each line; the linker pattern is last because it is the loosest.
+# Tried in this order on each line; the linker pattern is last because it is the loosest. The driver and nvlink
+# patterns come before the GCC style one (see each).
 _PATTERNS = (
     LinePattern(_EDG, _edg, fold=fold_edg_lines),
     LinePattern(_BACKEND, _backend),
+    LinePattern(_DRIVER, _driver),
+    LinePattern(_NVLINK, cuda_tool_diagnostic),
     dataclasses.replace(GCC, fold=_gcc_column),
     COLLECT2,
     UNDEFINED_REFERENCE,
@@ -126,13 +164,16 @@ def parse_diagnostics(stderr: str, files: Mapping[str, str] = NO_FILES) -> list[
     `files` (relative path -> text) are the files built; an EDG diagnostic
     gets its column by aligning the source echo with its line in them, a
     GCC style diagnostic keeps its column only on one of them (_gcc_column),
-    and a linker place is kept only as one of them. Lines that match no
-    pattern are skipped: error summaries, Remark lines, the -Minfo report,
-    the compiler's closing status line (such as "NVC++/x86-64 Linux
-    24.11-0: compilation aborted"), the linker's "in function" line, the
-    "pgacclnk: child process exit status 1: /usr/bin/ld" line (it only
-    restates that ld failed and says no "error:", unlike the "collect2:
-    error: ..." line, which is read as an error), and blank lines.
+    and a linker place is kept only as one of them; an nvlink or driver
+    diagnostic has no place. Lines that match no pattern are skipped: the
+    file name header nvc++ prints for each of several sources (such as
+    "helper.cpp:"), error summaries, Remark lines, the -Minfo report, the
+    compiler's closing status line (such as "NVC++/x86-64 Linux 24.11-0:
+    compilation aborted"), the linker's "in function" line, the "pgacclnk:
+    child process exit status 1: /usr/bin/ld" line and the one naming nvdd
+    after an nvlink error (each only restates that a tool failed and says
+    no "error:", unlike the "collect2: error: ..." line, which is read as an
+    error), and blank lines.
     """
     return parse_stderr(stderr, files, _PATTERNS)
 
