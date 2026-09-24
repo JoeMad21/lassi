@@ -53,8 +53,8 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.19 | DONE | Install CUDA 12.6.3 from the redistributable archives | P0.7 | 7d8d3d5: redistributable CUDA 12.6.3 (4 archives); from the clean commit V12.6.85, 63 remote tests, fixture recapture 12 of 12 byte-stable identical, no root-fs writes (rx 20260923-220925-desktop-8r113ei-p0-core-6db9); bible at master revision 85; old tree to OQ-017 |
 | P0.20 | DONE | Harden compiles of generated sources | P0.16 | 1de7db6; its acceptance record landed in f9d1e68 under the hooks subject (OQ-016): 63 remote tests and a fixture recapture (12 of 12 byte-stable identical) from 1de7db6; bible at master revision 83 |
 | P1.0 | DONE | Plan phase P1 into plans/p1-faithful.md and add its tasks here | - | plan plans/p1-faithful.md; base main c3cf248 |
-| P1.1 | ACTIVE | Pin upstream LASSI and check the HeCBench pin against its sources | - |  |
-| P1.2 | READY | Ten-app bench manifest, support files, and item selection | P1.1 |  |
+| P1.1 | DONE | Pin upstream LASSI and check the HeCBench pin against its sources | - | f92a4a0; results/p1-upstream-pin (rx 20260924-002439-desktop-8r113ei-p1-faithful-8e73, clean a815c45) |
+| P1.2 | DONE | Ten-app bench manifest, support files, and item selection | P1.1 | cd94c69; 20/20 references compiled, results/p1-hecbench-compile (rx 20260924-002513-desktop-8r113ei-p1-faithful-e7ba, clean a815c45) |
 | P1.3 | DONE | lassi-2024 prompt set and context packs from pinned upstream | P1.1 | tools/extract_lassi_assets.py writes 54 prompt fragments and 2 packs, gitignored; 3 MANIFEST.yaml tracked (OQ-018); tests/prompts 41 passed |
 | P1.4 | READY | Faithful generation: summarize_context, describe_source, generate | P1.3 |  |
 | P1.5 | READY | Baseline stage and the faithful correction loop | P1.2,P1.4 |  |
