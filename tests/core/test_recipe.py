@@ -46,12 +46,25 @@ NEW_MODULES = ("lassi.core.recipe", "lassi.core.registry")
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 # sha256 of canonical(EXPECTED_CHILD); computed once from the data below, never from a loader run.
-CHILD_HASH = "f62fcef7d400815920bfea49f7a4efa64faedc01f5c8fb33a2f343d487a5d1c1"
+CHILD_HASH = "3c361037e066f6cd94ec664259eab778c28745ed413761a67d7370c56cb57535"
 CHILD_CHAIN = ("fixture-base", "parent", "child")
 
 FENCE_TAG_DESCRIPTION = (
     "strip only the exact fence language tag; off keeps upstream's quirk that also drops a leading 'c' after cpp/c++"
 )
+PROMPT_SPACES_DESCRIPTION = (
+    "keep the generation prompt's runs of spaces;"
+    " off keeps upstream's quirk that cuts every run of spaces to one before the first generation call"
+)
+
+# Every named fix in lassi.core.recipe.FIXES: P0's fence tag fix and P1.4's prompt_spaces (on keeps the runs of spaces
+# in the generation prompt; off collapses each run to one space, as upstream does).
+FIX_NAMES = ("fence_tag", "prompt_spaces")
+
+
+def all_fixes(on: bool) -> dict[str, bool]:
+    """Return the resolved fixes mapping with every named fix set to `on`."""
+    return dict.fromkeys(FIX_NAMES, on)
 
 # Keys of the bible's yaml blocks in Project Recipes, by their first comment line; guards the parser.
 BIBLE_BLOCK_KEYS = (
@@ -108,7 +121,7 @@ EXPECTED_CHILD: dict[str, Any] = {
     "directions": [{"source": "omp", "target": "cuda"}],
     "executor": {"kind": "native"},
     "faithful": False,
-    "fixes": {"fence_tag": True},
+    "fixes": all_fixes(True),
     "judges": {
         "equivalence": {"model": "judge-model", "rubric": "equivalence-v1", "use": "screen"},
         "efficiency": {"model": "judge-model", "rubric": "efficiency-v1", "mode": "predict", "use": "metric"},
@@ -345,7 +358,7 @@ def with_defaults(data: Mapping[str, Any]) -> dict[str, Any]:
     """Return a copy of a non-faithful resolved mapping with faithful and fixes materialized as the loader does."""
     out = copy.deepcopy(dict(data))
     out.setdefault("faithful", False)
-    out.setdefault("fixes", {"fence_tag": True})
+    out.setdefault("fixes", all_fixes(True))
     return out
 
 
@@ -1654,13 +1667,14 @@ def test_entries_state_every_key_not_marked_optional(
 
 def test_fixes_table_and_uncapped(recipe_module: ModuleType) -> None:
     assert recipe_module.UNCAPPED == "uncapped"
-    assert recipe_module.FIXES == {"fence_tag": FENCE_TAG_DESCRIPTION}
+    assert recipe_module.FIXES == {"fence_tag": FENCE_TAG_DESCRIPTION, "prompt_spaces": PROMPT_SPACES_DESCRIPTION}
+    assert tuple(recipe_module.FIXES) == FIX_NAMES
 
 
 def test_defaults_are_materialized(load: Callable[..., Any]) -> None:
     data = load("child.yaml").data
     assert data["faithful"] is False
-    assert data["fixes"] == {"fence_tag": True}
+    assert data["fixes"] == all_fixes(True)
 
 
 def test_faithful_overrides_a_capped_parent_and_an_explicit_fix(
@@ -1669,14 +1683,14 @@ def test_faithful_overrides_a_capped_parent_and_an_explicit_fix(
     data = load("faithful-child.yaml").data
     assert data["faithful"] is True
     assert data["loop"] == {"max_corrections": recipe_module.UNCAPPED}
-    assert data["fixes"] == {"fence_tag": False}
+    assert data["fixes"] == all_fixes(False)
 
 
 def test_faithful_overrides_values_in_the_same_file(load: Callable[..., Any], tmp_path: Path) -> None:
     text = "extends: parent\nfaithful: true\nloop: {max_corrections: 4}\nfixes: {fence_tag: true}\n"
     data = load(write(tmp_path, "faithful-own.yaml", text)).data
     assert data["loop"] == {"max_corrections": "uncapped"}
-    assert data["fixes"] == {"fence_tag": False}
+    assert data["fixes"] == all_fixes(False)
 
 
 def test_faithful_creates_the_loop_section(load: Callable[..., Any], tmp_path: Path) -> None:
@@ -1685,19 +1699,19 @@ def test_faithful_creates_the_loop_section(load: Callable[..., Any], tmp_path: P
     data["faithful"] = True
     recipe = load(write(tmp_path, "faithful-no-loop.yaml", yaml.safe_dump(data)))
     assert recipe.data["loop"] == {"max_corrections": "uncapped"}
-    assert recipe.data["fixes"] == {"fence_tag": False}
+    assert recipe.data["fixes"] == all_fixes(False)
 
 
 def test_faithful_applies_to_the_resolved_value(load: Callable[..., Any], tmp_path: Path) -> None:
     data = load(write(tmp_path, "unfaithful.yaml", "extends: faithful-child\nfaithful: false\n")).data
     assert data["faithful"] is False
     assert data["loop"] == {"max_corrections": 3}
-    assert data["fixes"] == {"fence_tag": True}
+    assert data["fixes"] == all_fixes(True)
     text = "extends: faithful-child\nloop: {max_corrections: 6}\nfixes: {fence_tag: true}\n"
     inherited = load(write(tmp_path, "inherits-faithful.yaml", text)).data
     assert inherited["faithful"] is True
     assert inherited["loop"] == {"max_corrections": "uncapped"}
-    assert inherited["fixes"] == {"fence_tag": False}
+    assert inherited["fixes"] == all_fixes(False)
 
 
 def test_resolved_data_is_the_loaded_mapping_without_the_binding_check(
@@ -1716,7 +1730,7 @@ def test_resolved_data_is_the_loaded_mapping_without_the_binding_check(
 def test_explicit_fix_off_keeps_the_cap(load: Callable[..., Any]) -> None:
     data = load("fix-off.yaml").data
     assert data["faithful"] is False
-    assert data["fixes"] == {"fence_tag": False}
+    assert data["fixes"] == {**all_fixes(True), "fence_tag": False}
     assert data["loop"] == {"max_corrections": 3}
 
 
@@ -1949,7 +1963,7 @@ def test_bible_project_recipes_fit_the_schema(
     base_loop = bible_block_data("projects/base.yaml")["loop"]
     assert recipe.data["faithful"] is faithful
     assert recipe.data["loop"] == ({"max_corrections": "uncapped"} if faithful else base_loop)
-    assert recipe.data["fixes"] == {"fence_tag": not faithful}
+    assert recipe.data["fixes"] == all_fixes(not faithful)
     assert CONSTRUCTED == []
 
 

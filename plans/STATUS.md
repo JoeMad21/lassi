@@ -56,7 +56,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1.1 | DONE | Pin upstream LASSI and check the HeCBench pin against its sources | - | f92a4a0; results/p1-upstream-pin (rx 20260924-002439-desktop-8r113ei-p1-faithful-8e73, clean a815c45) |
 | P1.2 | DONE | Ten-app bench manifest, support files, and item selection | P1.1 | cd94c69; 20/20 references compiled, results/p1-hecbench-compile (rx 20260924-002513-desktop-8r113ei-p1-faithful-e7ba, clean a815c45) |
 | P1.3 | DONE | lassi-2024 prompt set and context packs from pinned upstream | P1.1 | tools/extract_lassi_assets.py writes 54 prompt fragments and 2 packs, gitignored; 3 MANIFEST.yaml tracked (OQ-018); tests/prompts 41 passed |
-| P1.4 | READY | Faithful generation: summarize_context, describe_source, generate | P1.3 |  |
+| P1.4 | DONE | Faithful generation: summarize_context, describe_source, generate | P1.3 | Faithful summarize_context, describe_source, generate with fence-quirk and prompt_spaces fixes; tests/core 1146 passed |
 | P1.5 | READY | Baseline stage and the faithful correction loop | P1.2,P1.4 |  |
 | P1.6 | READY | run_loop: execution gate, stale output, run flags, Ollama unload | P1.5 |  |
 | P1.7 | READY | Oracles: stdout_mask and passfail | P1.2 |  |

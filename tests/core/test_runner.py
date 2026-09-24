@@ -1877,19 +1877,55 @@ def test_refuses_a_stage_order_that_cannot_run(tmp_path: Path, bench: Path, stag
 @pytest.mark.parametrize(
     ("changes", "match"),
     [
-        ({"faithful": True}, r"fixes\.fence_tag is off \(faithful: true\)"),
-        ({"fixes": {"fence_tag": False}}, r"fixes\.fence_tag is off \(faithful: false\)"),
         ({"report": {"trial_md": False}}, r"report\.trial_md is false"),
         ({"report": {"parquet": False}}, r"report\.parquet is false"),
-        ({"context": ["openmp-card"]}, "sets context, which this runner does not carry out"),
         ({"metrics": ["pass-at-1"]}, "sets metrics, which this runner does not carry out"),
     ],
-    ids=["faithful", "fence-tag-off", "no-trial-md", "no-parquet", "context", "metrics"],
+    ids=["no-trial-md", "no-parquet", "metrics"],
 )
 def test_refuses_a_recipe_choice_the_stages_cannot_honor(
     tmp_path: Path, bench: Path, changes: dict[str, Any], match: str
 ) -> None:
     assert_refused_before_anything_runs(tmp_path, bench, "unhonored", scripted_data(**changes), match)
+
+
+def test_faithful_generate_then_compile_loop_reads_attempt_zero_from_the_first_fence(
+    tmp_path: Path, bench: Path
+) -> None:
+    # generate reproduces fence_tag and prompt_spaces, so the runner accepts faithful: true with compile_loop listed.
+    # This pins attempt 0 only: how compile_loop reads a correction under faithful is task P1.5's work.
+    script = Script([f"```cuda\n{GOOD_SOURCE}```\n"])
+    log = BuildLog()
+    registry = make_registry(log, backend=scripted_backend(script))
+    run_dir = run(write_recipe(tmp_path, "loop-test", scripted_data(faithful=True)), tmp_path / "runs-root", bench,
+                  registry, run_id="loop")
+    trial = load_trial(run_dir, LOOP_TRIAL)
+    (attempt,) = trial.attempts
+    assert attempt.files == {"main.cu": "uda\n" + GOOD_SOURCE}
+    assert [(item.stage, item.severity, item.code) for item in attempt.diagnostics] == [
+        ("parse", "warning", "fence-quirk")
+    ]
+    assert attempt.stage_reached == COMPILED
+    assert [files for _, _, files in log.builds] == [{"main.cu": "uda\n" + GOOD_SOURCE}]
+    assert (trial.final.stage_reached, trial.final.corrections) == (COMPILED, 0)
+
+
+def test_fence_tag_off_refuses_an_item_with_more_than_one_target_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The first fenced block is the one target file under the fence_tag quirk; synth-two's CUDA side has two files.
+    manifests = tmp_path / "manifests"
+    manifests.mkdir()
+    (manifests / "synth-two.yaml").write_bytes(SYNTH_MANIFEST.encode("ascii"))
+    monkeypatch.setattr(runner_module, "BENCH_DIR", manifests)
+    sources = tmp_path / "synth-bench"
+    for relative in ("alpha-omp/main.cpp", "alpha-cuda/a.cu", "alpha-cuda/b.cu", "zeta-omp/main.cpp",
+                     "zeta-cuda/a.cu", "zeta-cuda/b.cu"):
+        (sources / "src" / relative).parent.mkdir(parents=True, exist_ok=True)
+        (sources / "src" / relative).write_bytes(GOOD_SOURCE.encode("ascii"))
+    data = scripted_data(faithful=True, bench={"suite": "synth-two", "split": "eval"})
+    match = r"synth-two/alpha \(omp-cuda\) has 2 'cuda' files; with fixes\.fence_tag off"
+    assert_refused_before_anything_runs(tmp_path, sources, "two-targets", data, match)
 
 
 def prompt_sets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:

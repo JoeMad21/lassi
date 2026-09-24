@@ -39,6 +39,10 @@ FIXES: dict[str, str] = {
         "strip only the exact fence language tag;"
         " off keeps upstream's quirk that also drops a leading 'c' after cpp/c++"
     ),
+    "prompt_spaces": (
+        "keep the generation prompt's runs of spaces;"
+        " off keeps upstream's quirk that cuts every run of spaces to one before the first generation call"
+    ),
 }
 
 

@@ -1,19 +1,55 @@
-"""The stages of the compile-only path: generate and compile_loop (bible Component Interfaces, Stage row).
+"""The stages of the compile-only path: summarize_context, describe_source, generate, and compile_loop.
 
-Stages are pure over the trial record (Stage contract rules): a stage reads
-the Trial's fields, appends an attempt or annotates the last one, and
-returns a new Trial; the Trial it was given is never changed. Side effects
-go through components: the LLM backend, the toolchain, and the text store
-that keeps each prompt. Each stage is built as `factory(context=<RunContext>)`
-once per trial (lassi.core.registry states the construction convention), so
-a stage object never carries state from one trial to the next.
+Bible Component Interfaces, Stage row. Stages are pure over the trial record
+(Stage contract rules): a stage reads the Trial's fields, appends an attempt,
+annotates the last one, or fills Trial.context, and returns a new Trial; the
+Trial it was given is never changed. Side effects go through components: the
+LLM backend, the toolchain, and the text store that keeps each prompt. Each
+stage is built as `factory(context=<RunContext>)` once per trial
+(lassi.core.registry states the construction convention), so a stage object
+never carries state from one trial to the next.
 
-Prompts are template files, never string literals here (Design Principle
-3): generate renders `generate.txt` and compile_loop renders `correct.txt`
-from the recipe's prompt set (lassi.prompts). Each stage class declares the
-prompts it renders and their fields in `prompt_fields`, so the runner can
-check a prompt set before any model is asked. The model answers with FILE
-blocks, which lassi.core.files parses.
+Prompts are data files, never string literals here (Design Principle 3). A
+template set (lassi.prompts.render) holds `generate.txt` and `correct.txt`;
+each stage class declares the templates it renders and their fields in
+`prompt_fields`. A fragment set (lassi.prompts.load_recipe_assets, which
+the runner calls) holds checked fragments that lassi.core.fragments joins;
+each stage class declares the fragment keys it reads in `fragment_keys`,
+and `needs_context` when it needs a context pack for the target language.
+The runner checks either kind before any model is asked.
+
+- summarize_context sends [system, user]: the general system prompt, then
+  the summary request followed by the target language's context pack. The
+  reply fills Trial.context.knowledge_summary.
+- describe_source sends the general system prompt and the description
+  request followed by the source. The reply fills
+  Trial.context.source_description.
+- generate appends attempt 0. With a template set it sends generate.txt,
+  filled with the source files in FILE blocks, as the only message; with a
+  fragment set it sends the direction's system prompt and the generation
+  prompt (lassi.core.fragments.generation_prompt), the source read as text
+  mode reads it.
+
+A context stage names the Trial.context field it fills in `fills_context`,
+and generate names the fields its fragment prompt joins, when a pack serves
+the target, in `joins_context`; the runner checks that an earlier stage
+fills each joined field. A context reply is kept as returned, except that
+each lone surrogate becomes U+FFFD, as in an attempt's reply (it is not
+Unicode text and cannot be stored). Trial.context carries no diagnostics,
+so generate adds to attempt 0 one `invalid-text` warning per context field
+that holds U+FFFD.
+
+Two upstream quirks are reproduced when their fixes (lassi.core.recipe.FIXES)
+are off, and each stage class names the fixes it reproduces in `reproduces`:
+
+- `prompt_spaces` off: generate cuts every run of spaces in its prompt to
+  one space before sending it.
+- `fence_tag` off: generate reads the reply's first fenced block with
+  upstream's tag stripping as the target's one file (S1; S0 with an empty
+  file and a `no-fence` warning when there is no block). A stripping that
+  leaves text on the block's first line adds a parse-stage warning
+  Diagnostic with code `fence-quirk`. With the fix on, the model answers
+  with FILE blocks, which lassi.core.files parses.
 
 Stage reached (Result Record, Attempt.stage_reached) is the bible's stage
 ladder (Training Module, Reward Function), the one scale every record, metric,
@@ -43,14 +79,15 @@ import dataclasses
 import errno
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from lassi.bench import Direction, Suite
+from lassi.core import fragments as fragment_text
 from lassi.core.files import parse_file_blocks, render_file_blocks
 from lassi.core.interfaces import BuildResult, Executor, LLMBackend, Message, Sampling, Toolchain
 from lassi.core.recipe import Recipe
-from lassi.core.record import Attempt, Diagnostic, TextRef, Trial, unified_diff
+from lassi.core.record import Attempt, Context, Diagnostic, TextRef, Trial, unified_diff
 from lassi.core.registry import register
 from lassi.core.store import TextStore
 from lassi.executors.workdir import fresh_build_dir
@@ -84,7 +121,10 @@ class RunContext:
     `build_root` is the root that lassi.executors.workdir.build_dir places each
     attempt's build directory under; the runner passes the run directory, so
     one run's builds never meet another's. `prompts` is the prompt set, and
-    `max_corrections` the correction cap (None means uncapped).
+    `max_corrections` the correction cap (None means uncapped). `fragments`
+    holds the fragments of a fragment prompt set (empty for a template set),
+    and `packs` the recipe's context packs, keyed by the language each
+    serves.
     """
 
     recipe: Recipe
@@ -100,6 +140,8 @@ class RunContext:
     build_root: Path
     prompts: str
     max_corrections: int | None
+    fragments: Mapping[str, str] = field(default_factory=dict)
+    packs: Mapping[str, str] = field(default_factory=dict)
 
 
 def target_files(context: RunContext) -> list[str]:
@@ -112,6 +154,27 @@ def target_files(context: RunContext) -> list[str]:
             f"{context.suite.name}/{context.item} has no {context.direction.target!r} files; languages: {known}"
         )
     return list(sources.files)
+
+
+def fix_on(context: RunContext, name: str) -> bool:
+    """Return True unless the recipe turns the named fix off (faithful: true turns every fix off)."""
+    return context.recipe.data.get("fixes", {}).get(name, True) is not False
+
+
+def source_as_read(context: RunContext) -> str:
+    """Return the item's one source file in the direction's source language, as text mode reads it.
+
+    A fragment prompt set joins one source text into its prompts, read as a
+    file opened in text mode reads it (CRLF and CR become LF). Raises
+    ValueError when the item has more or fewer than one source file.
+    """
+    sources = context.suite.source_files(context.item, context.direction, context.sources_root, purpose=PURPOSE)
+    if len(sources) != 1:
+        raise ValueError(
+            f"{context.suite.name}/{context.item}: a fragment prompt set takes one source file, "
+            f"the {context.direction.source!r} version has {len(sources)}"
+        )
+    return fragment_text.as_text_mode(next(iter(sources.values())))
 
 
 def diagnostic_line(diagnostic: Diagnostic) -> str:
@@ -143,6 +206,36 @@ def _has_error(diagnostics: Sequence[Diagnostic]) -> bool:
 def _compile_error(code: str, message: str) -> Diagnostic:
     """Return a compile-stage error Diagnostic with no location."""
     return Diagnostic(stage="compile", severity="error", code=code, message=message)
+
+
+def _parse_warning(code: str, message: str) -> Diagnostic:
+    """Return a parse-stage warning Diagnostic with no location."""
+    return Diagnostic(stage="parse", severity="warning", code=code, message=message)
+
+
+def _context_text(reply: str) -> str:
+    """Return a context reply with each lone surrogate replaced by U+FFFD, so it can be stored and sent."""
+    return _SURROGATE.sub(_REPLACEMENT, reply)
+
+
+def _context_warnings(context: Context) -> list[Diagnostic]:
+    """Return one `invalid-text` warning per Trial.context field that holds U+FFFD, for attempt 0 to carry.
+
+    The context stages replace each lone surrogate in a reply with U+FFFD
+    (_context_text), and Trial.context has no diagnostics of its own, so
+    attempt 0 keeps the note. A reply may also hold U+FFFD itself; the
+    message states only what the field holds.
+    """
+    warnings = []
+    for name in ("knowledge_summary", "source_description"):
+        count = getattr(context, name).count(_REPLACEMENT)
+        if count:
+            message = (
+                f"Trial.context.{name} holds {count} U+FFFD replacement character(s); a context stage writes one "
+                "for each lone surrogate in its reply, which is not Unicode text"
+            )
+            warnings.append(_parse_warning("invalid-text", message))
+    return warnings
 
 
 def _storable(reply: str) -> tuple[str, list[Diagnostic]]:
@@ -180,11 +273,43 @@ def _parsed_attempt(index: int, prompt_ref: TextRef, reply: str, expected: Seque
     )
 
 
-def _ask(context: RunContext, prompt: str) -> tuple[TextRef, str]:
-    """Store `prompt`, send it to the backend as one user message, and return its reference and the reply text."""
+def _fenced_attempt(index: int, prompt_ref: TextRef, reply: str, expected: Sequence[str]) -> Attempt:
+    """Return the attempt for one reply read as upstream reads it: the first fenced block is the one target file.
+
+    S1 when the reply holds a fenced block, else S0 with an empty file (upstream
+    writes and builds one) and a `no-fence` warning. A tag stripping that
+    leaves text on the block's first line adds a `fence-quirk` warning.
+    """
+    if len(expected) != 1:
+        raise ValueError(f"the fence_tag quirk reads one fenced block, but the target has {len(expected)} files")
+    text, diagnostics = _storable(reply)
+    fence = fragment_text.first_fence(text)
+    if fence.quirk:
+        diagnostics.append(_parse_warning(fragment_text.FENCE_QUIRK, fragment_text.fence_quirk_message(fence)))
+    if not fence.found:
+        message = "the reply held no fenced block, so the target file is empty, as upstream writes it"
+        diagnostics.append(_parse_warning(fragment_text.NO_FENCE, message))
+    return Attempt(
+        index=index,
+        prompt_ref=prompt_ref,
+        response_text=text,
+        files={expected[0]: fence.text},
+        diff_from_previous="",
+        stage_reached=PARSED if fence.found else NO_OUTPUT,
+        diagnostics=diagnostics,
+    )
+
+
+def _reply(context: RunContext, prompt: str, system: str | None = None) -> str:
+    """Send `prompt` as the user message, after `system` as the system message when given; return the reply text."""
+    messages = [Message("user", prompt)] if system is None else [Message("system", system), Message("user", prompt)]
+    return context.backend.complete(messages, context.sampling).text
+
+
+def _ask(context: RunContext, prompt: str, system: str | None = None) -> tuple[TextRef, str]:
+    """Store `prompt`, send it as _reply does, and return its reference and the reply text."""
     ref = context.store.put(prompt)
-    completion = context.backend.complete([Message("user", prompt)], context.sampling)
-    return ref, completion.text
+    return ref, _reply(context, prompt, system)
 
 
 @register("Stage", "generate")
@@ -195,38 +320,147 @@ class GenerateStage:
     capabilities = frozenset({"generates"})
     requires = {"LLMBackend": {"chat"}}
     prompt_fields = {"generate": GENERATE_FIELDS}
+    fragment_keys = fragment_text.GENERATE_KEYS
+    reproduces = frozenset({"fence_tag", "prompt_spaces"})
+    joins_context = ("knowledge_summary", "source_description")
 
     def __init__(self, *, context: RunContext) -> None:
         """Keep the trial's run context."""
         self.context = context
 
     def __call__(self, trial: Trial) -> Trial:
-        """Return `trial` with attempt 0 appended: S1 when the reply holds the expected files, else S0.
+        """Return `trial` with attempt 0 appended: S1 when the reply yields the target files, else S0.
 
-        The prompt is generate.txt from the recipe's prompt set, filled with
-        the direction's languages, the item's source files in FILE blocks, and
-        the expected target file names; it is kept in the text store. The
-        backend gets it as the only message.
+        The prompt comes from _prompt; with the prompt_spaces fix off, each
+        run of spaces in it is cut to one. It is kept in the text store and
+        sent as the user message, after the system prompt when there is one.
+        With the fence_tag fix on the reply's FILE blocks are parsed, and with
+        it off its first fenced block is read as upstream reads it. The
+        attempt's diagnostics start with _context_warnings.
         """
         context = self.context
-        sources = context.suite.source_files(context.item, context.direction, context.sources_root, purpose=PURPOSE)
         expected = target_files(context)
-        fields = {
-            "source_language": context.direction.source,
-            "target_language": context.direction.target,
-            "source_files": render_file_blocks(sources),
-            "target_files": ", ".join(expected),
-        }
-        ref, reply = _ask(context, render(context.prompts, "generate", fields))
-        return trial.with_attempt(_parsed_attempt(0, ref, reply, expected))
+        system, prompt = self._prompt(trial, expected)
+        if not fix_on(context, "prompt_spaces"):
+            prompt = fragment_text.collapse_spaces(prompt)
+        ref, reply = _ask(context, prompt, system)
+        if fix_on(context, "fence_tag"):
+            attempt = _parsed_attempt(0, ref, reply, expected)
+        else:
+            attempt = _fenced_attempt(0, ref, reply, expected)
+        notes = _context_warnings(trial.context)
+        if notes:
+            attempt = dataclasses.replace(attempt, diagnostics=[*notes, *attempt.diagnostics])
+        return trial.with_attempt(attempt)
+
+    def _prompt(self, trial: Trial, expected: Sequence[str]) -> tuple[str | None, str]:
+        """Return the system prompt (None for a template set) and the user prompt.
+
+        A template set gives generate.txt, filled with the direction's
+        languages, the item's source files in FILE blocks, and the expected
+        target file names. A fragment set gives the direction's system prompt
+        and the generation prompt from the source (as text mode reads it),
+        the target language's context pack when the recipe has one, and the
+        trial's summary and description.
+        """
+        context = self.context
+        if not context.fragments:
+            sources = context.suite.source_files(
+                context.item, context.direction, context.sources_root, purpose=PURPOSE
+            )
+            fields = {
+                "source_language": context.direction.source,
+                "target_language": context.direction.target,
+                "source_files": render_file_blocks(sources),
+                "target_files": ", ".join(expected),
+            }
+            return None, render(context.prompts, "generate", fields)
+        direction = context.direction
+        prompt = fragment_text.generation_prompt(
+            context.fragments,
+            direction,
+            source_as_read(context),
+            context.packs.get(direction.target),
+            trial.context.knowledge_summary,
+            trial.context.source_description,
+        )
+        return context.fragments[fragment_text.fragment_key(fragment_text.DIRECTION_SYSTEM, direction)], prompt
 
     def describe(self) -> str:
         """Return a one-line description of the stage."""
         direction = self.context.direction
-        return (
-            f"generate: one {direction.source} to {direction.target} translation from "
-            f"{self.context.prompts}/generate.txt, parsed from FILE blocks"
-        )
+        prompts = self.context.prompts
+        source = f"the {prompts} fragments" if self.context.fragments else f"{prompts}/generate.txt"
+        reply = "FILE blocks" if fix_on(self.context, "fence_tag") else "its first fenced block"
+        return f"generate: one {direction.source} to {direction.target} translation from {source}, parsed from {reply}"
+
+
+@register("Stage", "summarize_context")
+class SummarizeContextStage:
+    """Asks the model to summarize the target language's context pack and keeps the reply in Trial.context."""
+
+    name = "summarize_context"
+    capabilities: frozenset[str] = frozenset()
+    requires = {"LLMBackend": {"chat"}}
+    prompt_fields: dict[str, tuple[str, ...]] = {}
+    fragment_keys = fragment_text.SUMMARY_KEYS
+    needs_context = True
+    fills_context = ("knowledge_summary",)
+
+    def __init__(self, *, context: RunContext) -> None:
+        """Keep the trial's run context."""
+        self.context = context
+
+    def __call__(self, trial: Trial) -> Trial:
+        """Return `trial` with context.knowledge_summary set to the model's reply; no attempt.
+
+        The general system prompt and the summary request, followed by the
+        target language's pack, go to the backend unchanged. The reply is
+        kept as returned, except that each lone surrogate becomes U+FFFD
+        (_context_text).
+        """
+        context = self.context
+        pack = context.packs[context.direction.target]
+        prompt = fragment_text.summary_request(context.fragments, context.direction, pack)
+        reply = _context_text(_reply(context, prompt, context.fragments[fragment_text.GENERAL_SYSTEM]))
+        return dataclasses.replace(trial, context=dataclasses.replace(trial.context, knowledge_summary=reply))
+
+    def describe(self) -> str:
+        """Return a one-line description of the stage."""
+        return f"summarize_context: summarize the {self.context.direction.target} context pack ({self.context.prompts})"
+
+
+@register("Stage", "describe_source")
+class DescribeSourceStage:
+    """Asks the model to describe the item's source and keeps the reply in Trial.context."""
+
+    name = "describe_source"
+    capabilities: frozenset[str] = frozenset()
+    requires = {"LLMBackend": {"chat"}}
+    prompt_fields: dict[str, tuple[str, ...]] = {}
+    fragment_keys = fragment_text.DESCRIPTION_KEYS
+    fills_context = ("source_description",)
+
+    def __init__(self, *, context: RunContext) -> None:
+        """Keep the trial's run context."""
+        self.context = context
+
+    def __call__(self, trial: Trial) -> Trial:
+        """Return `trial` with context.source_description set to the model's reply; no attempt.
+
+        The general system prompt and the description request, followed by
+        the source as text mode reads it, go to the backend unchanged. The
+        reply is kept as returned, except that each lone surrogate becomes
+        U+FFFD (_context_text).
+        """
+        context = self.context
+        prompt = fragment_text.description_request(context.fragments, source_as_read(context))
+        reply = _context_text(_reply(context, prompt, context.fragments[fragment_text.GENERAL_SYSTEM]))
+        return dataclasses.replace(trial, context=dataclasses.replace(trial.context, source_description=reply))
+
+    def describe(self) -> str:
+        """Return a one-line description of the stage."""
+        return f"describe_source: describe the {self.context.direction.source} source ({self.context.prompts})"
 
 
 @register("Stage", "compile_loop")

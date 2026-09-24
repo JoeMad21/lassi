@@ -9,14 +9,22 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    is asked: arms without a model (the model registry that maps arms to
    backends comes later) and arms beside a model; a recipe with no
    llm.sampling.max_tokens or no prompt set, since it never picks a value;
-   a fix toggle turned off (faithful: true turns them all off), a report
-   toggle turned off, or a section this runner does not carry out (context,
-   oracle, judges, and the like), since it never ignores a choice; a stage
-   list whose order cannot work (one generating stage at most, and every
-   compiling stage after it); a prompt set that lacks a template a stage
-   renders or uses a placeholder the stage does not fill; trial ids that
-   repeat; and missing bench sources. A stage it does not implement already
-   fails at load, unregistered;
+   a fix toggle turned off (faithful: true turns them all off) when no
+   listed stage names that fix in `reproduces`, a report toggle turned off,
+   or a section this runner does not carry out (oracle, judges, and the like),
+   since it never ignores a choice; a stage list whose order cannot
+   work (one generating stage at most, and every compiling stage after it);
+   a template prompt set that lacks a template a stage renders or uses a
+   placeholder the stage does not fill; context packs with a prompt set
+   that is not a fragment set; a fragment prompt set or context packs that
+   do not load (lassi.prompts.load_recipe_assets, which checks every file
+   against its manifest), two packs that serve one language, a fragment a
+   stage needs for a direction, a context pack a stage needs for a target
+   language, and a Trial.context field a stage joins into its prompt that
+   no earlier stage fills; trial ids that repeat; missing bench sources; an
+   item with more than one source file under a fragment set, or more than
+   one target file with fixes.fence_tag off, since each reads one file. A
+   stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id), each toolchain
    with its pinned compiler and a clean environment (below), and the
    executor as factory(**config);
@@ -26,7 +34,9 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    sorted order (the items bench.items selects, else every item of the
    recipe's split; an unknown item, one outside the split, or a repeat is a
    RunError before anything is written), then run 1 to trials.n: the
-   stages in recipe order on a fresh RunContext, then the trial's final block;
+   stages in recipe order on a fresh RunContext (which carries the prompt
+   set's fragments and the context packs by language), then the trial's
+   final block;
 6. writes the run tree and prints one line per trial and the run directory.
 
 The run tree is <runs root>/runs/<run_id>, where the runs root is the
@@ -111,6 +121,7 @@ from pathlib import Path
 from typing import Any
 
 from lassi.bench import Direction, Suite, load_suite, sources_dir
+from lassi.core.fragments import fragment_key, pack_language
 from lassi.core.interfaces import Executor, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
 from lassi.core.recipe import UNCAPPED, Recipe, RecipeError, load_recipe, resolved_data, resolved_yaml
@@ -130,7 +141,8 @@ from lassi.core.trial_md import fenced, fmt, fmt_provenance
 from lassi.executors import workdir
 from lassi.executors.sandbox import SandboxedCompileRunner
 from lassi.llm import model_info
-from lassi.prompts import render
+from lassi.prompts import assets as prompt_assets
+from lassi.prompts import load_recipe_assets, render
 from lassi.toolchains import EnvRunner
 from lassi.toolchains.pins import linked_prefixes, prefix_pin_name, read_pin
 
@@ -154,7 +166,7 @@ _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
 # put its trial directories among the text store or the Parquet tables.
 _RUN_TREE_NAMES = frozenset({"texts", PARQUET_DIR, RESOLVED_RECIPE, TOOLCHAINS_JSON, PROVENANCE_JSON, RUN_MD})
 # Recipe sections this runner does not carry out; a recipe that sets one is refused, never run without it.
-_NOT_CARRIED_OUT = ("context", "oracle", "profiler", "adversary", "metrics", "refine", "score", "agents", "judges")
+_NOT_CARRIED_OUT = ("oracle", "profiler", "adversary", "metrics", "refine", "score", "agents", "judges")
 # How long git may take to report the commit or the dirty flag, in seconds.
 _GIT_TIMEOUT_S = 60.0
 # How long a pinned compiler's --version may take, in seconds, and the name prefix of the fresh directory under
@@ -203,7 +215,11 @@ _DEFAULT_OPTIONS = RunOptions()
 
 @dataclass(frozen=True)
 class _Settings:
-    """The run choices read from a loaded recipe."""
+    """The run choices read from a loaded recipe.
+
+    `fragments` holds a fragment prompt set's fragments (empty for a template
+    set) and `packs` the context packs by the language each serves.
+    """
 
     backend: str
     model_id: str
@@ -213,6 +229,8 @@ class _Settings:
     directions: tuple[Direction, ...]
     trials: int
     split: str
+    fragments: Mapping[str, str] = dataclasses.field(default_factory=dict)
+    packs: Mapping[str, str] = dataclasses.field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -407,8 +425,11 @@ def _settings(recipe: Recipe) -> _Settings:
     if "prompts" not in data:
         raise RunError(f"{recipe.path}: prompts has no value; name the prompt set under assets/prompts/")
     _check_carried_out(recipe)
+    fragments, packs = _recipe_assets(recipe)
     cap = data["loop"]["max_corrections"]
     return _Settings(
+        fragments=fragments,
+        packs=packs,
         backend=data["model"]["backend"],
         model_id=data["model"]["id"],
         sampling=Sampling(
@@ -425,14 +446,11 @@ def _settings(recipe: Recipe) -> _Settings:
 
 
 def _check_carried_out(recipe: Recipe) -> None:
-    """Refuse a recipe choice the stages cannot honor, so the saved recipe never claims behavior the run lacked."""
+    """Refuse a recipe choice the stages cannot honor, so the saved recipe never claims behavior the run lacked.
+
+    A fix turned off is checked against the listed stages in _check_stages.
+    """
     data = recipe.data
-    for name, on in sorted(data["fixes"].items()):
-        if not on:
-            raise RunError(
-                f"{recipe.path}: fixes.{name} is off (faithful: {fmt(data['faithful'])}), which asks for an upstream "
-                "quirk that no stage here reproduces yet; turn the fix on and leave faithful off"
-            )
     for name, on in sorted(data["report"].items()):
         if not on:
             raise RunError(
@@ -445,6 +463,47 @@ def _check_carried_out(recipe: Recipe) -> None:
             f"{recipe.path}: the recipe sets {', '.join(unused)}, which this runner does not carry out yet; "
             "remove them rather than have the run ignore them"
         )
+
+
+def _recipe_assets(recipe: Recipe) -> tuple[dict[str, str], dict[str, str]]:
+    """Return the fragments of the recipe's prompt set and its context packs keyed by the language each serves.
+
+    A template set (no MANIFEST.yaml under the assets root) with no context
+    gives two empty mappings, and with context it is a RunError, since only
+    a fragment set joins a pack into its prompts. Otherwise
+    lassi.prompts.load_recipe_assets loads the set and the packs from the
+    default assets root, checking every file against its manifest. A pack
+    serves the language its one entry key ends in
+    (lassi.core.fragments.pack_language). Raises RunError, with the loader's
+    message, for a set or pack that does not load, and when two packs serve
+    one language.
+    """
+    data = recipe.data
+    root = prompt_assets.default_root()
+    names = data.get("context", [])
+    manifest = root / "prompts" / str(data["prompts"]) / prompt_assets.MANIFEST
+    if not manifest.is_file():
+        if not names:
+            return {}, {}
+        raise RunError(
+            f"{recipe.path}: context names packs, but the prompt set {data['prompts']!r} is not a fragment set "
+            f"(there is no {manifest}); only a fragment prompt set uses context packs, so drop context or name one"
+        )
+    try:
+        assets = load_recipe_assets(data, root=root)
+        packs: dict[str, str] = {}
+        by_language: dict[str, str] = {}
+        for name in names:
+            language = pack_language(next(iter(prompt_assets.load_tree(root / "context" / name))))
+            if language in packs:
+                raise RunError(
+                    f"{recipe.path}: the context packs {by_language[language]!r} and {name!r} both serve "
+                    f"{language!r}; name one pack per language"
+                )
+            packs[language], by_language[language] = assets.packs[name], name
+    except ValueError as error:
+        raise RunError(f"{recipe.path}: {error}") from error
+    return dict(assets.fragments), packs
 
 
 def _runs_root(options: RunOptions, recipe: Recipe) -> Path:
@@ -582,13 +641,13 @@ def _check_plan(recipe: Recipe, registry: Registry, settings: _Settings, bench: 
 def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> None:
     """Refuse a stage order that cannot run, a target language with no toolchain, and a prompt a stage cannot render.
 
-    A trial gets one first attempt, so at most one stage declares
-    `generates`, and a stage that declares `compiles` builds that attempt,
-    so it comes after it. Each stage's `prompt_fields` templates are rendered
-    once with empty fields, which finds a missing set or file and a
-    placeholder the stage does not fill.
+    A fix turned off needs a listed stage that reproduces its quirk
+    (_check_fixes). A trial gets one first attempt, so at most one stage
+    declares `generates`, and a stage that declares `compiles` builds that
+    attempt, so it comes after it. The prompts are checked by _check_prompts.
     """
     entries = [registry.get("Stage", name) for name in recipe.data["stages"]]
+    _check_fixes(recipe, entries)
     generated = False
     for index, entry in enumerate(entries):
         where = f"{recipe.path}: stages[{index}] {entry.name!r}"
@@ -606,16 +665,91 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
                     f"{recipe.path}: no toolchain is bound for the target language {direction.target!r}; "
                     f"set toolchain.{direction.target}"
                 )
+    _check_prompts(recipe, entries, settings)
+
+
+def _check_fixes(recipe: Recipe, entries: Sequence[Any]) -> None:
+    """Refuse a fix turned off when no listed stage names it in `reproduces`, so no quirk is asked for in vain."""
+    data = recipe.data
+    reproduced = {name for entry in entries for name in getattr(entry.factory, "reproduces", ())}
+    for name, on in sorted(data["fixes"].items()):
+        if not on and name not in reproduced:
+            raise RunError(
+                f"{recipe.path}: fixes.{name} is off (faithful: {fmt(data['faithful'])}), which asks for an upstream "
+                "quirk that no listed stage reproduces; list a stage that reproduces it, or turn the fix on and "
+                "leave faithful off"
+            )
+
+
+def _check_prompts(recipe: Recipe, entries: Sequence[Any], settings: _Settings) -> None:
+    """Refuse a prompt a stage cannot build from the recipe's prompt set and context packs.
+
+    With a template set, each stage's `prompt_fields` templates are rendered
+    once with empty fields, which finds a missing set or file and a
+    placeholder the stage does not fill; a stage that reads only fragments
+    is refused. With a fragment set, a stage that renders templates but
+    declares no `fragment_keys` is refused, every key a stage declares must
+    be in the set for every direction, a stage that declares
+    `needs_context` needs a pack for every target language, and each
+    Trial.context field a stage names in `joins_context` must be named in
+    `fills_context` by an earlier stage whenever a pack serves a target
+    (_check_context_order).
+    """
+    filled: set[str] = set()
     for entry in entries:
-        for prompt, fields in getattr(entry.factory, "prompt_fields", {}).items():
-            try:
-                render(settings.prompts, prompt, dict.fromkeys(fields, ""))
-            except ValueError as error:
-                raise RunError(f"{recipe.path}: stage {entry.name!r} cannot use the prompt set: {error}") from error
+        templates = getattr(entry.factory, "prompt_fields", {})
+        keys = getattr(entry.factory, "fragment_keys", None)
+        where = f"{recipe.path}: stage {entry.name!r}"
+        if not settings.fragments:
+            if keys and not templates:
+                raise RunError(f"{where} reads prompt fragments, but {settings.prompts!r} is a template prompt set")
+            for prompt, fields in templates.items():
+                try:
+                    render(settings.prompts, prompt, dict.fromkeys(fields, ""))
+                except ValueError as error:
+                    raise RunError(f"{where} cannot use the prompt set: {error}") from error
+            continue
+        _check_context_order(where, entry, settings, filled)
+        filled.update(getattr(entry.factory, "fills_context", ()))
+        if keys is None:
+            if templates:
+                raise RunError(f"{where} renders templates, but {settings.prompts!r} is a fragment prompt set")
+            continue
+        for direction in settings.directions:
+            missing = [key for key in (fragment_key(template, direction) for template in keys)
+                       if key not in settings.fragments]
+            if missing:
+                raise RunError(f"{where}: the prompt set {settings.prompts!r} has no fragment {', '.join(missing)}")
+            if getattr(entry.factory, "needs_context", False) and direction.target not in settings.packs:
+                served = ", ".join(sorted(settings.packs)) or "none"
+                raise RunError(
+                    f"{where} needs a context pack for the target language {direction.target!r}; "
+                    f"the recipe's context serves: {served}"
+                )
+
+
+def _check_context_order(where: str, entry: Any, settings: _Settings, filled: set[str]) -> None:
+    """Refuse a stage that joins a Trial.context field into its prompt when no earlier stage fills that field.
+
+    A fragment set's generation prompt joins the summary and the description
+    whenever a pack serves the target; with a field left empty the model
+    would get empty markers, a prompt upstream never sends.
+    """
+    missing = [name for name in getattr(entry.factory, "joins_context", ()) if name not in filled]
+    served = [direction.target for direction in settings.directions if direction.target in settings.packs]
+    if missing and served:
+        raise RunError(
+            f"{where} joins the Trial.context field(s) {', '.join(missing)} into its prompt when a context pack "
+            f"serves {served[0]!r}, but no earlier listed stage fills them; list the stages that fill them first"
+        )
 
 
 def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
-    """Refuse trial ids that are invalid or repeat (in any letter case), and bench sources that cannot be read."""
+    """Refuse trial ids that are invalid or repeat (in any letter case), and bench sources that cannot be read.
+
+    Each item's file counts are checked against the prompt set and the
+    fence_tag fix by _check_one_file.
+    """
     seen: dict[str, str] = {}
     for direction in settings.directions:
         for item in bench.items:
@@ -631,7 +765,7 @@ def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
                 )
             seen[key] = trial_id
             try:
-                bench.suite.source_files(item, direction, bench.root, purpose=PURPOSE)
+                sources = bench.suite.source_files(item, direction, bench.root, purpose=PURPOSE)
                 bench.suite.reference_target(item, direction, bench.root, purpose=PURPOSE)
                 bench.suite.support_files(item, bench.root, purpose=PURPOSE)
             except (OSError, ValueError) as error:
@@ -639,6 +773,29 @@ def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
                     f"cannot read {bench.suite.name}/{item} ({direction.name}) under {bench.root}: {error}; "
                     + _fetch_hint(bench.suite)
                 ) from error
+            _check_one_file(recipe, settings, bench, item, direction, len(sources))
+
+
+def _check_one_file(
+    recipe: Recipe, settings: _Settings, bench: _Bench, item: str, direction: Direction, source_count: int
+) -> None:
+    """Refuse an item a fragment set or the fence_tag quirk cannot take, before any model is asked.
+
+    A fragment set joins one source text into its prompts
+    (lassi.core.stages.source_as_read), and with fixes.fence_tag off the
+    first fenced block of a reply is the one target file.
+    """
+    where = f"{recipe.path}: {bench.suite.name}/{item} ({direction.name})"
+    if settings.fragments and source_count != 1:
+        raise RunError(
+            f"{where} has {source_count} {direction.source!r} source files; a fragment prompt set joins one source"
+        )
+    targets = bench.suite.item(item, purpose=PURPOSE).languages[direction.target].files
+    if recipe.data["fixes"].get("fence_tag", True) is False and len(targets) != 1:
+        raise RunError(
+            f"{where} has {len(targets)} {direction.target!r} files; with fixes.fence_tag off the first fenced "
+            "block of a reply is the one target file"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -998,6 +1155,8 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
         build_root=run.run_dir,
         prompts=settings.prompts,
         max_corrections=settings.max_corrections,
+        fragments=settings.fragments,
+        packs=settings.packs,
     )
     started = time.monotonic()
     stages = [run.registry.get("Stage", name).factory(context=context) for name in run.recipe.data["stages"]]
