@@ -157,11 +157,22 @@ Recommendation: (a); they are small and expire on their own. For awareness, outs
 Answer:
 
 ## OQ-015 Git Hooks Not Executable On Linux
-State: OPEN
+State: ANSWERED
 Kind: policy
 Blocks: none (CI still enforces the text policy on every push)
-Evidence: `git ls-tree -r HEAD` shows .githooks/commit-msg, .githooks/pre-commit, and .githooks/pre-push stored as mode 100644. The fast suite from the clean commit 1de7db6 on alpha01 (rx 20260923-195751-desktop-8r113ei-p0-core-7f98) failed only tests/tools/test_text_policy_modes.py::test_canary_local_blocks_both_seeded_commits; a rerun (rx 20260923-200253-desktop-8r113ei-p0-core-0d3e) showed the seeded canary commit going through. results/p0-compile-hardening/summary.md.
-Question: The hooks were committed from Windows, where Git Bash runs a hook whatever its mode. Git on Linux and macOS ignores a hook without the executable bit, so on alpha01 or any Linux clone the local text-policy hooks never run. Agents may not change .githooks/. Should the three hooks be marked executable?
+Evidence: at 1de7db6, `git ls-tree -r HEAD` showed .githooks/commit-msg, .githooks/pre-commit, and .githooks/pre-push stored as mode 100644. The fast suite from the clean commit 1de7db6 on alpha01 (rx 20260923-195751-desktop-8r113ei-p0-core-7f98) failed only tests/tools/test_text_policy_modes.py::test_canary_local_blocks_both_seeded_commits; a rerun (rx 20260923-200253-desktop-8r113ei-p0-core-0d3e) showed the seeded canary commit going through. results/p0-compile-hardening/summary.md.
+Question: The hooks were committed from Windows, where Git Bash runs a hook whatever its mode. Git on Linux and macOS ignores a hook without the executable bit, so on alpha01 or any Linux clone the local text-policy hooks never run. Agents leave changes to .githooks/ to the owner. Should the three hooks be marked executable?
 Options: (a) mark them executable. In Git Bash at C:\dev\lassi on branch p0-core, run `git update-index --chmod=+x .githooks/commit-msg .githooks/pre-commit .githooks/pre-push`, then `git commit -m "P0: Mark the git hooks executable"` and `git push`. Only the file modes change, and lib.sh is sourced, so it needs no bit. (b) leave them; CI alone enforces on Linux clones, and the canary test keeps failing there.
 Recommendation: (a); it restores local enforcement on every platform. After it, an agent reruns the fast suite on alpha01 to show the canary test passes.
+Answer: (a), applied by the owner in the working session on 2026-09-23 as commit f9d1e68, which stores the three hooks as mode 100755.
+Pending: an agent reruns the fast suite on alpha01 from a clean commit to show the canary test passes; then this item closes.
+
+## OQ-016 Commit f9d1e68 Holds The P0.20 Acceptance Record
+State: OPEN
+Kind: review
+Blocks: none
+Evidence: `git show --stat f9d1e68` (pushed to origin/p0-core; CI text-policy run 35950138033 passed on it). Besides the three hook mode changes, it holds the whole staged P0.20 acceptance change: results/p0-compile-hardening/ (both provenance files and summary.md), the bible Sandbox, Toolchain Pins, and Decision Log edits (master revision 83), plans/STATUS.md (P0.20 DONE), plans/PHASE-NOTES.md, and OQ-015. An audit found every fact in it correct.
+Question: The OQ-015 instructions an agent gave told the owner to commit while the agent's P0.20 change was still staged, so one commit carries both under the subject "P0: Mark the git hooks executable". AGENTS.md wants one commit per task with a message that describes the change, and forbids rewriting pushed history. How should this stand?
+Options: (a) leave it as is: the content is correct and audited, plans/STATUS.md points the P0.20 note at f9d1e68, and this item records the mismatch. (b) rewrite the branch history (only the owner may; it changes pushed commits).
+Recommendation: (a). Agents now empty their own index, or use `git commit -- <paths>`, before giving the owner any commit command.
 Answer:
