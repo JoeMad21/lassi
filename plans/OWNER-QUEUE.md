@@ -178,3 +178,13 @@ Options: (a) leave it as is: the content is correct and audited, plans/STATUS.md
 Recommendation: (a). Agents now empty their own index, or use `git commit -- <paths>`, before giving the owner any commit command.
 Answer: Let's go with option A.
 Applied: 2026-09-23. f9d1e68 stays as pushed; plans/STATUS.md's P0.20 note points to it, and agents empty their index before giving the owner a commit command.
+
+## OQ-017 Remove The Old CUDA Runfile Tree
+State: OPEN
+Kind: decision
+Blocks: none (usage is about 101G of the 120G cap)
+Evidence: results/p0-cuda-redist/summary.md; plans/spikes/p0-cuda-redist.md; bible Decision Log (P0.19 CUDA pin)
+Question: P0.19 replaced the runfile CUDA install with the redistributable archives. The installer moved the old tree aside rather than deleting it: /mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3.runfile-20260923-214325 (about 7.0G, including the runfile's cuda-installer.log). Nothing uses it; the pinned prefix cuda@12.6.3 is the new install, and it passed every check from the clean commit 7d8d3d5. Agents may not delete files there. Remove it?
+Options: (a) remove it: on alpha01, `rm -rf /mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3.runfile-20260923-214325`; this frees about 7G. (b) keep it as a fallback for now.
+Recommendation: (a); the new install is verified, and the runfile tree only takes space under the cap.
+Answer:
