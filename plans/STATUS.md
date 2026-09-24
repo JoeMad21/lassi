@@ -59,7 +59,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1.4 | DONE | Faithful generation: summarize_context, describe_source, generate | P1.3 | Faithful summarize_context, describe_source, generate with fence-quirk and prompt_spaces fixes; tests/core 1146 passed |
 | P1.5 | READY | Baseline stage and the faithful correction loop | P1.2,P1.4 |  |
 | P1.6 | READY | run_loop: execution gate, stale output, run flags, Ollama unload | P1.5 |  |
-| P1.7 | READY | Oracles: stdout_mask and passfail | P1.2 |  |
+| P1.7 | DONE | Oracles: stdout_mask and passfail | P1.2 | stdout_mask and passfail oracles, masks for all ten apps, runner oracle checks; the stage aligns run stdout once the baseline records the reference stdout (P1.5) |
 | P1.8 | DONE | Sim-T and Sim-L | P1.1 | lassi/scoring/similarity.py: faithful sim_t and sim_l equal upstream on 400 ordered pairs under the upstream guard; C-aware sim_t_c added |
 | P1.9 | READY | Replay backend and the upstream notebook replay harness | P1.6,P1.8 |  |
 | P1.10 | READY | lassi-repro recipes, project name, and the mock dry run | P1.6,P1.7 |  |

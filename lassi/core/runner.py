@@ -4,14 +4,15 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
 
 1. loads the recipe with the registry (every component registers when this
    module is imported, since it imports lassi.llm, lassi.toolchains,
-   lassi.executors, and lassi.core.stages);
+   lassi.executors, lassi.core.stages, and lassi.core.oracle_stage, which
+   imports lassi.oracles);
 2. refuses what it cannot run, before any directory is created or any model
    is asked: arms without a model (the model registry that maps arms to
    backends comes later) and arms beside a model; a recipe with no
    llm.sampling.max_tokens or no prompt set, since it never picks a value;
    a fix toggle turned off (faithful: true turns them all off) when no
    listed stage names that fix in `reproduces`, a report toggle turned off,
-   or a section this runner does not carry out (oracle, judges, and the like),
+   or a section this runner does not carry out (judges and the like),
    since it never ignores a choice; a stage list whose order cannot
    work (one generating stage at most, and every compiling stage after it);
    a template prompt set that lacks a template a stage renders or uses a
@@ -23,8 +24,11 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    language, and a Trial.context field a stage joins into its prompt that
    no earlier stage fills; trial ids that repeat; missing bench sources; an
    item with more than one source file under a fragment set, or more than
-   one target file with fixes.fence_tag off, since each reads one file. A
-   stage it does not implement already fails at load, unregistered;
+   one target file with fixes.fence_tag off, since each reads one file; and
+   an oracle section that no listed stage uses (none names Oracle in
+   `requires`) or that its Oracle refuses (factory(**config) raises
+   ValueError, as for an unset oracle.passfail). A stage it does not
+   implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id), each toolchain
    with its pinned compiler and a clean environment (below), and the
    executor as factory(**config);
@@ -121,6 +125,7 @@ from pathlib import Path
 from typing import Any
 
 from lassi.bench import Direction, Suite, load_suite, sources_dir
+from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
 from lassi.core.fragments import fragment_key, pack_language
 from lassi.core.interfaces import Executor, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
@@ -166,7 +171,7 @@ _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
 # put its trial directories among the text store or the Parquet tables.
 _RUN_TREE_NAMES = frozenset({"texts", PARQUET_DIR, RESOLVED_RECIPE, TOOLCHAINS_JSON, PROVENANCE_JSON, RUN_MD})
 # Recipe sections this runner does not carry out; a recipe that sets one is refused, never run without it.
-_NOT_CARRIED_OUT = ("oracle", "profiler", "adversary", "metrics", "refine", "score", "agents", "judges")
+_NOT_CARRIED_OUT = ("profiler", "adversary", "metrics", "refine", "score", "agents", "judges")
 # How long git may take to report the commit or the dirty flag, in seconds.
 _GIT_TIMEOUT_S = 60.0
 # How long a pinned compiler's --version may take, in seconds, and the name prefix of the fresh directory under
@@ -332,6 +337,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         raise RunError(f"the run directory {run_dir} already exists; choose another run id")
     bench = _bench(recipe, settings, options)
     _check_plan(recipe, registry, settings, bench)
+    _check_oracle(recipe, registry)
     backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id)
     if "needs_reference" in backend.capabilities and not hasattr(backend, "with_reference"):
         raise RunError(f"LLMBackend {settings.backend!r} needs the reference target but has no with_reference()")
@@ -796,6 +802,31 @@ def _check_one_file(
             f"{where} has {len(targets)} {direction.target!r} files; with fixes.fence_tag off the first fenced "
             "block of a reply is the one target file"
         )
+
+
+def _check_oracle(recipe: Recipe, registry: Registry) -> None:
+    """Refuse an oracle section that no listed stage uses, or one its Oracle cannot be built from.
+
+    A listed stage uses an Oracle when its registry entry names Oracle in
+    `requires` (the load already refuses such a stage when no oracle is
+    bound). Each bound Oracle is built once as factory(**config) and
+    dropped, so a choice its section leaves unset, such as oracle.passfail,
+    fails here, before any directory is created, and not when the first
+    trial builds its stages.
+    """
+    bindings = [binding for binding in recipe.bindings if binding.interface == "Oracle"]
+    if not bindings:
+        return
+    if not any("Oracle" in registry.get("Stage", name).requires for name in recipe.data["stages"]):
+        raise RunError(
+            f"{recipe.path}: sets oracle, but no listed stage uses an Oracle; "
+            "list the oracle stage or remove the section"
+        )
+    for binding in bindings:
+        try:
+            registry.get("Oracle", binding.name).factory(**binding.config)
+        except ValueError as error:
+            raise RunError(f"{recipe.path}: {binding.where}: {error}") from error
 
 
 # ---------------------------------------------------------------------------
