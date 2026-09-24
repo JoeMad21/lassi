@@ -1,0 +1,14 @@
+# The P1 dry run: P1.G runs `uv run lassi run tests/fixtures/recipes/p1-dry-run.yaml` on the build host, after
+# tools/fetch_upstream.py, tools/extract_lassi_assets.py, and tools/fetch_bench.py. It is lassi-repro with the
+# mock LLM, which answers every request with the item's reference target: a compile-stage run with the mock,
+# never compared with the paper.
+extends: lassi-repro  # projects/lassi-repro/recipe.yaml; its project key starts every trial id with lassi-repro/
+model: {backend: mock, id: mock-reference}  # the mock; under faithful extraction it answers in one untagged fence
+llm:
+  sampling:
+    max_tokens: 4096  # lassi-repro leaves max_tokens open and the runner never picks it; the mock ignores it
+bench:  # the suite and split come from lassi-repro
+  items: [atomicCost, bsearch, colorwheel, dense-embedding, entropy, jacobi, layout, matrix-rotate, pathfinder, randomAccess]  # all ten apps
+directions: [{source: omp, target: cuda}, {source: cuda, target: omp}]  # both directions: 20 trials
+executor: {kind: none}  # compile only: nothing runs, so no GPU is needed
+trials: {n: 1}  # one trial per app and direction

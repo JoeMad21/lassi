@@ -27,18 +27,21 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    against its manifest), two packs that serve one language, a fragment a
    stage needs for a direction, a context pack a stage needs for a target
    language, and a Trial.context field a stage joins into its prompt that
-   no earlier stage fills; trial ids that repeat; missing bench sources; an
+   no earlier stage fills; a project (the recipe's `project`, the first
+   trial id segment) that is not one plain segment or that names an entry
+   of the run tree; trial ids that repeat; missing bench sources; an
    item with more than one source file under a fragment set, or more than
    one target file with fixes.fence_tag off, since each reads one file; and
    an oracle section that no listed stage uses (none names Oracle in
    `requires`) or that its Oracle refuses (factory(**config) raises
    ValueError, as for an unset oracle.passfail); a backend that declares
-   `unload_before_run` but has no unload(); and, when the executor runs
-   programs, a sandbox.wall_s that is neither a number of seconds above 0
-   nor `baseline_x10`, or a sandbox.mem_gb that is not above 0 (the limits
-   of every run, lassi.core.stages attempt_limits and reference_limits), and
-   an executor without `sandboxed` when a listed stage declares
-   `runs_model_code` (Agent Rule 6).
+   `unload_before_run` but has no unload(), or `needs_reference` but has no
+   with_reference() (or, with fixes.fence_tag off, no with_untagged_fence());
+   and, when the executor runs programs, a sandbox.wall_s that is neither a
+   number of seconds above 0 nor `baseline_x10`, or a sandbox.mem_gb that
+   is not above 0 (the limits of every run, lassi.core.stages
+   attempt_limits and reference_limits), and an executor without
+   `sandboxed` when a listed stage declares `runs_model_code` (Agent Rule 6).
    A stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id), each toolchain
    with its pinned compiler and a clean environment (below), and the
@@ -49,12 +52,14 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    sorted order (the items bench.items selects, else every item of the
    recipe's split; an unknown item, one outside the split, or a repeat is a
    RunError before anything is written), then run 1 to trials.n: a backend
-   that declares `unload_before_run` is asked to unload (upstream's setup
-   unload, lassi.core.capabilities), then the stages run in recipe order on
-   a fresh RunContext (which carries the prompt set's fragments and the
-   context packs by language), then the trial's final block. A stage that
-   sets final.end_reason ends the trial: no later stage runs, and the final
-   block keeps the end reason;
+   that declares `needs_reference` gets the item's reference target, with
+   with_untagged_fence() when fixes.fence_tag is off (the mock's faithful
+   reply form), a backend that declares `unload_before_run` is asked to
+   unload (upstream's setup unload, lassi.core.capabilities), then the
+   stages run in recipe order on a fresh RunContext (which carries the
+   prompt set's fragments and the context packs by language), then the
+   trial's final block. A stage that sets final.end_reason ends the trial:
+   no later stage runs, and the final block keeps the end reason;
 6. writes the run tree and prints one line per trial and the run directory.
 
 The run tree is <runs root>/runs/<run_id>, where the runs root is the
@@ -355,10 +360,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     _check_plan(recipe, registry, settings, bench)
     _check_oracle(recipe, registry)
     backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id)
-    if "needs_reference" in backend.capabilities and not hasattr(backend, "with_reference"):
-        raise RunError(f"LLMBackend {settings.backend!r} needs the reference target but has no with_reference()")
-    if declares(backend, UNLOAD_BEFORE_RUN) and not callable(getattr(backend, "unload", None)):
-        raise RunError(f"LLMBackend {settings.backend!r} declares {UNLOAD_BEFORE_RUN!r} but has no unload()")
+    _check_backend(recipe, settings, backend)
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
     pins = _trial_pins(toolchains)
     target_pins = {
@@ -392,6 +394,26 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         commit=commit,
         dirty=dirty,
     )
+
+
+def _check_backend(recipe: Recipe, settings: _Settings, backend: Any) -> None:
+    """Refuse a backend that lacks a method the run will call on it.
+
+    A backend that declares `needs_reference` gets each item's reference
+    target through with_reference(), and, with fixes.fence_tag off, is asked
+    for its faithful reply form, one untagged fence, through
+    with_untagged_fence(). One that declares `unload_before_run` needs unload().
+    """
+    if "needs_reference" in backend.capabilities:
+        if not hasattr(backend, "with_reference"):
+            raise RunError(f"LLMBackend {settings.backend!r} needs the reference target but has no with_reference()")
+        if not recipe.data["fixes"]["fence_tag"] and not hasattr(backend, "with_untagged_fence"):
+            raise RunError(
+                f"LLMBackend {settings.backend!r} needs the reference target, but fixes.fence_tag is off and it has "
+                "no with_untagged_fence() to answer in the one untagged fence that faithful extraction reads"
+            )
+    if declares(backend, UNLOAD_BEFORE_RUN) and not callable(getattr(backend, "unload", None)):
+        raise RunError(f"LLMBackend {settings.backend!r} declares {UNLOAD_BEFORE_RUN!r} but has no unload()")
 
 
 # ---------------------------------------------------------------------------
@@ -698,9 +720,20 @@ def _check_sandboxed(recipe: Recipe, registry: Registry, executor: str, capabili
 
 
 def _check_plan(recipe: Recipe, registry: Registry, settings: _Settings, bench: _Bench) -> None:
-    """Refuse, before anything is built, a plan whose stages, prompts, trial ids, or sources cannot work."""
-    if recipe.name in _RUN_TREE_NAMES:
-        raise RunError(f"{recipe.path}: a recipe may not be named {recipe.name!r}, which the run tree uses itself")
+    """Refuse, before anything is built, a plan whose project, stages, prompts, trial ids, or sources cannot work.
+
+    The project (the recipe's `project` key, else its name) is the first
+    trial id segment, so it must be one plain segment that names no entry of
+    the run tree.
+    """
+    project = recipe.data["project"]
+    if not _NAME.fullmatch(project):
+        raise RunError(
+            f"{recipe.path}: the project {project!r} is the first trial id segment, so it must match {_NAME.pattern}; "
+            "set the project key"
+        )
+    if project in _RUN_TREE_NAMES:
+        raise RunError(f"{recipe.path}: the project may not be {project!r}, which the run tree uses itself")
     _check_stages(recipe, registry, settings)
     _check_trials(recipe, settings, bench)
 
@@ -859,7 +892,7 @@ def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
         for item in bench.items:
             try:
                 arm = arm_segment(settings.model_id)
-                trial_id = make_trial_id(recipe.name, arm, bench.suite.name, direction.name, item, 1)
+                trial_id = make_trial_id(recipe.data["project"], arm, bench.suite.name, direction.name, item, 1)
             except ValueError as error:
                 raise RunError(f"{recipe.path}: {error}") from error
             key = trial_id.casefold()
@@ -1261,18 +1294,23 @@ def _run_trials(run: _Run, provenance: Provenance) -> list[Trial]:
 def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: str, number: int) -> Trial:
     """Run the recipe's stages on one new trial, each built on a fresh RunContext, and set its final block.
 
-    A backend that declares `unload_before_run` is asked to unload first, as
-    upstream's setup unloads the model before anything runs. A stage that
-    sets final.end_reason ends the trial: no later stage runs, and the final
-    block keeps the end reason.
+    The trial id's first segment is the recipe's project. A backend that
+    declares `needs_reference` gets the item's reference target, as one
+    untagged fence when fixes.fence_tag is off (faithful extraction reads
+    that form). A backend that declares `unload_before_run` is asked to
+    unload first, as upstream's setup unloads the model before anything
+    runs. A stage that sets final.end_reason ends the trial: no later stage
+    runs, and the final block keeps the end reason.
     """
     settings, suite = run.settings, run.bench.suite
     backend = run.backend
     if "needs_reference" in backend.capabilities:
         backend = backend.with_reference(suite.reference_target(item, direction, run.bench.root, purpose=PURPOSE))
+        if not run.recipe.data["fixes"]["fence_tag"]:
+            backend = backend.with_untagged_fence()
     trial = Trial(
         trial_id=make_trial_id(
-            run.recipe.name, arm_segment(settings.model_id), suite.name, direction.name, item, number
+            run.recipe.data["project"], arm_segment(settings.model_id), suite.name, direction.name, item, number
         ),
         recipe_hash=run.recipe.recipe_hash,
         toolchain_pins=run.target_pins[direction.target],

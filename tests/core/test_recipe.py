@@ -16,6 +16,10 @@ constructors record the call and raise, so a load that constructs anything
 fails. The golden resolved file and the pinned recipe_hash were computed from
 the expected merged data below with the canonical YAML rule; no value in this
 module is a measurement.
+
+Since P1.10 every resolved recipe holds `project` (the explicit key, else the
+loaded file's recipe name), so the expected mappings, the golden file, and
+CHILD_HASH carry it.
 """
 
 from __future__ import annotations
@@ -46,7 +50,7 @@ NEW_MODULES = ("lassi.core.recipe", "lassi.core.registry")
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 # sha256 of canonical(EXPECTED_CHILD); computed once from the data below, never from a loader run.
-CHILD_HASH = "c9923e7743128f3e21d11fc67e2ed146c9bab0a7adad5d52fb868e1b446d84bd"
+CHILD_HASH = "5f6b570b8c15eb771fe27dbd4f525f061cd7665e69318bee8512f44ae1f006c0"
 CHILD_CHAIN = ("fixture-base", "parent", "child")
 
 FENCE_TAG_DESCRIPTION = (
@@ -102,8 +106,8 @@ BIBLE_RUN_RECIPES = ("lassi-repro", "lassi-ee", "lassi-df")
 
 # Top-level keys of a run recipe (recipe.SCHEMA); train recipe keys are not among them.
 RUN_RECIPE_KEYS = frozenset(
-    "extends faithful fixes llm loop trials runs_root sandbox report bench directions prompts context toolchain"
-    " stages executor oracle profiler adversary model arms metrics refine score agents judges".split()
+    "extends project faithful fixes llm loop trials runs_root sandbox report bench directions prompts context"
+    " toolchain stages executor oracle profiler adversary model arms metrics refine score agents judges".split()
 )
 
 # Keys that must be present and non-null in every resolved recipe (recipe.REQUIRED).
@@ -133,7 +137,8 @@ PROJECT_NAMES = ("lassi-repro", "lassi-ee", "lassi-df", "hecbench", "qwen", "wiz
 
 E_ACUTE = "\N{LATIN SMALL LETTER E WITH ACUTE}"
 
-# The resolved mapping of child.yaml: fixture-base, then parent, then child, plus the materialized defaults.
+# The resolved mapping of child.yaml: fixture-base, then parent, then child, plus the materialized defaults
+# (since P1.10 the project defaults to the loaded file's recipe name, here child).
 EXPECTED_CHILD: dict[str, Any] = {
     "adversary": {"kind": "fuzzer", "budget": {"inputs": 64}},
     "agents": {"generator": {"model": "fixture-model"}, "fixer": {"model": "same_as_generator"}},
@@ -154,6 +159,7 @@ EXPECTED_CHILD: dict[str, Any] = {
     "model": {"backend": "mock_llm", "id": "fixture-model"},
     "oracle": {"kind": "stdout_mask", "passfail": False},
     "profiler": {"kind": "timer", "interval_ms": 10},
+    "project": "child",
     "prompts": "fixture-prompts",
     "report": {"trial_md": True, "parquet": True},
     "runs_root": "fixture-runs",
@@ -376,9 +382,11 @@ def canonical(data: Mapping[str, Any]) -> str:
     return yaml.safe_dump(data, sort_keys=True, default_flow_style=False, allow_unicode=False, width=4096)
 
 
-def with_defaults(data: Mapping[str, Any]) -> dict[str, Any]:
-    """Return a copy of a non-faithful resolved mapping with faithful and fixes materialized as the loader does."""
+def with_defaults(data: Mapping[str, Any], project: str) -> dict[str, Any]:
+    """Return a copy of a non-faithful resolved mapping with project, faithful, and fixes materialized as the
+    loader does; `project` is the loaded file's recipe name, used when `data` sets none."""
     out = copy.deepcopy(dict(data))
+    out.setdefault("project", project)
     out.setdefault("faithful", False)
     out.setdefault("fixes", all_fixes(True))
     return out
@@ -1606,7 +1614,7 @@ def test_valid_values_load(load: Callable[..., Any], tmp_path: Path, snippet: st
 
 def test_standalone_recipe_loads(load: Callable[..., Any], tmp_path: Path) -> None:
     recipe = load(write(tmp_path, "standalone.yaml", yaml.safe_dump(STANDALONE)))
-    assert recipe.data == with_defaults(STANDALONE)
+    assert recipe.data == with_defaults(STANDALONE, "standalone")
     assert recipe.chain == ("standalone",)
 
 
@@ -1811,7 +1819,9 @@ def test_hash_is_stable_across_loads_and_directories(load: Callable[..., Any], t
 
 
 def test_hash_covers_the_data_only(load: Callable[..., Any], tmp_path: Path) -> None:
-    same = load(write(tmp_path, "same.yaml", "extends: child\n"))
+    # The file name enters the hash only through the project, so a leaf that restates child's project hashes
+    # the same.
+    same = load(write(tmp_path, "same.yaml", "extends: child\nproject: child\n"))
     assert same.chain == (*CHILD_CHAIN, "same")
     assert same.recipe_hash == CHILD_HASH
     changed = load(over_child(tmp_path, "trials: {n: 3}", "changed.yaml"))
@@ -1958,7 +1968,7 @@ def test_repository_recipe_loads_through_the_default_roots(recipe_module: Module
     own = yaml.safe_load(fixture.read_text(encoding="utf-8"))
     assert own.pop("extends") == "base"
     expected = {**bible_block_data("projects/base.yaml"), **own}
-    assert recipe.data == with_defaults(expected)
+    assert recipe.data == with_defaults(expected, "project-base-user")
     assert recipe.chain == ("base", "project-base-user")
     assert recipe_module.load_recipe(fixture, roots=None, registry=fakes).recipe_hash == recipe.recipe_hash
     assert CONSTRUCTED == []

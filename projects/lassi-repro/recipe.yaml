@@ -1,0 +1,17 @@
+# LASSI reproduction (bible Project Recipes, lassi-repro block): upstream's pipeline on its ten apps, faithful.
+# Keys of the block that P1 cannot carry out are left out, each until its phase:
+# metrics: left out until P2, which scores the records (correct, within_10pct, first_try, sim_t, sim_l, self_corr)
+# arms: left out until P3, whose model registry maps arms to backends; until then a child recipe names the model
+# executor: the block's gpu executor on an A100 host comes in P10; the block's tier-1 executor runs here
+# max_tokens: llm.sampling.max_tokens stays unset until P3 names each arm's limit (upstream sets none)
+extends: base  # projects/base.yaml: sampling, trials, runs root, sandbox, and report choices
+project: lassi-repro  # the first trial id segment of this recipe and of every recipe that extends it
+faithful: true  # uncapped loop and every fix off: upstream's quirks, as upstream (Design Principle 4)
+bench: {suite: lassi-hecbench-10, split: eval}  # the ten apps of upstream's *_main files, every item an eval item
+directions: [{source: omp, target: cuda}, {source: cuda, target: omp}]  # both of upstream's directions
+prompts: lassi-2024  # upstream's prompts, generated from the pinned checkout (tools/extract_lassi_assets.py)
+context: [openmp-4.0-card, cuda-12.5-ch5]  # upstream's two context packs, generated the same way
+toolchain: {cuda: nvcc-sm80, omp: nvcpp-cc80}  # the pinned nvcc and nvc++ with upstream's compile flags
+stages: [baseline, summarize_context, describe_source, generate, compile_loop, run_loop, oracle]  # baseline first
+executor: {kind: none}  # tier 1, compile only: nothing runs until the gpu executor of P10
+oracle: {kind: stdout_mask, passfail: true}  # timing lines masked; apps that print PASS or FAIL must print PASS

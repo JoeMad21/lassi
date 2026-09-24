@@ -1,5 +1,5 @@
 # Resolved recipe child (chain: fixture-base -> parent -> child)
-# recipe_hash: c9923e7743128f3e21d11fc67e2ed146c9bab0a7adad5d52fb868e1b446d84bd is the sha256 of the YAML below these comment lines
+# recipe_hash: 5f6b570b8c15eb771fe27dbd4f525f061cd7665e69318bee8512f44ae1f006c0 is the sha256 of the YAML below these comment lines
 adversary:
   budget:
     inputs: 64
@@ -57,6 +57,7 @@ oracle:
 profiler:
   interval_ms: 10
   kind: timer
+project: child
 prompts: fixture-prompts
 report:
   parquet: true

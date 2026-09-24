@@ -62,7 +62,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1.7 | DONE | Oracles: stdout_mask and passfail | P1.2 | stdout_mask and passfail oracles, masks for all ten apps, runner oracle checks; the stage aligns run stdout once the baseline records the reference stdout (P1.5) |
 | P1.8 | DONE | Sim-T and Sim-L | P1.1 | lassi/scoring/similarity.py: faithful sim_t and sim_l equal upstream on 400 ordered pairs under the upstream guard; C-aware sim_t_c added |
 | P1.9 | DONE | Replay backend and the upstream notebook replay harness | P1.6,P1.8 | c825f2c replay backend; tests/replay runs the pinned notebook and the faithful stages on 16 scripted synthetic scenarios in both directions and compares every decision (46 tests); the remote run is P1.G |
-| P1.10 | ACTIVE | lassi-repro recipes, project name, and the mock dry run | P1.6,P1.7 |  |
+| P1.10 | DONE | lassi-repro recipes, project name, and the mock dry run | P1.6,P1.7 | project key, lassi-repro recipe, mock untagged-fence form, faithful multicore guard; local mock dry run of 20 trials at S4 on attempt 0; the remote dry run is P1.G |
 | P1.11 | DONE | Toolchain follow-ups deferred from P0 | - | toolchain follow-ups from the P0 freeze: backend place without a line, inline asm place, sample lines tied to the fixtures; one review, PASS |
 | P1.12 | OWNER | Apply OQ-018: upstream text in the repository | P1.3 | waits on OQ-018; the gate does not depend on it |
 | P1.G | READY | Phase gate: notebook replay and mock dry run 20/20 | P1.9,P1.10,P1.11 |  |
