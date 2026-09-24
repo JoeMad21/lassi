@@ -60,7 +60,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1.5 | READY | Baseline stage and the faithful correction loop | P1.2,P1.4 |  |
 | P1.6 | READY | run_loop: execution gate, stale output, run flags, Ollama unload | P1.5 |  |
 | P1.7 | READY | Oracles: stdout_mask and passfail | P1.2 |  |
-| P1.8 | READY | Sim-T and Sim-L | P1.1 |  |
+| P1.8 | DONE | Sim-T and Sim-L | P1.1 | lassi/scoring/similarity.py: faithful sim_t and sim_l equal upstream on 400 ordered pairs under the upstream guard; C-aware sim_t_c added |
 | P1.9 | READY | Replay backend and the upstream notebook replay harness | P1.6,P1.8 |  |
 | P1.10 | READY | lassi-repro recipes, project name, and the mock dry run | P1.6,P1.7 |  |
 | P1.11 | DONE | Toolchain follow-ups deferred from P0 | - | toolchain follow-ups from the P0 freeze: backend place without a line, inline asm place, sample lines tied to the fixtures; one review, PASS |
