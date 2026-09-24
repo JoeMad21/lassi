@@ -34,6 +34,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 
 ## P1 Faithful LASSI
 
+- Demo (owner, 2026-09-24 01:24 EDT): a curated demo at 15:00 EDT replicating the original LASSI experiment on this setup. Emphasize what is unique here, such as serving the model on the Furiosa RNGD cards, running generated OpenMP on the CPU in the sandbox (the -mp=multicore proxy of OQ-003), per-trial provenance, and faithful quirks with named fixes. Order P1 tasks so the replication path works first; every number in the demo comes from a logged clean-commit run, and anything else is labeled exploratory.
 - Rerun ids (from P0.11): a rerun from `recipe.resolved.yaml` gets a different project segment in its trial ids, because the project name comes from the recipe file name (Design Principle 5). Decide whether the resolved recipe carries its project name; that changes every recipe hash.
 - p0-smoke runs every eval item of lassi-hecbench-10; once the other nine apps land, pin the smoke recipe to one item (P0.G's gate expects one app).
 - Prefer `third_party/LASSI` as a git submodule pinned at 74b4681: upstream stays untouched and its text stays out of the policy scan. If it must be vendored, pattern hits inside it go to the owner queue; never edit upstream text.
@@ -46,12 +47,17 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - Correction prompts (from the P0.20 review): lassi/core/stages.py puts every parsed diagnostic into the correction prompt with no cap, and a compile may now return up to 64 MiB of stderr, so a generated source can make one prompt very large. Cap or summarize the diagnostics a prompt carries (faithful mode reproduces upstream, so record the choice as a named toggle if upstream sends them all).
 - Toolchain follow-ups deferred by the P0 scope freeze (from P0.17 and P0.19): comments in lassi/toolchains/nvcc.py, nvcpp.py, and _stderr.py still cite dirty-tree exploratory captures for the ptxas-place, nvlink, and linker sample lines; point them at the fixtures (rx 20260923-211958-desktop-8r113ei-p0-core-d221). The linker sample lines in tests/toolchains/test_diagnostics.py copy fixture lines without an assertion tying them to the fixtures; add one so a recapture cannot leave them stale. An NVC++ backend line with a file but no line keeps '(main.cpp)' in its message with file None, and the nvc++ LLVM assembler line keeps file '<inline asm>' and line 1, which breaks the rule that file and line index a built file.
 - CUDA components (from P0.19): the redistributable install holds cuda_nvcc, cuda_cudart, cuda_cccl, and the fourth archive listed in toolchains/cuda.pin. An app that links cuBLAS, cuRAND, cuFFT, cuSPARSE, NVRTC, or nvJitLink, or a build that needs pkg-config files or version.json, needs a pin change (new archives and layout keys) with a Decision Log entry. Tests that start a bare 'bash' through subprocess can reach the WSL launcher on Windows; use shutil.which('bash').
-- The bible's lassi-df recipe binds `model.backend: furiosa`, which is not registered. furiosa-llm speaks the OpenAI API, so decide between an alias of openai_compat and a separate backend before P3.
 
 ## P2 Scoring
 
 - Stage ladder reading (from P0.11): an attempt whose FILE blocks have any error, including one missing expected file, records S0 even when other files were extracted. S0 and S1 carry different rewards (bible Reward Function), so confirm this reading and record it in the bible. Compile diagnostics also carry model-facing hints written in lassi/core/stages.py; move instruction wording into the prompt set if a prompt review wants it there (Design Principle 3).
 - The gate is an owner review: prepare a packet (one full run, score components per trial) and add a review item; set the phase GATE-OWNER and move to P4.
+
+## P3 RNGD Serving
+
+- The bible's lassi-df recipe binds `model.backend: furiosa`, which is not registered. furiosa-llm speaks the OpenAI API, so decide between an alias of openai_compat and a separate backend before P3.
+- A faithful LASSI loop has no correction cap, so a real model that never compiles needs a stop budget, recorded as a cap hit (from P1 planning).
+- Responses recorded from a real model can later join the P1 replay fixtures as a regression (from P1 planning).
 
 ## P4 ttsim Execution
 

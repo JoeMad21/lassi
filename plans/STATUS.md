@@ -9,9 +9,9 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | Phase | Branch | State | Note |
 | --- | --- | --- | --- |
 | P0 Core | p0-core | DONE | base: main; gate passed 2026-09-23 (results/p0-gate); merged into main as c3cf248 (PR 1) |
-| P1 Faithful LASSI | p1-faithful | NOT-STARTED | owner 2026-09-23: start as soon as P0 finishes (after the P0 retrospective), no pause; P2 right after |
+| P1 Faithful LASSI | p1-faithful | ACTIVE | base: main at c3cf248 (P0 merged, PR 1); plan plans/p1-faithful.md; owner 2026-09-23: scope fixed at planning, P2 follows without pause; owner 2026-09-24: curated LASSI demo at 15:00 EDT |
 | P2 Scoring | p2-scoring | NOT-STARTED | gate needs owner review |
-| P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001: alpha01, gate rngd enabled 2026-09-23); the owner records here when the phase may start |
+| P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
 | P4 ttsim Execution | p4-ttsim | NOT-STARTED | - |
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
@@ -52,3 +52,17 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.18 | DONE | Carry run provenance in each Trial | P0.11 | Trial.provenance {commit, dirty, device, sdk, date} copied from provenance.json by the runner; trial.md, run.md, and the Parquet trials table show it; Result Record lines of OQ-008 mirrored here |
 | P0.19 | DONE | Install CUDA 12.6.3 from the redistributable archives | P0.7 | 7d8d3d5: redistributable CUDA 12.6.3 (4 archives); from the clean commit V12.6.85, 63 remote tests, fixture recapture 12 of 12 byte-stable identical, no root-fs writes (rx 20260923-220925-desktop-8r113ei-p0-core-6db9); bible at master revision 85; old tree to OQ-017 |
 | P0.20 | DONE | Harden compiles of generated sources | P0.16 | 1de7db6; its acceptance record landed in f9d1e68 under the hooks subject (OQ-016): 63 remote tests and a fixture recapture (12 of 12 byte-stable identical) from 1de7db6; bible at master revision 83 |
+| P1.0 | DONE | Plan phase P1 into plans/p1-faithful.md and add its tasks here | - | plan plans/p1-faithful.md; base main c3cf248 |
+| P1.1 | READY | Pin upstream LASSI and check the HeCBench pin against its sources | - |  |
+| P1.2 | READY | Ten-app bench manifest, support files, and item selection | P1.1 |  |
+| P1.3 | READY | lassi-2024 prompt set and context packs from pinned upstream | P1.1 |  |
+| P1.4 | READY | Faithful generation: summarize_context, describe_source, generate | P1.3 |  |
+| P1.5 | READY | Baseline stage and the faithful correction loop | P1.2,P1.4 |  |
+| P1.6 | READY | run_loop: execution gate, stale output, run flags, Ollama unload | P1.5 |  |
+| P1.7 | READY | Oracles: stdout_mask and passfail | P1.2 |  |
+| P1.8 | READY | Sim-T and Sim-L | P1.1 |  |
+| P1.9 | READY | Replay backend and the upstream notebook replay harness | P1.6,P1.8 |  |
+| P1.10 | READY | lassi-repro recipes, project name, and the mock dry run | P1.6,P1.7 |  |
+| P1.11 | READY | Toolchain follow-ups deferred from P0 | - |  |
+| P1.12 | OWNER | Apply OQ-018: upstream text in the repository | P1.3 | waits on OQ-018; the gate does not depend on it |
+| P1.G | READY | Phase gate: notebook replay and mock dry run 20/20 | P1.9,P1.10,P1.11 |  |
