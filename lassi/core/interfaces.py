@@ -83,7 +83,15 @@ class Limits:
 
 @dataclass(frozen=True)
 class RunResult:
-    """What an executor returns for one run of an artifact."""
+    """What an executor returns for one run of an artifact.
+
+    `stdout_truncated` and `stderr_truncated` are True when the executor
+    kept only part of that stream because it passed the output cap
+    (lassi.toolchains._base OUTPUT_CAP_BYTES). `workdir_incomplete` is True
+    when the executor returned only part of what the run wrote in its
+    workdir, because it passed a cap or limit (lassi.executors.sandbox), so
+    output_files may lack files the program wrote.
+    """
 
     exit_code: int | None
     hang: bool
@@ -91,6 +99,9 @@ class RunResult:
     stderr: str
     output_files: Mapping[str, Path] = field(default_factory=dict)
     wall_s: float = 0.0
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
+    workdir_incomplete: bool = False
 
 
 @dataclass(frozen=True)

@@ -10,6 +10,7 @@ under lassi/ imports the projects package (Agent Rule 3, Design Principle 9).
 from __future__ import annotations
 
 import ast
+import dataclasses
 import importlib
 import inspect
 import typing
@@ -186,3 +187,16 @@ def test_lassi_does_not_import_projects() -> None:
         rel = path.relative_to(REPO).as_posix()
         hits.extend(find_projects_imports(path.read_text(encoding="utf-8"), rel))
     assert not hits, "lassi/ imports projects at: " + ", ".join(hits)
+
+
+def test_run_result_carries_the_output_truncation_flags(interfaces: ModuleType) -> None:
+    # P0.16 R4 and R5: an executor reports whether the sandbox cut stdout or stderr at its cap, and whether it
+    # returned only part of the workdir. The flags default to False, so an executor that runs nothing builds its
+    # RunResult as before.
+    names = [f.name for f in dataclasses.fields(interfaces.RunResult)]
+    assert names == [
+        "exit_code", "hang", "stdout", "stderr", "output_files", "wall_s", "stdout_truncated", "stderr_truncated",
+        "workdir_incomplete",
+    ]
+    result = interfaces.RunResult(exit_code=0, hang=False, stdout="", stderr="")
+    assert (result.stdout_truncated, result.stderr_truncated, result.workdir_incomplete) == (False, False, False)

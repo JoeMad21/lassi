@@ -45,6 +45,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib
+import io
 import json
 import os
 import platform
@@ -291,12 +292,19 @@ class FinishedProcess:
     pid = 2**31 - 1
 
     def __init__(self, argv: list[str], returncode: int, output: tuple[bytes, bytes], text: bool) -> None:
-        """Keep the exit status and the output, as text when the caller asked for text."""
+        """Keep the exit status and the output, as text when the caller asked for text.
+
+        The output is offered both through communicate() and as readable
+        stdout and stderr streams, so a runner that drains the pipes itself
+        (the capped reader of P0.16) sees the same bytes.
+        """
         self.args = argv
         self.returncode = returncode
-        self.stdin = self.stdout = self.stderr = None
+        self.stdin = None
         decoded = tuple(data.decode("utf-8", errors="replace") for data in output)
         self._output: tuple[Any, Any] = decoded if text else output
+        streams = [io.StringIO(data) for data in decoded] if text else [io.BytesIO(data) for data in output]
+        self.stdout, self.stderr = streams
 
     def communicate(self, input: Any = None, timeout: float | None = None) -> tuple[Any, Any]:
         """Return the stdout and stderr the fake was given."""

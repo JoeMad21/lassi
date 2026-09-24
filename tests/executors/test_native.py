@@ -1,11 +1,15 @@
-"""Tests for the native executor, registered as Executor "native" (P0.10).
+"""Tests for the native executor, registered as Executor "native" (P0.10, hardened in P0.16).
 
 The native executor runs a CPU artifact (bible Execution Backends, executor
 native) and, like every executor, runs it only through the sandbox module
 (Agent Rule 6): the workdir is the artifact's directory, the argv is the
-artifact then its inputs, and the read-only roots default to $LASSI_SCRATCH
-and $HOME. It reports the files the run created as output files (bible
-Component Interfaces, Executor contract rules).
+artifact then its inputs, the hidden roots default to $LASSI_SCRATCH and
+$HOME and always include the runs root, and the toolchains root the sandbox
+re-exposes read-only defaults to $LASSI_TOOLCHAINS (P0.16 R3); every one of
+those paths is resolved first. It reports the files the run created as output
+files (bible Component Interfaces, Executor contract rules), and passes the
+sandbox's stdout and stderr truncation flags (P0.16 R4) and its
+workdir_incomplete flag (P0.16 R5) on in its RunResult.
 
 Every test uses a fake Sandbox, a Sandbox with a fake runner, or a trapped
 subprocess.Popen, so no sandbox and no generated code ever starts. The
@@ -54,9 +58,16 @@ def sandbox() -> ModuleType:
 
 @pytest.fixture(autouse=True)
 def runs_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Make tmp_path the runs root ($LASSI_RUNS_ROOT), where the artifacts of these tests live."""
-    monkeypatch.setenv("LASSI_RUNS_ROOT", str(tmp_path))
-    return tmp_path
+    """Make tmp_path/runs the runs root ($LASSI_RUNS_ROOT), where these tests' artifacts live; unset $LASSI_TOOLCHAINS.
+
+    The runs root sits beside, not above, the scratch and home roots these
+    tests set, so the hidden roots the sandbox gets stay distinct.
+    """
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    monkeypatch.setenv("LASSI_RUNS_ROOT", str(runs))
+    monkeypatch.delenv("LASSI_TOOLCHAINS", raising=False)
+    return runs
 
 
 @dataclass(frozen=True)
@@ -109,8 +120,8 @@ def canned(sandbox: ModuleType, **overrides: object) -> object:
 
 
 def make_artifact(tmp_path: Path) -> Path:
-    """Return a placeholder artifact file in a fresh build directory; it is never executed."""
-    workdir = tmp_path / "attempt00" / "build"
+    """Return a placeholder artifact file in a fresh build directory under the runs root; it is never executed."""
+    workdir = tmp_path / "runs" / "attempt00" / "build"
     workdir.mkdir(parents=True)
     artifact = workdir / "main"
     artifact.write_bytes(b"placeholder artifact, never executed\n")
@@ -172,7 +183,7 @@ def test_factory_works_with_no_arguments_and_no_environment(
 
 def test_signatures_match_the_contract(native: ModuleType) -> None:
     init = inspect.signature(native.NativeExecutor).parameters
-    assert list(init) == ["harness", "readonly_roots", "sandbox"]
+    assert list(init) == ["harness", "hidden_roots", "toolchains", "sandbox"]
     assert all(p.kind is inspect.Parameter.KEYWORD_ONLY and p.default is None for p in init.values())
     assert list(inspect.signature(native.NativeExecutor.run).parameters) == ["self", "artifact", "inputs", "limits"]
 
@@ -224,6 +235,8 @@ def test_run_hands_the_sandbox_the_workdir_argv_and_limits(
 ) -> None:
     scratch, home = tmp_path / "scratch", tmp_path / "home"
     set_roots(monkeypatch, scratch, home)
+    toolchains = tmp_path / "toolchains"
+    monkeypatch.setenv("LASSI_TOOLCHAINS", str(toolchains))
     artifact = make_artifact(tmp_path)
     fake = FakeSandbox(result=canned(sandbox))
     harness = tmp_path / "assets" / "harness"
@@ -234,7 +247,9 @@ def test_run_hands_the_sandbox_the_workdir_argv_and_limits(
     assert isinstance(call.spec, sandbox.SandboxSpec)
     assert call.spec.workdir == artifact.parent
     assert call.spec.harness == harness
-    assert call.spec.readonly_roots == (scratch, home)
+    assert call.spec.hidden_roots == (scratch, home, tmp_path / "runs")
+    assert call.spec.toolchains == toolchains
+    assert call.spec.disk_mb == sandbox.WORKDIR_DISK_MB
     assert call.argv == [str(artifact), *inputs]
     assert call.limits == LIMITS
 
@@ -246,20 +261,23 @@ def test_harness_defaults_to_none(
     fake = FakeSandbox(result=canned(sandbox))
     native.NativeExecutor(sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
     assert fake.calls[0].spec.harness is None
-    assert fake.calls[0].argv == [str(tmp_path / "attempt00" / "build" / "main")]
+    assert fake.calls[0].spec.toolchains is None
+    assert fake.calls[0].argv == [str(tmp_path / "runs" / "attempt00" / "build" / "main")]
 
 
 @pytest.mark.parametrize(
     ("scratch", "home", "expected"),
     [
-        ("scratch", "home", ("scratch", "home")),
-        ("scratch", None, ("scratch",)),
-        (None, "home", ("home",)),
-        ("same", "same", ("same",)),
+        ("scratch", "home", ("scratch", "home", "runs")),
+        ("scratch", None, ("scratch", "runs")),
+        (None, "home", ("home", "runs")),
+        ("same", "same", ("same", "runs")),
+        ("scratch", "scratch/home", ("scratch", "runs")),
+        ("runs/..", None, ("",)),
     ],
-    ids=["both", "scratch-only", "home-only", "deduplicated"],
+    ids=["both", "scratch-only", "home-only", "deduplicated", "home-under-scratch", "runs-root-under-scratch"],
 )
-def test_readonly_roots_default_to_scratch_then_home(
+def test_hidden_roots_default_to_scratch_then_home_then_the_runs_root(
     native: ModuleType,
     sandbox: ModuleType,
     tmp_path: Path,
@@ -271,20 +289,90 @@ def test_readonly_roots_default_to_scratch_then_home(
     set_roots(monkeypatch, None if scratch is None else tmp_path / scratch, None if home is None else tmp_path / home)
     fake = FakeSandbox(result=canned(sandbox))
     native.NativeExecutor(sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
-    assert fake.calls[0].spec.readonly_roots == tuple(tmp_path / name for name in expected)
+    # Each root is resolved, so "runs/.." is tmp_path itself, which holds the runs root; SandboxSpec keeps only
+    # the outermost roots.
+    assert fake.calls[0].spec.hidden_roots == tuple(tmp_path / name if name else tmp_path for name in expected)
 
 
-def test_explicit_readonly_roots_replace_the_environment(
+def test_explicit_hidden_roots_replace_the_environment(
     native: ModuleType, sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     set_roots(monkeypatch, tmp_path / "scratch", tmp_path / "home")
     roots = [str(tmp_path / "ro-a"), str(tmp_path / "ro-b")]
     fake = FakeSandbox(result=canned(sandbox))
-    native.NativeExecutor(readonly_roots=roots, sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
-    assert fake.calls[0].spec.readonly_roots == (tmp_path / "ro-a", tmp_path / "ro-b")
+    native.NativeExecutor(hidden_roots=roots, sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
+    assert fake.calls[0].spec.hidden_roots == (tmp_path / "ro-a", tmp_path / "ro-b", tmp_path / "runs")
 
 
-def test_no_readonly_root_means_sandbox_unavailable_and_nothing_runs(
+def test_the_runs_root_is_hidden_even_outside_every_configured_root(
+    native: ModuleType, sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # R3: other trials under the runs root are never readable, wherever the runs root lies (review finding).
+    set_roots(monkeypatch, tmp_path / "elsewhere" / "scratch", None)
+    fake = FakeSandbox(result=canned(sandbox))
+    native.NativeExecutor(sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
+    assert fake.calls[0].spec.hidden_roots == (tmp_path / "elsewhere" / "scratch", tmp_path / "runs")
+
+
+def test_symbolic_links_in_the_configured_paths_are_resolved_first(
+    native: ModuleType, sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A harness that is a link to the scratch root must be seen as the scratch root, which SandboxSpec refuses,
+    # instead of re-exposing the whole scratch root under another name (review finding).
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    set_roots(monkeypatch, scratch, None)
+    link = tmp_path / "harness-link"
+    try:
+        os.symlink(scratch, link, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"cannot create a directory symlink here: {exc}")
+    fake = FakeSandbox(result=canned(sandbox))
+    with pytest.raises(ValueError, match="hidden root"):
+        native.NativeExecutor(harness=str(link), sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
+    assert fake.calls == []
+
+
+def test_hidden_roots_given_as_one_string_are_refused(native: ModuleType) -> None:
+    with pytest.raises(ValueError):
+        native.NativeExecutor(hidden_roots="/scratch")
+
+
+@pytest.mark.parametrize("value", [None, ""], ids=["unset", "empty"])
+def test_no_toolchains_variable_means_no_toolchains_root(
+    native: ModuleType, sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str | None
+) -> None:
+    set_roots(monkeypatch, tmp_path / "scratch", None)
+    if value is not None:
+        monkeypatch.setenv("LASSI_TOOLCHAINS", value)
+    fake = FakeSandbox(result=canned(sandbox))
+    native.NativeExecutor(sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
+    assert fake.calls[0].spec.toolchains is None
+
+
+def test_explicit_toolchains_replace_the_environment(
+    native: ModuleType, sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    set_roots(monkeypatch, tmp_path / "scratch", None)
+    monkeypatch.setenv("LASSI_TOOLCHAINS", str(tmp_path / "from-env"))
+    fake = FakeSandbox(result=canned(sandbox))
+    executor = native.NativeExecutor(toolchains=str(tmp_path / "pinned"), sandbox=fake)
+    executor.run(make_artifact(tmp_path), [], LIMITS)
+    assert fake.calls[0].spec.toolchains == tmp_path / "pinned"
+
+
+def test_a_relative_toolchains_variable_means_sandbox_unavailable_and_nothing_runs(
+    native: ModuleType, sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    set_roots(monkeypatch, tmp_path / "scratch", tmp_path / "home")
+    monkeypatch.setenv("LASSI_TOOLCHAINS", "relative/toolchains")
+    fake = FakeSandbox(result=canned(sandbox))
+    with pytest.raises(sandbox.SandboxUnavailableError, match="absolute"):
+        native.NativeExecutor(sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
+    assert fake.calls == []
+
+
+def test_no_hidden_root_means_sandbox_unavailable_and_nothing_runs(
     native: ModuleType, sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     set_roots(monkeypatch, None, None)
@@ -337,11 +425,10 @@ def test_an_artifact_outside_the_runs_root_is_refused_before_anything_runs(
     native: ModuleType, sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     set_roots(monkeypatch, tmp_path / "scratch", tmp_path / "home")
-    (tmp_path / "runs").mkdir()
-    monkeypatch.setenv("LASSI_RUNS_ROOT", str(tmp_path / "runs"))
+    outside = make_artifact(tmp_path / "elsewhere")
     fake = FakeSandbox(result=canned(sandbox))
     with pytest.raises(ValueError, match="runs root"):
-        native.NativeExecutor(sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
+        native.NativeExecutor(sandbox=fake).run(outside, [], LIMITS)
     with pytest.raises(ValueError, match="runs root"):
         native.NativeExecutor(sandbox=fake).run(tmp_path / "runs" / "main", [], LIMITS)
     assert fake.calls == []
@@ -367,7 +454,6 @@ def test_a_workdir_linked_out_of_the_runs_root_is_refused(
 ) -> None:
     set_roots(monkeypatch, tmp_path / "scratch", tmp_path / "home")
     runs, outside = tmp_path / "runs", tmp_path / "outside"
-    runs.mkdir()
     outside.mkdir()
     (outside / "main").write_bytes(b"placeholder artifact, never executed\n")
     try:
@@ -397,7 +483,7 @@ def test_default_sandbox_runs_through_the_sandbox_command_only(
     artifact = make_artifact(tmp_path)
     with pytest.raises(sandbox.SandboxUnavailableError):
         native.NativeExecutor().run(artifact, ["x"], LIMITS)
-    expected_spec = sandbox.SandboxSpec(workdir=artifact.parent, readonly_roots=(scratch,))
+    expected_spec = sandbox.SandboxSpec(workdir=artifact.parent, hidden_roots=(scratch, tmp_path / "runs"))
     assert seen == [sandbox.sandbox_command(expected_spec, [str(artifact), "x"], LIMITS)]
 
 
@@ -485,3 +571,32 @@ def test_run_result_fields_map_from_the_sandbox_result(
     assert result == RunResult(
         exit_code=returncode, hang=hang, stdout="out\n", stderr="err\n", output_files={}, wall_s=1.25
     )
+
+
+@pytest.mark.parametrize(
+    ("stdout_truncated", "stderr_truncated"), [(False, False), (True, False), (False, True), (True, True)]
+)
+def test_r4_truncation_flags_reach_the_run_result(
+    native: ModuleType,
+    sandbox: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stdout_truncated: bool,
+    stderr_truncated: bool,
+) -> None:
+    set_roots(monkeypatch, tmp_path / "scratch", tmp_path / "home")
+    outcome = canned(sandbox, stdout="o", stderr="e", stdout_truncated=stdout_truncated)
+    outcome = dataclasses.replace(outcome, stderr_truncated=stderr_truncated)
+    result = native.NativeExecutor(sandbox=FakeSandbox(result=outcome)).run(make_artifact(tmp_path), [], LIMITS)
+    assert (result.stdout_truncated, result.stderr_truncated) == (stdout_truncated, stderr_truncated)
+    assert (result.stdout, result.stderr) == ("o", "e")
+
+
+@pytest.mark.parametrize("incomplete", [False, True])
+def test_r5_the_workdir_incomplete_flag_reaches_the_run_result(
+    native: ModuleType, sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, incomplete: bool
+) -> None:
+    set_roots(monkeypatch, tmp_path / "scratch", tmp_path / "home")
+    outcome = canned(sandbox, workdir_incomplete=incomplete)
+    result = native.NativeExecutor(sandbox=FakeSandbox(result=outcome)).run(make_artifact(tmp_path), [], LIMITS)
+    assert result.workdir_incomplete is incomplete

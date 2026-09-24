@@ -25,13 +25,22 @@ and `timeout_s` (default 600.0).
 
 Tests inject a fake CommandRunner, so no compiler runs in them. The runner
 contract (CommandResult, CommandRunner, subprocess_runner, EnvRunner) and
-STDERR_ATTACHMENT are defined in lassi.toolchains._base and exported here.
+STDERR_ATTACHMENT are defined in lassi.toolchains._base and exported here,
+with capped_runner, the sandbox's default runner, which caps stdout and
+stderr (the compilers' runners keep all of their output).
 """
 
 from __future__ import annotations
 
 from lassi.toolchains import nvcc, nvcpp
-from lassi.toolchains._base import STDERR_ATTACHMENT, CommandResult, CommandRunner, EnvRunner, subprocess_runner
+from lassi.toolchains._base import (
+    STDERR_ATTACHMENT,
+    CommandResult,
+    CommandRunner,
+    EnvRunner,
+    capped_runner,
+    subprocess_runner,
+)
 from lassi.toolchains.nvcc import NvccSm80, NvccToolchain
 from lassi.toolchains.nvcpp import NvcppCc80, NvcppToolchain
 
@@ -44,6 +53,7 @@ __all__ = [
     "NvccToolchain",
     "NvcppCc80",
     "NvcppToolchain",
+    "capped_runner",
     "nvcc",
     "nvcpp",
     "subprocess_runner",

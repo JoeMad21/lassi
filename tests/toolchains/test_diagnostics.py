@@ -1622,7 +1622,9 @@ def test_a_file_set_the_workdir_cannot_hold_is_a_bad_path_error(
 
 def test_command_result_is_a_frozen_record() -> None:
     result = CommandResult(returncode=0, stdout="o", stderr="e")
-    assert [f.name for f in dataclasses.fields(CommandResult)] == ["returncode", "stdout", "stderr"]
+    # P0.16 R4 added the two truncation flags, which default to False (tests/toolchains/test_runner_caps.py).
+    fields = ["returncode", "stdout", "stderr", "stdout_truncated", "stderr_truncated"]
+    assert [f.name for f in dataclasses.fields(CommandResult)] == fields
     with pytest.raises(dataclasses.FrozenInstanceError):
         result.returncode = 1  # type: ignore[misc]
 
