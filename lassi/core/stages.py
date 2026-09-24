@@ -113,7 +113,8 @@ never on the recipe's `faithful` flag:
   first line adds a parse-stage warning Diagnostic with code `fence-quirk`.
   compile_loop builds such an S0 attempt's empty file, as upstream compiles
   the empty file it writes. With the fix on, the model answers with FILE
-  blocks, which lassi.core.files parses, and an S0 attempt is not built.
+  blocks, which lassi.core.files parses, and an attempt with a FILE-block
+  error (S0, or S1 missing an expected file) is not built.
 - `parsed_diagnostics` off: a correction prompt's error text is the whole
   raw stderr attachment of the build (BuildResult.stderr_ref), read as a
   file opened in text mode reads it (CRLF and CR become LF), uncapped, as
@@ -135,10 +136,14 @@ Stage reached (Result Record, Attempt.stage_reached) is the bible's stage
 ladder (Training Module, Reward Function), the one scale every record, metric,
 and reward reads (Design Principle 2):
 
-- S0, no extractable output: the reply held no FILE block, or its FILE
-  blocks had an error (a bad path, a repeated or unclosed block, or a
-  missing expected file), so it did not yield the expected files.
-- S1, parses: the FILE blocks gave the files with no FILE-block error.
+- S0, no extractable output: the FILE blocks gave no file (the reply held
+  no FILE block, or each was dropped), or they had an error other than a
+  missing expected file (a bad path, or a repeated or unclosed block).
+- S1, parses: the FILE blocks gave at least one file, and every FILE-block
+  error is `missing-file`, an expected file with no block. That error is
+  the build error of the Harness Contract: compile_loop feeds it back to
+  the model in the correction prompt without building the incomplete
+  files, so the attempt stays S1.
 - S2, verifies, and S3, lowers: the MLIR verifier and the lowering passes.
   Source-level translation has neither step, so these stages never record
   S2 or S3.
@@ -177,6 +182,7 @@ from lassi.core.record import (
     RunInfo,
     TextRef,
     Trial,
+    standing_attempt,
     unified_diff,
 )
 from lassi.core.registry import register
@@ -192,6 +198,9 @@ NO_OUTPUT = "S0"
 PARSED = "S1"
 COMPILED = "S4"
 RAN_CLEAN = "S5"
+# The FILE-block error code (lassi.core.files parse_file_blocks) of an expected file with no block: the one block
+# error an S1 attempt may hold (see the module docstring).
+MISSING_FILE = "missing-file"
 
 # The end codes these stages set in final.end_reason (lassi.core.record END_REASONS).
 BASELINE_COMPILE = "baseline-compile"
@@ -503,10 +512,16 @@ def _storable(reply: str, before: str = "the FILE blocks were read") -> tuple[st
 
 
 def _parsed_attempt(index: int, prompt_ref: TextRef, reply: str, expected: Sequence[str]) -> Attempt:
-    """Return the attempt for one model reply: its FILE blocks parsed, S1 when usable and S0 otherwise."""
+    """Return the attempt for one model reply: its FILE blocks parsed, S1 when usable and S0 otherwise.
+
+    The reply is usable when its blocks gave at least one file and every
+    block error is MISSING_FILE. The diagnostics are parse_file_blocks'
+    own, after any `invalid-text` warning.
+    """
     text, warnings = _storable(reply)
     parsed = parse_file_blocks(text, expected)
-    usable = bool(parsed.files) and not _has_error(parsed.diagnostics)
+    errors = [diagnostic for diagnostic in parsed.diagnostics if diagnostic.severity == "error"]
+    usable = bool(parsed.files) and all(error.code == MISSING_FILE for error in errors)
     return Attempt(
         index=index,
         prompt_ref=prompt_ref,
@@ -719,7 +734,7 @@ class GenerateStage:
         self.context = context
 
     def __call__(self, trial: Trial) -> Trial:
-        """Return `trial` with attempt 0 appended: S1 when the reply yields the target files, else S0.
+        """Return `trial` with attempt 0 appended: S1 when the reply yields usable files, else S0.
 
         The prompt comes from _prompt; with the prompt_spaces fix off, each
         run of spaces in it is cut to one. It is kept in the text store and
@@ -913,7 +928,8 @@ class CompileLoopStage:
 
         Under the fence_tag quirk an S0 attempt holds the empty target file
         upstream writes and compiles. An attempt that is S4 or holds a
-        compile error was built already.
+        compile error was built already, or, as an S1 attempt with a
+        MISSING_FILE error, is not built with its files incomplete.
         """
         if _has_error(attempt.diagnostics):
             return False
@@ -1179,9 +1195,10 @@ def _run_flag_warnings(run: RunResult) -> list[Diagnostic]:
 def _past_gate(trial: Trial) -> Trial:
     """Return `trial` ended at a compiling attempt past the execution gate, as upstream's loop ends there.
 
-    When an earlier attempt ran, the last attempt gains a `stale-output`
-    warning naming the last attempt that ran, whose stdout stands as the
-    trial's output. When none ran, the trial ends with `upstream-crash`.
+    The last attempt compiled but was not run, so the attempt whose output
+    stands (lassi.core.record standing_attempt) is an earlier one. When one
+    ran, the last attempt gains a `stale-output` warning naming it. When
+    none ran, the trial ends with `upstream-crash`.
     """
     last = trial.attempts[-1]
     head = (
@@ -1189,11 +1206,11 @@ def _past_gate(trial: Trial) -> Trial:
         f"compiling attempt runs only while its correction count is at most {EXECUTION_GATE_CORRECTIONS}), so it "
         "was not run"
     )
-    ran = [attempt.index for attempt in trial.attempts[:-1] if attempt.run.stdout_ref is not None]
-    if not ran:
+    standing = standing_attempt(trial)
+    if standing is None:
         message = f"{head}; no earlier attempt ran, so upstream's notebook has no run output to read and raises there"
         return _ended(trial, UPSTREAM_CRASH, message)
-    message = f"{head}; the stdout of attempt {ran[-1]}, the last attempt that ran, stands as the trial's output"
+    message = f"{head}; the stdout of attempt {standing.index}, the last attempt that ran, stands as the trial's output"
     warning = Diagnostic(stage="run", severity="warning", code=STALE_OUTPUT, message=message)
     stale = dataclasses.replace(last, diagnostics=[*last.diagnostics, warning])
     return dataclasses.replace(trial, attempts=[*trial.attempts[:-1], stale])

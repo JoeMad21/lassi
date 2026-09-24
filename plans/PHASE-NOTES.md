@@ -69,14 +69,14 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 
 ## P2 Scoring
 
-- Stage ladder reading (from P0.11): an attempt whose FILE blocks have any error, including one missing expected file, records S0 even when other files were extracted. S0 and S1 carry different rewards (bible Reward Function), so confirm this reading and record it in the bible (P2.3; the Harness Contract calls a missing file a build error).
+- Stage ladder reading (from P0.11): settled by P2.3. An attempt whose only FILE-block errors are missing-file is S1 (bible Reward Function); a reply that gives only files the target does not list is S1 too, a case for the P2.G review questions.
 - The gate is an owner review: prepare a packet (one full run, score components per trial) and add a review item; set the phase GATE-OWNER and move to P4.
 - Device in native runs (from P2.5): a run tree's provenance.json records device as null when the executor is native, although the programs ran on the host CPU (Agent Rule 1 asks every number to name its device). The runner should name the host CPU for the native executor; until then, summaries name the device by hand.
 - Prompts under a fragment set (from the P1.4 review): settled by P2.1. Trial.requests records every model call with its system messages, and a context reply's invalid-text warning sits on its request.
 - stdout_mask (from P1.7): the rule ignores exit code and hang, so a candidate that crashes after printing the reference's stdout scores 1.0; a fix that also requires exit 0 is a candidate. randomAccess lists passfail [cuda] only, so a CUDA to OpenMP translation is scored by stdout_mask alone. Before any stdout_mask result for jacobi is reported, check whether its CUDA reference prints the "Error after iteration" line identically across runs (a float atomicAdd reduction); if not, correct translations can score 0.0.
 - C-aware Sim-T (from P1.8): its design choices (the C lexer rules, autojunk off, 1.0 for two texts with no C tokens) are documented only in lassi/scoring/similarity.py. Record them in the bible's Decision Log when metrics wire the measure in.
 - Reference run flags (from the P1.6 review): settled by P2.2. RunInfo records the three flags, and the oracle stage never aligns against a truncated reference stdout.
-- Final alignment (from P1.7; not done in P1.10): the runner rebuilds Final at the end of each trial, so final.alignment stays unset; derive it (for example from the attempt whose stdout stands as the trial's output) with a runner edit.
+- Final alignment (from P1.7): settled by P2.3. lassi.core.record.standing_attempt names the output that stands, and the runner sets final.alignment from it; a trial that ends at correction-cap keeps it null.
 - projects/base.yaml's sandbox.wall_s comment names the 30 s floor and the no-reference case (done in 21131f7; P2.2 guards it with a test).
 - Plan plans/p2-scoring.md maps every item above to a task. Three items moved at P2 planning: the compile-diagnostic hint wording and the Attempt artifact field to P3, generated asset trees to P5.
 

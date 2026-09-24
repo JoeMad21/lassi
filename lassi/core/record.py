@@ -493,8 +493,10 @@ class EndReason:
 class Final:
     """The outcome of the whole trial; None means not reached or not measured.
 
-    `end_reason` is None when the trial ended normally, and otherwise says
-    why it ended early (EndReason).
+    `alignment` is the alignment mean of the attempt whose output stands
+    (standing_attempt), None when no attempt ran or that one was not
+    aligned. `end_reason` is None when the trial ended normally, and
+    otherwise says why it ended early (EndReason).
     """
 
     stage_reached: str | None = None
@@ -581,6 +583,22 @@ class Trial:
         if request.index != len(requests):
             raise ValueError(f"Trial.with_request: request.index must be {len(requests)}, got {request.index!r}")
         return dataclasses.replace(self, requests=[*requests, request])
+
+
+# ---------------------------------------------------------------------------
+# Readings
+
+
+def standing_attempt(trial: Trial) -> Attempt | None:
+    """Return the attempt whose output stands as the trial's output, or None when no attempt ran.
+
+    It is the last attempt that ran: the last one whose Attempt.run holds
+    stdout (run.stdout_ref is set), whether or not later attempts exist that
+    did not run, so stale output past the execution gate stands (bible
+    Oracles). Final.alignment is its alignment mean.
+    """
+    ran = [attempt for attempt in trial.attempts if attempt.run.stdout_ref is not None]
+    return ran[-1] if ran else None
 
 
 # ---------------------------------------------------------------------------

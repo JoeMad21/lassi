@@ -69,7 +69,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2.0 | DONE | Plan phase P2 into plans/p2-scoring.md and add its tasks here | - | plan plans/p2-scoring.md; base p1-faithful 5d5fd0c |
 | P2.1 | DONE | Record every model request | - | Trial.requests records every model call (messages by hash, reply, stage, attempt); trial.md Requests section; Parquet requests table; full suite 3114 passed |
 | P2.2 | DONE | Record the reference run's flags | - | RunInfo records stdout_truncated, stderr_truncated, workdir_incomplete; the oracle never aligns against a truncated reference stdout; full suite 3156 passed. The Sandbox section needed no edit (it already names the flags and the 30 s floor) |
-| P2.3 | READY | Readings the scores rest on: stage ladder and final alignment | - |  |
+| P2.3 | DONE | Readings the scores rest on: stage ladder and final alignment | - | S1 for a reply whose only FILE-block errors are missing-file; standing_attempt names the output that stands and sets final.alignment; tests/core, replay, oracles 1516 passed |
 | P2.4 | DONE | Spike: the paper's LASSI metric definitions | - | plans/spikes/p2-lassi-metrics.md, recounted independently: paper metric definitions and denominators; 5 of 8 published percentages do not follow from Tables VI and VII; OQ-021, OQ-022 queued |
 | P2.5 | DONE | Spike: stability of the reference output under the proxy | - | rx job 20260924-133017-p2-proxy-3a3a from 207e4dd: every item's masked reference stdout stable over 3 runs; dense-embedding not scorable under the proxy; results/p2-proxy-stability |
 | P2.6 | READY | df-v0 score profile | P2.3 |  |

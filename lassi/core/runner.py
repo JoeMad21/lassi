@@ -58,7 +58,8 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    unload (upstream's setup unload, lassi.core.capabilities), then the
    stages run in recipe order on a fresh RunContext (which carries the
    prompt set's fragments and the context packs by language), then the
-   trial's final block. A stage that sets final.end_reason ends the trial:
+   trial's final block, whose alignment is that of the attempt whose output
+   stands (_final). A stage that sets final.end_reason ends the trial:
    no later stage runs, and the final block keeps the end reason;
 6. writes the run tree and prints one line per trial and the run directory.
 
@@ -159,6 +160,7 @@ from lassi.core.record import (
     arm_segment,
     json_text,
     make_trial_id,
+    standing_attempt,
 )
 from lassi.core.registry import DEFAULT_REGISTRY, Registry
 from lassi.core.stages import BASELINE_X10, PURPOSE, RUNS_CODE, SANDBOXED, RunContext
@@ -1345,11 +1347,27 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
         trial = stage(trial)
         if trial.final.end_reason is not None:
             break
-    wall_s = time.monotonic() - started
+    return dataclasses.replace(trial, final=_final(trial, time.monotonic() - started))
+
+
+def _final(trial: Trial, wall_s: float) -> Final:
+    """Return the final block of a trial whose stages have run, taking `wall_s` as its wall time.
+
+    It holds the last attempt's stage, the correction count, the alignment
+    mean of the attempt whose output stands (standing_attempt; None when no
+    attempt ran), and the end reason a stage set. A stage that sets the end
+    reason ends the trial, so the oracle stage never aligns a trial that
+    ended at the correction cap, and its alignment stays None.
+    """
     last = trial.attempts[-1].stage_reached if trial.attempts else None
-    corrections = max(len(trial.attempts) - 1, 0)
-    final = Final(stage_reached=last, corrections=corrections, wall_s=wall_s, end_reason=trial.final.end_reason)
-    return dataclasses.replace(trial, final=final)
+    named = standing_attempt(trial)
+    return Final(
+        stage_reached=last,
+        alignment=None if named is None else named.alignment.mean,
+        corrections=max(len(trial.attempts) - 1, 0),
+        wall_s=wall_s,
+        end_reason=trial.final.end_reason,
+    )
 
 
 # ---------------------------------------------------------------------------
