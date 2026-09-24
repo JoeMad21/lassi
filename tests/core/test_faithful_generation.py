@@ -45,6 +45,13 @@ The contract these tests fix, from the P1.4 acceptance criteria:
   from the prompt set's generate.txt and FILE blocks parsed from the reply,
   with no `fence-quirk` Diagnostic.
 
+Since P1.5, `faithful: true` also turns off baseline_both, prompt_newlines,
+and parsed_diagnostics, which the baseline and compile_loop stages
+reproduce, so the faithful recipes here list them too, with a fake toolchain
+for the target language that compiles nothing and reports a PLACEHOLDER
+artifact. Each attempt 0 therefore ends at S4, and the model is asked no
+more than before.
+
 The expected prompts are computed here from the fragments and packs loaded
 out of a fresh extraction of the pinned upstream checkout into a temporary
 directory (tools/extract_lassi_assets.py); tests that need it skip, naming
@@ -77,7 +84,7 @@ import lassi.prompts as prompts_module
 import lassi.prompts.assets as prompt_assets
 from lassi.bench import Direction, load_suite
 from lassi.core.files import render_file_blocks
-from lassi.core.interfaces import Completion, Message, Sampling
+from lassi.core.interfaces import BuildResult, Completion, Message, Sampling
 from lassi.core.parquet import read_run_parquet
 from lassi.core.recipe import FIXES, load_recipe
 from lassi.core.record import Trial, make_trial_id
@@ -102,15 +109,19 @@ ITEM = "layout"
 MODEL_ID = "scripted-fixture"
 PROMPT_SET = "lassi-2024"
 P0_PROMPT_SET = "p0-smoke"
-FAITHFUL_STAGES = ("summarize_context", "describe_source", "generate")
+FAITHFUL_STAGES = ("baseline", "summarize_context", "describe_source", "generate", "compile_loop")
+# The fake toolchain bound for each target language, registered under the preset's name (compiles nothing).
+TOOLCHAIN_OF = {"cuda": "nvcc-sm80", "omp": "nvcpp-cc80"}
 # The pack upstream's experimental setup selects for each target language (its context knowledge entry).
 PACK_OF = {"omp": "openmp-4.0-card", "cuda": "cuda-12.5-ch5"}
 # Upstream's dictionary entry name for each direction: `<SOURCE>_to_<TARGET>` in upstream's language spelling.
 DIRECTION_KEY = {("omp", "cuda"): "OMP_to_CUDA", ("cuda", "omp"): "CUDA_to_OMP"}
 DIRECTIONS = [Direction("omp", "cuda"), Direction("cuda", "omp")]
 DIRECTION_IDS = ["omp-cuda", "cuda-omp"]
-# The stage ladder rung of an attempt whose target file was extracted (bible Training Module, Reward Function).
+# The stage ladder rungs of an attempt whose target file was extracted, and of one that was built (bible Training
+# Module, Reward Function).
 PARSED = "S1"
+COMPILED = "S4"
 FENCE_QUIRK = "fence-quirk"
 # The fixes this task's stages reproduce: P0's fence tag quirk and the generation prompt's space collapse.
 REPRODUCED_FIXES = ("fence_tag", "prompt_spaces")
@@ -285,6 +296,16 @@ class NoopStage:
         return "noop: returns the trial unchanged"
 
 
+class FakeToolchain:
+    """A toolchain that writes nothing, compiles nothing, and reports a PLACEHOLDER artifact for every build."""
+
+    capabilities = frozenset({"diagnostics"})
+
+    def build(self, files: Any, workdir: Path, harness: Any = None) -> BuildResult:
+        """Return a build with a PLACEHOLDER artifact path and no diagnostics; nothing is written or run."""
+        return BuildResult(artifact=Path(workdir) / "PLACEHOLDER-artifact", diagnostics=[])
+
+
 def registered_stage(name: str) -> type:
     """Return the Stage class registered as `name` in DEFAULT_REGISTRY; fail clearly while it is missing."""
     try:
@@ -294,10 +315,12 @@ def registered_stage(name: str) -> type:
 
 
 def make_registry(script: Script, stages: Sequence[str]) -> Registry:
-    """Return a test Registry: the scripted backend, the none executor, NoopStage, and the named real stages."""
+    """Return a test Registry: the scripted backend, the none executor, fake toolchains, NoopStage, and real stages."""
     registry = Registry()
     registry.register("LLMBackend", "scripted", scripted_backend(script))
     registry.register("Executor", "none", NoneExecutor)
+    for name in TOOLCHAIN_OF.values():
+        registry.register("Toolchain", name, FakeToolchain)
     registry.register("Stage", "noop", NoopStage)
     for name in stages:
         if name != "noop":
@@ -316,6 +339,7 @@ def recipe_data(direction: Direction, **changes: Any) -> dict[str, Any]:
         "directions": [{"source": direction.source, "target": direction.target}],
         "prompts": PROMPT_SET,
         "context": list(PACK_OF.values()),
+        "toolchain": {direction.target: TOOLCHAIN_OF[direction.target]},
         "stages": list(FAITHFUL_STAGES),
         "executor": {"kind": "none"},
         "trials": {"n": 1},
@@ -536,7 +560,8 @@ def test_faithful_extraction_takes_the_first_fence_after_upstream_tag_stripping(
     attempt = outcome.trial.attempts[0]
     assert attempt.response_text == reply
     assert attempt.files == {target_file(direction): text}
-    assert attempt.stage_reached == PARSED
+    assert attempt.stage_reached == COMPILED, "extracted (S1), then built by compile_loop with the fake toolchain"
+    assert not [d for d in attempt.diagnostics if d.code == "no-fence"], "a fence was found, so no S0 was built"
     hits = fence_quirks(outcome.trial)
     if quirk:
         assert len(hits) == 1, f"one fence-quirk Diagnostic, got {hits}"
@@ -578,7 +603,7 @@ def test_each_reproduced_quirk_is_a_named_fix_off_under_faithful(tmp_path: Path)
 @pytest.mark.parametrize(
     ("changes", "match"),
     [
-        ({"faithful": True}, r"fixes\.fence_tag is off \(faithful: true\)"),
+        ({"faithful": True}, r"fixes\.baseline_both is off \(faithful: true\)"),
         ({"faithful": False, "fixes": {"prompt_spaces": False}}, r"fixes\.prompt_spaces is off \(faithful: false\)"),
     ],
     ids=["faithful", "prompt-spaces-off"],

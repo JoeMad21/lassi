@@ -47,6 +47,18 @@ PROVENANCE_COLUMNS = (
     "provenance_sdk",
     "provenance_date",
 )
+# The target reference's baseline run (Trial.reference_run) and the end reason (Final.end_reason), task P1.5.
+REFERENCE_RUN_COLUMNS = (
+    "reference_run_exit_code",
+    "reference_run_hang",
+    "reference_run_sim_ub",
+    "reference_run_wall_s",
+    "reference_run_stdout_ref_sha256",
+    "reference_run_stdout_ref_path",
+    "reference_run_outputs_ref_sha256",
+    "reference_run_outputs_ref_path",
+)
+END_REASON_COLUMNS = ("final_end_reason_code", "final_end_reason_message")
 TRIAL_COLUMNS = (
     "project",
     "arm",
@@ -67,6 +79,7 @@ TRIAL_COLUMNS = (
     "model_sampling_temperature",
     "model_sampling_top_p",
     "model_sampling_max_tokens",
+    *REFERENCE_RUN_COLUMNS,
     "context_knowledge_summary",
     "context_source_description",
     "final_stage_reached",
@@ -74,6 +87,7 @@ TRIAL_COLUMNS = (
     "final_score",
     "final_corrections",
     "final_wall_s",
+    *END_REASON_COLUMNS,
     "attempt_count",
 )
 ATTEMPT_COLUMNS = (
@@ -131,6 +145,7 @@ INT64_COLUMNS = frozenset(
     {
         "run",
         "model_sampling_max_tokens",
+        "reference_run_exit_code",
         "final_corrections",
         "attempt_count",
         "index",
@@ -146,6 +161,7 @@ DOUBLE_COLUMNS = frozenset(
     {
         "model_sampling_temperature",
         "model_sampling_top_p",
+        "reference_run_wall_s",
         "final_alignment",
         "final_score",
         "final_wall_s",
@@ -160,6 +176,8 @@ DOUBLE_COLUMNS = frozenset(
 BOOL_COLUMNS = frozenset(
     {
         "provenance_dirty",
+        "reference_run_hang",
+        "reference_run_sim_ub",
         "run_hang",
         "run_sim_ub",
         "guards_host_compute",
@@ -345,6 +363,21 @@ def filled_attempts() -> list[record.Attempt]:
     return [first, second]
 
 
+def filled_reference_run() -> record.RunInfo:
+    """Return a reference run that sets every field, each to a value unlike its sibling columns."""
+    return record.RunInfo(
+        exit_code=7,
+        hang=False,
+        sim_ub=True,
+        wall_s=4.5,
+        stdout_ref=text_ref("reference stdout b\n"),
+        outputs_ref=text_ref("reference outputs b\n"),
+    )
+
+
+FILLED_END_REASON = record.EndReason(code="correction-cap", message="synthetic: the cap stopped the loop")
+
+
 def trial_b_omp_filled() -> record.Trial:
     """Return a trial in which every nullable field is set, so each column must hold its own field."""
     sampling = interfaces.Sampling(temperature=0.7, top_p=0.9, max_tokens=512)
@@ -356,8 +389,11 @@ def trial_b_omp_filled() -> record.Trial:
             commit=FILLED_COMMIT, dirty=True, device="fixture-device", sdk="fixture-sdk", date=FILLED_DATE
         ),
         model=record.ModelInfo(backend="mock", id="mock-filled", sampling=sampling),
+        reference_run=filled_reference_run(),
         context=record.Context(knowledge_summary="knowledge b\n", source_description="source b\n"),
-        final=record.Final(stage_reached="S4", alignment=0.25, score=0.5, corrections=1, wall_s=3.5),
+        final=record.Final(
+            stage_reached="S4", alignment=0.25, score=0.5, corrections=1, wall_s=3.5, end_reason=FILLED_END_REASON
+        ),
     )
 
 
@@ -443,6 +479,7 @@ def expected_trial_row_a_omp_entropy() -> dict[str, Any]:
         "model_sampling_temperature": 0.2,
         "model_sampling_top_p": 0.95,
         "model_sampling_max_tokens": 4096,
+        **dict.fromkeys(REFERENCE_RUN_COLUMNS),
         "context_knowledge_summary": "summary\n",
         "context_source_description": "",
         "final_stage_reached": "S5",
@@ -450,6 +487,7 @@ def expected_trial_row_a_omp_entropy() -> dict[str, Any]:
         "final_score": None,
         "final_corrections": 1,
         "final_wall_s": None,
+        **dict.fromkeys(END_REASON_COLUMNS),
         "attempt_count": 2,
     }
 
@@ -567,6 +605,14 @@ def expected_trial_row_b_omp_filled() -> dict[str, Any]:
         "model_sampling_temperature": 0.7,
         "model_sampling_top_p": 0.9,
         "model_sampling_max_tokens": 512,
+        "reference_run_exit_code": 7,
+        "reference_run_hang": False,
+        "reference_run_sim_ub": True,
+        "reference_run_wall_s": 4.5,
+        "reference_run_stdout_ref_sha256": text_ref("reference stdout b\n").sha256,
+        "reference_run_stdout_ref_path": text_ref("reference stdout b\n").path,
+        "reference_run_outputs_ref_sha256": text_ref("reference outputs b\n").sha256,
+        "reference_run_outputs_ref_path": text_ref("reference outputs b\n").path,
         "context_knowledge_summary": "knowledge b\n",
         "context_source_description": "source b\n",
         "final_stage_reached": "S4",
@@ -574,6 +620,8 @@ def expected_trial_row_b_omp_filled() -> dict[str, Any]:
         "final_score": 0.5,
         "final_corrections": 1,
         "final_wall_s": 3.5,
+        "final_end_reason_code": "correction-cap",
+        "final_end_reason_message": "synthetic: the cap stopped the loop",
         "attempt_count": 2,
     }
 
@@ -884,6 +932,7 @@ def test_int_values_in_float_columns_round_trip_as_floats(tmp_path: Path) -> Non
         model=record.ModelInfo(
             backend="mock", id="m", sampling=interfaces.Sampling(temperature=0, top_p=1, max_tokens=16)
         ),
+        reference_run=record.RunInfo(exit_code=0, wall_s=3),
         final=record.Final(stage_reached="S5", alignment=1, score=1, wall_s=2),
     )
     rows = parquet.trial_rows([trial])

@@ -14,6 +14,7 @@
 | Score | PLACEHOLDER |
 | Corrections | 1 |
 | Wall time (s) | PLACEHOLDER |
+| End reason | none |
 
 ## Provenance
 
@@ -38,6 +39,17 @@
 | cuda | fixture-cuda |
 | nvhpc | fixture-nvhpc |
 | rocm | not used |
+
+## Reference run
+
+| Field | Value |
+| --- | --- |
+| exit_code | PLACEHOLDER |
+| hang | PLACEHOLDER |
+| sim_ub | PLACEHOLDER |
+| wall_s | PLACEHOLDER |
+| stdout_ref | PLACEHOLDER |
+| outputs_ref | PLACEHOLDER |
 
 ## Context
 

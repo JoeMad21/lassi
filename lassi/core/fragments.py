@@ -5,7 +5,7 @@ generated lassi-2024 set) holds checked text fragments rather than
 templates. The stages join them in a fixed order; joiners that are only
 whitespace live here, never in the fragments. The keys below are the
 contract between such a set and the stages: a set that provides them works
-with summarize_context, describe_source, and generate. A key template holds
+with summarize_context, describe_source, generate, and compile_loop. A key template holds
 `{SOURCE}` and `{TARGET}` (the direction's languages, upper case) or
 `{target}` (the target language as written in the recipe); fragment_key
 fills them.
@@ -26,6 +26,9 @@ upstream's quirks (lassi.core.recipe.FIXES) are read by the stages:
   reads FILE blocks instead (lassi.core.files).
 - as_text_mode gives a source as a file opened in text mode reads it
   (universal newlines), which is how upstream reads its sources.
+
+correction_prompt joins upstream's correction prompt for a compile error;
+compile_loop removes its line feeds when the `prompt_newlines` fix is off.
 """
 
 from __future__ import annotations
@@ -59,6 +62,14 @@ DESCRIPTION_LEAD = "generate.description_lead"
 NO_CONTEXT_LEAD = "generate.no_context_lead"
 REQUEST_LEAD = "generate.request_lead"
 
+# The correction prompt for a compile error: the lead before and after upstream's compiler and flag text for the
+# target language, then, after the error text, the outro.
+CORRECT_COMPILE_HEAD = "correct.compile_error_head"
+CORRECT_COMPILE_TAIL = "correct.compile_error_tail"
+CORRECT_OUTRO = "correct.outro"
+SETUP_COMPILER = "setup.{target}.compiler"
+SETUP_FLAGS = "setup.{target}.flags"
+
 # The fragment keys each stage needs, as key templates (fragment_key fills them per direction).
 SUMMARY_KEYS = (GENERAL_SYSTEM, SUMMARY_INTRO, SUMMARY_OUTRO)
 DESCRIPTION_KEYS = (GENERAL_SYSTEM, DESCRIPTION_INTRO)
@@ -74,6 +85,14 @@ GENERATE_KEYS = (
     DESCRIPTION_LEAD,
     NO_CONTEXT_LEAD,
     REQUEST_LEAD,
+)
+CORRECT_KEYS = (
+    DIRECTION_SYSTEM,
+    CORRECT_COMPILE_HEAD,
+    SETUP_COMPILER,
+    SETUP_FLAGS,
+    CORRECT_COMPILE_TAIL,
+    CORRECT_OUTRO,
 )
 
 # The Diagnostic codes of the one-fenced-block reply form.
@@ -150,6 +169,23 @@ def generation_prompt(
         )
     request = fragments[fragment_key(DIRECTION_REQUEST, direction)]
     return head + fragments[REQUEST_LEAD] + request + " " + source
+
+
+def correction_prompt(fragments: Mapping[str, str], direction: Direction, code: str, errors: str) -> str:
+    """Return the correction prompt for a compile error, before any line feed is removed.
+
+    The previous attempt's code, the compile-error head, upstream's compiler
+    text for the target language, one space, its flag text, the
+    compile-error tail, the error text, and the outro, joined in that order.
+    """
+    return (
+        code
+        + fragments[CORRECT_COMPILE_HEAD]
+        + fragments[fragment_key(SETUP_COMPILER, direction)] + " " + fragments[fragment_key(SETUP_FLAGS, direction)]
+        + fragments[CORRECT_COMPILE_TAIL]
+        + errors
+        + fragments[CORRECT_OUTRO]
+    )
 
 
 @dataclass(frozen=True)

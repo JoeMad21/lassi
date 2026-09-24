@@ -92,6 +92,27 @@ class FakeToolchain:
     capabilities = frozenset({"diagnostics"})
 
 
+class TemplateOnlyStage:
+    """A stage that renders a template and reads no fragment, so a fragment prompt set cannot serve it; never run."""
+
+    name = "template_only"
+    capabilities: frozenset[str] = frozenset()
+    requires: dict[str, frozenset[str]] = {}
+    prompt_fields = {"correct": ("target_language",)}
+
+    def __init__(self, *, context: Any) -> None:
+        """Keep the trial's run context."""
+        self.context = context
+
+    def __call__(self, trial: Any) -> Any:
+        """Return `trial` unchanged."""
+        return trial
+
+    def describe(self) -> str:
+        """Return a one-line description of the stage."""
+        return "template_only: renders correct.txt"
+
+
 def run(
     tmp_path: Path, bench_root: Path, replies: Sequence[str], **changes: Any
 ) -> tuple[Path, list[list[Message]]]:
@@ -113,9 +134,11 @@ def run(
             requests.append(list(messages))
             return Completion(text=replies[len(requests) - 1], prompt_tokens=0, completion_tokens=0)
 
+    # generate reproduces fence_tag and prompt_spaces; the other fixes stay on, since no baseline stage is listed.
     data: dict[str, Any] = {
         "extends": "base",
-        "faithful": True,
+        "faithful": False,
+        "fixes": {"fence_tag": False, "prompt_spaces": False},
         "model": {"backend": "scripted", "id": MODEL_ID},
         "llm": {"sampling": {"max_tokens": 64}},
         "bench": {"suite": SUITE, "split": "eval", "items": [ITEM]},
@@ -130,7 +153,8 @@ def run(
     registry.register("LLMBackend", "scripted", Scripted)
     registry.register("Executor", "none", NoneExecutor)
     registry.register("Toolchain", "fake-cc", FakeToolchain)
-    for name in {*data["stages"], "compile_loop"}:
+    registry.register("Stage", "template_only", TemplateOnlyStage)
+    for name in {*data["stages"], "compile_loop"} - {"template_only"}:
         registry.register("Stage", name, DEFAULT_REGISTRY.get("Stage", name).factory)
     path = tmp_path / "fragment-run.yaml"
     path.write_bytes(yaml.safe_dump(data).encode("ascii"))
@@ -260,9 +284,10 @@ def test_a_fragment_set_refuses_an_item_with_more_than_one_source_file(
     [
         ({"context": ["cuda-pack", "other-cuda-pack"]}, r"'cuda-pack' and 'other-cuda-pack' both serve 'cuda'"),
         ({"stages": ["summarize_context", "generate"], "context": ["omp-pack"]}, r"context pack for .*'cuda'"),
+        ({"stages": ["generate", "template_only"]}, r"'template_only' renders templates"),
         (
             {"stages": ["generate", "compile_loop"], "toolchain": {"cuda": "fake-cc"}},
-            r"'compile_loop' renders templates",
+            r"'compile_loop': the prompt set 'synthetic-fragments' has no fragment correct\.compile_error_head",
         ),
         ({"stages": ["summarize_context", "generate"], "prompts": "p0-smoke"}, r"is a template prompt set"),
         ({"directions": [{"source": "cuda", "target": "omp"}]}, r"no fragment .*CUDA_to_OMP"),
@@ -277,8 +302,9 @@ def test_a_fragment_set_refuses_an_item_with_more_than_one_source_file(
             r"'generate' joins the Trial\.context field\(s\) source_description into",
         ),
     ],
-    ids=["two-packs-one-language", "no-pack-for-target", "templates-in-fragment-set", "fragments-in-template-set",
-         "missing-fragment", "context-with-template-set", "pack-without-context-stages", "context-stage-too-late"],
+    ids=["two-packs-one-language", "no-pack-for-target", "templates-in-fragment-set",
+         "correction-fragments-missing", "fragments-in-template-set", "missing-fragment",
+         "context-with-template-set", "pack-without-context-stages", "context-stage-too-late"],
 )
 def test_the_runner_refuses_a_fragment_plan_that_cannot_work(
     tmp_path: Path, bench: Path, assets_root: Path, changes: dict[str, Any], match: str

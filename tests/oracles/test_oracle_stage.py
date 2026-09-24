@@ -29,8 +29,14 @@ What these tests expect:
   of P1.6: the attempt that ran is aligned, and later attempts that were
   never run stay None.
 
-Where the reference stdout comes from is not part of P1.7: the plan leaves
-it to the baseline (P1.5), so these tests pass it to `align_runs` directly.
+Where the reference stdout comes from (task P1.5): the baseline stage keeps
+the target reference's run in `Trial.reference_run` (a RunInfo whose
+stdout_ref names the reference stdout in the text store). Called as a
+stage, the oracle stage aligns every attempt whose run holds stdout against
+that stdout, exactly as `align_runs(trial, <reference stdout>)` does; a
+trial whose attempts ran but that records no reference stdout still raises
+rather than go unaligned. The other tests pass the reference stdout to
+`align_runs` directly.
 
 SYNTHETIC fixtures: every stdout, reply, and source here is written by hand
 in the print formats of the pinned HeCBench sources. The values are
@@ -196,6 +202,17 @@ def trial_of(context: RunContext, attempts: Sequence[Attempt]) -> Trial:
     )
 
 
+def with_reference_run(trial: Trial, store: TextStore, reference_stdout: str) -> Trial:
+    """Return `trial` with a SYNTHETIC reference run whose stdout is kept in `store`; the wall time is no measurement.
+
+    Fails the test clearly while Trial has no `reference_run` field (task P1.5 adds it).
+    """
+    if "reference_run" not in {spec.name for spec in dataclasses.fields(Trial)}:
+        pytest.fail("Trial has no reference_run field; task P1.5 adds the reference run to the Result Record")
+    reference = RunInfo(exit_code=0, hang=False, wall_s=1.0, stdout_ref=store.put(reference_stdout))
+    return dataclasses.replace(trial, reference_run=reference)
+
+
 def assert_only_alignment_changed(before: Trial, after: Trial) -> None:
     """Assert that `after` differs from `before` in attempt alignments at most."""
     assert dataclasses.replace(after, attempts=[]) == dataclasses.replace(before, attempts=[])
@@ -271,6 +288,32 @@ def test_the_stale_output_attempt_is_aligned_and_later_unrun_attempts_stay_none(
     assert result.attempts[0].alignment == Alignment(per_input=[0.0], mean=0.0)
     assert [attempt.alignment for attempt in result.attempts[1:]] == [Alignment()] * 9
     assert_only_alignment_changed(trial, result)
+
+
+@pytest.mark.parametrize(
+    ("candidate", "expected"),
+    [(LAYOUT_OTHER_TIMES, 1.0), (LAYOUT.replace("PASS", "FAIL"), 0.0)],
+    ids=["same-but-timing", "fail"],
+)
+def test_as_a_stage_it_aligns_runs_against_the_reference_run_the_baseline_recorded(
+    tmp_path: Path, candidate: str, expected: float
+) -> None:
+    stage, context = oracle_stage(tmp_path, "layout", OMP_TO_CUDA)
+    run = ran(context.store, candidate)
+    attempts = [compile_failed(0, OMP_TO_CUDA), compiled(1, OMP_TO_CUDA, run)]
+    trial = with_reference_run(trial_of(context, attempts), context.store, LAYOUT)
+    result = stage(trial)
+    assert result == stage.align_runs(trial, LAYOUT)
+    assert result.attempts[0].alignment == Alignment()
+    assert result.attempts[1].alignment == Alignment(per_input=[expected], mean=expected)
+    assert_only_alignment_changed(trial, result)
+
+
+def test_as_a_stage_it_refuses_run_stdout_when_no_reference_stdout_was_recorded(tmp_path: Path) -> None:
+    stage, context = oracle_stage(tmp_path, "layout", OMP_TO_CUDA)
+    trial = trial_of(context, [compiled(0, OMP_TO_CUDA, ran(context.store, LAYOUT))])
+    with pytest.raises(ValueError, match="reference"):
+        stage(trial)
 
 
 @pytest.mark.parametrize(

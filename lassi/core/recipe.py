@@ -43,6 +43,18 @@ FIXES: dict[str, str] = {
         "keep the generation prompt's runs of spaces;"
         " off keeps upstream's quirk that cuts every run of spaces to one before the first generation call"
     ),
+    "baseline_both": (
+        "build and run the source reference as well as the target reference before any model call;"
+        " off keeps upstream's baseline, which builds and runs only the target reference"
+    ),
+    "prompt_newlines": (
+        "keep the correction prompt's line feeds;"
+        " off keeps upstream's quirk that removes every line feed from a correction prompt before sending it"
+    ),
+    "parsed_diagnostics": (
+        "send the parsed compile diagnostics, capped in count and bytes, in a correction prompt;"
+        " off keeps upstream's behavior of sending the whole raw compiler stderr, read in text mode"
+    ),
 }
 
 

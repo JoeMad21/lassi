@@ -46,7 +46,7 @@ NEW_MODULES = ("lassi.core.recipe", "lassi.core.registry")
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 # sha256 of canonical(EXPECTED_CHILD); computed once from the data below, never from a loader run.
-CHILD_HASH = "3c361037e066f6cd94ec664259eab778c28745ed413761a67d7370c56cb57535"
+CHILD_HASH = "45e3bfb03bc30ff7b91ebbd087011c6339546b8355923c4e3c6faee7f295df2e"
 CHILD_CHAIN = ("fixture-base", "parent", "child")
 
 FENCE_TAG_DESCRIPTION = (
@@ -56,10 +56,24 @@ PROMPT_SPACES_DESCRIPTION = (
     "keep the generation prompt's runs of spaces;"
     " off keeps upstream's quirk that cuts every run of spaces to one before the first generation call"
 )
+BASELINE_BOTH_DESCRIPTION = (
+    "build and run the source reference as well as the target reference before any model call;"
+    " off keeps upstream's baseline, which builds and runs only the target reference"
+)
+PROMPT_NEWLINES_DESCRIPTION = (
+    "keep the correction prompt's line feeds;"
+    " off keeps upstream's quirk that removes every line feed from a correction prompt before sending it"
+)
+PARSED_DIAGNOSTICS_DESCRIPTION = (
+    "send the parsed compile diagnostics, capped in count and bytes, in a correction prompt;"
+    " off keeps upstream's behavior of sending the whole raw compiler stderr, read in text mode"
+)
 
-# Every named fix in lassi.core.recipe.FIXES: P0's fence tag fix and P1.4's prompt_spaces (on keeps the runs of spaces
-# in the generation prompt; off collapses each run to one space, as upstream does).
-FIX_NAMES = ("fence_tag", "prompt_spaces")
+# Every named fix in lassi.core.recipe.FIXES: P0's fence tag fix, P1.4's prompt_spaces (on keeps the runs of spaces
+# in the generation prompt; off collapses each run to one space, as upstream does), and P1.5's baseline_both (on
+# builds and runs the source reference too), prompt_newlines (on keeps a correction prompt's line feeds), and
+# parsed_diagnostics (on sends capped parsed diagnostics in place of the raw compiler stderr).
+FIX_NAMES = ("fence_tag", "prompt_spaces", "baseline_both", "prompt_newlines", "parsed_diagnostics")
 
 
 def all_fixes(on: bool) -> dict[str, bool]:
@@ -1667,7 +1681,13 @@ def test_entries_state_every_key_not_marked_optional(
 
 def test_fixes_table_and_uncapped(recipe_module: ModuleType) -> None:
     assert recipe_module.UNCAPPED == "uncapped"
-    assert recipe_module.FIXES == {"fence_tag": FENCE_TAG_DESCRIPTION, "prompt_spaces": PROMPT_SPACES_DESCRIPTION}
+    assert recipe_module.FIXES == {
+        "fence_tag": FENCE_TAG_DESCRIPTION,
+        "prompt_spaces": PROMPT_SPACES_DESCRIPTION,
+        "baseline_both": BASELINE_BOTH_DESCRIPTION,
+        "prompt_newlines": PROMPT_NEWLINES_DESCRIPTION,
+        "parsed_diagnostics": PARSED_DIAGNOSTICS_DESCRIPTION,
+    }
     assert tuple(recipe_module.FIXES) == FIX_NAMES
 
 

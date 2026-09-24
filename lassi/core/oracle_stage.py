@@ -15,8 +15,11 @@ stdout later stands as the trial's stale output. An attempt that never ran
 keeps its alignment unset, and nothing else in the trial changes.
 
 Called as a stage, it returns a trial with no run stdout unchanged (every
-compile-only trial). The trial record does not carry the reference run's
-stdout yet, so a trial holding run stdout raises rather than go unaligned.
+compile-only trial). Otherwise it aligns the runs against the stdout of the
+target reference's run, which the baseline stage keeps in
+Trial.reference_run (stdout_ref, read through the text store), exactly as
+align_runs does; a trial holding run stdout but no reference stdout raises
+rather than go unaligned.
 
 The oracle class is looked up in the default registry, since a RunContext
 carries no registry; the runner checks the binding against its own registry
@@ -69,14 +72,22 @@ class OracleStage:
         self.oracle = _item_oracle(context)
 
     def __call__(self, trial: Trial) -> Trial:
-        """Return `trial` unchanged when no attempt holds run stdout; raise when one does (no reference yet)."""
+        """Return `trial` with its runs aligned against Trial.reference_run's stdout; unchanged when none ran.
+
+        Raises ValueError when an attempt holds run stdout but the trial
+        records no reference stdout (list the baseline stage, with an executor
+        that runs programs, before this one).
+        """
         ran = [attempt.index for attempt in trial.attempts if attempt.run.stdout_ref is not None]
-        if ran:
+        if not ran:
+            return trial
+        reference = trial.reference_run.stdout_ref
+        if reference is None:
             raise ValueError(
                 f"{trial.trial_id}: attempts {ran} hold run stdout, but the trial records no reference stdout to "
-                "align them with; no stage records the reference run yet"
+                "align them with; list the baseline stage, which runs the target reference, before the oracle stage"
             )
-        return trial
+        return self.align_runs(trial, self.context.store.get(reference))
 
     def align_runs(self, trial: Trial, reference_stdout: str) -> Trial:
         """Return `trial` with every attempt that ran aligned against `reference_stdout`; nothing else changes."""

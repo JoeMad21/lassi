@@ -1,12 +1,14 @@
 """Render a Trial as trial.md, the page a person reads to follow the trial without tooling.
 
-The page shows the trial's provenance, each prompt, each attempt's code, the
-unified diff from the previous attempt, the parsed diagnostics, and the score
-breakdown (bible Readability Standards, Trial row). It is plain ASCII with LF
-newlines; any non-ASCII character is written as a Python backslash escape.
-Every value that was not measured (None) shows as PLACEHOLDER. Provenance
-values are not measurements, so an unknown one (None) shows as "-", as a
-diagnostic without a code or location does.
+The page shows the trial's provenance, the reference run, each prompt, each
+attempt's code, the unified diff from the previous attempt, the parsed
+diagnostics, and the score breakdown (bible Readability Standards, Trial
+row). It is plain ASCII with LF newlines; any non-ASCII character is written
+as a Python backslash escape. Every value that was not measured (None) shows
+as PLACEHOLDER. Provenance values are not measurements, so an unknown one
+(None) shows as "-", as a diagnostic without a code or location does. The
+end reason shows as `<code>: <message>`, or "none" for a trial that ended
+normally.
 
 The page is a list of blocks (headings, lines, tables, fenced code), each
 ending with one newline and separated by one blank line. Fenced text goes
@@ -24,7 +26,17 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from lassi.core.files import fence_for, language_for
-from lassi.core.record import TOOLCHAIN_PIN_NAMES, Attempt, Context, Diagnostic, Provenance, TextRef, Trial
+from lassi.core.record import (
+    TOOLCHAIN_PIN_NAMES,
+    Attempt,
+    Context,
+    Diagnostic,
+    EndReason,
+    Provenance,
+    RunInfo,
+    TextRef,
+    Trial,
+)
 
 if TYPE_CHECKING:
     from lassi.core.store import TextStore
@@ -77,6 +89,11 @@ def _table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
     return "".join("| " + " | ".join(_cell(cell) for cell in line) + " |\n" for line in lines)
 
 
+def fmt_end_reason(reason: EndReason | None) -> str:
+    """Format a trial's end reason as `<code>: <message>`, or "none" when the trial ended normally."""
+    return "none" if reason is None else f"{reason.code}: {reason.message}"
+
+
 def _field_rows(record: object) -> list[tuple[str, str]]:
     """Return one (field name, formatted value) row per field of a record, in field order."""
     return [(spec.name, fmt(getattr(record, spec.name))) for spec in dataclasses.fields(record)]
@@ -107,6 +124,7 @@ def _summary_blocks(trial: Trial) -> list[str]:
         ("Score", fmt(final.score)),
         ("Corrections", fmt(final.corrections)),
         ("Wall time (s)", fmt(final.wall_s)),
+        ("End reason", fmt_end_reason(final.end_reason)),
     ]
     return [f"# Trial {trial.trial_id}\n", _table(("Field", "Value"), rows)]
 
@@ -122,6 +140,11 @@ def _pins_blocks(trial: Trial) -> list[str]:
     pins = [getattr(trial.toolchain_pins, name) for name in TOOLCHAIN_PIN_NAMES]
     rows = [(name, "not used" if pin is None else pin) for name, pin in zip(TOOLCHAIN_PIN_NAMES, pins, strict=True)]
     return ["## Toolchain pins\n", _table(("Toolchain", "Pin"), rows)]
+
+
+def _reference_run_blocks(reference_run: RunInfo) -> list[str]:
+    """Return the table of the target reference's baseline run; a value not measured reads PLACEHOLDER."""
+    return ["## Reference run\n", _table(("Field", "Value"), _field_rows(reference_run))]
 
 
 def _context_blocks(context: Context) -> list[str]:
@@ -228,7 +251,7 @@ def render_trial_md(trial: Trial, store: TextStore) -> str:
     backslash escapes), uses LF newlines, and ends with exactly one newline.
     """
     blocks = _summary_blocks(trial) + _provenance_blocks(trial.provenance)
-    blocks += _pins_blocks(trial) + _context_blocks(trial.context)
+    blocks += _pins_blocks(trial) + _reference_run_blocks(trial.reference_run) + _context_blocks(trial.context)
     for attempt in trial.attempts:
         blocks += _attempt_blocks(attempt, store)
     page = "\n".join(blocks)

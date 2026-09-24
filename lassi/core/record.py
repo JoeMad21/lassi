@@ -35,6 +35,10 @@ STAGES = ("S0", "S1", "S2", "S3", "S4", "S5")
 DIAGNOSTIC_STAGES = ("parse", "verify", "lower", "compile", "jit", "run")
 SEVERITIES = ("error", "warning", "note")
 TOOLCHAIN_PIN_NAMES = ("llvm", "polygeist", "tt_mlir", "tt_metal", "ttsim", "furiosa_sdk", "cuda", "nvhpc", "rocm")
+# The fixed codes of Final.end_reason: why a trial ended early. baseline-compile and baseline-run end a trial
+# before any model call (a reference program did not build, or its run exited nonzero or hung); correction-cap
+# means an error remained when loop.max_corrections stopped the correction loop.
+END_REASONS = ("baseline-compile", "baseline-run", "correction-cap")
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -411,14 +415,33 @@ class Context:
 
 
 @dataclass(frozen=True, kw_only=True)
+class EndReason:
+    """Why a trial ended early: one of END_REASONS and a message that says what happened."""
+
+    code: str
+    message: str
+
+    def __post_init__(self) -> None:
+        """Check the field types, that the code is one of END_REASONS, and that the message is not empty."""
+        _check_fields(self)
+        _check_choice("EndReason", "code", self.code, END_REASONS)
+        _check_non_empty("EndReason", "message", self.message)
+
+
+@dataclass(frozen=True, kw_only=True)
 class Final:
-    """The outcome of the whole trial; None means not reached or not measured."""
+    """The outcome of the whole trial; None means not reached or not measured.
+
+    `end_reason` is None when the trial ended normally, and otherwise says
+    why it ended early (EndReason).
+    """
 
     stage_reached: str | None = None
     alignment: float | None = None
     score: float | None = None
     corrections: int = 0
     wall_s: float | None = None
+    end_reason: EndReason | None = None
 
     def __post_init__(self) -> None:
         """Check the field types, the stage, the correction count, and that the alignment lies in [0, 1]."""
@@ -435,6 +458,10 @@ class Trial:
 
     `provenance` is required: a Trial without it raises TypeError naming the
     field, and a trial.json without it fails from_dict with a ValueError.
+    `reference_run` is the target reference's run from the baseline stage
+    (exit status, hang flag, wall time, and stdout by reference); it stays
+    all None when the reference was not run, as under a compile-only
+    executor.
     """
 
     trial_id: str
@@ -443,6 +470,7 @@ class Trial:
     provenance: Provenance
     bench_item: BenchItem
     model: ModelInfo
+    reference_run: RunInfo = field(default_factory=RunInfo)
     context: Context = field(default_factory=Context)
     attempts: list[Attempt] = field(default_factory=list)
     final: Final = field(default_factory=Final)

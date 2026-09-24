@@ -14,7 +14,12 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    listed stage names that fix in `reproduces`, a report toggle turned off,
    or a section this runner does not carry out (judges and the like),
    since it never ignores a choice; a stage list whose order cannot
-   work (one generating stage at most, and every compiling stage after it);
+   work (one generating stage at most, every compiling stage after it, and
+   every stage that builds the reference programs, `builds_references`,
+   before any stage that asks the model);
+   a stage that builds the source reference under a fix that is on
+   (`source_build_fix`, as baseline declares for baseline_both) when no
+   toolchain is bound for a direction's source language;
    a template prompt set that lacks a template a stage renders or uses a
    placeholder the stage does not fill; context packs with a prompt set
    that is not a fragment set; a fragment prompt set or context packs that
@@ -40,7 +45,8 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    RunError before anything is written), then run 1 to trials.n: the
    stages in recipe order on a fresh RunContext (which carries the prompt
    set's fragments and the context packs by language), then the trial's
-   final block;
+   final block. A stage that sets final.end_reason ends the trial: no later
+   stage runs, and the final block keeps the end reason;
 6. writes the run tree and prints one line per trial and the run directory.
 
 The run tree is <runs root>/runs/<run_id>, where the runs root is the
@@ -650,13 +656,23 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     A fix turned off needs a listed stage that reproduces its quirk
     (_check_fixes). A trial gets one first attempt, so at most one stage
     declares `generates`, and a stage that declares `compiles` builds that
-    attempt, so it comes after it. The prompts are checked by _check_prompts.
+    attempt, so it comes after it. A stage that declares `builds_references`
+    runs before any model call, so no stage that asks the model
+    (_asks_model) comes before it. The prompts are checked by _check_prompts.
     """
     entries = [registry.get("Stage", name) for name in recipe.data["stages"]]
     _check_fixes(recipe, entries)
     generated = False
+    asked: str | None = None
     for index, entry in enumerate(entries):
         where = f"{recipe.path}: stages[{index}] {entry.name!r}"
+        if "builds_references" in entry.capabilities and asked is not None:
+            raise RunError(
+                f"{where} builds the reference programs before any model call, but {asked} asks the model; "
+                "list it before every stage that asks the model"
+            )
+        if _asks_model(entry) and asked is None:
+            asked = f"stages[{index}] {entry.name!r}"
         if "compiles" in entry.capabilities and not generated:
             raise RunError(f"{where} builds the attempt a generating stage appends; list such a stage before it")
         if "generates" in entry.capabilities:
@@ -671,7 +687,34 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
                     f"{recipe.path}: no toolchain is bound for the target language {direction.target!r}; "
                     f"set toolchain.{direction.target}"
                 )
+    _check_source_toolchains(recipe, entries, settings)
     _check_prompts(recipe, entries, settings)
+
+
+def _asks_model(entry: Any) -> bool:
+    """Return True for a stage that asks the model: it requires an LLMBackend, or it generates or corrects attempts."""
+    return "LLMBackend" in entry.requires or bool({"generates", "compiles"} & entry.capabilities)
+
+
+def _check_source_toolchains(recipe: Recipe, entries: Sequence[Any], settings: _Settings) -> None:
+    """Refuse a stage that builds the source reference too, under a fix that is on, when no toolchain builds it.
+
+    A stage class names that fix in `source_build_fix` (baseline names
+    baseline_both); with the fix on, every direction's source language needs
+    a bound toolchain.
+    """
+    bound = recipe.data.get("toolchain", {})
+    for entry in entries:
+        fix = getattr(entry.factory, "source_build_fix", None)
+        if fix is None or recipe.data["fixes"].get(fix, True) is False:
+            continue
+        for direction in settings.directions:
+            if direction.source not in bound:
+                raise RunError(
+                    f"{recipe.path}: stage {entry.name!r} builds the source reference too while fixes.{fix} is on, "
+                    f"but no toolchain is bound for the source language {direction.source!r}; "
+                    f"set toolchain.{direction.source}, or turn fixes.{fix} off"
+                )
 
 
 def _check_fixes(recipe: Recipe, entries: Sequence[Any]) -> None:
@@ -1150,16 +1193,21 @@ def _run_trials(run: _Run, provenance: Provenance) -> list[Trial]:
                 write_trial(trial, run.run_dir, run.store)
                 trials.append(trial)
                 final = trial.final
+                ended = "" if final.end_reason is None else f"  end {final.end_reason.code}"
                 print(
                     f"{trial.trial_id}  stage {fmt(final.stage_reached)}  corrections {final.corrections}  "
-                    f"wall_s {fmt(final.wall_s)}",
+                    f"wall_s {fmt(final.wall_s)}{ended}",
                     flush=True,
                 )
     return trials
 
 
 def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: str, number: int) -> Trial:
-    """Run the recipe's stages on one new trial, each built on a fresh RunContext, and set its final block."""
+    """Run the recipe's stages on one new trial, each built on a fresh RunContext, and set its final block.
+
+    A stage that sets final.end_reason ends the trial: no later stage runs,
+    and the final block keeps the end reason.
+    """
     settings, suite = run.settings, run.bench.suite
     backend = run.backend
     if "needs_reference" in backend.capabilities:
@@ -1193,9 +1241,12 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
     stages = [run.registry.get("Stage", name).factory(context=context) for name in run.recipe.data["stages"]]
     for stage in stages:
         trial = stage(trial)
+        if trial.final.end_reason is not None:
+            break
     wall_s = time.monotonic() - started
     last = trial.attempts[-1].stage_reached if trial.attempts else None
-    final = Final(stage_reached=last, corrections=max(len(trial.attempts) - 1, 0), wall_s=wall_s)
+    corrections = max(len(trial.attempts) - 1, 0)
+    final = Final(stage_reached=last, corrections=corrections, wall_s=wall_s, end_reason=trial.final.end_reason)
     return dataclasses.replace(trial, final=final)
 
 

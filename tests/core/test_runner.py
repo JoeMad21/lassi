@@ -1892,13 +1892,14 @@ def test_refuses_a_recipe_choice_the_stages_cannot_honor(
 def test_faithful_generate_then_compile_loop_reads_attempt_zero_from_the_first_fence(
     tmp_path: Path, bench: Path
 ) -> None:
-    # generate reproduces fence_tag and prompt_spaces, so the runner accepts faithful: true with compile_loop listed.
-    # This pins attempt 0 only: how compile_loop reads a correction under faithful is task P1.5's work.
+    # With fixes.fence_tag off, generate reads attempt 0 from the first fenced block and compile_loop builds it.
+    # This pins attempt 0 only; tests/core/test_correction_loop.py covers how compile_loop reads corrections. Since
+    # P1.5, faithful: true also needs the baseline stage, so the quirk is asked for by its fix alone.
     script = Script([f"```cuda\n{GOOD_SOURCE}```\n"])
     log = BuildLog()
     registry = make_registry(log, backend=scripted_backend(script))
-    run_dir = run(write_recipe(tmp_path, "loop-test", scripted_data(faithful=True)), tmp_path / "runs-root", bench,
-                  registry, run_id="loop")
+    data = scripted_data(fixes={"fence_tag": False})
+    run_dir = run(write_recipe(tmp_path, "loop-test", data), tmp_path / "runs-root", bench, registry, run_id="loop")
     trial = load_trial(run_dir, LOOP_TRIAL)
     (attempt,) = trial.attempts
     assert attempt.files == {"main.cu": "uda\n" + GOOD_SOURCE}
@@ -1923,7 +1924,7 @@ def test_fence_tag_off_refuses_an_item_with_more_than_one_target_file(
                      "zeta-cuda/a.cu", "zeta-cuda/b.cu"):
         (sources / "src" / relative).parent.mkdir(parents=True, exist_ok=True)
         (sources / "src" / relative).write_bytes(GOOD_SOURCE.encode("ascii"))
-    data = scripted_data(faithful=True, bench={"suite": "synth-two", "split": "eval"})
+    data = scripted_data(fixes={"fence_tag": False}, bench={"suite": "synth-two", "split": "eval"})
     match = r"synth-two/alpha \(omp-cuda\) has 2 'cuda' files; with fixes\.fence_tag off"
     assert_refused_before_anything_runs(tmp_path, sources, "two-targets", data, match)
 
