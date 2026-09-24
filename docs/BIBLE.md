@@ -1,6 +1,6 @@
 # LASSI Project Bible
 
-Repository mirror of the project bible, master revision 125 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
+Repository mirror of the project bible, master revision 127 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
 
 ## Purpose And Scope
 
@@ -598,6 +598,7 @@ Rules for stdout_mask and passfail [DESIGN] (task P1.7):
 - Masks live in `assets/harness/masks/<suite>.yaml`, one list per item, derived from the stdout print statements of the item's pinned sources in both languages. A mask matches the fixed text that starts a timing print, never the printed number, so any number format is masked. A test renders every stdout print of the pinned sources and checks both directions: every timing line is masked and no other line is.
 - passfail: the recipe states it as `oracle: {kind: stdout_mask, passfail: <true or false>}`, with no default. PASS and FAIL are read as whole-word tokens anywhere in stdout, and only when the suite manifest lists the target language under the item's `passfail`. There a candidate scores 1.0 when its stdout holds PASS, holds no FAIL, and stdout_mask scores 1.0; a missing PASS is a fail. Elsewhere, or with `passfail: false`, the value is stdout_mask's alone.
 - The oracle stage aligns every attempt whose run holds stdout, the faithful loop's stale output included, and leaves the alignment of attempts that never ran unset.
+- Reference stability under the CPU proxy [MEASURED 2026-09-24: rx job 20260924-133017-p2-proxy-3a3a from commit 207e4dd, results/p2-proxy-stability; three reference runs and three mock candidate runs per item, CUDA to OpenMP, host CPU]: every item's masked reference stdout agreed across its runs, so no item needs a stability mark. dense-embedding's OpenMP reference prints FAIL under the proxy (one OpenMP team), so passfail cannot pass there; every table and packet that reports it under the proxy marks it not scorable. jacobi's CUDA reference cannot run without a GPU (OQ-003) and stays unchecked until P10.
 
 ### Sandbox
 
@@ -949,10 +950,11 @@ Open questions:
 
 ## Decision Log
 
-Sixty-three decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and seventeen on 2026-09-24; add new entries at the top, newest first.
+Sixty-four decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and eighteen on 2026-09-24; add new entries at the top, newest first.
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-24 | Under the CPU proxy every item's masked reference stdout is stable across three runs, so stdout_mask scores against one reference run per trial; dense-embedding is marked not scorable under the proxy, and jacobi's CUDA reference stays unchecked until a GPU host exists (task P2.5) | Spike plans/spikes/p2-proxy-stability.md, rx job 20260924-133017-p2-proxy-3a3a from a clean commit: all 30 trials reached S5, the six masked stdouts per item agreed, and 9 items aligned at 1.0; dense-embedding's reference prints FAIL under the proxy's single team. Three runs bound what this shows |
 | 2026-09-24 | Third-party code is pinned with a manifest and a fetch tool, not a git submodule, and the text-policy checker keeps reading every staged path as a blob of this repository (OQ-020, owner answer: option a, to be reviewed again later) | The checker refuses a staged gitlink, and the manifest pin of upstream LASSI works and is tested (P1.1); whether the checker should skip gitlinks is left for the owner's later review |
 | 2026-09-24 | Agent Rule 8 now requires furiosa-smi ps and furiosa-smi status before claiming NPUs, and a claim only of a card whose memory reads 0.00 GiB in furiosa-smi status (OQ-019, owner answer: option a, to be reviewed again later); AGENTS.md restates the amended rule | On alpha01 furiosa-smi ps lists only the caller's own processes: it showed no rows while another tenant held npu4 to npu7 (plans/spikes/p3-rngd-demo.md, exploratory). A gate check that refuses a furiosa-llm --devices naming a busy card (option c) is left for the review |
 | 2026-09-24 | Upstream LASSI's prompts and context packs stay local (OQ-018, owner answer; task P1.12): tools/extract_lassi_assets.py generates them from the pinned upstream checkout into gitignored trees, and only their MANIFEST.yaml files (keys, source cells, sha256) are tracked. No upstream prompt or documentation text is committed, and none had been, so nothing was removed; the leak-guard test in tests/prompts keeps it that way | The owner did not want the LASSI prompts in the repository: the text is GPL-3.0 upstream text and third-party documentation, and the repository is public. The manifests hold no upstream text and let the loader verify every local file |

@@ -1,0 +1,42 @@
+{
+  "big": true,
+  "branch": "p2-scoring",
+  "cmd": "git log --oneline -1; git status --short | head -3; uv run tools/fetch_upstream.py && uv run tools/extract_lassi_assets.py >/dev/null && uv run tools/fetch_bench.py assets/bench/lassi-hecbench-10.yaml && LASSI_REQUIRE_SANDBOX=1 uv run lassi run tests/fixtures/recipes/p2-proxy-mock.yaml --run-id p2-proxy-stability; echo \"lassi_rc=$?\"",
+  "commit": "207e4ddb91486f08d420606255aaa0a1f8f09179",
+  "cwd": "/mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-p2-scoring",
+  "dirty": false,
+  "end": "2026-09-24T13:39:36-07:00",
+  "gate_version": 1,
+  "host": {
+    "hostname": "alpha01",
+    "kernel": "6.6.29+main+3.0.0r1-amd64-gio-epilmore-dev+",
+    "load": [
+      21.72900390625,
+      26.06298828125,
+      26.515625
+    ],
+    "mem_avail_gb": 2972.4,
+    "mem_gb": 3169.6,
+    "nproc": 256,
+    "os": "Ubuntu 22.04.5 LTS",
+    "python": "3.10.12"
+  },
+  "id": "20260924-133017-p2-proxy-3a3a",
+  "kind": "job",
+  "machine": "desktop-8r113ei",
+  "name": "p2-proxy",
+  "pins": {
+    "cuda.pin": "# CUDA toolkit pin (tasks P0.7 and P0.19; bible Toolchain Pins). Shell-sourced by toolchains/cuda.sh.\n# The toolkit is assembled in user space under $LASSI_TOOLCHAINS/$PREFIX_NAME from NVIDIA's per-component\n# redistributable archives for 12.6.3; no runfile or other installer runs (OQ-010, decision of 2026-09-23).\n# 12.6.3 matches the nvcc measured on alpha01 in the P0.6 spike (plans/spikes/p0-nvcc.md).\nNAME=cuda\nVERSION=12.6.3\n# The redist root: the manifest and every archive path below are relative to it.\nURL=https://developer.download.nvidia.com/compute/cuda/redist\nMANIFEST_URL=https://developer.download.nvidia.com/compute/cuda/redist/redistrib_12.6.3.json\nMANIFEST_SHA256=9c598598457a6463eb92889080c16b2b9dc04150e501b8bfc1536d403ba70aaf  # 49142 bytes, Last-Modified 2024-11-20, fetched on alpha01 2026-09-23 (rx 20260923-212205-exec-19f2)\n# The components the pinned nvcc and the nvc++ compiles through NVHPC_CUDA_HOME need (plans/spikes/p0-cuda-redist.md):\n# nvcc with ptxas, nvlink, fatbinary, cicc, and libdevice; the runtime headers and libraries; CCCL, whose\n# nv/target the runtime's cuda_fp16.h includes; and cuobjdump, which the install's sm_80 checks use.\nCOMPONENTS=\"cuda_nvcc cuda_cudart cuda_cccl cuda_cuobjdump\"\n# ARCHIVE_<COMPONENT>=\"<version> <size in bytes> <sha256> <relative path>\", from the manifest's linux-x86_64 entry.\nARCHIVE_CUDA_NVCC=\"12.6.85 49996208 840deff234d9bef20d6856439c49881cb4f29423b214f9ecd2fa59b7ac323817 cuda_nvcc/linux-x86_64/cuda_nvcc-linux-x86_64-12.6.85-archive.tar.xz\"\nARCHIVE_CUDA_CUDART=\"12.6.77 1126072 f74689258a60fd9c5bdfa7679458527a55e22442691ba678dcfaeffbf4391ef9 cuda_cudart/linux-x86_64/cuda_cudart-linux-x86_64-12.6.77-archive.tar.xz\"\nARCHIVE_CUDA_CCCL=\"12.6.77 934952 9c3145ef01f73e50c0f5fcf923f0899c847f487c529817daa8f8b1a3ecf20925 cuda_cccl/linux-x86_64/cuda_cccl-linux-x86_64-12.6.77-archive.tar.xz\"\nARCHIVE_CUDA_CUOBJDUMP=\"12.6.77 219068 54d0edf14284249baf8e2db1c26c71d079ad7afd1f41779e22f239ff9e8bf60f cuda_cuobjdump/linux-x86_64/cuda_cuobjdump-linux-x86_64-12.6.77-archive.tar.xz\"\n# Install layout, the one the runfile gave cuda@12.6.3: an archive's bin/ and nvvm/ go to the prefix, its include/\n# and lib/ to targets/x86_64-linux/, its LICENSE to licenses/<component>/; include and lib64 are links into\n# targets/x86_64-linux, and nvcc.profile finds headers and libraries there.\nLAYOUT_PREFIX_DIRS=\"bin nvvm\"\nLAYOUT_TARGET_DIR=targets/x86_64-linux\nLAYOUT_TARGET_DIRS=\"include lib\"\nLAYOUT_LINKS=\"include:targets/x86_64-linux/include lib64:targets/x86_64-linux/lib\"\n# Top-level entries left out, by name: cuda_cudart's pkg-config/ holds .pc files whose cudaroot names a system\n# CUDA root, which the runfile rewrote to the prefix; no LASSI compile uses pkg-config.\nLAYOUT_SKIP=\"pkg-config\"\n# Planning bound, in KiB, for the space check before any download: the assembled prefix took 233316 KiB\n# (du -sk) in the spike (rx 20260923-212629-exec-290a), rounded up.\nINSTALL_KIB=250000\nPREFIX_NAME=cuda@12.6.3\nEXPECT_VERSION=\"Cuda compilation tools, release 12.6, V12.6.85\"\n",
+    "nvhpc.pin": "# NVIDIA HPC SDK pin (task P0.7; bible Toolchain Pins). Shell-sourced by toolchains/nvhpc.sh.\n# The single-CUDA tarball installs in user space under $LASSI_TOOLCHAINS/$PREFIX_NAME.\n# 24.11 is the 2024 release whose bundled CUDA (12.6 update 2 and 11.8, per its release notes) is closest\n# to the CUDA 12.6.3 in toolchains/cuda.pin; it postdates the LASSI paper, so upstream did not use it.\nNAME=nvhpc\nVERSION=24.11\nURL=https://developer.download.nvidia.com/hpc-sdk/24.11/nvhpc_2024_2411_Linux_x86_64_cuda_12.6.tar.gz\nSHA256=39408ac062573936e0d41f34530ab065998ef4b85b6bcccb59287d71135a1920  # first download, 6131381079 bytes, Last-Modified 2026-06-07; clean-tree rx 20260923-045504-desktop-8r113ei-p0-core-8b48\nINSTALL_FLAGS=\"NVHPC_SILENT=true NVHPC_INSTALL_TYPE=single\"\nPREFIX_NAME=nvhpc@24.11\nCOMPILER_SUBDIR=Linux_x86_64/24.11/compilers/bin\nEXPECT_VERSION=\"nvc++ 24.11\"\n# With no GPU driver on the host, nvc++ -gpu=cc80 needs NVHPC_CUDA_HOME set to the pinned CUDA prefix\n# ($LASSI_TOOLCHAINS/<CUDA_HOME_FROM>); the bible's compile flags stay unchanged (rx 20260923-045559-desktop-8r113ei-p0-core-778e).\nCUDA_HOME_FROM=cuda@12.6.3\n"
+  },
+  "rc": 0,
+  "root_free_gb": 307.5,
+  "runner_pid": 1373970,
+  "scratch_free_gb_after": 427.4,
+  "scratch_free_gb_before": 427.4,
+  "slot": "desktop-8r113ei-p2-scoring",
+  "snapshot_of": null,
+  "start": "2026-09-24T13:30:17-07:00",
+  "state": "done",
+  "timeout_s": 7200
+}

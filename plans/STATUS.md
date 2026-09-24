@@ -71,7 +71,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2.2 | READY | Record the reference run's flags | - |  |
 | P2.3 | READY | Readings the scores rest on: stage ladder and final alignment | - |  |
 | P2.4 | READY | Spike: the paper's LASSI metric definitions | - |  |
-| P2.5 | READY | Spike: stability of the reference output under the proxy | - | start first: rx job runs while P2.1 to P2.4 proceed |
+| P2.5 | DONE | Spike: stability of the reference output under the proxy | - | rx job 20260924-133017-p2-proxy-3a3a from 207e4dd: every item's masked reference stdout stable over 3 runs; dense-embedding not scorable under the proxy; results/p2-proxy-stability |
 | P2.6 | READY | df-v0 score profile | P2.3 |  |
 | P2.7 | READY | lassi score profile | P2.3,P2.4 |  |
 | P2.8 | READY | Run metrics per arm and direction | P2.6,P2.7 |  |
