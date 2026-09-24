@@ -8,7 +8,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 
 | Phase | Branch | State | Note |
 | --- | --- | --- | --- |
-| P0 Core | p0-core | ACTIVE | base: main; scope frozen by the owner 2026-09-23: finish P0.17, P0.19, then P0.G; no new P0 tasks |
+| P0 Core | p0-core | DONE | base: main; gate passed 2026-09-23 (results/p0-gate); PR P0 Core open for the owner |
 | P1 Faithful LASSI | p1-faithful | NOT-STARTED | owner 2026-09-23: start as soon as P0 finishes (after the P0 retrospective), no pause; P2 right after |
 | P2 Scoring | p2-scoring | NOT-STARTED | gate needs owner review |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001: alpha01, gate rngd enabled 2026-09-23); the owner records here when the phase may start |
@@ -44,7 +44,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.11 | DONE | Stage runner and lassi run compile-only path | P0.2,P0.3,P0.4,P0.5,P0.8,P0.10 | stage runner, lassi run compile-only path, p0-smoke recipe; stage ladder per bible (S4 compiles) |
 | P0.12 | DONE | Verify text-policy tooling, local half | - | check_setup 15 PASS; canary local blocks both commits; --history clean; tests added for --message, --history, canary local |
 | P0.13 | DONE | Verify text-policy tooling, CI half | P0.12 | owner ran push and cleanup 2026-09-23; CI run 35921343647 on p0-canary (a039a53) concluded failure on the canary in the commit message and canary.txt; branch deleted; evidence to results/p0-gate in P0.G |
-| P0.G | ACTIVE | Phase gate: mock LLM compile-only run and text-policy canary | P0.7,P0.11,P0.12,P0.13 | owner order 2026-09-23: runs last, after P0.20, P0.17, and P0.19; P0.14 and P0.18 done |
+| P0.G | DONE | Phase gate: mock LLM compile-only run and text-policy canary | P0.7,P0.11,P0.12,P0.13 | gate passed: mock compile-only run S4 with an artifact from the clean commit bdcf5d2 (rx 20260923-221344-desktop-8r113ei-p0-core-7cfa); canary blocked locally and in CI run 35922699182; results/p0-gate |
 | P0.14 | DONE | Fix rx local-transport tests on Windows | - | rx local transport works on Windows; also touches tools/server/gate.py (Windows-only branches, refusals unchanged) and adds tests/tools/test_gate_windows.py; gate tests pass on Windows and on alpha01 (rx 20260923-101115-desktop-8r113ei-p0-core-d7ce) |
 | P0.15 | DONE | Replace toolchain stderr fixtures with alpha01 captures | P0.7 | fixtures are alpha01 captures (rx 20260923-112105-desktop-8r113ei-p0-core-ba1a from clean ebe6b07); expected lists hand-derived; nvcc drops GCC columns, nvc++ backend and linker places fixed; results/p0-toolchain-fixtures; unparsed formats to P0.17 |
 | P0.16 | DONE | Sandbox hardening before native runs of generated code | P0.10 | 59b5799: 46 remote tests from the clean commit (rx 20260923-173420-desktop-8r113ei-p0-core-192f); three review rounds; bible Sandbox and Decision Log at master revision 81; compile-side items to P0.20 |
