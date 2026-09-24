@@ -139,6 +139,18 @@ def test_canary_local_blocks_both_seeded_commits() -> None:
     assert result.returncode == 0, result
     report = json.loads(result.stdout.strip().splitlines()[0])
     assert report == {"content_commit_blocked": True, "message_commit_blocked": True}
+    if not pattern_list_installed():
+        # A host without the owner's list (kept outside git), such as the build host: the hooks run and fail closed,
+        # so both commits are refused with a configuration error, never let through.
+        assert result.stdout.count("configuration error") == 2, result.stdout
+        return
     # Both blocks must come from real findings on the canary, not from a hook failing closed on its configuration.
     assert result.stdout.count("violations found") == 2, result.stdout
     assert "canary.txt" in result.stdout and "commit message" in result.stdout, result.stdout
+
+
+def pattern_list_installed() -> bool:
+    """Return True when the hooks can load the owner's pattern list here, as check_text_policy.load_patterns would."""
+    if os.environ.get("TEXT_POLICY_PATTERNS", "").strip():
+        return True
+    return Path(os.environ.get("LASSI_TEXT_POLICY_FILE", "") or ctp.DEFAULT_PATTERN_FILE).is_file()
