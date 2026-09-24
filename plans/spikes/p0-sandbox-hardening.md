@@ -521,7 +521,7 @@ Findings [MEASURED] for the composite:
   - R5 inside tmpfs only, with a cap of a few MiB, never filling the host disk.
   - R6 with SIGSEGV and SIGABRT crashes and `coredumpctl -q list --since` for the user's uid.
   - R7 with a setsid child and the runner's own timeout.
-- Handoff, out of P0.16 scope (plans/PHASE-NOTES.md, "P0.16 scope"): compiles run with the host soft core limit 0, which systemd-coredump ignores, so compiler crashes store cores on the root filesystem (the two nvcpfe cores above). Running compiles under `prlimit --core=1` would stop that. This belongs with the later task that sandboxes compiles.
+- Handoff, out of P0.16 scope (plans/PHASE-NOTES.md, "P0.20 scope"; task P0.20): compiles run with the host soft core limit 0, which systemd-coredump ignores, so compiler crashes store cores on the root filesystem (the two nvcpfe cores above). Running compiles under `prlimit --core=1` would stop that. This belongs to P0.20, the task that hardens compiles.
 
 ## Sources
 
@@ -531,6 +531,8 @@ Findings [MEASURED] for the composite:
 - Linux overlayfs documentation, https://docs.kernel.org/filesystems/overlayfs.html: the `userxattr` option for unprivileged mounts (not re-read for this spike; the mount was measured in D and I).
 
 ## Proposed bible edit (factual; apply once the P0.16 remote tests pass from a clean commit)
+
+Applied on 2026-09-23 in revised form (master revision 81; docs/BIBLE.md, Sandbox bullet and Decision Log). The revision adds the round-3 changes (keyring refusal, hang judged by the program's own run time), the chosen constants as [DESIGN] values, the acceptance run (46 remote tests from commit 59b5799, rx 20260923-173420-desktop-8r113ei-p0-core-192f, results/p0-sandbox-hardening/), and marks the limits that are inferred rather than measured. The text below is the proposal as written before round 3.
 
 In Sandbox, second bullet, replace the final sentence, from "Open gaps: host /dev is visible" to "required before native runs of generated code).", with:
 
