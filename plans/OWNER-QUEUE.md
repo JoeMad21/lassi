@@ -199,3 +199,13 @@ Question: The bible puts the lassi-2024 prompts under assets/prompts/ and the co
 Options: (a) commit all generated text with a NOTICE naming the upstream commit and its GPL-3.0 license: the repository reads as the bible describes, but carries GPL-3.0 material and the two documentation excerpts. (b) commit only the manifests (upstream key and sha256) and generate the text from the pinned submodule before each run: nothing third-party is published, readers see the prompts in each trial.md, and the bible's Repository Layout note is updated. (c) commit the prompts with a NOTICE and generate only the two context packs: the short prompts stay readable in the repository and the documentation excerpts stay out.
 Recommendation: (c); it keeps the prompt templates readable (Readability Standards, Prompts row) and keeps copyrighted documentation text out of a public repository. Until you answer, P1.3 keeps all generated upstream text gitignored, so nothing is published first. The gate and the demo do not wait, because the text is byte-identical either way.
 Answer:
+
+## OQ-019 Agent Rule 8: furiosa-smi ps Misses Other Tenants
+State: OPEN
+Kind: policy
+Blocks: none (serving checks furiosa-smi status too in the meantime)
+Evidence: plans/spikes/p3-rngd-demo.md, section 2 (exploratory, 2026-09-24)
+Question: Agent Rule 8 requires `furiosa-smi ps` before claiming NPUs. On alpha01 it lists only the caller's own processes: it showed no rows while another tenant's server held npu4-npu7 (45.93 of 47.50 GiB each in `furiosa-smi status`). Should the rule also name `furiosa-smi status`?
+Options: (a) amend Rule 8 to "run furiosa-smi ps and furiosa-smi status; claim only a card whose memory reads 0.00 GiB", changing the bible and AGENTS.md together. (b) keep the rule as written and record the extra check only in Host Facts and the Serving Rules; the rule alone would still allow claiming an occupied card. (c) also have the gate refuse a furiosa-llm command whose --devices names a card with nonzero memory; mechanical, but a gate change you reinstall.
+Recommendation: (a) now, (c) later. Agents already check the Memory column before every claim; that is stricter than Rule 8, not looser.
+Answer:

@@ -56,6 +56,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 ## P3 RNGD Serving
 
 - The bible's lassi-df recipe binds `model.backend: furiosa`, which is not registered. furiosa-llm speaks the OpenAI API, so decide between an alias of openai_compat and a separate backend before P3.
+- RNGD serving (spike plans/spikes/p3-rngd-demo.md, 2026-09-24, exploratory): the 2026.2.1 venv serves furiosa-ai/Llama-3.1-8B-Instruct@v2026.2 on one card with HF_HOME set to /mnt/nvme10/joseph_ufl/.cache/huggingface and HF_HUB_OFFLINE=1 (the gate's HF_HOME is empty). `rx job kill` stops only the job runner, since the gate starts the command in its own session; until tools/server/gate.py kills the command's process group too (and the owner reinstalls the gate), start servers through the spike's watchdog wrapper and verify every stop with furiosa-smi status. The spike's proposed bible Host Facts and Decision Log text waits for the next bible sync.
 - A faithful LASSI loop has no correction cap, so a real model that never compiles needs a stop budget, recorded as a cap hit (from P1 planning).
 - Responses recorded from a real model can later join the P1 replay fixtures as a regression (from P1 planning).
 
