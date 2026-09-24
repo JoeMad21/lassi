@@ -222,3 +222,23 @@ Options: (a) leave the checker as it is and pin third-party code with manifests 
 Recommendation: (a) for P1, since the manifest pin works; decide (b) before any later phase that needs a submodule.
 Answer: Go ahead with option A for now. Make a notice to review this question again later.
 Applied: 2026-09-24. The checker stays as it is; third-party code is pinned with manifests and fetch tools. Recorded in the bible (Decision Log); the review note is in plans/PHASE-NOTES.md (All Phases).
+
+## OQ-021 LASSI Paper Values That Do Not Follow From Its Tables
+State: OPEN
+Kind: decision
+Blocks: none (P2.8 carries both values; the choice applies when a headline metric is marked reproduced or reported with its gap, Acceptance Criteria)
+Evidence: plans/spikes/p2-lassi-metrics.md
+Question: Five of the eight percentages in the LASSI results table do not follow from the paper's own Tables VI and VII: within 10% or faster in both directions, Sim-T >= 0.6 in both, and CUDA -> OMP first try. Each recount differs from the published value by 1 to 5 trials, and the sources do not say why. When the reproduction marks a headline metric reproduced or reports its gap, which paper value is the reference?
+Options: (a) The published percentages only: this matches the paper's claims, but part of a gap may be the paper's own inconsistency, unmarked. (b) Both values side by side, with the gap reported against each and the difference noted: nothing is hidden, but tables get wider and five metrics carry two gaps. (c) The recounts only: consistent with the published rows and the Reporting Rules' recompute-from-raw rule, but departs from the paper's stated headline numbers.
+Recommendation: (b). The sources cannot tell which value is right, so neither is picked silently.
+Answer:
+
+## OQ-022 Which Token Similarity Is The Paper's Sim-T
+State: OPEN
+Kind: decision
+Blocks: none
+Evidence: plans/spikes/p2-lassi-metrics.md (Findings 5); lassi/scoring/similarity.py
+Question: The pinned notebook computes and stores two token similarities, one over Python tokenize tokens and one over tiktoken cl100k_base ids. The paper names one Sim-T and does not say which. The faithful sim_t uses Python tokenize (quirk table). The paper's generated codes are unpublished, so no data can settle this. P2's scope is fixed, so a second measure would come in a later phase.
+Options: (a) Keep sim_t as the faithful Sim-T and label every paper comparison of Sim-T "tokenizer not stated by the paper": no new dependency, and the comparison stays caveated. (b) As (a), and add sim_t_tiktoken under its own name in a later phase: both candidates are reported, but this adds the tiktoken dependency and its cl100k_base file, which must be cached under the scratch root before offline use on alpha01. (c) Make the tiktoken similarity the faithful Sim-T: this changes the quirk table's Sim-T row and the P1.9 replay comparison, and no evidence favors it.
+Recommendation: (a). A second measure cannot resolve a question that no published data can settle, and (a) keeps the documented design.
+Answer:

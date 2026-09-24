@@ -1,6 +1,6 @@
 # LASSI Project Bible
 
-Repository mirror of the project bible, master revision 127 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
+Repository mirror of the project bible, master revision 129 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
 
 ## Purpose And Scope
 
@@ -97,6 +97,7 @@ Fidelity findings that bind the reproduction:
 - DeepSeek's 66x CUDA->OMP atomicCost speedup came from removing atomics, the quantity the benchmark times. Matching stdout missed it.
 - Table VI error: the GPT-4 atomicCost row repeats layout's Ratio, Sim-T, and Sim-L. From the listed runtimes the ratio is 43.9190 / 45.8775 = 0.957. Recompute every ratio from raw runtimes.
 - The arXiv HTML v2 garbles Table VII Panel A; transcribe from the PDF.
+- Five of the eight results percentages do not follow from the paper's Tables VI and VII; the recounts and the paper's definitions are in Evaluation Protocol, LASSI Paper Metrics.
 
 Upstream repo ([SPEAR-UIC/LASSI](https://github.com/SPEAR-UIC/LASSI) at 74b4681, GPL-3.0): `LASSI_pipeline_v0.ipynb`, `prompt_dictionary.py`, and the 20 `*_main` sources. Generated codes are not published.
 
@@ -775,6 +776,46 @@ Every result is reported per arm and direction, with the paper's values alongsid
 | LASSI-DF | Per source language and target: stage-reached distribution, build and JIT rates, run rate, correct rate, pass@1, pass@3, corrections by class, sim_gap rate, guard flags, MLIR-to-source token ratio, Sim-T and Sim-L where a reference exists | n = 5 |
 | Judges and adversaries | Judge sign accuracy and Spearman correlation against measurements, judge exploitability rate, adversary confirmed-divergence rate, invalid-input rejection rate | Per calibration set |
 
+### LASSI Paper Metrics
+
+The LASSI paper's metrics, from arXiv:2407.01638 (v1 and v2 have the same tables and percentages) and the pinned notebook at 74b4681 (task P2.4; evidence in plans/spikes/p2-lassi-metrics.md, recounted independently). A paper trial is one run of one app, direction, and model. The paper ran one trial per scenario: 10 apps x 4 models, or 40 trials per direction.
+
+| Metric | Paper definition | Denominator |
+| --- | --- | --- |
+| Correct output | The final code compiled, ran with exit status 0, and a person judged its stdout to match the stdout of the HeCBench original in the target language, reported timings aside (paper pp. 4 to 7, Sec. III-D, V-A, V-B, V-D). The notebook records both stdouts and no verdict | All trials of the direction: 32/40 OMP -> CUDA, 34/40 CUDA -> OMP |
+| Within 10% or faster | Ratio = the target-language original's runtime (Table IV, the mean of three A100 runs) / the generated code's runtime (a mean over an unstated number of runs); the share of trials where the generated code is at most 10% slower | Correct trials: 25/32, 21/34 |
+| First try | Self-corr = 0. Self-corr is the notebook's final correction count, one counter for compile and run corrections; it equals final.corrections | Correct trials: 21/32, 19/34 |
+| Sim-T >= 0.6 | Token similarity of the final code against the target-language original, 0.6 or higher | Correct trials: 13/32, 16/34 |
+
+For correct output, the counts are the rows of Tables VI and VII that have values. For the other three metrics, every fraction with a denominator of at most 40 that gives a published percentage has the direction's correct-trial count as its denominator (47.1% is also 8/17, which matches no trial count), and the paper's text says the same. Every rate pools the four models; the paper reports no per-model rate. Correct counts per model (OMP -> CUDA, CUDA -> OMP): GPT-4 7 and 9, Codestral 9 and 8, WizardCoder 9 and 10, DeepSeek-Coder-V2 7 and 7.
+
+Five of the eight published percentages do not follow from the paper's Tables VI and VII. The recounts below are counts read from those tables, not measurements; a second, independent recount from the v1 and v2 PDFs and HTML gave the same values:
+
+| Direction | Metric | Published | Recount from Tables VI and VII |
+| --- | --- | --- | --- |
+| OMP -> CUDA | Within 10% or faster | 78.1% (25/32) | 23/32 from the printed Ratios; 24/32 with GPT-4's atomicCost Ratio recomputed |
+| OMP -> CUDA | Sim-T >= 0.6 | 40.6% (13/32) | 8/32 |
+| CUDA -> OMP | Within 10% or faster | 61.8% (21/34) | 20/34 |
+| CUDA -> OMP | First try | 55.9% (19/34) | 18/34 |
+| CUDA -> OMP | Sim-T >= 0.6 | 47.1% (16/34) | 15/34 |
+
+Correct output (both directions) and OMP -> CUDA first try recount to their published values. Neither 0.9 nor 1/1.1 gives either published within-10% value, and no single Ratio threshold gives both. GPT-4's OMP -> CUDA atomicCost row repeats the layout row above it (Ratio, Sim-T, Sim-L, and Self-corr), so that trial's Sim-T and Self-corr are as doubtful as its Ratio.
+
+Rules for the reproduction:
+
+- The paper criterion for correct output is a manual judgment, so it is never computed: it is None and labeled. The automated oracle gives correct.
+- A rate shown next to a paper value uses the paper's denominator. [DESIGN]
+- The notebook keeps, per trial, the last attempt's code, the last successful build, and one metadata file. The file holds the configuration, the direction's system and translation prompts, the generation loop's wall time, both token similarities and Sim-L at two decimals, the correction count, the reference stdout, and the stdout of the last attempt that ran. The notebook records no program runtime, no verdict on correctness, and no per-attempt history, so the paper's runtimes and verdicts were taken outside it.
+
+[OPEN], because the sources do not say:
+
+- What else counted as a stdout match (tolerance, which lines), and why each N/A trial failed.
+- The exact within-10% inequality (Ratio >= 0.9 and Ratio >= 1/1.1 count the same on the printed Ratios), how many runs the generated code's mean used, and how runtimes were timed. Settle these before within_10pct is computed (P10).
+- Which of the notebook's two token similarities the Sim-T column is: Python tokenize, or tiktoken cl100k_base. The faithful sim_t uses Python tokenize (quirk table, Sim-T row); OQ-022 asks the owner.
+- What the percentages that do not recount were computed from; OQ-021 asks the owner which values the reproduction compares against.
+- Which pipeline version produced the paper's results. Both committed notebooks postdate the paper's v1. Codestral's CUDA -> OMP pathfinder (Self-corr 34, correct, with a runtime) cannot come from the pinned notebook's stored output, because its execution gate leaves attempt 34 unrun.
+- How a trial that never reached a clean run was stopped. The pinned loop has no cap, and the paper names no stopping rule.
+
 ### Acceptance Criteria
 
 LASSI reproduction:
@@ -950,10 +991,11 @@ Open questions:
 
 ## Decision Log
 
-Sixty-four decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and eighteen on 2026-09-24; add new entries at the top, newest first.
+Sixty-five decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and nineteen on 2026-09-24; add new entries at the top, newest first.
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-24 | The LASSI paper's metrics join the Evaluation Protocol as LASSI Paper Metrics (task P2.4). Correct output was a manual judgment of stdout against the target-language original's, over all 40 trials of a direction. Within 10% or faster, first try (final.corrections = 0), and Sim-T >= 0.6 are shares of the correct trials (32 OMP -> CUDA, 34 CUDA -> OMP). A rate shown next to a paper value uses the paper's denominator. Five published percentages that differ from recounts of Tables VI and VII are recorded with both values. Six questions the sources leave open are [OPEN]; OQ-021 and OQ-022 ask the owner the two that need a choice | Spike plans/spikes/p2-lassi-metrics.md read arXiv:2407.01638 v1 and v2 (same tables and percentages) and the pinned notebook at 74b4681, and an independent recount from both versions' PDFs and HTML gave the same values. The paper's text and the arithmetic agree on the denominators. The notebook records no runtime or verdict, and it computes two token similarities without saying which the paper used, so those questions are named, not guessed. The recounts are read from published tables, not measured |
 | 2026-09-24 | Under the CPU proxy every item's masked reference stdout is stable across three runs, so stdout_mask scores against one reference run per trial; dense-embedding is marked not scorable under the proxy, and jacobi's CUDA reference stays unchecked until a GPU host exists (task P2.5) | Spike plans/spikes/p2-proxy-stability.md, rx job 20260924-133017-p2-proxy-3a3a from a clean commit: all 30 trials reached S5, the six masked stdouts per item agreed, and 9 items aligned at 1.0; dense-embedding's reference prints FAIL under the proxy's single team. Three runs bound what this shows |
 | 2026-09-24 | Third-party code is pinned with a manifest and a fetch tool, not a git submodule, and the text-policy checker keeps reading every staged path as a blob of this repository (OQ-020, owner answer: option a, to be reviewed again later) | The checker refuses a staged gitlink, and the manifest pin of upstream LASSI works and is tested (P1.1); whether the checker should skip gitlinks is left for the owner's later review |
 | 2026-09-24 | Agent Rule 8 now requires furiosa-smi ps and furiosa-smi status before claiming NPUs, and a claim only of a card whose memory reads 0.00 GiB in furiosa-smi status (OQ-019, owner answer: option a, to be reviewed again later); AGENTS.md restates the amended rule | On alpha01 furiosa-smi ps lists only the caller's own processes: it showed no rows while another tenant held npu4 to npu7 (plans/spikes/p3-rngd-demo.md, exploratory). A gate check that refuses a furiosa-llm --devices naming a busy card (option c) is left for the review |
