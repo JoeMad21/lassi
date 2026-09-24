@@ -157,7 +157,7 @@ Recommendation: (a); they are small and expire on their own. For awareness, outs
 Answer:
 
 ## OQ-015 Git Hooks Not Executable On Linux
-State: ANSWERED
+State: CLOSED
 Kind: policy
 Blocks: none (CI still enforces the text policy on every push)
 Evidence: at 1de7db6, `git ls-tree -r HEAD` showed .githooks/commit-msg, .githooks/pre-commit, and .githooks/pre-push stored as mode 100644. The fast suite from the clean commit 1de7db6 on alpha01 (rx 20260923-195751-desktop-8r113ei-p0-core-7f98) failed only tests/tools/test_text_policy_modes.py::test_canary_local_blocks_both_seeded_commits; a rerun (rx 20260923-200253-desktop-8r113ei-p0-core-0d3e) showed the seeded canary commit going through. results/p0-compile-hardening/summary.md.
@@ -165,7 +165,7 @@ Question: The hooks were committed from Windows, where Git Bash runs a hook what
 Options: (a) mark them executable. In Git Bash at C:\dev\lassi on branch p0-core, run `git update-index --chmod=+x .githooks/commit-msg .githooks/pre-commit .githooks/pre-push`, then `git commit -m "P0: Mark the git hooks executable"` and `git push`. Only the file modes change, and lib.sh is sourced, so it needs no bit. (b) leave them; CI alone enforces on Linux clones, and the canary test keeps failing there.
 Recommendation: (a); it restores local enforcement on every platform. After it, an agent reruns the fast suite on alpha01 to show the canary test passes.
 Answer: (a), applied by the owner in the working session on 2026-09-23 as commit f9d1e68, which stores the three hooks as mode 100755.
-Pending: an agent reruns the fast suite on alpha01 from a clean commit to show the canary test passes; then this item closes.
+Applied: 2026-09-23. On alpha01 the hooks now run: rx 20260923-201529-desktop-8r113ei-p0-core-e098 showed both canary commits refused, with a configuration error, since the owner's pattern list is not installed there (fail closed). Commit 60197f4 lets the canary test accept that refusal where no list is installed while still requiring real findings where one is. The full fast suite from the clean commit 60197f4 on alpha01 passed: 2442 passed, 13 skipped, pytest status 0 (rx 20260923-201618-desktop-8r113ei-p0-core-b46a).
 
 ## OQ-016 Commit f9d1e68 Holds The P0.20 Acceptance Record
 State: OPEN
