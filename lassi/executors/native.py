@@ -17,6 +17,12 @@ Interfaces, Executor contract rules); symbolic links are left out, so a run
 cannot point its caller at a host file outside the workdir. The RunResult
 carries the sandbox's stdout and stderr truncation flags (P0.16 R4) and its
 workdir_incomplete flag (P0.16 R5).
+
+The program's environment bounds its OpenMP threads by Limits.cpus
+(OMP_NUM_THREADS; DEMO.2, plans/spikes/demo-multicore-proxy.md): without the
+bound the OpenMP runtime starts one thread per host CPU, which on a host with
+as many CPUs as the sandbox's TasksMax fails a thread creation and aborts
+the program. See NativeExecutor.run for the exact environment.
 """
 
 from __future__ import annotations
@@ -24,16 +30,30 @@ from __future__ import annotations
 import os
 from collections.abc import Sequence
 from pathlib import Path
+from types import MappingProxyType
 
 from lassi.core.interfaces import Limits, RunResult
 from lassi.core.registry import register
-from lassi.executors.sandbox import Sandbox, SandboxSpec, SandboxUnavailableError
+from lassi.executors.sandbox import SANDBOX_PATH, Sandbox, SandboxSpec, SandboxUnavailableError
 from lassi.executors.workdir import runs_root
 
 # The environment variables that name the default hidden roots, in order.
 _ROOT_VARIABLES = ("LASSI_SCRATCH", "HOME")
 # The environment variable that names the default toolchains root, which the sandbox re-exposes read-only.
 _TOOLCHAINS_VARIABLE = "LASSI_TOOLCHAINS"
+# The fixed part of every program's environment: the sandbox's default program environment without HOME, which
+# SandboxSpec.environment never holds (P0.20). _program_environment adds the OpenMP thread bound.
+_PROGRAM_ENVIRONMENT = MappingProxyType({"PATH": SANDBOX_PATH, "LANG": "C.UTF-8", "TMPDIR": "/tmp"})
+
+
+def _program_environment(limits: Limits) -> dict[str, str]:
+    """Return the program's environment: _PROGRAM_ENVIRONMENT plus OMP_NUM_THREADS=<limits.cpus>.
+
+    Nothing comes from the caller's environment, a caller's OMP_NUM_THREADS
+    included. The sandbox checks limits.cpus (an integer >= 1) before
+    anything runs.
+    """
+    return {**_PROGRAM_ENVIRONMENT, "OMP_NUM_THREADS": str(limits.cpus)}
 
 
 def _absolute_variable(name: str, use: str) -> Path | None:
@@ -148,6 +168,22 @@ class NativeExecutor:
         environment, or a relative $LASSI_TOOLCHAINS, raises
         SandboxUnavailableError, before anything runs. The spec keeps the
         sandbox's default disk cap.
+
+        The program's environment (SandboxSpec.environment) is exactly
+        PATH=SANDBOX_PATH, LANG=C.UTF-8, TMPDIR=/tmp, and
+        OMP_NUM_THREADS=<limits.cpus>, which bounds the program's OpenMP
+        threads by the run's CPU count (DEMO.2): it is the OpenMP runtime's
+        default thread count, so a program's own num_threads clause or
+        omp_set_num_threads call can still ask for more, up to the sandbox's
+        TasksMax. OMP_NUM_THREADS is a thread count, not a secret or a
+        loader variable (Agent Rule 12). The one change from the sandbox's
+        default program environment: there is no HOME (the default sets
+        HOME=<workdir>), since SandboxSpec.environment never holds HOME; the
+        working directory is still the workdir. The
+        program runs as `env -i -- NAME=value... <artifact> <inputs>` inside
+        the sandbox, so an artifact path that holds "=" raises ValueError,
+        and env's own statuses (125, 126, 127) can come back as the exit
+        code, as the sandbox module docstring says.
         """
         artifact = Path(artifact)
         if not artifact.is_absolute():
@@ -168,6 +204,7 @@ class NativeExecutor:
             hidden_roots=(*(_resolved(root) for root in roots), runs_root().resolve()),
             harness=None if self.harness is None else _resolved(self.harness),
             toolchains=None if toolchains is None else _resolved(toolchains),
+            environment=_program_environment(limits),
         )
         before = _regular_files(spec.workdir)
         result = self.sandbox.run(spec, [str(artifact), *inputs], limits)

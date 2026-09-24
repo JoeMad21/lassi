@@ -130,10 +130,11 @@ tests pass from a clean commit. One command runs each program:
       - an innermost `timeout --kill-after`, which is what enforces wall
         time (the spike's second addendum measured exit status 124);
       - only when the spec sets the program's environment
-        (SandboxSpec.environment, P0.20): `env -i -- NAME=value...` right
-        before the program, so the program gets exactly those variables
-        instead of the defaults above, while every tool of the chain, env
-        included, still comes from SANDBOX_PATH;
+        (SandboxSpec.environment, P0.20; every native executor run does,
+        DEMO.2): `env -i -- NAME=value...` right before the program, so the
+        program gets exactly those variables instead of the defaults above,
+        while every tool of the chain, env included, still comes from
+        SANDBOX_PATH;
   12. after that namespace has ended, sets an EXIT trap that prints
       "lassi-sandbox: the setup stopped after the program ended" on stderr,
       so any failure from here on ends stderr with a line of its own; reads
@@ -196,12 +197,15 @@ file. SandboxSpec.environment carries the compile's environment (PATH,
 LANG=C, LC_ALL=C, a private TMPDIR under the build dir, and each variable a
 pin names), checked against ENVIRONMENT_NAMES, a fixed allowlist; each
 variable reaches the command as one NAME=value element after SETUP_SCRIPT,
-so no shell parses it. Program runs keep the defaults and the P0.16
-command (environment None). A compile keeps each stream of the compiler's
-output whole up to COMPILE_OUTPUT_CAP_BYTES (CappedRunner, far above any
-compile output seen, exploratory: 3210 bytes; OUTPUT_CAP_BYTES is for
-generated programs), and a line of
-the sandbox's own ends its stderr when a stream passed that cap, when a
+so no shell parses it. A spec without an environment keeps the program
+defaults and the P0.16 command (environment None); the native executor
+(lassi.executors.native) always sets one for program runs: the defaults
+without HOME plus OMP_NUM_THREADS=<Limits.cpus> (DEMO.2), so the OpenMP
+runtime's default thread count is the run's CPU count, not the host's. A
+compile keeps each stream of the compiler's output whole up to
+COMPILE_OUTPUT_CAP_BYTES (CappedRunner, far above any compile output seen,
+exploratory: 3210 bytes; OUTPUT_CAP_BYTES is for generated programs), and a
+line of the sandbox's own ends its stderr when a stream passed that cap, when a
 limit killed the compile, or when its whole sandbox was killed, so nothing
 is lost silently. Its wall limit is the toolchain's timeout, and its disk
 and memory limits are COMPILE_DISK_MB and COMPILE_MEMORY_MB (see
@@ -336,11 +340,12 @@ SYSTEM_DIRS = ("/var", "/sys")
 SANDBOX_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
 # The caller's environment variables the sandbox command keeps, when set: what systemd-run --user needs.
 PASSED_VARIABLES = ("XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")
-# The only names SandboxSpec.environment may hold (P0.20): PATH, the locale (LANG, LC_ALL), TMPDIR, and each
-# variable a pin names (lassi.toolchains.pins PREFIX_VARIABLES, NVHPC_CUDA_HOME). HOME, loader variables
+# The only names SandboxSpec.environment may hold (P0.20): PATH, the locale (LANG, LC_ALL), TMPDIR, each
+# variable a pin names (lassi.toolchains.pins PREFIX_VARIABLES, NVHPC_CUDA_HOME), and OMP_NUM_THREADS, the OpenMP
+# runtime's default thread count, which the native executor sets to Limits.cpus (DEMO.2). HOME, loader variables
 # (LD_PRELOAD, LD_LIBRARY_PATH), variables that change a compile silently (NVCC_PREPEND_FLAGS, CPATH), and
 # credentials are never on it (Agent Rule 12). It is fixed: nothing adds a name at run time.
-ENVIRONMENT_NAMES = frozenset({"PATH", "LANG", "LC_ALL", "TMPDIR", *PREFIX_VARIABLES.values()})
+ENVIRONMENT_NAMES = frozenset({"PATH", "LANG", "LC_ALL", "TMPDIR", "OMP_NUM_THREADS", *PREFIX_VARIABLES.values()})
 # The positional element that tells SETUP_SCRIPT that the program's environment follows it, one NAME=value
 # element per variable, right before the program argv. sandbox_command refuses a program argv that starts with it.
 ENVIRONMENT_MARKER = "lassi-sandbox-environment"

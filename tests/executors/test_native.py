@@ -483,7 +483,16 @@ def test_default_sandbox_runs_through_the_sandbox_command_only(
     artifact = make_artifact(tmp_path)
     with pytest.raises(sandbox.SandboxUnavailableError):
         native.NativeExecutor().run(artifact, ["x"], LIMITS)
-    expected_spec = sandbox.SandboxSpec(workdir=artifact.parent, hidden_roots=(scratch, tmp_path / "runs"))
+    # The program environment bounds its OpenMP threads by limits.cpus (DEMO.2, tests/executors/test_native_threads.py).
+    environment = {
+        "PATH": sandbox.SANDBOX_PATH,
+        "LANG": "C.UTF-8",
+        "TMPDIR": "/tmp",
+        "OMP_NUM_THREADS": str(LIMITS.cpus),
+    }
+    expected_spec = sandbox.SandboxSpec(
+        workdir=artifact.parent, hidden_roots=(scratch, tmp_path / "runs"), environment=environment
+    )
     assert seen == [sandbox.sandbox_command(expected_spec, [str(artifact), "x"], LIMITS)]
 
 

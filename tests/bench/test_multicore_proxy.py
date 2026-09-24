@@ -19,18 +19,22 @@ What the test does, on the build host only:
   registered "native" executor, under LIMITS (180 s wall). Its sandbox's
   runner is wrapped only to record each command: every run must go through
   the sandbox command (prlimit, systemd-run, unshare, then the artifact and
-  its arguments), so no run escapes the sandbox (Agent Rule 6). A
-  SandboxUnavailableError is never caught.
+  its arguments), so no run escapes the sandbox (Agent Rule 6), and must
+  carry OMP_NUM_THREADS=<LIMITS.cpus> in the program's environment, before
+  the artifact (DEMO.2). A SandboxUnavailableError is never caught.
 - One line per app is printed: compile ok, exit code, wall seconds, the
   timeout (hang) flag, stdout bytes, and, for the apps whose OpenMP program
   prints PASS or FAIL (the manifest's passfail), whether PASS appeared; a
   run with a nonzero or missing exit code adds the tail of its stderr. Run
   outcomes are reported, never asserted.
 
-The limits are test inputs. The run's environment is the sandbox default
-(no OMP_NUM_THREADS), so the OpenMP runtime picks its own thread count, and
-the CPU-time budget is wall x cpus (Sandbox, OQ-011): a run that spends it
-ends by a signal, and its exit code shows that. Wall seconds are
+The limits are test inputs. The run's environment is the native executor's
+(DEMO.2, tests/executors/test_native_threads.py): the sandbox default with
+OMP_NUM_THREADS set to LIMITS.cpus, so the OpenMP runtime starts that many
+threads rather than one per host CPU (on the build host one per CPU passed
+the sandbox's TasksMax, plans/spikes/demo-multicore-proxy.md), and the
+CPU-time budget is wall x cpus (Sandbox, OQ-011): a run that spends it ends
+by a signal, and its exit code shows that. Wall seconds are
 exploratory: the proxy checks outputs, never runtime, and no value this
 test prints is a performance number. Output from a dirty tree is
 exploratory; only a clean-commit rx run is evidence.
@@ -91,6 +95,8 @@ APPS = (
 # 922521600 doubles (about 14.8 GB, read from its source), so the limit is 32768 MB rather than the compile
 # sandbox's 8192 MB (COMPILE_MEMORY_MB); the build host has far more.
 LIMITS = Limits(wall_s=180.0, memory_mb=32768, cpus=16)
+# The program-environment element that bounds each run's OpenMP threads by LIMITS.cpus (the native executor, DEMO.2).
+THREAD_BOUND = f"OMP_NUM_THREADS={LIMITS.cpus}"
 # The head of every sandboxed command (lassi.executors.sandbox.sandbox_command) and the tools it must hold.
 SANDBOX_HEAD = ["prlimit", "--core=1", "--"]
 SANDBOX_TOOLS = ("systemd-run", "unshare")
@@ -152,6 +158,7 @@ def check_sandboxed(app: str, calls: list[tuple[list[str], Path]], artifact: Pat
     missing = [tool for tool in SANDBOX_TOOLS if tool not in argv]
     assert not missing, f"{app}: the command lacks {missing}"
     assert argv[-(len(args) + 1) :] == [str(artifact), *args], f"{app}: the command's tail is {argv[-4:]}"
+    assert THREAD_BOUND in argv[: -(len(args) + 1)], f"{app}: the program's environment lacks {THREAD_BOUND}"
     assert cwd == artifact.parent.resolve(), f"{app}: the sandbox ran in {cwd}, not the build dir"
 
 
