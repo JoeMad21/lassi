@@ -1723,7 +1723,8 @@ def test_factory_with_no_arguments_builds_the_preset(preset: str) -> None:
     assert isinstance(tool, Component)
     assert tool.name == case.name
     assert tool.command(["x.c"]) == [case.executable, *case.flags, "-o", OUTPUT, "x.c"]
-    assert list(inspect.signature(case.factory.build).parameters) == ["self", "files", "workdir"]
+    # P1.2 adds the optional harness files (tests/toolchains/test_harness_files.py).
+    assert list(inspect.signature(case.factory.build).parameters) == ["self", "files", "workdir", "harness"]
 
 
 @pytest.mark.parametrize("preset", PRESET_NAMES)

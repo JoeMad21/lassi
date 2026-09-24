@@ -1,16 +1,29 @@
-"""Tests for the bench registry and the lassi-hecbench-10 manifest (P0.8).
+"""Tests for the bench registry and the lassi-hecbench-10 manifest (P0.8, P1.2).
 
 The manifest pins HeCBench by commit and lists items with their split and
 their source files per language (bible Benchmark Suites). The registry loads
 it, returns an item's reference target for a direction, and refuses eval
 items to training (Agent Rule 5). Sources are never read from git: tests use
 files written under tmp_path. No value here is a measurement.
+
+P1.2 adds, per language, the sha256 of each model-facing file
+(`sha256: {<file>: <hex>}`, LanguageSources.sha256), and per item its run
+arguments (`run_args`, SuiteItem.run_args), the languages that print
+PASS/FAIL (`passfail`, SuiteItem.passfail), and its support files
+(`support: {<build-dir name>: <path in the sources>}`, SuiteItem.support),
+which Suite.support_files reads from the pinned sources. tools/fetch_bench.py
+fetches the support files with the item files and refuses a fetch whose
+files differ from their sha256. The ten-app content of the real manifest is
+checked in tests/bench/test_hecbench10.py.
 """
 
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import re
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -140,17 +153,139 @@ def test_sources_live_under_scratch_never_in_the_repo(tmp_path: Path) -> None:
         bench.sources_dir(REPO / "tmp-scratch", suite)
 
 
-def test_fetch_script_needs_the_scratch_root_and_lists_only_item_directories(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import importlib.util
-
+def fetch_tool() -> ModuleType:
+    """Import tools/fetch_bench.py by path and return the module."""
     spec = importlib.util.spec_from_file_location("fetch_bench", REPO / "tools" / "fetch_bench.py")
     assert spec and spec.loader
     fetch_bench = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fetch_bench)
+    return fetch_bench
+
+
+def test_fetch_script_needs_the_scratch_root_and_lists_only_item_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fetch_bench = fetch_tool()
     monkeypatch.delenv("LASSI_SCRATCH", raising=False)
     assert fetch_bench.main([str(MANIFEST)]) == 2
     suite = bench.load_suite(MANIFEST)
-    assert fetch_bench.sparse_dirs(suite) == ["src/layout-cuda", "src/layout-omp"]
-    assert fetch_bench.missing_files(suite, tmp_path) == ["src/layout-omp/main.cpp", "src/layout-cuda/main.cu"]
+    dirs = sorted({spec.dir for item in suite.items.values() for spec in item.languages.values()})
+    assert fetch_bench.sparse_dirs(suite) == dirs
+    assert "src/layout-omp/main.cpp" in fetch_bench.missing_files(suite, tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# P1.2: sha256, run arguments, PASS/FAIL languages, and support files
+
+OMP_TEXT = "// omp main\n"
+CUDA_TEXT = "// cuda main\n"
+HELPER_TEXT = "// helper header\n"
+
+
+def digest(text: str) -> str:
+    """Return the sha256 hex digest of `text` encoded as UTF-8."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def full_manifest(tmp_path: Path, split: str = "eval") -> Path:
+    """Write a one-item manifest with sha256, run_args, passfail, and support, and return its path."""
+    return write(
+        tmp_path / "demo-suite.yaml",
+        "suite: demo-suite\n"
+        "repo: https://example.invalid/demo.git\n"
+        f"commit: {'a' * 40}\n"
+        "items:\n"
+        "  saxpy:\n"
+        f"    split: {split}\n"
+        '    run_args: ["100", ""]\n'
+        "    passfail: [cuda]\n"
+        "    support: {helper.h: src/common/helper.h}\n"
+        "    languages:\n"
+        f"      omp: {{dir: src/saxpy-omp, files: [main.cpp], sha256: {{main.cpp: {digest(OMP_TEXT)}}}}}\n"
+        f"      cuda: {{dir: src/saxpy-cuda, files: [main.cu], sha256: {{main.cu: {digest(CUDA_TEXT)}}}}}\n",
+    )
+
+
+def write_sources(root: Path, cuda_text: str = CUDA_TEXT) -> Path:
+    """Write the full manifest's sources under `root` (the CUDA main as `cuda_text`) and return `root`."""
+    write(root / "src/saxpy-omp/main.cpp", OMP_TEXT)
+    write(root / "src/saxpy-cuda/main.cu", cuda_text)
+    write(root / "src/common/helper.h", HELPER_TEXT)
+    return root
+
+
+def test_manifest_records_sha256_run_args_passfail_and_support(tmp_path: Path) -> None:
+    item = bench.load_suite(full_manifest(tmp_path)).items["saxpy"]
+    assert dict(item.languages["omp"].sha256) == {"main.cpp": digest(OMP_TEXT)}
+    assert dict(item.languages["cuda"].sha256) == {"main.cu": digest(CUDA_TEXT)}
+    assert tuple(item.run_args) == ("100", "")
+    assert frozenset(item.passfail) == {"cuda"}
+    assert dict(item.support) == {"helper.h": "src/common/helper.h"}
+
+
+def test_support_files_are_read_from_the_pinned_sources_and_refused_to_training(tmp_path: Path) -> None:
+    root = write_sources(tmp_path / "sources")
+    suite = bench.load_suite(full_manifest(tmp_path))
+    assert suite.support_files("saxpy", root, purpose="eval") == {"helper.h": HELPER_TEXT}
+    with pytest.raises(bench.EvalSplitError):
+        suite.support_files("saxpy", root, purpose="train")
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (("{main.cpp: " + digest(OMP_TEXT), "{main.cpp: " + "g" * 64), "sha256"),
+        (("{main.cpp: " + digest(OMP_TEXT), "{other.cpp: " + digest(OMP_TEXT)), "sha256"),
+        (('run_args: ["100", ""]', "run_args: 100"), "run_args"),
+        (("passfail: [cuda]", "passfail: [hip]"), "hip"),
+        (("support: {helper.h: src/common/helper.h}", "support: {helper.h: ../helper.h}"), "support"),
+        (("passfail: [cuda]", "passfail: [[cuda]]"), "passfail"),
+        (("support: {helper.h: src/common/helper.h}", "support: {main.cu: src/common/helper.h}"), "main.cu"),
+    ],
+)
+def test_new_manifest_fields_are_validated(tmp_path: Path, change: tuple[str, str], message: str) -> None:
+    path = full_manifest(tmp_path)
+    old, new = change
+    text = path.read_bytes().decode("utf-8")
+    assert old in text
+    path.write_bytes(text.replace(old, new).encode("utf-8"))
+    with pytest.raises(ValueError, match=message):
+        bench.load_suite(path)
+
+
+def test_fetch_lists_support_files_as_files_to_fetch(tmp_path: Path) -> None:
+    suite = bench.load_suite(full_manifest(tmp_path))
+    fetch_bench = fetch_tool()
+    missing = fetch_bench.missing_files(suite, tmp_path / "empty")
+    assert sorted(missing) == ["src/common/helper.h", "src/saxpy-cuda/main.cu", "src/saxpy-omp/main.cpp"]
+    sparse = fetch_bench.sparse_dirs(suite)
+    assert any(entry == "src/common/helper.h" or "src/common/helper.h".startswith(f"{entry}/") for entry in sparse)
+
+
+def test_fetch_refuses_files_whose_sha256_differs_from_the_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fetch_bench = fetch_tool()
+    manifest = full_manifest(tmp_path)
+    suite = bench.load_suite(manifest)
+    scratch = tmp_path / "scratch"
+    monkeypatch.setenv("LASSI_SCRATCH", str(scratch))
+    dest = bench.sources_dir(scratch, suite)
+    served = {"cuda": "// edited upstream of the pin\n"}
+    fetched: list[Path] = []
+
+    def fake_fetch(suite_arg: bench.Suite, dest_arg: Path, *rest: object) -> None:
+        """Stand in for the sparse shallow checkout: write the sources, with the CUDA main as served."""
+        fetched.append(Path(dest_arg))
+        write_sources(Path(dest_arg), served["cuda"])
+
+    monkeypatch.setattr(fetch_bench, "fetch", fake_fetch)
+    monkeypatch.setattr(fetch_bench, "_head", lambda path: suite.commit)
+    # A kept checkout at the pinned commit whose CUDA main differs is not accepted, and neither is a fetch of it.
+    write_sources(dest, served["cuda"])
+    assert fetch_bench.main([str(manifest)]) == 1
+    assert "src/saxpy-cuda/main.cu" in capsys.readouterr().err
+    served["cuda"] = CUDA_TEXT
+    assert fetch_bench.main([str(manifest)]) == 0
+    assert fetched, "the checkout was fetched again"
+    assert (dest / "src/saxpy-cuda/main.cu").read_bytes() == CUDA_TEXT.encode("utf-8")

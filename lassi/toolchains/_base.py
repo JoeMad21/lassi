@@ -366,8 +366,14 @@ class CompilerToolchain:
         """Return the Diagnostics in the compiler's `stderr`; each subclass defines it."""
         raise NotImplementedError
 
-    def build(self, files: Mapping[str, str], workdir: Path) -> BuildResult:
+    def build(self, files: Mapping[str, str], workdir: Path, harness: Mapping[str, str] | None = None) -> BuildResult:
         """Write `files` (relative path -> text) under `workdir`, compile the sources, and parse the diagnostics.
+
+        `harness` holds the bench item's support files (relative path ->
+        text, such as a header its sources include), written beside `files`
+        and never compiled as sources. A model file at a harness file's path is
+        refused with a "bad-path" error before anything is written, so the
+        model can never replace a harness file.
 
         Every path is checked as lassi.core.files checks it and every text is
         encoded before anything is written, so a bad path raises ValueError
@@ -387,10 +393,11 @@ class CompilerToolchain:
         earlier attempt stay visible to the compiler.
         """
         workdir = Path(workdir)
-        for path in files:
+        harness = dict(harness or {})
+        for path in [*files, *harness]:
             _check_path(path)
-        payloads = {path: text.encode("utf-8") for path, text in files.items()}
-        refused = self._unwritable(files)
+        payloads = {path: text.encode("utf-8") for path, text in [*files.items(), *harness.items()]}
+        refused = self._unwritable(files, harness)
         if refused:
             return BuildResult(artifact=None, diagnostics=refused, stderr_ref="")
         for path, data in payloads.items():
@@ -412,19 +419,23 @@ class CompilerToolchain:
             diagnostics.append(failure)
         return BuildResult(artifact=artifact, diagnostics=diagnostics, stderr_ref=STDERR_ATTACHMENT)
 
-    def _unwritable(self, files: Mapping[str, str]) -> list[Diagnostic]:
+    def _unwritable(self, files: Mapping[str, str], harness: Mapping[str, str]) -> list[Diagnostic]:
         """Return a "bad-path" error for each path the workdir cannot hold, in sorted order.
 
         A path is refused when its first segment is OUTPUT or
-        STDERR_ATTACHMENT, which build() writes itself, or when another path
-        needs it as a directory (a file "a" next to "a/b.cu").
+        STDERR_ATTACHMENT, which build() writes itself, when a harness file
+        has that path, or when another path, a harness path included, needs
+        it as a directory (a file "a" next to "a/b.cu").
         """
-        directories = {parent.as_posix() for path in files for parent in PurePosixPath(path).parents}
+        every = [*files, *harness]
+        directories = {parent.as_posix() for path in every for parent in PurePosixPath(path).parents}
         refused: list[Diagnostic] = []
-        for path in sorted(files):
+        for path in sorted(set(every)):
             first = path.split("/")[0]
             if first in _RESERVED:
                 reason = f"the build keeps the name {first!r} for {_RESERVED[first]}"
+            elif path in files and path in harness:
+                reason = "the harness provides that file for the build"
             elif path in directories:
                 reason = "other files use it as a directory"
             else:

@@ -289,7 +289,7 @@ SCHEMA = _Fields(
         "runs_root": _STR,
         "sandbox": _Fields({"network": _BOOL, "wall_s": _NUMBER_OR_STR, "mem_gb": _NUMBER}),
         "report": _Fields({"trial_md": _BOOL, "parquet": _BOOL}),
-        "bench": _Fields({"suite": _STR, "split": _STR}),
+        "bench": _Fields({"suite": _STR, "split": _STR, "items": _ListOf(_STR, non_empty=True)}),
         "directions": _ListOf(
             _Fields({"source": _STR, "target": _STR}, required=frozenset({"source", "target"})), non_empty=True
         ),

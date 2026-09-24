@@ -42,7 +42,7 @@ Owner queue: OQ-018 (upstream LASSI text in the public repository) blocks only P
   - Support files land in every build directory of their item as harness files, and a model file with the same name cannot replace them (test). The known case is entropy's `reference.h` from pinned HeCBench. No app needs a CUDA component beyond the pinned archives.
   - A recipe can select items; `tests/fixtures/recipes/p0-smoke.yaml` selects `layout` only.
   - A `remote` test fetches the manifest and compiles all 20 reference programs with the pinned toolchains in the compile sandbox, reporting 20/20 or each failure. Evidence: run from a clean commit, its rx id in the P1.2 STATUS note, and `rx pull` into `results/p1-hecbench-compile/` with `provenance.json` and a `summary.md`.
-- Files: `assets/bench/lassi-hecbench-10.yaml`, `lassi/bench/registry.py`, `tools/fetch_bench.py`, `lassi/core/recipe.py`, `lassi/toolchains/_base.py`, `tests/fixtures/recipes/p0-smoke.yaml`, `tests/bench/`, `tests/toolchains/`, `results/p1-hecbench-compile/`.
+- Files: `assets/bench/lassi-hecbench-10.yaml`, `lassi/bench/registry.py`, `tools/fetch_bench.py`, `lassi/core/recipe.py`, `lassi/core/runner.py`, `lassi/core/stages.py`, `lassi/core/interfaces.py`, `lassi/toolchains/_base.py`, `tests/fixtures/recipes/p0-smoke.yaml`, `tests/bench/`, `tests/core/test_runner.py`, `tests/toolchains/`, `results/p1-hecbench-compile/`.
 - Remote: `rx run` of the fetch and the remote test, then `rx pull`. Depends: P1.1.
 
 ### P1.3 lassi-2024 prompt set and context packs from pinned upstream

@@ -159,7 +159,7 @@ SMOKE_DATA: dict[str, Any] = {
     "extends": "base",
     "model": {"backend": "mock", "id": MOCK_ID},
     "llm": {"sampling": {"max_tokens": 4096}},
-    "bench": {"suite": SUITE, "split": "eval"},
+    "bench": {"suite": SUITE, "split": "eval", "items": [ITEM]},
     "directions": [{"source": "omp", "target": "cuda"}],
     "prompts": "p0-smoke",
     "toolchain": {"cuda": "nvcc-sm80"},

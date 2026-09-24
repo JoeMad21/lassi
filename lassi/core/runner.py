@@ -23,7 +23,9 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
 4. loads the suite manifest assets/bench/<bench.suite>.yaml and finds the
    fetched sources (tools/fetch_bench.py puts them under $LASSI_SCRATCH);
 5. runs every trial, direction by direction in recipe order, item by item in
-   sorted order (the items of the recipe's split), then run 1 to trials.n: the
+   sorted order (the items bench.items selects, else every item of the
+   recipe's split; an unknown item, one outside the split, or a repeat is a
+   RunError before anything is written), then run 1 to trials.n: the
    stages in recipe order on a fresh RunContext, then the trial's final block;
 6. writes the run tree and prints one line per trial and the run directory.
 
@@ -506,7 +508,7 @@ def _toolchains_root(options: RunOptions) -> Path | None:
 
 
 def _bench(recipe: Recipe, settings: _Settings, options: RunOptions) -> _Bench:
-    """Load the recipe's suite and find its fetched sources; the items are those of the recipe's split, sorted."""
+    """Load the recipe's suite and find its fetched sources; the items are those `_items` selects, sorted."""
     name = recipe.data["bench"]["suite"]
     manifest = BENCH_DIR / f"{name}.yaml"
     if not _NAME.fullmatch(name) or not manifest.is_file():
@@ -515,10 +517,33 @@ def _bench(recipe: Recipe, settings: _Settings, options: RunOptions) -> _Bench:
         suite = load_suite(manifest)
     except (OSError, ValueError) as error:
         raise RunError(f"cannot load the suite manifest {manifest}: {error}") from error
-    items = tuple(sorted(item for item, spec in suite.items.items() if spec.split == settings.split))
-    if not items:
-        raise RunError(f"{recipe.path}: suite {name!r} has no items in the split {settings.split!r}")
+    items = _items(recipe, suite, settings.split)
     return _Bench(suite=suite, root=_sources_root(suite, options), items=items)
+
+
+def _items(recipe: Recipe, suite: Suite, split: str) -> tuple[str, ...]:
+    """Return the items the run covers, sorted: those bench.items names, else every item of the recipe's split.
+
+    A selected item the suite lacks, one outside the split, or one named
+    twice is a RunError naming it.
+    """
+    in_split = sorted(item for item, spec in suite.items.items() if spec.split == split)
+    selected = recipe.data["bench"].get("items")
+    if selected is None:
+        if not in_split:
+            raise RunError(f"{recipe.path}: suite {suite.name!r} has no items in the split {split!r}")
+        return tuple(in_split)
+    for index, item in enumerate(selected):
+        if item not in suite.items:
+            raise RunError(
+                f"{recipe.path}: bench.items names {item!r}, which suite {suite.name!r} does not have; "
+                f"items: {', '.join(sorted(suite.items))}"
+            )
+        if item not in in_split:
+            raise RunError(f"{recipe.path}: bench.items names {item!r}, which is not in the split {split!r}")
+        if item in selected[:index]:
+            raise RunError(f"{recipe.path}: bench.items names {item!r} twice")
+    return tuple(sorted(selected))
 
 
 def _fetch_hint(suite: Suite) -> str:
@@ -608,6 +633,7 @@ def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
             try:
                 bench.suite.source_files(item, direction, bench.root, purpose=PURPOSE)
                 bench.suite.reference_target(item, direction, bench.root, purpose=PURPOSE)
+                bench.suite.support_files(item, bench.root, purpose=PURPOSE)
             except (OSError, ValueError) as error:
                 raise RunError(
                     f"cannot read {bench.suite.name}/{item} ({direction.name}) under {bench.root}: {error}; "

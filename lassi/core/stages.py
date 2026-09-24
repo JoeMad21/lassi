@@ -319,11 +319,17 @@ class CompileLoopStage:
     def _build(self, files: Mapping[str, str], workdir: Path) -> BuildResult:
         """Build `files` in `workdir`; a file name the filesystem refuses becomes an "unwritable" error.
 
-        Only a name error (too long, or refused as invalid) is the model's to
-        fix; any other OSError, such as a full disk, propagates and stops the
-        run.
+        The item's support files from the suite manifest go into the build
+        directory as harness files, passed as the toolchain's `harness`
+        argument only when the item has some. Only a name error (too long, or
+        refused as invalid) is the model's to fix; any other OSError, such as
+        a full disk, propagates and stops the run.
         """
+        context = self.context
+        harness = context.suite.support_files(context.item, context.sources_root, purpose=PURPOSE)
         try:
+            if harness:
+                return self._toolchain().build(files, workdir, harness=harness)
             return self._toolchain().build(files, workdir)
         except UnicodeError as error:
             reason = f"a file is not valid Unicode text ({error.reason})"
