@@ -1,0 +1,533 @@
+{
+  "synthetic": true,
+  "note": "Scripted synthetic fixtures for the notebook replay (task P1.9); see README.md. No text here is model output, upstream source, or upstream prompt text, and no value here is a measurement.",
+  "item": "layout",
+  "compile_kinds": {
+    "clean": {
+      "ok": true,
+      "stderr": {
+        "omp": "nvcpp_minfo_clean.stderr",
+        "cuda": "nvcc_clean.stderr"
+      }
+    },
+    "edg_error": {
+      "ok": false,
+      "stderr": {
+        "omp": "nvcpp_edg_error.stderr",
+        "cuda": "nvcc_undefined_identifier.stderr"
+      }
+    },
+    "linker_error": {
+      "ok": false,
+      "stderr": {
+        "omp": "nvcpp_linker_error.stderr",
+        "cuda": "nvcc_linker_error.stderr"
+      }
+    },
+    "fatal": {
+      "ok": false,
+      "stderr": {
+        "omp": "nvcpp_fatal_abort.stderr",
+        "cuda": "nvcc_fatal.stderr"
+      }
+    }
+  },
+  "programs": {
+    "plain": {
+      "omp": "// SYNTHETIC replay fixture: OpenMP form of a made-up sum program.\n#include <cstdio>\n\nint main(int argc, char **argv) {\n    const int count = 8;\n    int total = 0;\n    #pragma omp target teams distribute parallel for map(tofrom: total) reduction(+: total)\n    for (int k = 0; k < count; k++) {\n        total += k;\n    }\n    printf(\"replay total %d\\n\", total);\n    printf(\"PASS\\n\");\n    return 0;\n}\n",
+      "cuda": "// SYNTHETIC replay fixture: CUDA form of a made-up sum program.\n#include <cstdio>\n\n__global__ void replay_sum(int *replay_total, int count) {\n    int k = blockIdx.x * blockDim.x + threadIdx.x;\n    if (k < count) atomicAdd(replay_total, k);\n}\n\nint main(int argc, char **argv) {\n    const int count = 8;\n    int total = 0;\n    int *replay_total;\n    cudaMalloc(&replay_total, sizeof(int));\n    cudaMemcpy(replay_total, &total, sizeof(int), cudaMemcpyHostToDevice);\n    replay_sum<<<1, count>>>(replay_total, count);\n    cudaMemcpy(&total, replay_total, sizeof(int), cudaMemcpyDeviceToHost);\n    cudaFree(replay_total);\n    printf(\"replay total %d\\n\", total);\n    printf(\"PASS\\n\");\n    return 0;\n}\n"
+    },
+    "spaced": {
+      "omp": "// SYNTHETIC  replay  fixture:   spaced   OpenMP form,  CRLF line ends.\r\n#include   <cstdio>\r\n\r\nint  main(int argc,    char **argv)   {\r\n    const  int   count    =  8;   \r\n\tint total = 0;\r\n    #pragma omp target teams distribute parallel for   map(tofrom: total)   reduction(+: total)\r\n    for (int k = 0;   k < count;   k++) {\r\n        total  +=  k;\r\n    }\r\n    printf(\"replay   total   %d\\n\",   total);\r\n    printf(\"PASS\\n\");\r\n    return   0;\r\n}\r\n",
+      "cuda": "// SYNTHETIC  replay  fixture:   spaced   CUDA form,  CRLF line ends.\r\n#include   <cstdio>\r\n\r\n__global__   void  replay_sum(int  *replay_total,   int count)  {\r\n    int   k  =  blockIdx.x * blockDim.x   +   threadIdx.x;\r\n\tif (k < count)   atomicAdd(replay_total,   k);\r\n}\r\n\r\nint  main(int argc,    char **argv)   {\r\n    const  int   count    =  8;   \r\n    int   total = 0;\r\n    int  *replay_total;\r\n    cudaMalloc(&replay_total,   sizeof(int));\r\n    replay_sum<<<1,   count>>>(replay_total,  count);\r\n    cudaMemcpy(&total,  replay_total,  sizeof(int),   cudaMemcpyDeviceToHost);\r\n    printf(\"replay   total   %d\\n\",   total);\r\n    return   0;\r\n}\r\n"
+    }
+  },
+  "runs": {
+    "reference_ok": {
+      "exit": 0,
+      "stdout": "SYNTHETIC reference run\nreplay total 28\nPASS\n",
+      "stderr": ""
+    },
+    "reference_fail": {
+      "exit": 1,
+      "stdout": "SYNTHETIC reference run\n",
+      "stderr": "SYNTHETIC reference failure on stderr\n"
+    },
+    "attempt_ok": {
+      "exit": 0,
+      "stdout": "SYNTHETIC attempt run\nreplay total 28\nPASS\n",
+      "stderr": ""
+    },
+    "attempt_segfault": {
+      "signal": 11,
+      "stdout": "SYNTHETIC attempt run before a fault\n",
+      "stderr": "SYNTHETIC fault report  with   runs of spaces\nsecond stderr line\n"
+    },
+    "attempt_exit_error": {
+      "exit": 3,
+      "stdout": "SYNTHETIC attempt run\nreplay total 27\nFAIL\n",
+      "stderr": "SYNTHETIC failure on stderr\n"
+    }
+  },
+  "scenarios": [
+    {
+      "name": "first-try-success",
+      "what": "The first reply is one bare untagged fence; it compiles and runs clean.",
+      "program": "plain",
+      "recording": "recordings/first-try-success.json",
+      "compiles": [
+        "clean",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 1,
+        "compiled": [
+          0
+        ],
+        "ran": [
+          0
+        ],
+        "corrections": 0,
+        "end": "complete",
+        "fence_quirk": 0,
+        "output_from": 0,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "fence-cpp",
+      "what": "The first reply's fence is tagged cpp; the tag is cut and the rest of its line is empty.",
+      "program": "plain",
+      "recording": "recordings/fence-cpp.json",
+      "compiles": [
+        "clean",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 1,
+        "compiled": [
+          0
+        ],
+        "ran": [
+          0
+        ],
+        "corrections": 0,
+        "end": "complete",
+        "fence_quirk": 0,
+        "output_from": 0,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "fence-c-plus-plus",
+      "what": "The first reply's fence is tagged c++; the tag is cut and the rest of its line is empty.",
+      "program": "plain",
+      "recording": "recordings/fence-c-plus-plus.json",
+      "compiles": [
+        "clean",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 1,
+        "compiled": [
+          0
+        ],
+        "ran": [
+          0
+        ],
+        "corrections": 0,
+        "end": "complete",
+        "fence_quirk": 0,
+        "output_from": 0,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "fence-c",
+      "what": "The first reply's fence is tagged c; the tag is cut and the rest of its line is empty.",
+      "program": "plain",
+      "recording": "recordings/fence-c.json",
+      "compiles": [
+        "clean",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 1,
+        "compiled": [
+          0
+        ],
+        "ran": [
+          0
+        ],
+        "corrections": 0,
+        "end": "complete",
+        "fence_quirk": 0,
+        "output_from": 0,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "fence-cuda",
+      "what": "The first reply's fence is tagged cuda; the cut leaves uda on the first line (a fence-quirk hit), the scripted compile fails, and an untagged correction compiles and runs clean.",
+      "program": "plain",
+      "recording": "recordings/fence-cuda.json",
+      "compiles": [
+        "clean",
+        "edg_error",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 2,
+        "compiled": [
+          1
+        ],
+        "ran": [
+          1
+        ],
+        "corrections": 1,
+        "end": "complete",
+        "fence_quirk": 1,
+        "output_from": 1,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "fence-untagged",
+      "what": "The first reply holds prose around one untagged fence; it compiles and runs clean.",
+      "program": "plain",
+      "recording": "recordings/fence-untagged.json",
+      "compiles": [
+        "clean",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 1,
+        "compiled": [
+          0
+        ],
+        "ran": [
+          0
+        ],
+        "corrections": 0,
+        "end": "complete",
+        "fence_quirk": 0,
+        "output_from": 0,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "fence-code-on-fence-line",
+      "what": "The first reply's untagged fence has code on its opening line starting with c, so the cut leaves onst on that line (a fence-quirk hit); the scripted compile fails and the correction compiles and runs clean.",
+      "program": "plain",
+      "recording": "recordings/fence-code-on-fence-line.json",
+      "compiles": [
+        "clean",
+        "edg_error",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 2,
+        "compiled": [
+          1
+        ],
+        "ran": [
+          1
+        ],
+        "corrections": 1,
+        "end": "complete",
+        "fence_quirk": 1,
+        "output_from": 1,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "no-fence",
+      "what": "The first reply holds no fence, so the target file is empty; its scripted compile fails at the link and the correction compiles and runs clean.",
+      "program": "plain",
+      "recording": "recordings/no-fence.json",
+      "compiles": [
+        "clean",
+        "linker_error",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 2,
+        "compiled": [
+          1
+        ],
+        "ran": [
+          1
+        ],
+        "corrections": 1,
+        "end": "complete",
+        "fence_quirk": 0,
+        "output_from": 1,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "several-fences",
+      "what": "The first reply holds a helper in a first cpp fence and the program in a second; only the first is read, its scripted compile fails at the link, and the correction compiles and runs clean.",
+      "program": "plain",
+      "recording": "recordings/several-fences.json",
+      "compiles": [
+        "clean",
+        "linker_error",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 2,
+        "compiled": [
+          1
+        ],
+        "ran": [
+          1
+        ],
+        "corrections": 1,
+        "end": "complete",
+        "fence_quirk": 0,
+        "output_from": 1,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "compile-error-then-fix",
+      "what": "Attempt 0 fails its scripted compile with a captured EDG error; attempt 1 compiles and runs clean.",
+      "program": "plain",
+      "recording": "recordings/compile-error-then-fix.json",
+      "compiles": [
+        "clean",
+        "edg_error",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 2,
+        "compiled": [
+          1
+        ],
+        "ran": [
+          1
+        ],
+        "corrections": 1,
+        "end": "complete",
+        "fence_quirk": 0,
+        "output_from": 1,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "run-error-then-fix",
+      "what": "Attempt 0 compiles and its scripted run dies by signal 11 with stderr; attempt 1 compiles and runs clean.",
+      "program": "plain",
+      "recording": "recordings/run-error-then-fix.json",
+      "compiles": [
+        "clean",
+        "clean",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_segfault",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 2,
+        "compiled": [
+          0,
+          1
+        ],
+        "ran": [
+          0,
+          1
+        ],
+        "corrections": 1,
+        "end": "complete",
+        "fence_quirk": 0,
+        "output_from": 1,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "stale-output-past-gate",
+      "what": "Attempt 0 compiles and its scripted run exits 3; attempts 1 to 7 fail their compiles; attempt 8 compiles after 8 corrections, past the execution gate, so it is not run and attempt 0's stdout stands.",
+      "program": "plain",
+      "recording": "recordings/stale-output-past-gate.json",
+      "compiles": [
+        "clean",
+        "clean",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_exit_error"
+      ],
+      "expect": {
+        "attempts": 9,
+        "compiled": [
+          0,
+          8
+        ],
+        "ran": [
+          0
+        ],
+        "corrections": 8,
+        "end": "complete",
+        "fence_quirk": 0,
+        "output_from": 0,
+        "stale_output": true
+      }
+    },
+    {
+      "name": "crash-past-gate-no-run",
+      "what": "Attempts 0 to 8 fail their compiles; attempt 9 compiles past the execution gate with no earlier run, where the notebook raises and the faithful trial ends upstream-crash.",
+      "program": "plain",
+      "recording": "recordings/crash-past-gate-no-run.json",
+      "compiles": [
+        "clean",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "edg_error",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok"
+      ],
+      "expect": {
+        "attempts": 10,
+        "compiled": [
+          9
+        ],
+        "ran": [],
+        "corrections": 9,
+        "end": "upstream-crash",
+        "fence_quirk": 0,
+        "output_from": null,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "baseline-compile-failure",
+      "what": "The target reference fails its scripted compile, so the trial ends before any model call.",
+      "program": "plain",
+      "recording": "recordings/baseline-compile-failure.json",
+      "compiles": [
+        "fatal"
+      ],
+      "runs": [],
+      "expect": {
+        "attempts": 0,
+        "compiled": [],
+        "ran": [],
+        "corrections": null,
+        "end": "baseline-compile",
+        "fence_quirk": 0,
+        "output_from": null,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "baseline-run-failure",
+      "what": "The target reference compiles and its scripted run exits 1, so the trial ends before any model call.",
+      "program": "plain",
+      "recording": "recordings/baseline-run-failure.json",
+      "compiles": [
+        "clean"
+      ],
+      "runs": [
+        "reference_fail"
+      ],
+      "expect": {
+        "attempts": 0,
+        "compiled": [],
+        "ran": [],
+        "corrections": null,
+        "end": "baseline-run",
+        "fence_quirk": 0,
+        "output_from": null,
+        "stale_output": false
+      }
+    },
+    {
+      "name": "spaces-in-source",
+      "what": "Source and reference hold runs of spaces, a tab, and CRLF line ends; the generation prompt cuts the runs, the correction prompt keeps those in the reply's code, and the fix compiles and runs clean.",
+      "program": "spaced",
+      "recording": "recordings/spaces-in-source.json",
+      "compiles": [
+        "clean",
+        "edg_error",
+        "clean"
+      ],
+      "runs": [
+        "reference_ok",
+        "attempt_ok"
+      ],
+      "expect": {
+        "attempts": 2,
+        "compiled": [
+          1
+        ],
+        "ran": [
+          1
+        ],
+        "corrections": 1,
+        "end": "complete",
+        "fence_quirk": 0,
+        "output_from": 1,
+        "stale_output": false
+      }
+    }
+  ]
+}
