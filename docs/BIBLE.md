@@ -1,6 +1,6 @@
 # LASSI Project Bible
 
-Repository mirror of the project bible, master revision 116 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
+Repository mirror of the project bible, master revision 119 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
 
 ## Purpose And Scope
 
@@ -251,8 +251,21 @@ Trial:
   model: {backend, id, sampling: {temperature, top_p, max_tokens}}
   reference_run: {exit_code, hang, sim_ub, wall_s, stdout_ref, outputs_ref}   # the target reference's baseline run
   context: {knowledge_summary, source_description}
+  requests: [Request]                   # every model call in the order sent; null when not recorded (older records)
   attempts: [Attempt]
   final: {stage_reached, alignment, score, corrections, wall_s, end_reason: {code, message}}
+
+Request:
+  index: position in Trial.requests
+  stage: the registered name of the stage that sent it
+  attempt_index: the attempt its reply became; null for a context request
+  messages: [RequestMessage]            # every message sent, in order, system messages included
+  reply_ref: {sha256, path}             # the reply as kept, each lone surrogate replaced by U+FFFD
+  diagnostics: [Diagnostic]             # notes on the reply that no attempt carries (a context reply's invalid-text)
+
+RequestMessage:
+  role: the chat role, such as system or user
+  ref: {sha256, path}                   # the message text in the text store
 
 Attempt:
   index: 0 for the initial generation, then one per correction
@@ -275,6 +288,8 @@ Diagnostic:
 ```
 
 Trial.reference_run is the target reference's run from the baseline stage: exit status, hang flag, wall time, and stdout by hash. The oracle stage aligns every run's stdout against it, and run_loop derives each attempt run's wall limit from its wall time (Sandbox); it stays unset (all null) under a compile-only executor. The reference run's own limits are 600 s of wall time, 16 CPUs, and the recipe's sandbox.mem_gb [DESIGN]. final.end_reason is null when a trial ends normally, and otherwise a fixed code with a message: `baseline-compile` (a reference program did not build) and `baseline-run` (a reference run exited nonzero, ended with no exit status, or hung) end the trial before any model call, and `correction-cap` means an error, from a build or a run, remained when loop.max_corrections stopped the loop, and upstream-crash means that, with fixes.execution_gate off, a compiling attempt came past the execution gate when no earlier attempt had run, where the notebook raises (no stdout, no alignment). A stage that sets it ends the trial: no later stage runs. trial.md shows the end reason and the reference run, and the Parquet trials table carries them as final_end_reason_code, final_end_reason_message, and reference_run_<field> columns. run_loop fills Attempt.run for each attempt it runs (stdout by hash): a clean run (exit status 0, no hang) is S5, and a failed run stays S4 with a run-stage error Diagnostic, code run-error. Its run-stage warning codes are stale-output and stdout-truncated, stderr-truncated, and workdir-incomplete, one for each RunResult flag that is set.
+
+Trial.requests records every model call of a trial in the order sent, one Request each: the registered name of the stage that sent it (summarize_context, describe_source, generate, compile_loop for a compile-error correction, run_loop for a run-error correction), the attempt its reply became (null for a context request, whose reply fills Trial.context), every message sent with its role and text-store hash, system messages included, and the reply as kept (each lone surrogate becomes U+FFFD). The stage stores each message before sending it, so trial.json keeps no message text inline. An attempt's request ends with the user message the attempt keeps as prompt_ref, and its reply is the attempt's response_text; a context request's reply is the Trial.context field it fills. A faithful trial with context holds 3 + final.corrections requests, whose system messages are the general and the direction's system prompts. Request.diagnostics holds what no attempt carries: a context reply that held a lone surrogate gives its request one parse-stage invalid-text warning, while an attempt's own invalid-text warning stays on the attempt. The runner starts every trial with an empty list, so a trial that ends before any model call records []; null means not recorded, and a trial.json written before the field existed loads with it null. A request's index is its position, and its attempt_index names an attempt of the trial. trial.md shows a Requests section after the context, with each message's sha256, then the reply's sha256, for every request in order, and each distinct message text fenced once; the Parquet mirror's requests table holds one row per request (index, stage, attempt_index, message_roles, message_sha256, reply_ref_sha256, reply_ref_path, diagnostic_count).
 
 Storage: one JSON file and one `trial.md` per trial under the run tree, aggregated into Hive-partitioned Parquet per run. Large texts (responses, stdout) are stored once by hash and referenced. The run manifest (`provenance.json` and `run.md`) is authoritative for provenance; each Trial's `provenance` is a copy of it, shown in `trial.md` and the trials table, so a trial read outside its run tree still carries its provenance (Agent Rule 1).
 
@@ -934,10 +949,11 @@ Open questions:
 
 ## Decision Log
 
-Fifty-nine decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and thirteen on 2026-09-24; add new entries at the top, newest first.
+Sixty decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and fourteen on 2026-09-24; add new entries at the top, newest first.
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-24 | Every model request joins the Result Record (task P2.1). Trial.requests, between context and attempts, holds one Request per model call in the order sent (index, stage, attempt_index, messages, reply_ref, diagnostics); each message is a RequestMessage (role, ref) by text-store hash, system messages included, and the reply is kept as the attempt or context field keeps it. A correction is recorded under the loop stage that asked for it. null means not recorded, so a trial.json written before this change loads unchanged; the runner starts every trial with [], so a trial that asked no model records []. A context reply's invalid-text warning moves from attempt 0 to its request. trial.md gains a Requests section and the Parquet mirror a requests table. This supersedes the part of the faithful generation entry (2026-09-24) that left the system prompts and the summary and description requests out of the record until a later phase | A person must be able to follow a trial without rebuilding its prompts from the fragment manifest and the recipe hash (Readability Standards), and the scores and the review packet of P2 read the exact messages a model saw (Design Principle 2). A warning about a context reply belongs to the call that produced it, not to the first attempt, and moving it keeps attempt 0's diagnostics about attempt 0 |
 | 2026-09-24 | Recipes carry their project name in an explicit project key (task P1.10): a string, inherited through extends (nearest file wins), defaulting to the loaded file's recipe name; the resolved recipe always writes it, and it is the first trial id segment. A project that is not one trial id segment or that names a run tree entry is refused before anything is written. projects/lassi-repro/recipe.yaml sets project: lassi-repro and leaves out metrics (P2), arms (P3), the gpu executor (P10, keeping the block's tier-1 executor none), and max_tokens (P3). This changes every recipe hash from P1 on; the P0 gate evidence and the demo evidence stay valid for the commits they name | A rerun from recipe.resolved.yaml took its project segment from that file's name, so its trial ids differed from the original run's (Design Principle 5; PHASE-NOTES P1, Rerun ids) |
 | 2026-09-24 | Mock dry runs go through faithful fence stripping (task P1.10): with fixes.fence_tag off, the runner asks the mock LLM for its untagged-fence form, and the mock answers with one untagged fence holding the item's one reference target file, the form upstream's system prompts ask for; with the fix on, it keeps FILE blocks | FILE blocks tag .cu files cuda, which upstream's tag stripping turns into "uda", so a faithful dry run would not return the reference (Risks And Questions, mock LLM) |
 | 2026-09-24 | A recipe with faithful: true that binds a toolchain declaring openmp_multicore (the -mp=multicore proxy) is refused at load, before anything is written (task P1.10); the check reads the capability, not the toolchain's name | Upstream builds OpenMP for GPU offload and the proxy checks outputs only (Harness Contract), so a faithful label on a proxy run would misstate what was reproduced (Agent Rule 4; P1.6 commit audit) |

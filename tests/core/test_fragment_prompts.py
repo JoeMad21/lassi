@@ -231,10 +231,14 @@ def test_a_lone_surrogate_in_a_context_reply_becomes_a_replacement_character_and
     assert trial.context.knowledge_summary in sent and trial.context.source_description in sent
     (attempt,) = trial.attempts
     assert attempt.stage_reached == "S1"
-    notes = [(d.stage, d.severity, d.code) for d in attempt.diagnostics]
-    assert notes == [("parse", "warning", "invalid-text")] * 2, "one warning per context field holding U+FFFD"
-    messages = [d.message for d in attempt.diagnostics]
-    assert "knowledge_summary holds 1 " in messages[0] and "source_description holds 2 " in messages[1]
+    assert attempt.diagnostics == [], "a context reply's warning rides on its request (P2.1), not on attempt 0"
+    assert trial.requests is not None
+    notes = [[(d.stage, d.severity, d.code) for d in request.diagnostics] for request in trial.requests]
+    invalid = ("parse", "warning", "invalid-text")
+    assert notes == [[invalid], [invalid], []], "one warning on each context request whose reply held a surrogate"
+    messages = [request.diagnostics[0].message for request in trial.requests[:2]]
+    assert "held 1 lone surrogate" in messages[0] and "Trial.context.knowledge_summary" in messages[0]
+    assert "held 2 lone surrogate" in messages[1] and "Trial.context.source_description" in messages[1]
 
 
 def test_context_without_a_replacement_character_adds_no_warning(
@@ -244,8 +248,10 @@ def test_context_without_a_replacement_character_adds_no_warning(
     replies = ["summary", "description", "```\nint main() {}\n```"]
     run_dir, _ = run(tmp_path, bench, replies, stages=stage_list, context=["cuda-pack"])
     trial_id = make_trial_id("fragment-run", MODEL_ID, SUITE, "omp-cuda", ITEM, 1)
-    (attempt,) = read_trial(trial_dir(run_dir, trial_id), TextStore(run_dir)).attempts
+    trial = read_trial(trial_dir(run_dir, trial_id), TextStore(run_dir))
+    (attempt,) = trial.attempts
     assert attempt.diagnostics == []
+    assert trial.requests is not None and all(request.diagnostics == [] for request in trial.requests)
 
 
 # A synthetic suite whose one item has two OpenMP source files and one CUDA file.

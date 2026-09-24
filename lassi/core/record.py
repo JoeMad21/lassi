@@ -298,6 +298,52 @@ class ScoreBreakdown:
 
 
 @dataclass(frozen=True, kw_only=True)
+class RequestMessage:
+    """One message of a model request: its chat role and its text in the text store, by reference."""
+
+    role: str
+    ref: TextRef
+
+    def __post_init__(self) -> None:
+        """Check the field types and that the role is a non-empty string."""
+        _check_fields(self)
+        _check_non_empty("RequestMessage", "role", self.role)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Request:
+    """One model call of a trial, in Trial.requests at position `index`.
+
+    `stage` is the registered name of the stage that sent it (a correction
+    names the loop stage that asked for it). `attempt_index` is the attempt
+    the reply became, and None for a request whose reply fills Trial.context.
+    `messages` holds every message sent, in order, system messages included,
+    each by text-store reference; `reply_ref` is the reply as kept, each lone
+    surrogate replaced by U+FFFD. `diagnostics` holds what was noted about a
+    reply that no attempt carries, such as a context reply's `invalid-text`
+    warning. Every field but `diagnostics` is required, so a missing value is
+    never read as a context request or an empty call.
+    """
+
+    index: int
+    stage: str
+    attempt_index: int | None
+    messages: list[RequestMessage]
+    reply_ref: TextRef
+    diagnostics: list[Diagnostic] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        """Check the field types, the indexes, the stage name, and that at least one message was sent."""
+        _check_fields(self)
+        _check_non_negative("Request", "index", self.index)
+        _check_non_empty("Request", "stage", self.stage)
+        if self.attempt_index is not None:
+            _check_non_negative("Request", "attempt_index", self.attempt_index)
+        if not self.messages:
+            _fail("Request", "messages", self.messages, "must hold at least one message")
+
+
+@dataclass(frozen=True, kw_only=True)
 class Attempt:
     """One generation: index 0 is the initial one, then one per correction."""
 
@@ -463,7 +509,10 @@ class Trial:
     `reference_run` is the target reference's run from the baseline stage
     (exit status, hang flag, wall time, and stdout by reference); it stays
     all None when the reference was not run, as under a compile-only
-    executor.
+    executor. `requests` holds every model call in the order sent (Request);
+    None means not recorded, as in a trial.json written before requests
+    were, and the runner starts every trial with an empty list, so a trial
+    that asked no model records [].
     """
 
     trial_id: str
@@ -474,11 +523,16 @@ class Trial:
     model: ModelInfo
     reference_run: RunInfo = field(default_factory=RunInfo)
     context: Context = field(default_factory=Context)
+    requests: list[Request] | None = None
     attempts: list[Attempt] = field(default_factory=list)
     final: Final = field(default_factory=Final)
 
     def __post_init__(self) -> None:
-        """Check the field types, the id, the recipe hash, the id against the bench item, and the attempt order."""
+        """Check the field types, the id, the recipe hash, the id against the bench item, and the list orders.
+
+        Each attempt's and each request's index must be its position, and a
+        request's attempt_index must name an attempt of the trial.
+        """
         _check_fields(self)
         parsed = parse_trial_id(self.trial_id)
         _check_sha256("Trial", "recipe_hash", self.recipe_hash)
@@ -490,6 +544,12 @@ class Trial:
         for position, attempt in enumerate(self.attempts):
             if attempt.index != position:
                 _fail("Trial", f"attempts[{position}].index", attempt.index, f"must be {position}")
+        for position, request in enumerate(self.requests or []):
+            if request.index != position:
+                _fail("Trial", f"requests[{position}].index", request.index, f"must be {position}")
+            if request.attempt_index is not None and request.attempt_index >= len(self.attempts):
+                where = f"requests[{position}].attempt_index"
+                _fail("Trial", where, request.attempt_index, f"must name one of the {len(self.attempts)} attempt(s)")
 
     def with_attempt(self, attempt: Attempt) -> Trial:
         """Return a new Trial with `attempt` appended; its index must equal the current attempt count."""
@@ -497,6 +557,17 @@ class Trial:
         if attempt.index != expected:
             raise ValueError(f"Trial.with_attempt: attempt.index must be {expected}, got {attempt.index!r}")
         return dataclasses.replace(self, attempts=[*self.attempts, attempt])
+
+    def with_request(self, request: Request) -> Trial:
+        """Return a new Trial with `request` appended; its index must equal the current request count.
+
+        A trial whose requests were not recorded (None) starts its list with
+        this request.
+        """
+        requests = self.requests or []
+        if request.index != len(requests):
+            raise ValueError(f"Trial.with_request: request.index must be {len(requests)}, got {request.index!r}")
+        return dataclasses.replace(self, requests=[*requests, request])
 
 
 # ---------------------------------------------------------------------------

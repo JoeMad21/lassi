@@ -67,7 +67,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1.12 | OWNER | Apply OQ-018: upstream text in the repository | P1.3 | waits on OQ-018; the gate does not depend on it |
 | P1.G | DONE | Phase gate: notebook replay and mock dry run 20/20 | P1.9,P1.10,P1.11 | PASS: replay 47 passed, 32 cases match (rx 20260924-104048-desktop-8r113ei-p1-faithful-5fd3); mock dry run 20/20 at S4 attempt 0 (rx 20260924-104105-desktop-8r113ei-p1-faithful-c002); fe01ab1 clean; results/p1-gate |
 | P2.0 | DONE | Plan phase P2 into plans/p2-scoring.md and add its tasks here | - | plan plans/p2-scoring.md; base p1-faithful 5d5fd0c |
-| P2.1 | READY | Record every model request | - |  |
+| P2.1 | DONE | Record every model request | - | Trial.requests records every model call (messages by hash, reply, stage, attempt); trial.md Requests section; Parquet requests table; full suite 3114 passed |
 | P2.2 | READY | Record the reference run's flags | - |  |
 | P2.3 | READY | Readings the scores rest on: stage ladder and final alignment | - |  |
 | P2.4 | READY | Spike: the paper's LASSI metric definitions | - |  |

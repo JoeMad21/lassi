@@ -1,4 +1,4 @@
-"""Tests for the Result record, trial naming, JSON, and the text store (P0.2), and Trial provenance (P0.18).
+"""Tests for the Result record, trial naming, JSON, and the text store (P0.2), Trial provenance (P0.18), and requests.
 
 The expected field names come from the Result Record yaml block in
 docs/BIBLE.md, so drift between the bible and lassi/core/record.py fails in
@@ -14,6 +14,14 @@ a Provenance record of commit, dirty, device, sdk, and date, typed as
 provenance.json holds them (commit, dirty, device, and sdk may be null there;
 date may not). It is required: a Trial built without it, and a trial.json that
 lacks it or one of its keys, are refused with a message naming the field.
+
+Trial.requests (P2.1) records every model call: a list of Request records
+(index, stage, attempt_index, messages, reply_ref, diagnostics), each message
+a RequestMessage (role, ref). The bible block defines Request and
+RequestMessage after Trial and before Attempt, and requests sits between
+context and attempts. None means not recorded: a trial.json without the key
+loads with None. A request's index is its position, and its attempt_index,
+when set, names an attempt of the trial.
 """
 
 from __future__ import annotations
@@ -79,8 +87,12 @@ NESTED_RECORDS = {
         "Attempt.guards",
         "Attempt.score",
     ],
+    "Request": ["Request", "Request.reply_ref"],
+    "RequestMessage": ["RequestMessage", "RequestMessage.ref"],
     "Diagnostic": ["Diagnostic"],
 }
+# The top-level blocks of the bible's Result Record yaml block, in order, and the record class of each.
+BIBLE_BLOCKS = ("Trial", "Request", "RequestMessage", "Attempt", "Diagnostic")
 
 CORE_MODULES = ("lassi.core.record", "lassi.core.store", "lassi.core.trial_md", "lassi.core.parquet")
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
@@ -94,6 +106,8 @@ RECORD_CLASSES: tuple[type, ...] = (
     record.Guards,
     record.ScoreBreakdown,
     record.Attempt,
+    record.RequestMessage,
+    record.Request,
     record.ToolchainPins,
     record.Provenance,
     record.BenchItem,
@@ -119,6 +133,11 @@ RESPONSES = (
     "",
 )
 STDOUT = "PASS\n"
+# Synthetic request texts: the two system prompts and the summary request.
+SYSTEM_GENERAL = "Synthetic general system prompt.\n"
+SYSTEM_DIRECTION = "Synthetic direction system prompt.\n"
+SUMMARY_REQUEST = "Summarize the synthetic notes.\n"
+KNOWLEDGE = f"Target offload maps to a grid; na{I_DIAERESIS}ve copy.\n"
 CODE_0 = "int x;\n"
 CODE_1 = f"int y; // na{I_DIAERESIS}ve\n"
 
@@ -338,11 +357,51 @@ def sample_diagnostic() -> record.Diagnostic:
     )
 
 
-def full_trial(prompt_refs: tuple[record.TextRef, record.TextRef], stdout_ref: record.TextRef) -> record.Trial:
-    """Return a two-attempt Trial that sets every kind of field, with CRLF and non-ASCII text."""
+def full_requests(ref: Callable[[str], record.TextRef]) -> list[record.Request]:
+    """Return a context request with a warning and one request per attempt, each text referenced through `ref`."""
+
+    def messages(system: str, user: str) -> list[record.RequestMessage]:
+        return [
+            record.RequestMessage(role="system", ref=ref(system)),
+            record.RequestMessage(role="user", ref=ref(user)),
+        ]
+
+    warning = record.Diagnostic(stage="parse", severity="warning", code="invalid-text", message="synthetic warning")
+    return [
+        record.Request(
+            index=0,
+            stage="summarize_context",
+            attempt_index=None,
+            messages=messages(SYSTEM_GENERAL, SUMMARY_REQUEST),
+            reply_ref=ref(KNOWLEDGE),
+            diagnostics=[warning],
+        ),
+        record.Request(
+            index=1,
+            stage="generate",
+            attempt_index=0,
+            messages=messages(SYSTEM_DIRECTION, PROMPTS[0]),
+            reply_ref=ref(RESPONSES[0]),
+        ),
+        record.Request(
+            index=2,
+            stage="compile_loop",
+            attempt_index=1,
+            messages=messages(SYSTEM_DIRECTION, PROMPTS[1]),
+            reply_ref=ref(RESPONSES[1]),
+        ),
+    ]
+
+
+def full_trial(ref: Callable[[str], record.TextRef]) -> record.Trial:
+    """Return a two-attempt Trial that sets every kind of field, with CRLF and non-ASCII text.
+
+    Every text reference comes from `ref`: text_ref for tests that need no
+    store, a store's put for tests that render trial.md.
+    """
     first = record.Attempt(
         index=0,
-        prompt_ref=prompt_refs[0],
+        prompt_ref=ref(PROMPTS[0]),
         response_text=RESPONSES[0],
         files={"main.cu": CODE_0},
         stage_reached="S1",
@@ -353,14 +412,14 @@ def full_trial(prompt_refs: tuple[record.TextRef, record.TextRef], stdout_ref: r
     )
     second = record.Attempt(
         index=1,
-        prompt_ref=prompt_refs[1],
+        prompt_ref=ref(PROMPTS[1]),
         response_text=RESPONSES[1],
         files={"main.cu": CODE_1, "kernels/k.cuh": "#pragma once"},
         diff_from_previous=record.unified_diff(
             {"main.cu": CODE_0}, {"main.cu": CODE_1, "kernels/k.cuh": "#pragma once"}
         ),
         stage_reached="S5",
-        run=record.RunInfo(exit_code=0, hang=False, sim_ub=None, wall_s=None, stdout_ref=stdout_ref, outputs_ref=None),
+        run=record.RunInfo(exit_code=0, hang=False, sim_ub=None, wall_s=None, stdout_ref=ref(STDOUT), outputs_ref=None),
         alignment=record.Alignment(per_input=[1.0, 0.5], mean=0.75),
         profile=record.Profile(),
         guards=record.Guards(host_compute=False, harness_tamper=False, oracle_access=None),
@@ -373,7 +432,8 @@ def full_trial(prompt_refs: tuple[record.TextRef, record.TextRef], stdout_ref: r
         provenance=full_provenance(),
         bench_item=example_bench(),
         model=example_model(),
-        context=record.Context(knowledge_summary=f"Target offload maps to a grid; na{I_DIAERESIS}ve copy.\n"),
+        context=record.Context(knowledge_summary=KNOWLEDGE),
+        requests=full_requests(ref),
         attempts=[first, second],
         final=record.Final(stage_reached="S5", alignment=0.75, score=None, corrections=1, wall_s=None),
     )
@@ -381,12 +441,12 @@ def full_trial(prompt_refs: tuple[record.TextRef, record.TextRef], stdout_ref: r
 
 def json_trial() -> record.Trial:
     """Return full_trial with references computed by hashlib, for tests that need no store."""
-    return full_trial((text_ref(PROMPTS[0]), text_ref(PROMPTS[1])), text_ref(STDOUT))
+    return full_trial(text_ref)
 
 
 def stored_trial(text_store: store.TextStore) -> record.Trial:
-    """Return full_trial with its prompts and stdout put in the store, so trial.md can resolve them."""
-    return full_trial((text_store.put(PROMPTS[0]), text_store.put(PROMPTS[1])), text_store.put(STDOUT))
+    """Return full_trial with every referenced text put in the store, so trial.md can resolve them."""
+    return full_trial(text_store.put)
 
 
 def public_defs(tree: ast.Module) -> list[tuple[str, ast.AST]]:
@@ -429,16 +489,19 @@ def text_store(tmp_path: Path) -> store.TextStore:
 # Field names and constants from the bible
 
 
-def test_bible_block_names_trial_attempt_diagnostic() -> None:
+def test_bible_block_names_every_record_block() -> None:
     fields = bible_record_fields()
-    assert list(fields) == ["Trial", "Attempt", "Diagnostic"]
+    assert tuple(fields) == BIBLE_BLOCKS
     assert list(fields["Diagnostic"]) == ["stage", "severity", "code", "file", "line", "column", "message"]
+    trial = list(fields["Trial"])
+    assert trial[trial.index("context") :][:3] == ["context", "requests", "attempts"]
+    assert fields["Trial"]["requests"] == "[Request]"
+    assert fields["Request"]["messages"] == "[RequestMessage]"
 
 
-@pytest.mark.parametrize("name", ["Trial", "Attempt", "Diagnostic"])
+@pytest.mark.parametrize("name", BIBLE_BLOCKS)
 def test_record_fields_match_bible(name: str) -> None:
-    cls = {"Trial": record.Trial, "Attempt": record.Attempt, "Diagnostic": record.Diagnostic}[name]
-    visited = check_record_fields(cls, bible_record_fields()[name], name)
+    visited = check_record_fields(getattr(record, name), bible_record_fields()[name], name)
     assert visited == NESTED_RECORDS[name]
 
 
@@ -457,6 +520,14 @@ def test_json_keys_match_bible() -> None:
     assert len(diagnostics) == 2
     for diagnostic in diagnostics:
         check_dict_keys(diagnostic, fields["Diagnostic"], "Diagnostic")
+    assert len(data["requests"]) == 3
+    for request in data["requests"]:
+        assert check_dict_keys(request, fields["Request"], "Request") == NESTED_RECORDS["Request"]
+        for message in request["messages"]:
+            visited = check_dict_keys(message, fields["RequestMessage"], "RequestMessage")
+            assert visited == NESTED_RECORDS["RequestMessage"]
+    (diagnostic,) = data["requests"][0]["diagnostics"]
+    check_dict_keys(diagnostic, fields["Diagnostic"], "Diagnostic")
 
 
 def test_stage_constants_match_bible() -> None:
@@ -622,6 +693,7 @@ def test_trial_and_part_defaults() -> None:
     assert trial.toolchain_pins == record.ToolchainPins()
     assert all(getattr(trial.toolchain_pins, name) is None for name in record.TOOLCHAIN_PIN_NAMES)
     assert trial.context == record.Context(knowledge_summary="", source_description="")
+    assert trial.requests is None, "requests default to not recorded"
     assert trial.attempts == []
     assert trial.final == record.Final(stage_reached=None, alignment=None, score=None, corrections=0, wall_s=None)
     assert record.RunInfo() == record.RunInfo(
@@ -755,6 +827,30 @@ FIELD_ERRORS = [
     ),
 ]
 
+
+def request_with(**changes: Any) -> record.Request:
+    """Return a context request with one user message, with the given fields changed."""
+    fields: dict[str, Any] = {
+        "index": 0,
+        "stage": "summarize_context",
+        "attempt_index": None,
+        "messages": [record.RequestMessage(role="user", ref=text_ref(SUMMARY_REQUEST))],
+        "reply_ref": text_ref(KNOWLEDGE),
+    }
+    fields.update(changes)
+    return record.Request(**fields)
+
+
+FIELD_ERRORS += [
+    pytest.param(lambda: request_with(index=-1), "index", -1, id="request-index"),
+    pytest.param(lambda: request_with(stage=""), "stage", "", id="request-stage-empty"),
+    pytest.param(lambda: request_with(attempt_index=-1), "attempt_index", -1, id="request-attempt-index"),
+    pytest.param(lambda: request_with(messages=[]), "messages", [], id="request-no-message"),
+    pytest.param(
+        lambda: record.RequestMessage(role="", ref=text_ref(SUMMARY_REQUEST)), "role", "", id="request-message-role"
+    ),
+]
+
 # Wrong types: the constructors take exactly what from_dict gives back, so every
 # record that can be built also survives the JSON round trip.
 TYPE_ERRORS = [
@@ -798,6 +894,21 @@ TYPE_ERRORS = [
         "attempts",
         (record.Attempt(index=0, stage_reached="S0"),),
         id="trial-attempts-tuple",
+    ),
+    pytest.param(lambda: request_with(index=True), "index", True, id="request-index-bool"),
+    pytest.param(lambda: request_with(attempt_index="0"), "attempt_index", "0", id="request-attempt-index-str"),
+    pytest.param(lambda: request_with(messages=["user"]), "messages", "user", id="request-messages-str"),
+    pytest.param(
+        lambda: request_with(reply_ref=f"texts/{VALID_SHA[:2]}/{VALID_SHA}.txt"),
+        "reply_ref",
+        f"texts/{VALID_SHA[:2]}/{VALID_SHA}.txt",
+        id="request-reply-ref-str",
+    ),
+    pytest.param(lambda: request_with(diagnostics=["m"]), "diagnostics", "m", id="request-diagnostics-str"),
+    pytest.param(lambda: record.RequestMessage(role=None, ref=text_ref("x")), "role", None, id="message-role-none"),
+    pytest.param(lambda: record.RequestMessage(role="user", ref="x"), "ref", "x", id="message-ref-str"),
+    pytest.param(
+        lambda: trial_with(requests=(request_with(),)), "requests", (request_with(),), id="trial-requests-tuple"
     ),
     pytest.param(lambda: example_provenance(commit=5), "commit", 5, id="provenance-commit-int"),
     pytest.param(lambda: example_provenance(dirty="false"), "dirty", "false", id="provenance-dirty-str"),
@@ -846,6 +957,47 @@ def test_trial_cross_field_rules(bench_changes: dict[str, str], indexes: list[in
     message = str(info.value)
     assert field in message, message
     assert mentions(message, value), message
+
+
+REQUEST_ORDER_ERRORS = [
+    pytest.param([1], 0, "requests[0].index", 1, id="first-request-index-1"),
+    pytest.param([0, 0], 0, "requests[1].index", 0, id="repeated-request-index"),
+    pytest.param([0, 2], 0, "requests[1].index", 2, id="skipped-request-index"),
+]
+
+
+@pytest.mark.parametrize(("indexes", "attempts", "field", "value"), REQUEST_ORDER_ERRORS)
+def test_trial_requests_are_in_index_order(indexes: list[int], attempts: int, field: str, value: Any) -> None:
+    requests = [request_with(index=index) for index in indexes]
+    with pytest.raises(ValueError) as info:
+        trial_with(requests=requests)
+    message = str(info.value)
+    assert field in message, message
+    assert mentions(message, value), message
+
+
+def test_a_request_attempt_index_must_name_an_attempt_of_the_trial() -> None:
+    attempt = record.Attempt(index=0, stage_reached="S1")
+    trial = trial_with(requests=[request_with(attempt_index=0)], attempts=[attempt])
+    assert trial.requests is not None and trial.requests[0].attempt_index == 0
+    with pytest.raises(ValueError) as info:
+        trial_with(requests=[request_with(attempt_index=1)], attempts=[attempt])
+    assert "requests[0].attempt_index" in str(info.value) and mentions(str(info.value), 1)
+
+
+def test_with_request_appends_and_starts_a_list_on_a_trial_not_recorded() -> None:
+    empty = minimal_trial()
+    first = request_with()
+    second = request_with(index=1, stage="describe_source")
+    one = empty.with_request(first)
+    assert empty.requests is None
+    assert one.requests == [first]
+    assert one.with_request(second).requests == [first, second]
+    assert trial_with(requests=[]).with_request(first).requests == [first]
+    for wrong in (request_with(index=1), request_with(index=0)):
+        with pytest.raises(ValueError) as info:
+            (empty if wrong.index else one).with_request(wrong)
+        assert "request.index" in str(info.value)
 
 
 def test_int_values_in_float_fields_become_floats() -> None:
@@ -1185,6 +1337,10 @@ def test_to_json_format() -> None:
         pytest.param(example_provenance, id="provenance"),
         pytest.param(unknown_provenance, id="provenance-unknown"),
         pytest.param(lambda: trial_with(provenance=unknown_provenance()), id="trial-unknown-provenance"),
+        pytest.param(lambda: json_trial().requests[0], id="request-context"),
+        pytest.param(lambda: json_trial().requests[1], id="request-attempt"),
+        pytest.param(lambda: json_trial().requests[0].messages[0], id="request-message"),
+        pytest.param(lambda: trial_with(requests=[]), id="trial-no-request"),
     ],
 )
 def test_json_round_trip(build: Callable[[], Any]) -> None:
@@ -1206,6 +1362,21 @@ def test_round_trip_rebuilds_nested_types() -> None:
     assert isinstance(trial.attempts[0].prompt_ref, record.TextRef)
     assert isinstance(trial.attempts[1].run.stdout_ref, record.TextRef)
     assert trial.attempts[1].run.outputs_ref is None
+    assert trial.requests is not None and all(isinstance(r, record.Request) for r in trial.requests)
+    assert all(isinstance(m, record.RequestMessage) for r in trial.requests for m in r.messages)
+    assert isinstance(trial.requests[0].reply_ref, record.TextRef)
+    assert isinstance(trial.requests[0].diagnostics[0], record.Diagnostic)
+    assert (trial.requests[0].attempt_index, trial.requests[2].attempt_index) == (None, 1)
+
+
+def test_a_trial_without_requests_reads_as_not_recorded() -> None:
+    data = record.to_dict(json_trial())
+    del data["requests"]
+    assert record.from_dict(record.Trial, data).requests is None
+    data["requests"] = None
+    assert record.from_dict(record.Trial, data).requests is None
+    data["requests"] = []
+    assert record.from_dict(record.Trial, data).requests == []
 
 
 def test_trial_json_carries_the_provenance_as_the_bible_names_it() -> None:
@@ -1272,6 +1443,8 @@ def test_from_dict_rejects_unknown_key() -> None:
         pytest.param(("attempts", 0, "diagnostics", 0), "hint", "Diagnostic", id="diagnostic"),
         pytest.param((), "notes", "Trial", id="trial"),
         pytest.param(("provenance",), "host", "Provenance", id="provenance"),
+        pytest.param(("requests", 0), "notes", "Request", id="request"),
+        pytest.param(("requests", 0, "messages", 1), "text", "RequestMessage", id="request-message"),
     ],
 )
 def test_from_dict_rejects_unknown_nested_key(path: tuple[Any, ...], key: str, owner: str) -> None:
@@ -1300,6 +1473,11 @@ def test_from_dict_rejects_unknown_nested_key(path: tuple[Any, ...], key: str, o
         pytest.param(("provenance",), "device", id="provenance-device"),
         pytest.param(("provenance",), "sdk", id="provenance-sdk"),
         pytest.param(("provenance",), "date", id="provenance-date"),
+        pytest.param(("requests", 0), "stage", id="request-stage"),
+        pytest.param(("requests", 0), "attempt_index", id="request-attempt-index"),
+        pytest.param(("requests", 1), "messages", id="request-messages"),
+        pytest.param(("requests", 1), "reply_ref", id="request-reply-ref"),
+        pytest.param(("requests", 1, "messages", 0), "role", id="request-message-role"),
     ],
 )
 def test_from_dict_rejects_missing_required_key(path: tuple[Any, ...], key: str) -> None:

@@ -1,9 +1,10 @@
 """Render a Trial as trial.md, the page a person reads to follow the trial without tooling.
 
-The page shows the trial's provenance, the reference run, each prompt, each
-attempt's code, the unified diff from the previous attempt, the parsed
-diagnostics, and the score breakdown (bible Readability Standards, Trial
-row). It is plain ASCII with LF newlines; any non-ASCII character is written
+The page shows the trial's provenance, the reference run, every model
+request, each prompt, each attempt's code, the unified diff from the
+previous attempt, the parsed diagnostics, and the score breakdown (bible
+Readability Standards, Trial row). It is plain ASCII with LF newlines; any
+non-ASCII character is written
 as a Python backslash escape. Every value that was not measured (None) shows
 as PLACEHOLDER. Provenance values are not measurements, so an unknown one
 (None) shows as "-", as a diagnostic without a code or location does. The
@@ -17,6 +18,15 @@ blank lines and trailing spaces included (a diff's context line for an empty
 line is a single space), except that CRLF and lone CR line breaks become LF so
 the page has LF newlines only. The exact texts stay in trial.json and the text
 store.
+
+The Requests section, after the context, lists every model request in the
+order sent (Trial.requests): its stage and the attempt its reply became, a
+table of its messages (index, role, sha256, and where the text is shown),
+the text of each message not shown before, the reply's sha256, and the
+request's diagnostics. Each distinct message text is fenced once on the
+page: an attempt's prompt under that attempt, any other text at its first
+request. A record whose requests were not recorded (None) shows "Not
+recorded."; a trial that asked no model shows "None.".
 """
 
 from __future__ import annotations
@@ -33,6 +43,7 @@ from lassi.core.record import (
     Diagnostic,
     EndReason,
     Provenance,
+    Request,
     RunInfo,
     TextRef,
     Trial,
@@ -156,6 +167,48 @@ def _context_blocks(context: Context) -> list[str]:
     return blocks
 
 
+def _requests_blocks(trial: Trial, store: TextStore) -> list[str]:
+    """Return the Requests section: every model request in order, or a line saying none was made or recorded."""
+    blocks = ["## Requests\n"]
+    if trial.requests is None:
+        return [*blocks, "Not recorded.\n"]
+    if not trial.requests:
+        return [*blocks, "None.\n"]
+    shown: dict[str, str] = {}
+    for attempt in trial.attempts:
+        if attempt.prompt_ref is not None:
+            shown.setdefault(attempt.prompt_ref.sha256, f"Attempt {attempt.index} prompt")
+    for request in trial.requests:
+        blocks += _request_blocks(request, store, shown)
+    return blocks
+
+
+def _request_blocks(request: Request, store: TextStore, shown: dict[str, str]) -> list[str]:
+    """Return one request's blocks; a message text not in `shown` is fenced here and added to it.
+
+    `shown` maps the sha256 of each text already placed on the page to
+    where it is shown.
+    """
+    if request.attempt_index is None:
+        attempt, reply = "none (context request)", "kept in Trial.context"
+    else:
+        attempt, reply = str(request.attempt_index), f"attempt {request.attempt_index}'s response"
+    rows: list[tuple[str, str, str, str]] = []
+    texts: list[str] = []
+    for position, message in enumerate(request.messages):
+        sha = message.ref.sha256
+        where = shown.get(sha)
+        if where is None:
+            where = "below"
+            shown[sha] = f"request {request.index} message {position}"
+            texts += [f"#### Message {position} ({message.role})\n", fenced(store.get(message.ref), "text")]
+        rows.append((str(position), message.role, f"`{sha}`", where))
+    blocks = [f"### Request {request.index}\n", f"Stage: {request.stage}. Attempt: {attempt}.\n"]
+    blocks += [_table(("Message", "Role", "sha256", "Text"), rows), *texts]
+    blocks.append(f"Reply: sha256 `{request.reply_ref.sha256}` ({reply}).\n")
+    return blocks + _diagnostic_blocks(request.diagnostics, "####")
+
+
 def _prompt_blocks(attempt: Attempt, store: TextStore) -> list[str]:
     """Return the prompt text, resolved through the store, with its reference."""
     ref = attempt.prompt_ref
@@ -198,13 +251,14 @@ def _location(diagnostic: Diagnostic) -> str:
     return location
 
 
-def _diagnostic_blocks(diagnostics: Sequence[Diagnostic]) -> list[str]:
-    """Return the parsed diagnostics as a table, or None."""
+def _diagnostic_blocks(diagnostics: Sequence[Diagnostic], level: str = "###") -> list[str]:
+    """Return the parsed diagnostics as a table, or None, under a Diagnostics heading of the given level."""
+    heading = f"{level} Diagnostics\n"
     if not diagnostics:
-        return ["### Diagnostics\n", "None.\n"]
+        return [heading, "None.\n"]
     header = ("Stage", "Severity", "Code", "Location", "Message")
     rows = [(d.stage, d.severity, d.code or "-", _location(d), d.message) for d in diagnostics]
-    return ["### Diagnostics\n", _table(header, rows)]
+    return [heading, _table(header, rows)]
 
 
 def _measurement_blocks(attempt: Attempt) -> list[str]:
@@ -245,13 +299,14 @@ def _attempt_blocks(attempt: Attempt, store: TextStore) -> list[str]:
 
 
 def render_trial_md(trial: Trial, store: TextStore) -> str:
-    """Return trial.md for `trial`, resolving prompt texts through `store`.
+    """Return trial.md for `trial`, resolving prompt and request message texts through `store`.
 
     The result is deterministic, plain ASCII (non-ASCII characters become
     backslash escapes), uses LF newlines, and ends with exactly one newline.
     """
     blocks = _summary_blocks(trial) + _provenance_blocks(trial.provenance)
     blocks += _pins_blocks(trial) + _reference_run_blocks(trial.reference_run) + _context_blocks(trial.context)
+    blocks += _requests_blocks(trial, store)
     for attempt in trial.attempts:
         blocks += _attempt_blocks(attempt, store)
     page = "\n".join(blocks)

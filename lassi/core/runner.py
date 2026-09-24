@@ -1300,7 +1300,9 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
     that form). A backend that declares `unload_before_run` is asked to
     unload first, as upstream's setup unloads the model before anything
     runs. A stage that sets final.end_reason ends the trial: no later stage
-    runs, and the final block keeps the end reason.
+    runs, and the final block keeps the end reason. Every trial starts with
+    an empty Trial.requests, so its model requests are recorded and a trial
+    that ends before any model call records none ([], never None).
     """
     settings, suite = run.settings, run.bench.suite
     backend = run.backend
@@ -1317,6 +1319,7 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
         provenance=provenance,
         bench_item=suite.bench_item(item, direction),
         model=model_info(backend, settings.sampling),
+        requests=[],
     )
     context = RunContext(
         recipe=run.recipe,
