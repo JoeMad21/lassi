@@ -8,7 +8,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 
 | Phase | Branch | State | Note |
 | --- | --- | --- | --- |
-| P0 Core | p0-core | DONE | base: main; gate passed 2026-09-23 (results/p0-gate); PR P0 Core open for the owner |
+| P0 Core | p0-core | DONE | base: main; gate passed 2026-09-23 (results/p0-gate); merged into main as c3cf248 (PR 1) |
 | P1 Faithful LASSI | p1-faithful | NOT-STARTED | owner 2026-09-23: start as soon as P0 finishes (after the P0 retrospective), no pause; P2 right after |
 | P2 Scoring | p2-scoring | NOT-STARTED | gate needs owner review |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001: alpha01, gate rngd enabled 2026-09-23); the owner records here when the phase may start |
