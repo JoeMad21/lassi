@@ -11,6 +11,10 @@ render fills a template with Template.substitute: every placeholder must get
 a value, and a field value is inserted as is, so a `$` inside it is never
 read as a placeholder. Every problem raises ValueError naming the set or the
 file.
+
+Sets and context packs with a MANIFEST.yaml hold checked fragments rather
+than templates: load_recipe_assets (lassi.prompts.assets) returns the ones a
+recipe names, each checked against its manifest's sha256.
 """
 
 from __future__ import annotations
@@ -19,6 +23,10 @@ import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from string import Template
+
+from lassi.prompts.assets import RecipeAssets, load_recipe_assets
+
+__all__ = ["RecipeAssets", "SUFFIX", "default_roots", "load_recipe_assets", "prompt_dir", "render"]
 
 # The file suffix of every prompt template.
 SUFFIX = ".txt"

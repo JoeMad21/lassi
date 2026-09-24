@@ -55,7 +55,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1.0 | DONE | Plan phase P1 into plans/p1-faithful.md and add its tasks here | - | plan plans/p1-faithful.md; base main c3cf248 |
 | P1.1 | ACTIVE | Pin upstream LASSI and check the HeCBench pin against its sources | - |  |
 | P1.2 | READY | Ten-app bench manifest, support files, and item selection | P1.1 |  |
-| P1.3 | READY | lassi-2024 prompt set and context packs from pinned upstream | P1.1 |  |
+| P1.3 | DONE | lassi-2024 prompt set and context packs from pinned upstream | P1.1 | tools/extract_lassi_assets.py writes 54 prompt fragments and 2 packs, gitignored; 3 MANIFEST.yaml tracked (OQ-018); tests/prompts 41 passed |
 | P1.4 | READY | Faithful generation: summarize_context, describe_source, generate | P1.3 |  |
 | P1.5 | READY | Baseline stage and the faithful correction loop | P1.2,P1.4 |  |
 | P1.6 | READY | run_loop: execution gate, stale output, run flags, Ollama unload | P1.5 |  |
