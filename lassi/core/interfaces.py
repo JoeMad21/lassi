@@ -115,10 +115,17 @@ class Verdict:
 
 @dataclass(frozen=True)
 class Score:
-    """Named score components and the scalar derived from them."""
+    """Named score components, the scalar derived from them, and notes on the components.
 
-    components: Mapping[str, float]
-    scalar: float
+    A component or the scalar is None when it was not measured or not
+    computed. `notes` maps a component name to a plain ASCII note, such as
+    why that component is None or which interpreter computed it; it is empty
+    unless the profile writes one.
+    """
+
+    components: Mapping[str, float | None]
+    scalar: float | None
+    notes: Mapping[str, str] = field(default_factory=dict)
 
 
 class LLMBackend(Component, Protocol):
@@ -219,7 +226,7 @@ class Judge(Component, Protocol):
 
 
 class ScoreProfile(Component, Protocol):
-    """Turns a trial into score components and a scalar."""
+    """Turns a trial into score components, a scalar, and notes on its null components."""
 
     def score(self, trial: Trial) -> Score:
         """Return the score breakdown for `trial`."""

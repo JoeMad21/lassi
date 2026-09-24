@@ -32,8 +32,9 @@ row: "keep; add a C-aware Sim-T"):
 - `sim_t_c`: the matched-token ratio 2M/T of `difflib.SequenceMatcher` over the
   token strings of `c_tokens`, with autojunk off.
 
-Design choices of task P1.8, not yet in the bible (a later task that owns the
-bible logs them in the Decision Log); the tests pin the lexer rules:
+Design choices of task P1.8, recorded in the bible's Evaluation Protocol
+(LASSI Score Profile) with a Decision Log entry by task P2.7; the tests pin
+the lexer rules:
 
 - The C lexer drops layout (whitespace, backslash-newline splices) and both
   comment styles. String and char literals are one token each, escapes
@@ -50,7 +51,8 @@ bible logs them in the Decision Log); the tests pin the lexer rules:
 - Two texts with no C tokens score 1.0 under `sim_t_c` (difflib's value for two
   empty sequences).
 
-Wiring these values into metrics is P2's work.
+The ScoreProfile `lassi` (lassi.scoring.lassi_profile) gives these values as
+its sim_t, sim_t_c, and sim_l components.
 """
 
 from __future__ import annotations

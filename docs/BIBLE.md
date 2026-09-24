@@ -1,6 +1,6 @@
 # LASSI Project Bible
 
-Repository mirror of the project bible, master revision 143 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
+Repository mirror of the project bible, master revision 148 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
 
 ## Purpose And Scope
 
@@ -109,7 +109,7 @@ Upstream repo ([SPEAR-UIC/LASSI](https://github.com/SPEAR-UIC/LASSI) at 74b4681,
 | Baseline builds and runs only the target-language reference | A source program that fails to build or run goes unnoticed; a target failure still ends the trial before any model call | Faithful toggle (`fixes.baseline_both`) |
 | Correction prompt loses every line feed: the previous code, the compiler command and flags, the whole raw compiler stderr (read in text mode), and the outro are joined, then each LF is removed | Code and compiler output reach the model as one line; a CR in the model's code stays; the raw stderr, -Minfo report included, is never capped | Faithful toggles (`fixes.prompt_newlines`, `fixes.parsed_diagnostics`) |
 | `argo_llm` undefined in the public notebook | GPT-4 path cannot run | OpenAI-compatible backend |
-| Sim-T tokenizes C/C++ with Python `tokenize` | Odd but reproducible | Keep; add a C-aware Sim-T |
+| Sim-T tokenizes C/C++ with Python `tokenize` | Odd but reproducible | Keep (sim_t); add a C-aware Sim-T (sim_t_c; Evaluation Protocol, LASSI Score Profile) |
 | Ollama unload before each execution | Frees the shared A100 | Only for Ollama arms: a backend declaring the capability unload_before_run (ollama) is asked to unload at trial start (the notebook's setup unload) and right before each attempt run; the reference run follows only the trial-start unload |
 | PASS/FAIL in both languages for 7 of 10 apps; randomAccess CUDA only; none for bsearch, pathfinder | Oracle gaps | Masked stdout diff for gaps |
 | entropy includes `reference.h`, absent from the repo | Build fails | Pull from pinned HeCBench |
@@ -182,7 +182,7 @@ lassi/                            # monorepo root
     bench/       # suite manifests; sources pinned by commit
     upstream/    # upstream LASSI pin manifest (lassi.yaml), read by tools/fetch_upstream.py
     harness/     # lassi_io bindings: c/, rust/, csharp/, python/; host generators; masking rules
-    scoring/     # weights of the score profiles: df-v0.yaml
+    scoring/     # score profile files: df-v0.yaml (weights), lassi.yaml (component order and notes)
   projects/
     lassi-repro/recipe.yaml
     lassi-ee/recipe.yaml
@@ -218,7 +218,7 @@ Twelve interfaces carry all project differences; each is a Python Protocol in `l
 | Profiler | trace during a run | Timing | Power (NVML, rocm-smi) | Timing; power where telemetry exists |
 | Agent | role + backend + tools + budget -> attempt or annotation | Summarizer, generator, fixer | Plus planner, reviewer | Plus adversary |
 | Judge | candidate + evidence + rubric -> verdict, score, rationale | None | Equivalence | Equivalence, efficiency, readability |
-| ScoreProfile | Trial -> components + scalar | Eval metrics | Plus energy term | Plus dataflow and calibrated judge terms |
+| ScoreProfile | Trial -> components + scalar + notes | Eval metrics (lassi) | Plus energy term | Plus dataflow and calibrated judge terms |
 | Stage | Trial -> Trial | Baseline, summarize, describe, generate, compile loop, run loop | Profile, vanilla, judge, plan, refine loop, select, report | Raise, normalize, generate, verify loop, lower, emit, build loop, run loop |
 
 Contract rules:
@@ -227,6 +227,7 @@ Contract rules:
 - Executors enforce limits (wall time, memory, CPU) and return exit status, stdout, stderr, output files, and a hang flag.
 - Oracles never trust a program's self-reported PASS as the only signal; the harness owns inputs and comparison.
 - Stages are pure over the trial record: read fields, append an attempt, a model request, or an annotation, return. Side effects go through components. One handoff sits outside the record: compile_loop passes each built program to run_loop through the per-trial RunContext, in memory, so no resume or rerun can run an attempt from the record alone (an Attempt artifact field is a later record decision).
+- A ScoreProfile returns a Score (lassi.core.interfaces): components by name, each a number or null (not measured or not computed), a scalar that may be null, and notes, a map from a component name to a plain ASCII note (why the value is null, or which interpreter computed it), empty unless the profile writes one. The lassi profile notes every null component.
 - A component declares its capabilities (for example `emits_warnings`, `supports_power`). Recipes are validated against them at load time.
 
 ## Result Record
@@ -821,6 +822,32 @@ Rules for the reproduction:
 - Which pipeline version produced the paper's results. Both committed notebooks postdate the paper's v1. Codestral's CUDA -> OMP pathfinder (Self-corr 34, correct, with a runtime) cannot come from the pinned notebook's stored output, because its execution gate leaves attempt 34 unrun.
 - How a trial that never reached a clean run was stopped. The pinned loop has no cap, and the paper names no stopping rule.
 
+### LASSI Score Profile
+
+The ScoreProfile `lassi` (lassi.scoring.lassi_profile, task P2.7) scores one trial of the reproduction. assets/scoring/lassi.yaml names its components in order, its scalar (correct), and every note text; the code holds the definitions below. The profile is built over the root of the suite's fetched sources and reads the item's one target-language reference file there, found through the suite manifest, in text mode (each CRLF and each lone CR becomes LF), as the notebook reads it. A missing reference file is an error naming its path, never an empty text. Every component is a number or null, and every null carries a note saying why. [DESIGN]
+
+| Component | Definition |
+| --- | --- |
+| correct | 1 when the output that stands (Result Record, standing_attempt) came from a clean run, exit status 0 and no hang, that the oracle aligned at 1; 0 when that run was not clean, when the oracle gave less than 1, or when no output stands. Null, with a note, for a trial with no attempt that ended at baseline-compile or baseline-run, for a compile-only trial (the target reference was not run and no attempt ran; noted as a compile-stage reproduction), and for a clean standing run the oracle never aligned (no reference stdout, or a truncated one). The scalar |
+| correct_paper | The paper criterion, a manual inspection of stdout; never computed, always null |
+| within_10pct | Null while no timing profiler exists, even when an attempt carries a runtime; the CPU proxy checks outputs, never runtime |
+| first_try | 1 when correct is 1 and final.corrections is 0; null when correct is null; else 0 |
+| sim_t, sim_l | The faithful Sim-T and Sim-L of the last attempt's target file (empty when that attempt has none) against the text-mode reference target, reference first; null when the trial holds no attempt. Each note names the interpreter version that computed it |
+| sim_t_c | The C-aware Sim-T of the same pair; a separate measure, never reported as Sim-T |
+| self_corr | final.corrections |
+| cap_hit | 1 when final.end_reason is correction-cap, else 0 |
+| fence_quirk | The number of fence-quirk diagnostics over all attempts |
+| compiled | 1 when the last attempt reached S4 or S5; null for a trial that ended at the baseline; 0 for any other trial with no attempt |
+| compiled_first_try | 1 when compiled is 1 and final.corrections is 0; null when compiled is null; else 0 |
+
+correct reads the output that stands, stale output included, while the similarity values read the last attempt's file, as the notebook stores them; past the execution gate the two can come from different attempts. The stdout_mask rule itself is unchanged: an oracle match from a run that crashed, exited nonzero, or hung aligns at 1 and scores correct 0.
+
+C-aware Sim-T (sim_t_c), design choices of task P1.8; the tests pin the lexer rules: [DESIGN]
+
+- The C lexer drops layout (whitespace, form feeds, backslash-newline splices) and both comment styles; an unclosed block comment runs to the end of the text. A string or char literal is one token, quotes and escapes included; an unclosed one ends at the end of its line, and an encoding prefix such as `L` or `u8` is a separate name token. Numbers follow the C preprocessing-number rule, so suffixes and exponent signs stay in the token (`1.5e-3f`, `0x1Fu`, and `42UL` are one token each). Multi-character operators are one token each by longest match, with the CUDA launch brackets `<<<` and `>>>` among them; `#` is its own token; any other character is a one-character token. The lexer never raises and never yields an empty or whitespace token.
+- The value is the matched-token ratio 2M/T of difflib's SequenceMatcher over the token strings, reference first, with autojunk off. With autojunk on, difflib ignores as match seeds every token that occurs more than len/100 + 1 times (integer division) in a candidate of 200 or more tokens; in C that is the common punctuation and keywords, so matched runs of them would go uncounted. The faithful Sim-T's positional tokens are nearly all distinct, which is why autojunk hardly acts there.
+- Two texts with no C tokens score 1.0, difflib's value for two empty sequences.
+
 ### Acceptance Criteria
 
 LASSI reproduction:
@@ -996,10 +1023,12 @@ Open questions:
 
 ## Decision Log
 
-Sixty-eight decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and twenty-two on 2026-09-24; add new entries at the top, newest first.
+Seventy decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and twenty-four on 2026-09-24; add new entries at the top, newest first.
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-24 | The lassi score profile (task P2.7). The ScoreProfile lassi (lassi.scoring.lassi_profile) gives each trial the components of Evaluation Protocol, LASSI Score Profile, in the order assets/scoring/lassi.yaml lists them, with correct as the scalar and every note text in that file. correct is 1 only when the output that stands came from a clean run (exit status 0, no hang) that the oracle aligned at 1, so an oracle match from a crashed, failed, or hung run is 0. correct is null, with a note, for a compile-only trial (a compile-stage reproduction), for a trial with no attempt that ended at the baseline, and for a clean standing run the oracle never aligned; correct_paper is never computed, and within_10pct stays null until a timing profiler exists. The similarity values compare the last attempt's target file with the reference target read in text mode, and each notes the interpreter version. A missing reference file is an error naming its path. Score (Component Interfaces) gains notes, a map from component name to a plain ASCII note, empty by default, and its components and scalar may be null. assets/scoring/lassi.yaml joins the Repository Layout | stdout_mask ignores exit status and hang, so a program that crashes after printing the reference's stdout aligns at 1 (PHASE-NOTES P2, stdout_mask), while the paper's correct output also required exit status 0 (LASSI Paper Metrics); the profile therefore asks for a clean run (plans/p2-scoring.md, the planning decision on correct). A null with its reason keeps a value that was not measured (no run, no alignment, no baseline, no profiler, a manual criterion) apart from a measured 0, so no rate counts it as a failure. Reading the reference in text mode and comparing the last attempt's file is what the notebook does, so sim_t and sim_l equal its values on the P1.9 replay records (tests/scoring/test_lassi_profile_replay.py); Python's tokenize changes between interpreter versions, so each value names the one that computed it |
+| 2026-09-24 | The C-aware Sim-T's design choices join the Evaluation Protocol, LASSI Score Profile (task P2.7, from P1.8): a C lexer that drops layout and comments and keeps literals, preprocessing numbers, and longest-match operators (the CUDA launch brackets included) as one token each; difflib's 2M/T over the token strings with autojunk off; 1.0 for two texts with no C tokens. sim_t_c is its own component, never reported as Sim-T | The quirk table keeps the faithful Python-tokenize Sim-T and asks for a C-aware one. The choices were documented only in lassi.scoring.similarity (PHASE-NOTES P2, C-aware Sim-T); with the lassi profile they reach metrics, so they belong in the bible. With autojunk on, difflib drops C's frequent punctuation and keywords as match seeds in any candidate of 200 or more tokens, so matched runs of them would go uncounted |
 | 2026-09-24 | The df-v0 score profile and its readings of the Result Record (task P2.6). The ScoreProfile df-v0 (lassi.scoring.df_v0) reads every Reward Function weight from assets/scoring/df-v0.yaml (stage_base, warning_weight, warning_cap, alignment_weight, guard_violation, correction_penalty), holds none in code, and refuses a file missing a weight. W counts the compile- and jit-stage warnings of an attempt at S4 or S5, unique by (code, file, line, column); parse- and run-stage pipeline warnings are not code warnings. A counts only at S5, and an S5 attempt never aligned scores no alignment term and is marked alignment_missing. The guard component is 1, 0, or null (not every guard checked), and only a true guard sets R = -1. R_final is the last attempt's R, a guard violation or a stale-output attempt included. The trial's components are single_turn (attempt 0's R) and multi_turn (R_final - 0.05 x corrections), final.score is the multi-turn value, and a trial with no attempts has no score. assets/scoring/ joins the Repository Layout | The Reward Function names W, A, and the guards without saying which record fields they read. A parse- or run-stage warning (a fence quirk, a stale output, a cut stream) says nothing about the code the compiler saw, so charging it would penalize the pipeline, not the translation (plans/p2-scoring.md, the planning decision on W). A null alignment at S5 is no evidence of correct output, so it earns nothing, and the mark keeps it apart from an output that aligned at 0. A null guard was not checked, so it neither violates nor clears. Episodes default to single_turn (Algorithms), but a trial record holds the whole correction loop, so final.score takes the multi-turn value and attempt 0's R stays as the single-turn component (plans/p2-scoring.md, the planning decision on final.score). Weights in YAML let the P2.G review change one by a file edit and a Decision Log entry, with no code change |
 | 2026-09-24 | The stage ladder's reading of FILE blocks and final.alignment (task P2.3). With fixes.fence_tag on, an attempt whose FILE blocks gave at least one file and whose only FILE-block errors are missing-file is S1: the missing file is the Harness Contract's build error, so the incomplete files are not built, the attempt stays S1, and the correction prompt carries the missing-file error. A reply whose blocks gave no file, or with any other FILE-block error, stays S0; replies read with fixes.fence_tag off are unchanged. One helper, lassi.core.record standing_attempt, names the attempt whose output stands: the last attempt whose run holds stdout, stale output past the execution gate included, or none when no attempt ran. The execution gate's stale-output warning names that attempt, and the runner sets final.alignment to its alignment mean, null when no attempt ran or it was not aligned. A trial that ends at correction-cap never reaches the oracle stage, so its final.alignment stays null | P1 read a reply that gave some files but left out an expected one as S0, the rung of a reply with no code, although the Harness Contract calls a missing file a build error fed back to the model, and S0 and S1 carry different rewards (PHASE-NOTES P2, stage ladder reading). The runner rebuilt Final after the stages, so final.alignment was never set, and the P2 profiles need one reading of the output that stands: the one the P1.9 replay and the stale-output warning already used (PHASE-NOTES P2, final alignment) |
 | 2026-09-24 | The run flags join the Result Record (task P2.2). RunInfo, and so Trial.reference_run and Attempt.run, gains stdout_truncated, stderr_truncated, and workdir_incomplete after outputs_ref, copied as booleans from the executor's RunResult flags of the same names; null means not recorded, so a trial.json written before this change loads with them null. The baseline stage fills them for the target reference's run only, and a cut output does not end the trial; run_loop fills them for every attempt it runs, a failed run included, and keeps its stdout-truncated, stderr-truncated, and workdir-incomplete warnings. The oracle stage never aligns against a reference stdout marked truncated: the alignments stay unset and each attempt whose run holds stdout gets one run-stage warning, code reference-stdout-truncated. trial.md shows the flags in the Reference run and Run tables, and the Parquet trials and attempts tables gain reference_run_<flag> and run_<flag> bool columns | The baseline dropped the reference run's flags, so an attempt could be aligned against a cut reference stdout with no record of the cut, and a correct translation could score 0.0 against it (PHASE-NOTES P2, reference run flags). An attempt's flags were only warnings, which the P2 scores and the review packet cannot read as run fields. Aligning against a cut reference would make stdout_mask measure the cap, not the translation |
