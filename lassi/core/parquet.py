@@ -10,7 +10,9 @@ read back as '+'. Response texts stay in the text store; the attempts table
 keeps only their sha256. Nested record fields become `<field>_<key>` columns,
 so the trials table carries each trial's provenance (its copy of the run
 manifest) as provenance_commit, provenance_dirty, provenance_device,
-provenance_sdk, and provenance_date.
+provenance_sdk, and provenance_date, the target reference's baseline run as
+reference_run_<key> columns, and the end reason as final_end_reason_code
+and final_end_reason_message (null when the trial ended normally).
 """
 
 from __future__ import annotations
@@ -63,6 +65,14 @@ SCHEMAS = {
             ("model_sampling_temperature", _DOUBLE),
             ("model_sampling_top_p", _DOUBLE),
             ("model_sampling_max_tokens", _INT),
+            ("reference_run_exit_code", _INT),
+            ("reference_run_hang", _BOOL),
+            ("reference_run_sim_ub", _BOOL),
+            ("reference_run_wall_s", _DOUBLE),
+            ("reference_run_stdout_ref_sha256", _STRING),
+            ("reference_run_stdout_ref_path", _STRING),
+            ("reference_run_outputs_ref_sha256", _STRING),
+            ("reference_run_outputs_ref_path", _STRING),
             ("context_knowledge_summary", _STRING),
             ("context_source_description", _STRING),
             ("final_stage_reached", _STRING),
@@ -70,6 +80,8 @@ SCHEMAS = {
             ("final_score", _DOUBLE),
             ("final_corrections", _INT),
             ("final_wall_s", _DOUBLE),
+            ("final_end_reason_code", _STRING),
+            ("final_end_reason_message", _STRING),
             ("attempt_count", _INT),
         ]
     ),
@@ -164,6 +176,7 @@ def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
     parsed = parse_trial_id(trial.trial_id)
     bench, model, final, provenance = trial.bench_item, trial.model, trial.final, trial.provenance
     pins = {f"toolchain_pins_{name}": getattr(trial.toolchain_pins, name) for name in TOOLCHAIN_PIN_NAMES}
+    reference, reason = trial.reference_run, final.end_reason
     return {
         **key,
         "item": parsed.item,
@@ -184,6 +197,12 @@ def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
         "model_sampling_temperature": model.sampling.temperature,
         "model_sampling_top_p": model.sampling.top_p,
         "model_sampling_max_tokens": model.sampling.max_tokens,
+        "reference_run_exit_code": reference.exit_code,
+        "reference_run_hang": reference.hang,
+        "reference_run_sim_ub": reference.sim_ub,
+        "reference_run_wall_s": reference.wall_s,
+        **_ref_columns("reference_run_stdout_ref", reference.stdout_ref),
+        **_ref_columns("reference_run_outputs_ref", reference.outputs_ref),
         "context_knowledge_summary": trial.context.knowledge_summary,
         "context_source_description": trial.context.source_description,
         "final_stage_reached": final.stage_reached,
@@ -191,6 +210,8 @@ def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
         "final_score": final.score,
         "final_corrections": final.corrections,
         "final_wall_s": final.wall_s,
+        "final_end_reason_code": reason.code if reason else None,
+        "final_end_reason_message": reason.message if reason else None,
         "attempt_count": len(trial.attempts),
     }
 

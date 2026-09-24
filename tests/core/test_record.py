@@ -65,8 +65,10 @@ NESTED_RECORDS = {
         "Trial.bench_item",
         "Trial.model",
         "Trial.model.sampling",
+        "Trial.reference_run",
         "Trial.context",
         "Trial.final",
+        "Trial.final.end_reason",
     ],
     "Attempt": [
         "Attempt",
@@ -442,7 +444,11 @@ def test_record_fields_match_bible(name: str) -> None:
 
 def test_json_keys_match_bible() -> None:
     fields = bible_record_fields()
-    data = record.to_dict(json_trial())
+    # An end reason is set so that its nested keys are checked too (the fixture's own final block has none).
+    reason = record.EndReason(code="correction-cap", message="synthetic: the cap stopped the loop")
+    trial = json_trial()
+    trial = dataclasses.replace(trial, final=dataclasses.replace(trial.final, end_reason=reason))
+    data = record.to_dict(trial)
     assert check_dict_keys(data, fields["Trial"], "Trial") == NESTED_RECORDS["Trial"]
     assert len(data["attempts"]) == 2
     for attempt in data["attempts"]:

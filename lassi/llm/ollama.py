@@ -8,6 +8,9 @@ chats through `<base_url>/api/chat` with the sampling parameters in `options`
 (prompt_eval_count and eval_count); a missing count raises ServingError and is
 never estimated. unload() asks Ollama to drop the model from memory (bible
 LASSI quirk table: Ollama unload before each execution, for Ollama arms only).
+The backend declares `unload_before_run` (lassi.core.capabilities), so the
+runner asks it to unload at trial start and run_loop right before each run of
+an attempt.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ import copy
 from collections.abc import Sequence
 from typing import Any
 
+from lassi.core.capabilities import UNLOAD_BEFORE_RUN
 from lassi.core.interfaces import Completion, Message, Sampling
 from lassi.core.registry import register
 from lassi.llm._http import (
@@ -39,7 +43,7 @@ class OllamaBackend:
     """
 
     name = "ollama"
-    capabilities = frozenset({"chat", "model_check", "unload"})
+    capabilities = frozenset({"chat", "model_check", "unload", UNLOAD_BEFORE_RUN})
 
     def __init__(self, model_id: str, *, base_url: str = DEFAULT_BASE_URL, timeout_s: float = 600.0) -> None:
         """Keep the settings; base_url loses any trailing '/'.

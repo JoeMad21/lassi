@@ -1,0 +1,17 @@
+{
+  "synthetic": true,
+  "completions": [
+    {
+      "text": "SYNTHETIC summary reply:  the   context pack   covers directives,  kernels,   and memory."
+    },
+    {
+      "text": "SYNTHETIC description reply:  the source   sums eight integers   and prints PASS."
+    },
+    {
+      "text": "SYNTHETIC reply, attempt 0.\n```\n// SYNTHETIC   replay   reply   code   with   runs   of   spaces,   attempt 0.\n#include   <cstdio>\n\nint  main(int argc,    char **argv)   {\n    int   total   =   undeclared_replay_total;   // runs   of   spaces   stay   in   a   correction   prompt\n    printf(\"replay   total   %d\\n\",   total);\n    return   0;\n}\n```\nSYNTHETIC closing note.\n"
+    },
+    {
+      "text": "SYNTHETIC reply, attempt 1.\n```\n// SYNTHETIC   replay   reply   code   with   runs   of   spaces,   attempt 1.\n#include   <cstdio>\n\nint  main(int argc,    char **argv)   {\n    int   total   =   0;   // runs   of   spaces   stay   in   a   correction   prompt\n    printf(\"replay   total   %d\\n\",   total);\n    return   0;\n}\n```\nSYNTHETIC closing note.\n"
+    }
+  ]
+}

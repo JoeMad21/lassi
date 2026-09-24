@@ -5,11 +5,14 @@ Diagnostic records (severity, code, file, line, column, message, stage). The
 compiler's raw stderr is kept as an attachment, the file STDERR_ATTACHMENT in
 the workdir, and never consumed downstream.
 
-Importing this package registers two presets in
+Importing this package registers three presets in
 lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
 
 - "nvcc-sm80" (nvcc.NvccSm80): CUDA with nvcc for sm_80.
 - "nvcpp-cc80" (nvcpp.NvcppCc80): OpenMP offload with nvc++ for cc80.
+- "nvcpp-multicore" (nvcpp.NvcppMulticore): OpenMP target regions built
+  with nvc++ -mp=multicore to run on the host CPU, the Harness Contract's
+  proxy; never in faithful recipes, never a source of runtime numbers.
 
 Toolchain bindings carry no config. Each preset declares its pin as class
 attributes: PIN, the pin file stem (toolchains/<PIN>.pin, read by

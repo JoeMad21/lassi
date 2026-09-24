@@ -1,4 +1,4 @@
-"""Tests for the nvcc and nvc++ toolchain adapters in lassi/toolchains/ (P0.5, P0.15, P0.17).
+"""Tests for the nvcc and nvc++ toolchain adapters in lassi/toolchains/ (P0.5, P0.15, P0.17, P1.11).
 
 A Toolchain turns files into an artifact plus diagnostics parsed into records
 of (severity, code, file, line, column, message, stage); the raw stderr is kept
@@ -24,6 +24,13 @@ clean-commit capture that all 16 fixtures come from (rx
 format (nvc++-Error-, nvc++-Fatal-), which no scenario produces without
 crashing a compiler; its line tests use the lines on record
 (NVCPP_DRIVER_ERROR, NVCPFE_CRASH_STDERR).
+
+P1.11 closes the toolchain follow-ups deferred from P0. The linker sample
+lines here are tied to their fixtures, as the P0.17 ones are. The comments
+on the ptxas place, nvlink, and linker formats in lassi/toolchains/ cite the
+clean capture, and every sample line they show is a line of its fixture. The
+NVC++ backend line that names a file but no line, and LLVM's `<inline asm>`
+line, give a file and line that index a built file, or None.
 
 No test here runs a compiler: parse_diagnostics reads the fixtures, build gets
 a fake command runner that records its call and returns canned stderr, and
@@ -54,6 +61,7 @@ from lassi.core.capabilities import Component
 from lassi.core.interfaces import BuildResult
 from lassi.core.record import Diagnostic
 from lassi.core.registry import DEFAULT_REGISTRY
+from lassi.toolchains import _stderr as shared_stderr
 
 # The package imports both adapter modules, which registers the two presets.
 nvcc = toolchains.nvcc
@@ -156,6 +164,24 @@ SHORT_PTX = "/w/@lassi-tmp/tmpxft_00000002_00000000-6_main.ptx"
 # nvcc names its PTX after the source stem, which the model chooses. These stems hold an EDG and a GCC style place.
 EDG_STEM_PTX = "/w/@lassi-tmp/tmpxft_00000002_00000000-6_x(3): error: y.ptx"
 GCC_STEM_PTX = "/w/@lassi-tmp/tmpxft_00000002_00000000-6_ab:1:2: error: b.ptx"
+
+# P1.11. The linker sample lines, copied from fixtures nvcc_linker_error and nvcpp_linker_error (clean-commit capture
+# rx 20260923-211958-desktop-8r113ei-p0-core-d221); test_the_linker_sample_lines_are_lines_of_their_fixtures checks
+# each against its fixture, so a recapture cannot leave them stale. The ld lines name that run's absolute workdir
+# (CAPTURE_WORK), and nvcc's temporary cudafe1 file with a section offset is its linker place (NVCC_LINKER_PLACE).
+CAPTURE_WORK = "/mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-211958-desktop-8r113ei-p0-core-d221/work/"
+NVCC_LD_CONTEXT_LINE = (
+    "/usr/bin/ld: " + CAPTURE_WORK + "nvcc_linker_error/@lassi-tmp/tmpxft_00000002_00000000-11_main.o: in function "
+    "`main':"
+)
+NVCC_LINKER_PLACE = "tmpxft_00000002_00000000-6_main.cudafe1.cpp:(.text.startup+0x2c)"
+NVCC_UNDEFINED_LINE = NVCC_LINKER_PLACE + ": " + HELPER_UNDEFINED
+COLLECT2_LINE = "collect2: error: ld returned 1 exit status"
+NVCPP_LD_CONTEXT_LINE = (
+    "/usr/bin/ld: " + CAPTURE_WORK + "nvcpp_linker_error/@lassi-tmp/nvc++vc-2bVcpD9.o: in function `main':"
+)
+NVCPP_UNDEFINED_LINE = CAPTURE_WORK + "nvcpp_linker_error/main.cpp:21: " + HELPER_UNDEFINED
+LD_STATUS_LINE = "pgacclnk: child process exit status 1: /usr/bin/ld"
 
 # P0.17, the nvc++ driver format (nvc++-Error-, nvc++-Fatal-). No scenario produces it from sources with the preset
 # flags without crashing a compiler, so its line tests use the two lines on record, copied verbatim. The first is
@@ -430,6 +456,82 @@ def test_the_p017_sample_lines_are_lines_of_their_fixtures() -> None:
     assert run in PTX_FILE and run in NVLINK_OBJECT
 
 
+def test_the_linker_sample_lines_are_lines_of_their_fixtures() -> None:
+    # P1.11, the oracle for the linker sample lines that NVCC_LINES, NVCPP_LINES, SKIPPED_LINES, and the linker place
+    # tests use: each is a whole line of its fixture, which test_fixture_is_the_captured_stderr_byte_for_byte checks
+    # against the sha256 the capture recorded.
+    assert fixture_text("nvcc_linker_error").splitlines() == [NVCC_LD_CONTEXT_LINE, NVCC_UNDEFINED_LINE, COLLECT2_LINE]
+    assert fixture_text("nvcpp_linker_error").splitlines()[-3:] == [
+        NVCPP_LD_CONTEXT_LINE,
+        NVCPP_UNDEFINED_LINE,
+        LD_STATUS_LINE,
+    ]
+    assert load_captures()["rx_run_id"] in CAPTURE_WORK
+
+
+# ---------------------------------------------------------------------------
+# The adapters' comments on the formats the clean capture shows (P1.11)
+#
+# Each regular expression in lassi/toolchains/ carries a comment block with sample lines, indented by at least three
+# blanks after the "#", where "..." marks text left out. The blocks on the ptxas place, nvlink, and linker formats
+# once cited dirty-tree exploratory captures. Now each cites the clean capture the fixtures come from, and no other
+# run, and every sample line it shows is a line of one of its fixtures.
+
+RX_ID = re.compile(r"20[0-9]{6}-[0-9]{6}-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
+SAMPLE_LINE = re.compile(r"#[ ]{3,}(?P<sample>\S.*)")
+
+# The module, the name assigned right after the comment block, and the fixtures its sample lines come from.
+COMMENT_BLOCKS = [
+    pytest.param(nvcc, "_PTXAS_PLACE", ("nvcc_ptxas_inline_asm",), id="nvcc-ptxas-place"),
+    pytest.param(nvcpp, "_NVLINK", ("nvcpp_nvlink_error",), id="nvcpp-nvlink"),
+    pytest.param(shared_stderr, "_LINKER_PHRASE", ("nvcc_linker_error", "nvcpp_linker_error"), id="stderr-linker"),
+]
+
+
+def comment_block(module: ModuleType, name: str) -> list[str]:
+    """Return the comment lines right above the line that assigns `name` at the top level of `module`, stripped."""
+    lines = Path(module.__file__).read_text(encoding="utf-8").split("\n")
+    starts = [index for index, line in enumerate(lines) if line.startswith(f"{name} = ")]
+    assert len(starts) == 1, f"{module.__name__}: {len(starts)} top-level assignments of {name}"
+    start = end = starts[0]
+    while start > 0 and lines[start - 1].startswith("#"):
+        start -= 1
+    block = [line.rstrip() for line in lines[start:end]]
+    assert block, f"{module.__name__}: no comment block above {name}"
+    return block
+
+
+def sample_matches(sample: str, line: str) -> bool:
+    """Return True when `line` is `sample` with each "..." standing for any text."""
+    pattern = ".*?".join(re.escape(part) for part in sample.split("..."))
+    return re.fullmatch(pattern, line.rstrip()) is not None
+
+
+def is_fixture_line(sample: str, fixture: str) -> bool:
+    """Return True when `sample`, with each "..." standing for any text, is a whole line of stderr fixture `fixture`."""
+    return any(sample_matches(sample, line) for line in fixture_text(fixture).split("\n"))
+
+
+@pytest.mark.parametrize(("module", "name", "fixtures"), COMMENT_BLOCKS)
+def test_the_comment_on_a_captured_format_cites_only_the_clean_capture(
+    module: ModuleType, name: str, fixtures: tuple[str, ...]
+) -> None:
+    runs = set(RX_ID.findall(" ".join(comment_block(module, name))))
+    assert runs == {load_captures()["rx_run_id"]}, (module.__name__, name, sorted(runs))
+
+
+@pytest.mark.parametrize(("module", "name", "fixtures"), COMMENT_BLOCKS)
+def test_the_sample_lines_of_a_captured_format_are_lines_of_its_fixtures(
+    module: ModuleType, name: str, fixtures: tuple[str, ...]
+) -> None:
+    samples = [match["sample"] for line in comment_block(module, name) if (match := SAMPLE_LINE.fullmatch(line))]
+    shown = {fixture: [sample for sample in samples if is_fixture_line(sample, fixture)] for fixture in fixtures}
+    stale = [sample for sample in samples if not any(sample in shown[fixture] for fixture in fixtures)]
+    assert not stale, f"{module.__name__} {name}: sample lines that are no line of {list(fixtures)}: {stale}"
+    for fixture in fixtures:
+        assert shown[fixture], f"{module.__name__} {name}: no sample line from fixture {fixture}"
+
+
 @pytest.mark.parametrize("module", [nvcc, nvcpp], ids=["nvcc", "nvcpp"])
 def test_empty_stderr_parses_to_nothing(module: ModuleType) -> None:
     assert module.parse_diagnostics("") == []
@@ -662,11 +764,10 @@ NVCC_LINES = [
         [compile_diag("error", None, "main.cu", 40, None, "assertion failed in lower_il")],
         id="edg-internal-error",
     ),
-    # From capture nvcc_linker_error: the undefined reference names a temporary cudafe1 file and a section
-    # offset, with no "/usr/bin/ld: " in front; the collect2 line follows.
+    # From capture nvcc_linker_error (NVCC_UNDEFINED_LINE, COLLECT2_LINE): the undefined reference names a temporary
+    # cudafe1 file and a section offset, with no "/usr/bin/ld: " in front; the collect2 line follows.
     pytest.param(
-        "tmpxft_00000002_00000000-6_main.cudafe1.cpp:(.text.startup+0x2c): " + HELPER_UNDEFINED + "\n"
-        "collect2: error: ld returned 1 exit status\n",
+        NVCC_UNDEFINED_LINE + "\n" + COLLECT2_LINE + "\n",
         [
             compile_diag("error", None, None, None, None, HELPER_UNDEFINED),
             compile_diag("error", None, None, None, None, "ld returned 1 exit status"),
@@ -774,11 +875,10 @@ NVCPP_LINES = [
         [compile_diag("error", None, None, None, None, "ld returned 1 exit status")],
         id="collect2",
     ),
-    # From capture nvcpp_linker_error: the linker names main.cpp by its absolute workdir path and a line. With
-    # no files the path is no built file, so file and line are None (see the linker place tests).
+    # From capture nvcpp_linker_error (NVCPP_UNDEFINED_LINE): the linker names main.cpp by its absolute workdir path
+    # and a line. With no files the path is no built file, so file and line are None (see the linker place tests).
     pytest.param(
-        "/mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-211958-desktop-8r113ei-p0-core-d221/work/"
-        "nvcpp_linker_error/main.cpp:21: " + HELPER_UNDEFINED + "\n",
+        NVCPP_UNDEFINED_LINE + "\n",
         [compile_diag("error", None, None, None, None, HELPER_UNDEFINED)],
         id="linker-message-after-the-last-colon",
     ),
@@ -787,16 +887,6 @@ NVCPP_LINES = [
         "/usr/bin/ld: main.o:(.data.rel.ro+0x10): " + VTABLE_UNDEFINED + "\n",
         [compile_diag("error", None, None, None, None, VTABLE_UNDEFINED)],
         id="linker-two-colons-before-the-phrase",
-    ),
-    # No committed capture shows this. Exploratory probe nvcpp_probe_asm_int (dirty-tree rx
-    # 20260923-104618-desktop-8r113ei-p0-core-173d) showed LLVM's assembler naming the inline asm string, whose
-    # line and column index no built file, so there is no column; its echo and caret lines match no pattern.
-    pytest.param(
-        "<inline asm>:1:2: error: invalid instruction mnemonic 'bogus.op.s32'\n"
-        "        bogus.op.s32 %edi, %edi;\n"
-        "        ^~~~~~~~~~~~\n",
-        [compile_diag("error", None, "<inline asm>", 1, None, "invalid instruction mnemonic 'bogus.op.s32'")],
-        id="llvm-inline-asm-error",
     ),
     # P0.17, the last two lines of capture nvcpp_nvlink_error (NVLINK_LINE, NVDD_STATUS_LINE). nvlink names a
     # temporary object and no line, so file and line are None (NVLINK_MESSAGE). The pgacclnk line after it names
@@ -894,12 +984,7 @@ SKIPPED_LINES = [
     pytest.param(nvcc, "main.cu: In function 'int main()':", id="nvcc-gcc-in-function"),
     pytest.param(nvcc, "   16 |     for (int i = 0; i < host.size(); i++) {", id="nvcc-gcc-echo"),
     pytest.param(nvcc, "      |                 ~~^~~~~~~~~~~~~", id="nvcc-gcc-caret"),
-    pytest.param(
-        nvcc,
-        "/usr/bin/ld: /mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-211958-desktop-8r113ei-p0-core-d221"
-        "/work/nvcc_linker_error/@lassi-tmp/tmpxft_00000002_00000000-11_main.o: in function `main':",
-        id="nvcc-ld-context",
-    ),
+    pytest.param(nvcc, NVCC_LD_CONTEXT_LINE, id="nvcc-ld-context"),
     pytest.param(nvcpp, '1 error detected in the compilation of "main.cpp".', id="nvcpp-error-summary"),
     pytest.param(
         nvcpp,
@@ -928,13 +1013,8 @@ SKIPPED_LINES = [
     pytest.param(nvcpp, "      6, Loop not vectorized/parallelized: not countable", id="nvcpp-minfo-colon"),
     pytest.param(nvcpp, "         Generating map(to:x[:n]) ", id="nvcpp-minfo-map"),
     pytest.param(nvcpp, "     15, Generated vector simd code for the loop", id="nvcpp-minfo-simd"),
-    pytest.param(
-        nvcpp,
-        "/usr/bin/ld: /mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-211958-desktop-8r113ei-p0-core-d221"
-        "/work/nvcpp_linker_error/@lassi-tmp/nvc++vc-2bVcpD9.o: in function `main':",
-        id="nvcpp-ld-context",
-    ),
-    pytest.param(nvcpp, "pgacclnk: child process exit status 1: /usr/bin/ld", id="nvcpp-link-status"),
+    pytest.param(nvcpp, NVCPP_LD_CONTEXT_LINE, id="nvcpp-ld-context"),
+    pytest.param(nvcpp, LD_STATUS_LINE, id="nvcpp-link-status"),
     # From capture nvcpp_nvlink_error (P0.17): the file header nvc++ prints for each of several
     # sources, an -Minfo line with ": " in it, and the pgacclnk line naming nvdd rather than ld.
     pytest.param(nvcpp, "helper.cpp:", id="nvcpp-file-header"),
@@ -1133,13 +1213,63 @@ def test_nvcpp_gcc_column_zero_is_none() -> None:
     assert nvcpp.parse_diagnostics(gcc_unused_stderr(column=0), {"main.cpp": HOST_CPP}) == [gcc_unused(None)]
 
 
-def test_nvcpp_inline_asm_error_has_no_column_with_the_files() -> None:
-    # Exploratory probe nvcpp_probe_asm_int (see NVCPP_LINES): '<inline asm>' is no built file, so even with the
-    # files there is no column; file and line stay as printed.
-    stderr = "<inline asm>:1:2: error: invalid instruction mnemonic 'bogus.op.s32'\n"
+# ---------------------------------------------------------------------------
+# Places that index no built file (P1.11)
+#
+# A Diagnostic's file and line index a built file, or are None: the file is a key of `files` and the line, when
+# set, is a line of it. Two nvc++ formats broke this rule in P0: LLVM's assembler line names the inline asm string,
+# and an NVC++ backend line may name a file with no line. No committed capture shows either line.
+
+INLINE_ASM_LINE = "<inline asm>:1:2: error: invalid instruction mnemonic 'bogus.op.s32'"
+INLINE_ASM_MESSAGE = "invalid instruction mnemonic 'bogus.op.s32'"
+ACCELERATOR_REGION = "Invalid accelerator region"
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        pytest.param(INLINE_ASM_LINE + "\n", id="line-alone"),
+        # With the echo and caret lines LLVM prints after it (no gutter); neither is a diagnostic.
+        pytest.param(
+            INLINE_ASM_LINE + "\n        bogus.op.s32 %edi, %edi;\n        ^~~~~~~~~~~~\n", id="with-echo-and-caret"
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "files", [pytest.param({}, id="no-files"), pytest.param({"main.cpp": HOST_CPP}, id="built-file")]
+)
+def test_nvcpp_inline_asm_error_has_no_file_or_line(stderr: str, files: dict[str, str]) -> None:
+    # Exploratory probe nvcpp_probe_asm_int (dirty-tree rx 20260923-104618-desktop-8r113ei-p0-core-173d, not a
+    # fixture) showed LLVM's assembler rejecting an inline asm instruction in main.cpp with this line. Line 1 and
+    # column 2 count in the asm string, and '<inline asm>' is no built file, so file, line, and column are None.
+    # The error itself stays: one error, no code, its message holding the assembler's text.
+    diagnostics = nvcpp.parse_diagnostics(stderr, files)
+    assert len(diagnostics) == 1, diagnostics
+    diagnostic = diagnostics[0]
+    assert (diagnostic.stage, diagnostic.severity, diagnostic.code) == ("compile", "error", None)
+    assert (diagnostic.file, diagnostic.line, diagnostic.column) == (None, None, None)
+    assert INLINE_ASM_MESSAGE in diagnostic.message
+
+
+def test_nvcpp_backend_line_with_a_built_file_and_no_line_names_the_file() -> None:
+    # No capture shows this line. The place "(main.cpp)" names a built file with no line, so the file is main.cpp,
+    # line and column are None, and the message is the text before the blank and the place, as for a backend line
+    # with a line ("backend-severe-with-file" in NVCPP_LINES).
+    stderr = f"NVC++-S-0155-{ACCELERATOR_REGION} (main.cpp)\n"
     assert nvcpp.parse_diagnostics(stderr, {"main.cpp": HOST_CPP}) == [
-        compile_diag("error", None, "<inline asm>", 1, None, "invalid instruction mnemonic 'bogus.op.s32'")
+        compile_diag("error", "S-0155", "main.cpp", None, None, ACCELERATOR_REGION)
     ]
+
+
+def test_nvcpp_backend_line_with_no_built_file_and_no_line_has_no_file() -> None:
+    # No capture shows this line. The place "(main.cpp)" names no built file here, so file, line, and column are None.
+    stderr = f"NVC++-S-0155-{ACCELERATOR_REGION} (main.cpp)\n"
+    diagnostics = nvcpp.parse_diagnostics(stderr, {"other.cpp": HOST_CPP})
+    assert len(diagnostics) == 1, diagnostics
+    diagnostic = diagnostics[0]
+    assert (diagnostic.stage, diagnostic.severity, diagnostic.code) == ("compile", "error", "S-0155")
+    assert (diagnostic.file, diagnostic.line, diagnostic.column) == (None, None, None)
+    assert ACCELERATOR_REGION in diagnostic.message
 
 
 # ---------------------------------------------------------------------------
@@ -1172,9 +1302,9 @@ LINKED = "#include <cstdio>\n\nvoid helper(float *data, int n);\n\nint main()\n{
         pytest.param("/work/run/other.cpp:7", {"main.cpp": LINKED}, None, None, id="not-a-built-file"),
         pytest.param("/work/run/main.cpp:99", {"main.cpp": LINKED}, None, None, id="line-past-the-end"),
         pytest.param("/work/run/main.cpp:7", {}, None, None, id="no-files"),
-        # As in capture nvcc_linker_error: a temporary file and a section offset.
+        # As in capture nvcc_linker_error: a temporary file and a section offset (NVCC_LINKER_PLACE).
         pytest.param(
-            "tmpxft_00000002_00000000-6_main.cudafe1.cpp:(.text.startup+0x2c)",
+            NVCC_LINKER_PLACE,
             {"main.cpp": LINKED},
             None,
             None,
@@ -1593,7 +1723,8 @@ def test_factory_with_no_arguments_builds_the_preset(preset: str) -> None:
     assert isinstance(tool, Component)
     assert tool.name == case.name
     assert tool.command(["x.c"]) == [case.executable, *case.flags, "-o", OUTPUT, "x.c"]
-    assert list(inspect.signature(case.factory.build).parameters) == ["self", "files", "workdir"]
+    # P1.2 adds the optional harness files (tests/toolchains/test_harness_files.py).
+    assert list(inspect.signature(case.factory.build).parameters) == ["self", "files", "workdir", "harness"]
 
 
 @pytest.mark.parametrize("preset", PRESET_NAMES)

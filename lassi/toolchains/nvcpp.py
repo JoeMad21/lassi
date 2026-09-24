@@ -8,11 +8,11 @@ unchanged:
 
 NvcppCc80 is the preset with GPU "cc80". parse_diagnostics reads the stderr
 of the NVHPC EDG front end, the NVC++ backend, the nvc++ driver, GCC style
-and linker lines (nvc++ runs the link step itself), and nvlink, the device
-linker; the patterns below each show a sample line, from the captures in
-tests/toolchains/fixtures/ where one shows it. The -Minfo report goes to
-stderr too and matches no pattern, so it yields no diagnostics; for example
-(capture nvcpp_minfo_clean)
+and linker lines (nvc++ runs the link step itself), nvlink, the device
+linker, and LLVM's assembler on inline asm; the patterns below each show a
+sample line, from the captures in tests/toolchains/fixtures/ where one
+shows it. The -Minfo report goes to stderr too and matches no pattern, so
+it yields no diagnostics; for example (capture nvcpp_minfo_clean)
     saxpy(int, float, float const*, float*):
           4, #omp target teams distribute parallel for
               4, Generating "nvkernel__Z5saxpyifPKfPf_F1L4_2" GPU kernel
@@ -57,25 +57,31 @@ _EDG = re.compile(
     r"(?: \[(?P<code>[A-Za-z_][A-Za-z0-9_]*)\])?"
 )
 
-# NVC++ backend: "NVC++-<S>-<nnnn>-<message>", with an optional trailing "(<file>: <line>)" after one or more
-# blanks, for example (captures nvcpp_backend_error and nvcpp_fatal_abort, both messages shortened with "...")
+# NVC++ backend: "NVC++-<S>-<nnnn>-<message>", with an optional trailing place "(<file>: <line>)" or "(<file>)"
+# after one or more blanks, for example (captures nvcpp_backend_error and nvcpp_fatal_abort, both messages
+# shortened with "...")
 #   NVC++-S-1101-The maximum stack size ... is limited to 524288 bytes: 1048676 (main.cpp: 4)
 #   NVC++-F-0000-Internal compiler error. child tinfo ... outlining function for host    1198  (main.cpp: 8)
+# and, a place with no line that no capture shows yet,
+#   NVC++-S-0155-Invalid accelerator region (main.cpp)
 # The code is "<S>-<nnnn>". S is I (a note), W (a warning), S (severe, an error), or F (fatal, an error).
 # The message is the text before the blanks, as printed, so an internal error keeps its internal number and
-# its inner blanks. The look-behind lets only the first blank of a run start the separator, which keeps the
-# match linear in the line length.
+# its inner blanks. A place with a line gives the file and line as printed. A place with no line holds no ": ",
+# so "(main.cpp: <more than 10 digits>)" is no place, and _backend_place keeps it only as a built file: the file
+# is set and the line is None, or, since a message may also end in a parenthesis that names no file, the file is
+# None and the message keeps the place as printed. The look-behind lets only the first blank of a run start the
+# separator, which keeps the match linear in the line length.
 _BACKEND = re.compile(
     r"NVC\+\+-(?P<severity>[IWSF])-(?P<number>[0-9]+)-"
     r"(?P<message>.*?)"
-    r"(?:(?<=\S)\s+\((?P<file>[^()]+): (?P<line>[0-9]{1,10})\))?"
+    r"(?:(?<=\S)\s+\((?:(?P<file>[^()]+): (?P<line>[0-9]{1,10})|(?P<bare_file>(?:(?!: )[^()])+))\))?"
 )
 _BACKEND_SEVERITY = {"I": "note", "W": "warning", "S": "error", "F": "error"}
 
-# nvlink, the CUDA device linker: "nvlink <severity> : <message>" with varying spacing, for example (exploratory
-# capture nvcpp_nvlink_error, from an OpenMP target region calling a function with no device definition, in
-# dirty-tree rx 20260923-202909-desktop-8r113ei-p0-core-09c6; the workdir and toolchain paths shortened with "...")
-#   nvlink error   : Undefined reference to '_Z5twicef' in '/mnt/nvme10/.../@lassi-tmp/nvc++8c0N0-iy_9.o'
+# nvlink, the CUDA device linker: "nvlink <severity> : <message>" with varying spacing, for example (fixture
+# nvcpp_nvlink_error, from an OpenMP target region calling a function with no device definition, in the clean
+# capture rx 20260923-211958-desktop-8r113ei-p0-core-d221; the workdir and toolchain paths shortened with "...")
+#   nvlink error   : Undefined reference to '_Z5twicef' in '/mnt/nvme10/.../@lassi-tmp/nvc++bcdFQVDqP8.o'
 #   pgacclnk: child process exit status 2: /mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/.../bin/tools/nvdd
 # nvlink names a symbol and an object, never a source line, and the object is a temporary one in the compile's
 # private TMPDIR (@lassi-tmp). So the Diagnostic has no file, line, or column, and the message is the text after
@@ -118,24 +124,62 @@ def _driver(match: re.Match[str]) -> Diagnostic:
 
 
 def _backend(match: re.Match[str]) -> Diagnostic:
-    """Return the Diagnostic for an NVC++ backend line, which never gives a column."""
+    """Return the Diagnostic for an NVC++ backend line, which never gives a column.
+
+    A place with no line sets the file, and the message keeps the place as
+    printed until _backend_place checks the file against the built files.
+    """
+    severity = _BACKEND_SEVERITY[match["severity"]]
+    code = f"{match['severity']}-{match['number']}"
+    if match["bare_file"] is not None:
+        return compile_diagnostic(severity, match[0][match.start("message") :], code=code, file=match["bare_file"])
     line = match["line"]
     return compile_diagnostic(
-        _BACKEND_SEVERITY[match["severity"]],
-        match["message"],
-        code=f"{match['severity']}-{match['number']}",
-        file=match["file"],
-        line=None if line is None else int(line),
+        severity, match["message"], code=code, file=match["file"], line=None if line is None else int(line)
     )
 
 
-# GCC style lines: nvc++ compiles the built files itself, with no regenerated source in between, so a GCC style
-# line on a built file keeps its column as printed; no capture shows one yet. Any other place gets no column. An
+def _backend_place(
+    diagnostic: Diagnostic, lines: list[str], index: int, files: Mapping[str, str], patterns: Sequence[LinePattern]
+) -> tuple[Diagnostic, int]:
+    """Keep a backend place with no line only as a built file (a key of `files`); consume no line.
+
+    On a built file the message becomes the text before the blanks and the
+    place: the place is the last "(" (a file name here holds none), and the
+    pattern puts a non-blank before the blanks. Otherwise the file becomes
+    None and the message keeps the place as printed. A place with a line,
+    and a line with no place, are returned unchanged.
+    """
+    if diagnostic.file is None or diagnostic.line is not None:
+        return diagnostic, index
+    if diagnostic.file in files:
+        message = diagnostic.message[: diagnostic.message.rindex("(")].rstrip()
+        return dataclasses.replace(diagnostic, message=message), index
+    return dataclasses.replace(diagnostic, file=None), index
+
+
+# LLVM's assembler on inline asm: "<inline asm>:<line>:<column>: <severity>: <message>". No capture shows it. An
 # exploratory probe (nvcpp_probe_asm_int in dirty-tree rx 20260923-104618-desktop-8r113ei-p0-core-173d, not a
-# fixture) showed LLVM's assembler rejecting an inline asm instruction, with an echo and a caret line (no
-# gutter) that match no pattern after it:
+# fixture) showed LLVM's assembler rejecting an inline asm instruction, with an echo of the asm string and a caret
+# line (no gutter) after it that match no pattern:
 #   <inline asm>:1:2: error: invalid instruction mnemonic 'bogus.op.s32'
-# Its line and column index the asm string, not a built file; the file and line stay as printed.
+# Its line and column count in the asm string, and '<inline asm>' names no built file, so file, line, and column
+# are None and there is no code. The message keeps the place as printed, as a ptxas place does under nvcc:
+# "<inline asm>:1:2: invalid instruction mnemonic 'bogus.op.s32'". It is tried before the GCC style pattern, which
+# would read '<inline asm>' as a file; a built file named '<inline asm>' gets no place either, the safe side of
+# the rule. A number past 10 digits is no place, and the line then matches no pattern.
+_INLINE_ASM = re.compile(
+    r"(?P<place><inline asm>:[0-9]{1,10}:[0-9]{1,10}): (?P<severity>error|warning|note): (?P<message>.*)"
+)
+
+
+def _inline_asm(match: re.Match[str]) -> Diagnostic:
+    """Return the Diagnostic for an LLVM inline asm line: no file, line, column, or code; the place in the message."""
+    return compile_diagnostic(match["severity"], f"{match['place']}: {match['message']}")
+
+
+# GCC style lines: nvc++ compiles the built files itself, with no regenerated source in between, so a GCC style
+# line on a built file keeps its column as printed; no capture shows one yet. Any other place gets no column.
 def _gcc_column(
     diagnostic: Diagnostic, lines: list[str], index: int, files: Mapping[str, str], patterns: Sequence[LinePattern]
 ) -> tuple[Diagnostic, int]:
@@ -145,13 +189,14 @@ def _gcc_column(
     return dataclasses.replace(diagnostic, column=None), index
 
 
-# Tried in this order on each line; the linker pattern is last because it is the loosest. The driver and nvlink
-# patterns come before the GCC style one (see each).
+# Tried in this order on each line; the linker pattern is last because it is the loosest. The driver, nvlink, and
+# inline asm patterns come before the GCC style one (see each).
 _PATTERNS = (
     LinePattern(_EDG, _edg, fold=fold_edg_lines),
-    LinePattern(_BACKEND, _backend),
+    LinePattern(_BACKEND, _backend, fold=_backend_place),
     LinePattern(_DRIVER, _driver),
     LinePattern(_NVLINK, cuda_tool_diagnostic),
+    LinePattern(_INLINE_ASM, _inline_asm),
     dataclasses.replace(GCC, fold=_gcc_column),
     COLLECT2,
     UNDEFINED_REFERENCE,
@@ -164,10 +209,11 @@ def parse_diagnostics(stderr: str, files: Mapping[str, str] = NO_FILES) -> list[
     `files` (relative path -> text) are the files built; an EDG diagnostic
     gets its column by aligning the source echo with its line in them, a
     GCC style diagnostic keeps its column only on one of them (_gcc_column),
-    and a linker place is kept only as one of them; an nvlink or driver
-    diagnostic has no place. Lines that match no pattern are skipped: the
-    file name header nvc++ prints for each of several sources (such as
-    "helper.cpp:"), error summaries, Remark lines, the -Minfo report, the
+    and a linker place, or a backend place with no line, is kept only as one
+    of them; an nvlink, driver, or inline asm diagnostic has no place (an
+    inline asm place stays in the message). Lines that match no pattern are
+    skipped: the file name header nvc++ prints for each of several sources
+    (such as "helper.cpp:"), error summaries, Remark lines, the -Minfo report, the
     compiler's closing status line (such as "NVC++/x86-64 Linux 24.11-0:
     compilation aborted"), the linker's "in function" line, the "pgacclnk:
     child process exit status 1: /usr/bin/ld" line and the one naming nvdd
@@ -210,3 +256,32 @@ class NvcppCc80(NvcppToolchain):
     # The pinned nvc++: toolchains/nvhpc.pin, at <toolchains root>/<PREFIX_NAME>/<COMPILER_SUBDIR>/nvc++.
     PIN = "nvhpc"
     PIN_BIN = "{COMPILER_SUBDIR}/nvc++"
+
+
+@register("Toolchain", "nvcpp-multicore")
+class NvcppMulticore(NvcppToolchain):
+    """nvc++ building OpenMP target regions for the host CPU: the multicore proxy of the Harness Contract.
+
+    The bible's Harness Contract (Execution Backends) names a CUDA -> OMP
+    proxy without a GPU: a second binary built with nvc++ -mp=multicore, so
+    target regions run on the host. This preset builds it with the
+    nvcpp-cc80 command, -mp=gpu replaced by -mp=multicore and no -gpu target:
+
+        nvc++ -Wall -O3 -Minfo -mp=multicore -o main <sources>
+
+    It shares nvcpp-cc80's pin (PIN and PIN_BIN) and stderr parser. Its
+    capabilities hold "openmp_multicore" in place of "openmp_offload", so a
+    component that requires offload never gets it. It is a proxy: it never
+    appears in faithful recipes, and a run of its binary checks outputs only
+    and never yields runtime numbers.
+    """
+
+    name = "nvcpp-multicore"
+    capabilities = frozenset({"openmp_multicore", "emits_warnings", "diagnostics"})
+    PIN = NvcppCc80.PIN
+    PIN_BIN = NvcppCc80.PIN_BIN
+
+    def command(self, sources: Sequence[str]) -> list[str]:
+        """Return the proxy command line: the LASSI flags with -mp=multicore and no -gpu target, then `sources`."""
+        flags = ["-Wall", "-O3", "-Minfo", "-mp=multicore"]
+        return [self.executable, *flags, "-o", OUTPUT, *sources]

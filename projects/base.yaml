@@ -10,7 +10,7 @@ trials:
 runs_root: /mnt/nvme10/joseph_ufl/lassi-runs  # raw run trees stay on the build host scratch disk, never in git (Agent Rule 7)
 sandbox:
   network: false  # generated code never reaches the network (Execution Backends, Sandbox)
-  wall_s: baseline_x10  # the wall limit is ten times the baseline run's wall time
+  wall_s: baseline_x10  # ten times the reference run's wall time, at least 30 s, and 30 s when no reference ran
   mem_gb: 16  # the memory limit per sandboxed run, in GB
 report:
   trial_md: true  # write trial.md for every trial (Readability Standards, Trial row)

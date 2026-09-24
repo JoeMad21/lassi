@@ -8,10 +8,10 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 
 | Phase | Branch | State | Note |
 | --- | --- | --- | --- |
-| P0 Core | p0-core | DONE | base: main; gate passed 2026-09-23 (results/p0-gate); PR P0 Core open for the owner |
-| P1 Faithful LASSI | p1-faithful | NOT-STARTED | owner 2026-09-23: start as soon as P0 finishes (after the P0 retrospective), no pause; P2 right after |
+| P0 Core | p0-core | DONE | base: main; gate passed 2026-09-23 (results/p0-gate); merged into main as c3cf248 (PR 1) |
+| P1 Faithful LASSI | p1-faithful | DONE | base: main at c3cf248 (P0 merged, PR 1); plan plans/p1-faithful.md; owner 2026-09-23: scope fixed at planning, P2 follows without pause; owner 2026-09-24: curated LASSI demo at 15:00 EDT |
 | P2 Scoring | p2-scoring | NOT-STARTED | gate needs owner review |
-| P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001: alpha01, gate rngd enabled 2026-09-23); the owner records here when the phase may start |
+| P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
 | P4 ttsim Execution | p4-ttsim | NOT-STARTED | - |
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
@@ -52,3 +52,17 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.18 | DONE | Carry run provenance in each Trial | P0.11 | Trial.provenance {commit, dirty, device, sdk, date} copied from provenance.json by the runner; trial.md, run.md, and the Parquet trials table show it; Result Record lines of OQ-008 mirrored here |
 | P0.19 | DONE | Install CUDA 12.6.3 from the redistributable archives | P0.7 | 7d8d3d5: redistributable CUDA 12.6.3 (4 archives); from the clean commit V12.6.85, 63 remote tests, fixture recapture 12 of 12 byte-stable identical, no root-fs writes (rx 20260923-220925-desktop-8r113ei-p0-core-6db9); bible at master revision 85; old tree to OQ-017 |
 | P0.20 | DONE | Harden compiles of generated sources | P0.16 | 1de7db6; its acceptance record landed in f9d1e68 under the hooks subject (OQ-016): 63 remote tests and a fixture recapture (12 of 12 byte-stable identical) from 1de7db6; bible at master revision 83 |
+| P1.0 | DONE | Plan phase P1 into plans/p1-faithful.md and add its tasks here | - | plan plans/p1-faithful.md; base main c3cf248 |
+| P1.1 | DONE | Pin upstream LASSI and check the HeCBench pin against its sources | - | f92a4a0; results/p1-upstream-pin (rx 20260924-002439-desktop-8r113ei-p1-faithful-8e73, clean a815c45) |
+| P1.2 | DONE | Ten-app bench manifest, support files, and item selection | P1.1 | cd94c69; 20/20 references compiled, results/p1-hecbench-compile (rx 20260924-002513-desktop-8r113ei-p1-faithful-e7ba, clean a815c45) |
+| P1.3 | DONE | lassi-2024 prompt set and context packs from pinned upstream | P1.1 | tools/extract_lassi_assets.py writes 54 prompt fragments and 2 packs, gitignored; 3 MANIFEST.yaml tracked (OQ-018); tests/prompts 41 passed |
+| P1.4 | DONE | Faithful generation: summarize_context, describe_source, generate | P1.3 | Faithful summarize_context, describe_source, generate with fence-quirk and prompt_spaces fixes; tests/core 1146 passed |
+| P1.5 | DONE | Baseline stage and the faithful correction loop | P1.2,P1.4 | baseline stage, Trial.reference_run, final.end_reason, faithful correction prompt with prompt_newlines and parsed_diagnostics fixes; full suite 2923 passed |
+| P1.6 | DONE | run_loop: execution gate, stale output, run flags, Ollama unload | P1.5 | 75a06e5; run_loop with execution gate, stale-output, upstream-crash, run flags as warnings, unload_before_run, upstream run report (execute.* fragments), sandboxed-executor check; the reference run's flags are not recorded (PHASE-NOTES P2) |
+| P1.7 | DONE | Oracles: stdout_mask and passfail | P1.2 | stdout_mask and passfail oracles, masks for all ten apps, runner oracle checks; the stage aligns run stdout once the baseline records the reference stdout (P1.5) |
+| P1.8 | DONE | Sim-T and Sim-L | P1.1 | lassi/scoring/similarity.py: faithful sim_t and sim_l equal upstream on 400 ordered pairs under the upstream guard; C-aware sim_t_c added |
+| P1.9 | DONE | Replay backend and the upstream notebook replay harness | P1.6,P1.8 | c825f2c replay backend, 526a550 harness; tests/replay runs the pinned notebook and the faithful stages on 16 scripted synthetic scenarios in both directions and compares every decision (47 tests); the remote run is P1.G |
+| P1.10 | DONE | lassi-repro recipes, project name, and the mock dry run | P1.6,P1.7 | project key, lassi-repro recipe, mock untagged-fence form, faithful multicore guard; local mock dry run of 20 trials at S4 on attempt 0; the remote dry run is P1.G |
+| P1.11 | DONE | Toolchain follow-ups deferred from P0 | - | toolchain follow-ups from the P0 freeze: backend place without a line, inline asm place, sample lines tied to the fixtures; one review, PASS |
+| P1.12 | OWNER | Apply OQ-018: upstream text in the repository | P1.3 | waits on OQ-018; the gate does not depend on it |
+| P1.G | DONE | Phase gate: notebook replay and mock dry run 20/20 | P1.9,P1.10,P1.11 | PASS: replay 47 passed, 32 cases match (rx 20260924-104048-desktop-8r113ei-p1-faithful-5fd3); mock dry run 20/20 at S4 attempt 0 (rx 20260924-104105-desktop-8r113ei-p1-faithful-c002); fe01ab1 clean; results/p1-gate |

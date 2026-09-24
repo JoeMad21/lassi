@@ -2,12 +2,144 @@
 # Sources are pinned by commit and fetched by tools/fetch_bench.py under $LASSI_SCRATCH, never into git.
 suite: lassi-hecbench-10
 repo: https://github.com/zjin-lcf/HeCBench
-# HeCBench master on 2026-09-23 (git ls-remote, rx 20260923-050523-exec-73f1). Whether this matches the
-# HeCBench revision LASSI copied its *_main sources from is unverified; P1 compares it with upstream LASSI.
-commit: 7d2d3c567be522a2104065165de0a4a233a6ea1a
+# The newest commit on HeCBench master's first-parent line whose src/<app>-<omp|cuda>/main.* files are byte for
+# byte the 20 *_main files of upstream LASSI at 74b4681 (plans/spikes/p1-hecbench-pin.md, Decision). Each sha256
+# below is that of upstream's file; tools/fetch_bench.py refuses a fetch whose files differ.
+commit: 692cba32c5744f6ef024cca59f65e9488edba8bf
+# Per item: run_args are the arguments of upstream's experimental_setup docstring, exactly (its DNU entry is left
+# out); passfail lists the languages whose program prints PASS or FAIL (bible Source Papers, LASSI quirk table);
+# support maps a harness file in every build directory of the item to its path in the pinned sources.
 items:
-  layout:                   # one of LASSI's 10 apps (bible Source Papers, LASSI); the other nine land in P1
+  atomicCost:
     split: eval
+    run_args: ["1"]
+    passfail: [omp, cuda]
     languages:
-      omp: {dir: src/layout-omp, files: [main.cpp]}
-      cuda: {dir: src/layout-cuda, files: [main.cu]}
+      omp:
+        dir: src/atomicCost-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 551a852d6b4f49b46a25115e5e2e9e415800902212cc866bcf3c0b5a78f8545a}
+      cuda:
+        dir: src/atomicCost-cuda
+        files: [main.cu]
+        sha256: {main.cu: f0187a042fb4ed5703fda58f3c9c37af44789f665bc75170f24902625e932c41}
+  bsearch:
+    split: eval
+    run_args: ["10000", "1"]
+    passfail: []
+    languages:
+      omp:
+        dir: src/bsearch-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 7510f31aa1f2349aa3423691c25cf6fc499ebb69d89a020f5af140961561bf7b}
+      cuda:
+        dir: src/bsearch-cuda
+        files: [main.cu]
+        sha256: {main.cu: 0268969ff49b7d55c6066c930e101eeecf3d145e63faef3b8df4327b8001a574}
+  colorwheel:
+    split: eval
+    run_args: ["10000", "8", "1"]
+    passfail: [omp, cuda]
+    languages:
+      omp:
+        dir: src/colorwheel-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 4093121818bc0c40f0f2f7ba9e8750c9918812838df1208d755a00596fed85a5}
+      cuda:
+        dir: src/colorwheel-cuda
+        files: [main.cu]
+        sha256: {main.cu: 38107094523e3a5066ae1942ff6a59bc2a5f293d2d6ba1a714fea632ac3dfa3e}
+  dense-embedding:
+    split: eval
+    run_args: ["10000", "8", "1"]
+    passfail: [omp, cuda]
+    languages:
+      omp:
+        dir: src/dense-embedding-omp
+        files: [main.cpp]
+        sha256: {main.cpp: e47a75f577ae1775d9d55fefd4d109fb2a1868c9e2a61ca89198853e6ffcb020}
+      cuda:
+        dir: src/dense-embedding-cuda
+        files: [main.cu]
+        sha256: {main.cu: 1b55b9f9aea4bc62b2cdf321c6d480344707ec4e912d4c479bc2f6b8dac5777b}
+  entropy:
+    split: eval
+    run_args: ["10000", "1024", "1"]
+    passfail: [omp, cuda]
+    # Both languages include reference.h, which upstream LASSI lacks; HeCBench keeps it beside the CUDA source
+    # (bible Source Papers, LASSI quirk table, entropy row).
+    support: {reference.h: src/entropy-cuda/reference.h}
+    languages:
+      omp:
+        dir: src/entropy-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 572cfb561a4fec6d2478e08fd0a227d1d8a1633326fd9b597ad9974445049fa6}
+      cuda:
+        dir: src/entropy-cuda
+        files: [main.cu]
+        sha256: {main.cu: af5c64a0a1cfa7c10fe41d690a0b89b5f313120f95910ed954dc2eae0ba9c3eb}
+  jacobi:
+    split: eval
+    run_args: [""]  # one empty argument, as upstream passes it
+    passfail: [omp, cuda]
+    languages:
+      omp:
+        dir: src/jacobi-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 437d064e9e2b3dd23dcb436b56c73c6403d0758db5d1d325ed4cce519a43a556}
+      cuda:
+        dir: src/jacobi-cuda
+        files: [main.cu]
+        sha256: {main.cu: 1bdccb9acc89b641971cf484d00fdaf80deccf608563a47c0206cb268be663b4}
+  layout:
+    split: eval
+    run_args: ["1"]
+    passfail: [omp, cuda]
+    languages:
+      omp:
+        dir: src/layout-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 004471a88f8e4bd9310c9b6d7d6eed97c346ec0792d3c5fa9ed4ad2ee8a18917}
+      cuda:
+        dir: src/layout-cuda
+        files: [main.cu]
+        sha256: {main.cu: 4c9be5825f1b1165127047dfd70e57304f9a6bfa522eab876a5a42b5958774a3}
+  matrix-rotate:
+    split: eval
+    run_args: ["10000", "1"]
+    passfail: [omp, cuda]
+    languages:
+      omp:
+        dir: src/matrix-rotate-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 0a75e4a6aac2d73821bb73d4fbc3ad5d1efa796082597a7598757567293bc4c8}
+      cuda:
+        dir: src/matrix-rotate-cuda
+        files: [main.cu]
+        sha256: {main.cu: ed315e736acb3621d48965b11b316e292e5cad82d474f66f61191a92f9edb7b5}
+  pathfinder:
+    split: eval
+    run_args: ["10000", "1000", "1000"]
+    passfail: []
+    languages:
+      omp:
+        dir: src/pathfinder-omp
+        files: [main.cpp]
+        sha256: {main.cpp: ebcb3d25cdd6da85b07b8a8850fe3e548fc79e4e3e268a98b8e811fe8428ebe3}
+      cuda:
+        dir: src/pathfinder-cuda
+        files: [main.cu]
+        sha256: {main.cu: a97520e25758e91b45c1dd7fec39f7b64691b69032c72e221f9629963cbd0ac9}
+  randomAccess:
+    split: eval
+    run_args: ["1"]
+    passfail: [cuda]
+    languages:
+      omp:
+        dir: src/randomAccess-omp
+        files: [main.cpp]
+        sha256: {main.cpp: d8901f8c2b4e70ef58b0cea790876c6623e81545bbdbe41d91cbca71e889ab42}
+      cuda:
+        dir: src/randomAccess-cuda
+        files: [main.cu]
+        sha256: {main.cu: 28ecb90f300e7c537bd094acca9ab1c61b20005004ab6c9eb659df708c9300e2}

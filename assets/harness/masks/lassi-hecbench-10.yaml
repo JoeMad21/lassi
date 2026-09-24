@@ -1,0 +1,33 @@
+# Timing masks of the lassi-hecbench-10 suite for the stdout_mask oracle (task P1.7; bible Oracles, Harness Contract).
+# Each item lists regular expressions; lassi.oracles.load_masks reads them, and a line that one of its item's
+# masks matches (re.search) is a timing line, replaced whole by one marker line before stdouts are compared.
+# The masks come from the stdout print statements of the item's pinned sources in both languages (the manifest
+# assets/bench/lassi-hecbench-10.yaml pins them): each matches the fixed text that starts a timing print, never
+# the printed number, so any number format is masked. tests/oracles/test_harness_masks.py renders every stdout
+# print of the pinned sources and checks both directions: each timing line is masked and no other line is.
+suite: lassi-hecbench-10
+items:
+  atomicCost:
+    - '^Average execution time of With(out)?AtomicOnGlobalMem: '
+  # The OpenMP version says "device" where the CUDA version says "kernel".
+  bsearch:
+    - '^Average (kernel|device) execution time \(bs[1-4]\) '
+  colorwheel:
+    - '^Average kernel execution time : '
+  dense-embedding:
+    - '^Average execution time of dense embedding kernel \(k[12]\): '
+  entropy:
+    - '^Average kernel \((baseline|optimized)\) execution time '
+  jacobi:
+    - '^Average execution time per iteration: '
+    - '^Total elapsed time: '
+  layout:
+    - '^Average kernel execution time \((AoS|SoA)\): '
+  matrix-rotate:
+    - '^Average kernel execution time: '
+  # The OpenMP version prints no space before "(s)" on the offloading line; the mask stops before the number.
+  pathfinder:
+    - '^Total kernel execution time: '
+    - '^Device offloading time = '
+  randomAccess:
+    - '^Average kernel execution time: '

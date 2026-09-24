@@ -159,7 +159,7 @@ SMOKE_DATA: dict[str, Any] = {
     "extends": "base",
     "model": {"backend": "mock", "id": MOCK_ID},
     "llm": {"sampling": {"max_tokens": 4096}},
-    "bench": {"suite": SUITE, "split": "eval"},
+    "bench": {"suite": SUITE, "split": "eval", "items": [ITEM]},
     "directions": [{"source": "omp", "target": "cuda"}],
     "prompts": "p0-smoke",
     "toolchain": {"cuda": "nvcc-sm80"},
@@ -1877,19 +1877,56 @@ def test_refuses_a_stage_order_that_cannot_run(tmp_path: Path, bench: Path, stag
 @pytest.mark.parametrize(
     ("changes", "match"),
     [
-        ({"faithful": True}, r"fixes\.fence_tag is off \(faithful: true\)"),
-        ({"fixes": {"fence_tag": False}}, r"fixes\.fence_tag is off \(faithful: false\)"),
         ({"report": {"trial_md": False}}, r"report\.trial_md is false"),
         ({"report": {"parquet": False}}, r"report\.parquet is false"),
-        ({"context": ["openmp-card"]}, "sets context, which this runner does not carry out"),
         ({"metrics": ["pass-at-1"]}, "sets metrics, which this runner does not carry out"),
     ],
-    ids=["faithful", "fence-tag-off", "no-trial-md", "no-parquet", "context", "metrics"],
+    ids=["no-trial-md", "no-parquet", "metrics"],
 )
 def test_refuses_a_recipe_choice_the_stages_cannot_honor(
     tmp_path: Path, bench: Path, changes: dict[str, Any], match: str
 ) -> None:
     assert_refused_before_anything_runs(tmp_path, bench, "unhonored", scripted_data(**changes), match)
+
+
+def test_faithful_generate_then_compile_loop_reads_attempt_zero_from_the_first_fence(
+    tmp_path: Path, bench: Path
+) -> None:
+    # With fixes.fence_tag off, generate reads attempt 0 from the first fenced block and compile_loop builds it.
+    # This pins attempt 0 only; tests/core/test_correction_loop.py covers how compile_loop reads corrections. Since
+    # P1.5, faithful: true also needs the baseline stage, so the quirk is asked for by its fix alone.
+    script = Script([f"```cuda\n{GOOD_SOURCE}```\n"])
+    log = BuildLog()
+    registry = make_registry(log, backend=scripted_backend(script))
+    data = scripted_data(fixes={"fence_tag": False})
+    run_dir = run(write_recipe(tmp_path, "loop-test", data), tmp_path / "runs-root", bench, registry, run_id="loop")
+    trial = load_trial(run_dir, LOOP_TRIAL)
+    (attempt,) = trial.attempts
+    assert attempt.files == {"main.cu": "uda\n" + GOOD_SOURCE}
+    assert [(item.stage, item.severity, item.code) for item in attempt.diagnostics] == [
+        ("parse", "warning", "fence-quirk")
+    ]
+    assert attempt.stage_reached == COMPILED
+    assert [files for _, _, files in log.builds] == [{"main.cu": "uda\n" + GOOD_SOURCE}]
+    assert (trial.final.stage_reached, trial.final.corrections) == (COMPILED, 0)
+
+
+def test_fence_tag_off_refuses_an_item_with_more_than_one_target_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The first fenced block is the one target file under the fence_tag quirk; synth-two's CUDA side has two files.
+    manifests = tmp_path / "manifests"
+    manifests.mkdir()
+    (manifests / "synth-two.yaml").write_bytes(SYNTH_MANIFEST.encode("ascii"))
+    monkeypatch.setattr(runner_module, "BENCH_DIR", manifests)
+    sources = tmp_path / "synth-bench"
+    for relative in ("alpha-omp/main.cpp", "alpha-cuda/a.cu", "alpha-cuda/b.cu", "zeta-omp/main.cpp",
+                     "zeta-cuda/a.cu", "zeta-cuda/b.cu"):
+        (sources / "src" / relative).parent.mkdir(parents=True, exist_ok=True)
+        (sources / "src" / relative).write_bytes(GOOD_SOURCE.encode("ascii"))
+    data = scripted_data(fixes={"fence_tag": False}, bench={"suite": "synth-two", "split": "eval"})
+    match = r"synth-two/alpha \(omp-cuda\) has 2 'cuda' files; with fixes\.fence_tag off"
+    assert_refused_before_anything_runs(tmp_path, sources, "two-targets", data, match)
 
 
 def prompt_sets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -2951,3 +2988,26 @@ def test_importing_the_runner_registers_every_component(module: str) -> None:
     assert {"nvcc-sm80", "nvcpp-cc80"} <= set(names["Toolchain"])
     assert {"none", "native"} <= set(names["Executor"])
     assert {"generate", "compile_loop"} <= set(names["Stage"])
+
+
+# ---------------------------------------------------------------------------
+# A model id with '/' (a Hugging Face id) as the trial id's arm segment
+
+
+def test_arm_segment_maps_each_slash_of_a_model_id_to_two_dashes() -> None:
+    assert record_module.arm_segment("furiosa-ai/Llama-3.1-8B-Instruct") == "furiosa-ai--Llama-3.1-8B-Instruct"
+    assert record_module.arm_segment(MOCK_ID) == MOCK_ID
+    trial_id = record_module.make_trial_id(
+        "demo", record_module.arm_segment("org/sub/name"), SUITE, "omp-cuda", ITEM, 1
+    )
+    assert trial_id.split("/")[1] == "org--sub--name"
+
+
+def test_a_model_id_with_a_slash_runs_with_its_arm_segment(tmp_path: Path, bench: Path) -> None:
+    data = smoke_data(model={"backend": "mock", "id": f"org/{MOCK_ID}"})
+    recipe = write_recipe(tmp_path, "slash-model", data)
+    run_dir = run(recipe, tmp_path / "runs-root", bench, make_registry(BuildLog()), run_id="slash")
+    trial_id = f"slash-model/org--{MOCK_ID}/{SUITE}/omp-cuda/{ITEM}/run01"
+    trial = load_trial(run_dir, trial_id)
+    assert trial.trial_id == trial_id
+    assert trial.model.id == f"org/{MOCK_ID}", "the record keeps the model id exactly as served"

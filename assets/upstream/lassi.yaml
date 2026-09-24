@@ -1,0 +1,6 @@
+# Upstream LASSI pin (task P1.1; bible Source Papers, LASSI; Repository Layout, third_party/).
+# tools/fetch_upstream.py fetches exactly this commit into `path` (gitignored, never tracked, never edited).
+# Changing the commit is a Decision Log entry (Agent Rule 10).
+url: "https://github.com/SPEAR-UIC/LASSI"
+commit: "74b46812523f2ff79b53b6880a4521690d7478b0"
+path: "third_party/LASSI"

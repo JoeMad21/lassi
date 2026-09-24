@@ -180,11 +180,42 @@ Answer: Let's go with option A.
 Applied: 2026-09-23. f9d1e68 stays as pushed; plans/STATUS.md's P0.20 note points to it, and agents empty their index before giving the owner a commit command.
 
 ## OQ-017 Remove The Old CUDA Runfile Tree
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: none (usage is about 101G of the 120G cap)
 Evidence: results/p0-cuda-redist/summary.md; plans/spikes/p0-cuda-redist.md; bible Decision Log (P0.19 CUDA pin)
 Question: P0.19 replaced the runfile CUDA install with the redistributable archives. The installer moved the old tree aside rather than deleting it: /mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3.runfile-20260923-214325 (about 7.0G, including the runfile's cuda-installer.log). Nothing uses it; the pinned prefix cuda@12.6.3 is the new install, and it passed every check from the clean commit 7d8d3d5. Agents may not delete files there. Remove it?
 Options: (a) remove it: on alpha01, `rm -rf /mnt/nvme10/joseph_ufl/toolchains/cuda@12.6.3.runfile-20260923-214325`; this frees about 7G. (b) keep it as a fallback for now.
 Recommendation: (a); the new install is verified, and the runfile tree only takes space under the cap.
+Answer: Went with option A. Deleted the files.
+Applied: 2026-09-23. Verified read-only: only toolchains/cuda@12.6.3 remains, and `du -sh /mnt/nvme10/joseph_ufl` is 94G (rx 20260923-222319-exec-07d8).
+
+## OQ-018 Upstream LASSI Text In The Public Repository
+State: OPEN
+Kind: policy
+Blocks: P1.12 (the P1 gate and the demo do not wait on it)
+Evidence: plans/p1-faithful.md (P1.3, P1.12). Upstream SPEAR-UIC/LASSI at 74b4681 is GPL-3.0 (bible Source Papers, LASSI). Its prompt_dictionary.py holds the lassi-2024 system and translation prompts and both context packs: about 28.6 KB of OpenMP reference card text and 18.2 KB of CUDA C++ Programming Guide chapter 5 text. The repository is public (OQ-005) and has no LICENSE file. An exploratory local check on 2026-09-24 ran prompt_dictionary.py, the notebook, and the 20 *_main sources through tools/check_text_policy.py --text-stdin: no pattern hits; the only failures were a non-ASCII copyright sign in the two layout sources, which are never committed. Each upstream system prompt opens with a sentence that casts the model in its role; the Attribution Policy covers this repository's own text, so publishing upstream wording word for word is worth a deliberate choice.
+Question: The bible puts the lassi-2024 prompts under assets/prompts/ and the context packs under assets/context/. That text is upstream's, word for word, so committing it publishes GPL-3.0 text and third-party documentation excerpts in an unlicensed public repository. May agents commit it?
+Options: (a) commit all generated text with a NOTICE naming the upstream commit and its GPL-3.0 license: the repository reads as the bible describes, but carries GPL-3.0 material and the two documentation excerpts. (b) commit only the manifests (upstream key and sha256) and generate the text from the pinned upstream checkout before each run: nothing third-party is published, readers see the prompts in each trial.md, and the bible's Repository Layout note is updated. (c) commit the prompts with a NOTICE and generate only the two context packs: the short prompts stay readable in the repository and the documentation excerpts stay out.
+Recommendation: (c); it keeps the prompt templates readable (Readability Standards, Prompts row) and keeps copyrighted documentation text out of a public repository. Until you answer, P1.3 keeps all generated upstream text gitignored, so nothing is published first. The gate and the demo do not wait, because the text is byte-identical either way. Note from P1.3: its leak-guard test fails when any tracked file outside the upstream checkout holds a generated fragment of 40 or more characters. It exempts only the experimental_setup compiler and flag literals that docs/BIBLE.md already records (today the CUDA flag text); every other literal, upstream's absolute nvc++ path included, stays guarded.
+Answer:
+
+## OQ-019 Agent Rule 8: furiosa-smi ps Misses Other Tenants
+State: OPEN
+Kind: policy
+Blocks: none (serving checks furiosa-smi status too in the meantime)
+Evidence: plans/spikes/p3-rngd-demo.md, section 2 (exploratory, 2026-09-24)
+Question: Agent Rule 8 requires `furiosa-smi ps` before claiming NPUs. On alpha01 it lists only the caller's own processes: it showed no rows while another tenant's server held npu4-npu7 (45.93 of 47.50 GiB each in `furiosa-smi status`). Should the rule also name `furiosa-smi status`?
+Options: (a) amend Rule 8 to "run furiosa-smi ps and furiosa-smi status; claim only a card whose memory reads 0.00 GiB", changing the bible and AGENTS.md together. (b) keep the rule as written and record the extra check only in Host Facts and the Serving Rules; the rule alone would still allow claiming an occupied card. (c) also have the gate refuse a furiosa-llm command whose --devices names a card with nonzero memory; mechanical, but a gate change you reinstall.
+Recommendation: (a) now, (c) later. Agents already check the Memory column before every claim; that is stricter than Rule 8, not looser.
+Answer:
+
+## OQ-020 Text-Policy Checker Refuses Staged Gitlinks
+State: OPEN
+Kind: policy
+Blocks: none (P1.1 pins upstream with a manifest and a fetch tool instead)
+Evidence: plans/spikes/p1-hecbench-pin.md (Upstream pin); tools/check_text_policy.py, check_staged (it reads every staged path with `git show :<path>`)
+Question: A gitlink (mode 160000) names a commit in another repository, so `git show :<path>` fails on it and the pre-commit check refuses the commit. No submodule can be committed while the checker reads gitlinks this way. P1.1 pinned upstream LASSI with assets/upstream/lassi.yaml and tools/fetch_upstream.py into a gitignored checkout, which works and is tested. Should the checker skip gitlinks?
+Options: (a) leave the checker as it is and pin third-party code with manifests and fetch tools: no checker change; submodules stay impossible. (b) skip mode-160000 entries in check_staged (or check the gitlink's commit id as text): submodules become possible; a gitlink holds no text of this repository to scan. Either way the owner makes the change, since agents may not edit the checker.
+Recommendation: (a) for P1, since the manifest pin works; decide (b) before any later phase that needs a submodule.
 Answer:

@@ -59,13 +59,13 @@ _DRIVER_FATAL = re.compile(r"nvcc fatal\s*:\s*(?P<message>.*)")
 
 # ptxas: "ptxas <severity> : <message>" with varying spacing, for example (capture nvcc_ptxas_error)
 #   ptxas error   : Entry function '_Z6reducePKfPfi' uses too much shared data (0x40000 bytes, 0x29000 max)
-# A ptxas fatal is an error; no fixture shows a ptxas warning or fatal yet (the exploratory capture below shows a
-# fatal).
+# A ptxas fatal is an error; fixture nvcc_ptxas_inline_asm (below) shows one, and no fixture shows a ptxas warning
+# yet.
 _PTXAS = re.compile(r"ptxas\s+(?P<severity>error|warning|fatal)\s*:\s*(?P<message>.*)")
 
 # ptxas with a place in the PTX it reads: "ptxas <PTX file>, line <line>; <severity> : <message>", with varying
-# spacing before the ":", for example (exploratory capture nvcc_ptxas_inline_asm, from inline PTX asm with an
-# unknown modifier, in dirty-tree rx 20260923-202909-desktop-8r113ei-p0-core-09c6; the workdir shortened with "...")
+# spacing before the ":", for example (fixture nvcc_ptxas_inline_asm, from inline PTX asm with an unknown modifier,
+# in the clean capture rx 20260923-211958-desktop-8r113ei-p0-core-d221; the workdir shortened with "...")
 #   ptxas /mnt/nvme10/.../@lassi-tmp/tmpxft_00000002_00000000-6_main.ptx, line 28; error   : Unknown modifier '.bogus'
 #   ptxas fatal   : Ptx assembly aborted due to errors
 # The PTX file is the one nvcc wrote in the compile's private TMPDIR (@lassi-tmp), and its line counts in that PTX;

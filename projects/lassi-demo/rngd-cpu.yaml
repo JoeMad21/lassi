@@ -1,0 +1,19 @@
+# CUDA to OpenMP with every generated program run on the host CPU, on the model rngd-compile.yaml serves.
+# Not faithful: upstream builds OpenMP for GPU offload; here the proxy preset nvcpp-multicore builds it so target
+# regions run on the CPU (bible Harness Contract: it checks outputs, never runtime), and the loop stops at a cap.
+# The correction prompts still name upstream's compiler and flags, since they are upstream's text.
+extends: rngd-compile.yaml
+fixes:
+  execution_gate: false  # run_loop reproduces upstream's gate; with the cap of 5 below 8 it never triggers
+directions:
+  - {source: cuda, target: omp}  # only OpenMP can run here: there is no NVIDIA GPU (OQ-003)
+toolchain:
+  omp: nvcpp-multicore  # nvc++ -mp=multicore, the proxy; the CUDA toolchain stays bound but builds nothing here
+stages: [baseline, summarize_context, describe_source, generate, compile_loop, run_loop, oracle]  # upstream's, plus the oracle
+executor:
+  kind: native  # the reference and every compiling attempt run in the sandbox on the host CPU
+oracle:
+  kind: stdout_mask  # timing lines masked, the rest of stdout compared exactly with the reference run's
+  passfail: true  # apps that print PASS or FAIL must also print PASS
+sandbox:
+  mem_gb: 32  # atomicCost's OpenMP reference allocates about 15 GB

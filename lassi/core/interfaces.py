@@ -164,8 +164,13 @@ class IRLevel(Component, Protocol):
 class Toolchain(Component, Protocol):
     """Compiles files into an artifact with parsed diagnostics."""
 
-    def build(self, files: Mapping[str, str], workdir: Path) -> BuildResult:
-        """Write `files` under `workdir`, build them, and parse diagnostics."""
+    def build(self, files: Mapping[str, str], workdir: Path, harness: Mapping[str, str] | None = None) -> BuildResult:
+        """Write `files` under `workdir`, build them, and parse diagnostics.
+
+        `harness` holds the bench item's support files (relative path ->
+        text), written beside `files`; a model file never replaces one. A
+        stage passes it only for an item that has support files.
+        """
         ...
 
 

@@ -14,6 +14,11 @@ the run manifest) is a "## Provenance" table right after the summary table,
 before the toolchain pins and the attempts. Provenance values are not
 measurements, so an unknown one (None) shows as "-", as the page shows a
 diagnostic without a code or location, and never as PLACEHOLDER.
+
+Since P1.5 the summary table ends with an "End reason" row (`<code>:
+<message>`, or "none" for a trial that ended normally), and a "## Reference
+run" table (Trial.reference_run, PLACEHOLDER for a value not measured)
+follows the toolchain pins.
 """
 
 from __future__ import annotations
@@ -300,7 +305,7 @@ def test_fixture_diff_is_the_unified_diff_of_its_files() -> None:
 
 def test_golden_shows_the_provenance_before_the_pins_and_the_attempts() -> None:
     golden = read_golden()
-    summary_end = "| Wall time (s) | PLACEHOLDER |\n\n"
+    summary_end = "| Wall time (s) | PLACEHOLDER |\n| End reason | none |\n\n"
     assert summary_end + PROVENANCE_BLOCK + "\n## Toolchain pins\n" in golden
     assert golden.count("## Provenance\n") == 1
     assert golden.index(PROVENANCE_BLOCK) < golden.index("## Attempt 0\n")
@@ -368,7 +373,7 @@ def test_golden_marks_unmeasured_values_placeholder() -> None:
         assert golden.count(f"| {row} | PLACEHOLDER |\n") == 2, row
     assert golden.count("| per_input | PLACEHOLDER |\n") == 1
     assert "| per_input | 1.0, 0.5, 0.75, 1.0 |\n" in golden
-    assert golden.count("| outputs_ref | PLACEHOLDER |\n") == 2
+    assert golden.count("| outputs_ref | PLACEHOLDER |\n") == 3, "two attempts' runs and the reference run"
     assert golden.count("| oracle_access | PLACEHOLDER |\n") == 2
 
 
@@ -429,12 +434,22 @@ def test_trial_without_attempts_ends_after_context(text_store: store.TextStore) 
         "| Alignment | PLACEHOLDER |\n"
         "| Score | PLACEHOLDER |\n"
         "| Corrections | 0 |\n"
-        "| Wall time (s) | PLACEHOLDER |\n\n"
+        "| Wall time (s) | PLACEHOLDER |\n"
+        "| End reason | none |\n\n"
         f"{PROVENANCE_BLOCK}\n"
         "## Toolchain pins\n\n"
         "| Toolchain | Pin |\n"
         "| --- | --- |\n"
         f"{pins}\n"
+        "## Reference run\n\n"
+        "| Field | Value |\n"
+        "| --- | --- |\n"
+        "| exit_code | PLACEHOLDER |\n"
+        "| hang | PLACEHOLDER |\n"
+        "| sim_ub | PLACEHOLDER |\n"
+        "| wall_s | PLACEHOLDER |\n"
+        "| stdout_ref | PLACEHOLDER |\n"
+        "| outputs_ref | PLACEHOLDER |\n\n"
         "## Context\n\n"
         "### Knowledge summary\n\n"
         "None.\n\n"

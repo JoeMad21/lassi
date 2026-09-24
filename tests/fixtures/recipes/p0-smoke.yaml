@@ -9,8 +9,9 @@ llm:
   sampling:
     max_tokens: 4096  # base.yaml leaves max_tokens open and the runner never picks it; the mock ignores it
 bench:
-  suite: lassi-hecbench-10  # assets/bench/lassi-hecbench-10.yaml, which lists one item so far (layout)
+  suite: lassi-hecbench-10  # assets/bench/lassi-hecbench-10.yaml: LASSI's 10 apps
   split: eval  # the suite's items are all eval items (Agent Rule 5)
+  items: [layout]  # the smoke run translates one item, as the P0 gate did
 directions:
   - {source: omp, target: cuda}  # one direction: OpenMP offload to CUDA
 prompts: p0-smoke  # assets/prompts/p0-smoke/: generate.txt and correct.txt

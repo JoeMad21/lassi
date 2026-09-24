@@ -264,9 +264,10 @@ def _gcc(match: re.Match[str]) -> Diagnostic:
 _COLLECT2 = re.compile(r"collect2: error: (?P<message>.*)")
 
 # The linker: any line holding "undefined reference to"; the message is the text after the last ": "
-# (the last one that still leaves the phrase in the message), for example (capture nvcc_linker_error, then
-# capture nvcpp_linker_error with its workdir path and the helper's signature shortened)
-#   tmpxft_0013778e_00000000-6_main.cudafe1.cpp:(.text.startup+0x2c): undefined reference to `helper(float*, int)'
+# (the last one that still leaves the phrase in the message), for example (fixtures nvcc_linker_error and
+# nvcpp_linker_error, from the clean capture rx 20260923-211958-desktop-8r113ei-p0-core-d221; the second with its
+# workdir path and the helper's signature shortened with "...")
+#   tmpxft_00000002_00000000-6_main.cudafe1.cpp:(.text.startup+0x2c): undefined reference to `helper(float*, int)'
 #   /mnt/nvme10/joseph_ufl/lassi-runs/.../work/nvcpp_linker_error/main.cpp:21: undefined reference to `helper(...)'
 # The place is the text before that ": ", after any earlier ": " (such as a "/usr/bin/ld: " in front). When it
 # is "<path>:<line>", as in the second sample, it gives the file and line, and _fold_linker_place keeps them only

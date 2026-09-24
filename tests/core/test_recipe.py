@@ -16,6 +16,10 @@ constructors record the call and raise, so a load that constructs anything
 fails. The golden resolved file and the pinned recipe_hash were computed from
 the expected merged data below with the canonical YAML rule; no value in this
 module is a measurement.
+
+Since P1.10 every resolved recipe holds `project` (the explicit key, else the
+loaded file's recipe name), so the expected mappings, the golden file, and
+CHILD_HASH carry it.
 """
 
 from __future__ import annotations
@@ -46,12 +50,47 @@ NEW_MODULES = ("lassi.core.recipe", "lassi.core.registry")
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 # sha256 of canonical(EXPECTED_CHILD); computed once from the data below, never from a loader run.
-CHILD_HASH = "f62fcef7d400815920bfea49f7a4efa64faedc01f5c8fb33a2f343d487a5d1c1"
+CHILD_HASH = "5f6b570b8c15eb771fe27dbd4f525f061cd7665e69318bee8512f44ae1f006c0"
 CHILD_CHAIN = ("fixture-base", "parent", "child")
 
 FENCE_TAG_DESCRIPTION = (
     "strip only the exact fence language tag; off keeps upstream's quirk that also drops a leading 'c' after cpp/c++"
 )
+PROMPT_SPACES_DESCRIPTION = (
+    "keep the generation prompt's runs of spaces;"
+    " off keeps upstream's quirk that cuts every run of spaces to one before the first generation call"
+)
+BASELINE_BOTH_DESCRIPTION = (
+    "build and run the source reference as well as the target reference before any model call;"
+    " off keeps upstream's baseline, which builds and runs only the target reference"
+)
+PROMPT_NEWLINES_DESCRIPTION = (
+    "keep the correction prompt's line feeds;"
+    " off keeps upstream's quirk that removes every line feed from a correction prompt before sending it"
+)
+PARSED_DIAGNOSTICS_DESCRIPTION = (
+    "send the parsed compile diagnostics, capped in count and bytes, in a correction prompt;"
+    " off keeps upstream's behavior of sending the whole raw compiler stderr, read in text mode"
+)
+EXECUTION_GATE_DESCRIPTION = (
+    "run every compiling attempt within the correction cap;"
+    " off keeps upstream's quirk that runs a compiling attempt only while its correction count is at most 7,"
+    " so a later compiling attempt ends the trial unexecuted, with an earlier run's stdout as stale output"
+)
+
+# Every named fix in lassi.core.recipe.FIXES: P0's fence tag fix, P1.4's prompt_spaces (on keeps the runs of spaces
+# in the generation prompt; off collapses each run to one space, as upstream does), P1.5's baseline_both (on
+# builds and runs the source reference too), prompt_newlines (on keeps a correction prompt's line feeds), and
+# parsed_diagnostics (on sends capped parsed diagnostics in place of the raw compiler stderr), and P1.6's
+# execution_gate (on runs every compiling attempt; off runs one only while its correction count is at most 7).
+FIX_NAMES = (
+    "fence_tag", "prompt_spaces", "baseline_both", "prompt_newlines", "parsed_diagnostics", "execution_gate"
+)
+
+
+def all_fixes(on: bool) -> dict[str, bool]:
+    """Return the resolved fixes mapping with every named fix set to `on`."""
+    return dict.fromkeys(FIX_NAMES, on)
 
 # Keys of the bible's yaml blocks in Project Recipes, by their first comment line; guards the parser.
 BIBLE_BLOCK_KEYS = (
@@ -67,8 +106,8 @@ BIBLE_RUN_RECIPES = ("lassi-repro", "lassi-ee", "lassi-df")
 
 # Top-level keys of a run recipe (recipe.SCHEMA); train recipe keys are not among them.
 RUN_RECIPE_KEYS = frozenset(
-    "extends faithful fixes llm loop trials runs_root sandbox report bench directions prompts context toolchain"
-    " stages executor oracle profiler adversary model arms metrics refine score agents judges".split()
+    "extends project faithful fixes llm loop trials runs_root sandbox report bench directions prompts context"
+    " toolchain stages executor oracle profiler adversary model arms metrics refine score agents judges".split()
 )
 
 # Keys that must be present and non-null in every resolved recipe (recipe.REQUIRED).
@@ -98,7 +137,8 @@ PROJECT_NAMES = ("lassi-repro", "lassi-ee", "lassi-df", "hecbench", "qwen", "wiz
 
 E_ACUTE = "\N{LATIN SMALL LETTER E WITH ACUTE}"
 
-# The resolved mapping of child.yaml: fixture-base, then parent, then child, plus the materialized defaults.
+# The resolved mapping of child.yaml: fixture-base, then parent, then child, plus the materialized defaults
+# (since P1.10 the project defaults to the loaded file's recipe name, here child).
 EXPECTED_CHILD: dict[str, Any] = {
     "adversary": {"kind": "fuzzer", "budget": {"inputs": 64}},
     "agents": {"generator": {"model": "fixture-model"}, "fixer": {"model": "same_as_generator"}},
@@ -108,7 +148,7 @@ EXPECTED_CHILD: dict[str, Any] = {
     "directions": [{"source": "omp", "target": "cuda"}],
     "executor": {"kind": "native"},
     "faithful": False,
-    "fixes": {"fence_tag": True},
+    "fixes": all_fixes(True),
     "judges": {
         "equivalence": {"model": "judge-model", "rubric": "equivalence-v1", "use": "screen"},
         "efficiency": {"model": "judge-model", "rubric": "efficiency-v1", "mode": "predict", "use": "metric"},
@@ -119,6 +159,7 @@ EXPECTED_CHILD: dict[str, Any] = {
     "model": {"backend": "mock_llm", "id": "fixture-model"},
     "oracle": {"kind": "stdout_mask", "passfail": False},
     "profiler": {"kind": "timer", "interval_ms": 10},
+    "project": "child",
     "prompts": "fixture-prompts",
     "report": {"trial_md": True, "parquet": True},
     "runs_root": "fixture-runs",
@@ -341,11 +382,13 @@ def canonical(data: Mapping[str, Any]) -> str:
     return yaml.safe_dump(data, sort_keys=True, default_flow_style=False, allow_unicode=False, width=4096)
 
 
-def with_defaults(data: Mapping[str, Any]) -> dict[str, Any]:
-    """Return a copy of a non-faithful resolved mapping with faithful and fixes materialized as the loader does."""
+def with_defaults(data: Mapping[str, Any], project: str) -> dict[str, Any]:
+    """Return a copy of a non-faithful resolved mapping with project, faithful, and fixes materialized as the
+    loader does; `project` is the loaded file's recipe name, used when `data` sets none."""
     out = copy.deepcopy(dict(data))
+    out.setdefault("project", project)
     out.setdefault("faithful", False)
-    out.setdefault("fixes", {"fence_tag": True})
+    out.setdefault("fixes", all_fixes(True))
     return out
 
 
@@ -1571,7 +1614,7 @@ def test_valid_values_load(load: Callable[..., Any], tmp_path: Path, snippet: st
 
 def test_standalone_recipe_loads(load: Callable[..., Any], tmp_path: Path) -> None:
     recipe = load(write(tmp_path, "standalone.yaml", yaml.safe_dump(STANDALONE)))
-    assert recipe.data == with_defaults(STANDALONE)
+    assert recipe.data == with_defaults(STANDALONE, "standalone")
     assert recipe.chain == ("standalone",)
 
 
@@ -1654,13 +1697,21 @@ def test_entries_state_every_key_not_marked_optional(
 
 def test_fixes_table_and_uncapped(recipe_module: ModuleType) -> None:
     assert recipe_module.UNCAPPED == "uncapped"
-    assert recipe_module.FIXES == {"fence_tag": FENCE_TAG_DESCRIPTION}
+    assert recipe_module.FIXES == {
+        "fence_tag": FENCE_TAG_DESCRIPTION,
+        "prompt_spaces": PROMPT_SPACES_DESCRIPTION,
+        "baseline_both": BASELINE_BOTH_DESCRIPTION,
+        "prompt_newlines": PROMPT_NEWLINES_DESCRIPTION,
+        "parsed_diagnostics": PARSED_DIAGNOSTICS_DESCRIPTION,
+        "execution_gate": EXECUTION_GATE_DESCRIPTION,
+    }
+    assert tuple(recipe_module.FIXES) == FIX_NAMES
 
 
 def test_defaults_are_materialized(load: Callable[..., Any]) -> None:
     data = load("child.yaml").data
     assert data["faithful"] is False
-    assert data["fixes"] == {"fence_tag": True}
+    assert data["fixes"] == all_fixes(True)
 
 
 def test_faithful_overrides_a_capped_parent_and_an_explicit_fix(
@@ -1669,14 +1720,14 @@ def test_faithful_overrides_a_capped_parent_and_an_explicit_fix(
     data = load("faithful-child.yaml").data
     assert data["faithful"] is True
     assert data["loop"] == {"max_corrections": recipe_module.UNCAPPED}
-    assert data["fixes"] == {"fence_tag": False}
+    assert data["fixes"] == all_fixes(False)
 
 
 def test_faithful_overrides_values_in_the_same_file(load: Callable[..., Any], tmp_path: Path) -> None:
     text = "extends: parent\nfaithful: true\nloop: {max_corrections: 4}\nfixes: {fence_tag: true}\n"
     data = load(write(tmp_path, "faithful-own.yaml", text)).data
     assert data["loop"] == {"max_corrections": "uncapped"}
-    assert data["fixes"] == {"fence_tag": False}
+    assert data["fixes"] == all_fixes(False)
 
 
 def test_faithful_creates_the_loop_section(load: Callable[..., Any], tmp_path: Path) -> None:
@@ -1685,19 +1736,19 @@ def test_faithful_creates_the_loop_section(load: Callable[..., Any], tmp_path: P
     data["faithful"] = True
     recipe = load(write(tmp_path, "faithful-no-loop.yaml", yaml.safe_dump(data)))
     assert recipe.data["loop"] == {"max_corrections": "uncapped"}
-    assert recipe.data["fixes"] == {"fence_tag": False}
+    assert recipe.data["fixes"] == all_fixes(False)
 
 
 def test_faithful_applies_to_the_resolved_value(load: Callable[..., Any], tmp_path: Path) -> None:
     data = load(write(tmp_path, "unfaithful.yaml", "extends: faithful-child\nfaithful: false\n")).data
     assert data["faithful"] is False
     assert data["loop"] == {"max_corrections": 3}
-    assert data["fixes"] == {"fence_tag": True}
+    assert data["fixes"] == all_fixes(True)
     text = "extends: faithful-child\nloop: {max_corrections: 6}\nfixes: {fence_tag: true}\n"
     inherited = load(write(tmp_path, "inherits-faithful.yaml", text)).data
     assert inherited["faithful"] is True
     assert inherited["loop"] == {"max_corrections": "uncapped"}
-    assert inherited["fixes"] == {"fence_tag": False}
+    assert inherited["fixes"] == all_fixes(False)
 
 
 def test_resolved_data_is_the_loaded_mapping_without_the_binding_check(
@@ -1716,7 +1767,7 @@ def test_resolved_data_is_the_loaded_mapping_without_the_binding_check(
 def test_explicit_fix_off_keeps_the_cap(load: Callable[..., Any]) -> None:
     data = load("fix-off.yaml").data
     assert data["faithful"] is False
-    assert data["fixes"] == {"fence_tag": False}
+    assert data["fixes"] == {**all_fixes(True), "fence_tag": False}
     assert data["loop"] == {"max_corrections": 3}
 
 
@@ -1768,7 +1819,9 @@ def test_hash_is_stable_across_loads_and_directories(load: Callable[..., Any], t
 
 
 def test_hash_covers_the_data_only(load: Callable[..., Any], tmp_path: Path) -> None:
-    same = load(write(tmp_path, "same.yaml", "extends: child\n"))
+    # The file name enters the hash only through the project, so a leaf that restates child's project hashes
+    # the same.
+    same = load(write(tmp_path, "same.yaml", "extends: child\nproject: child\n"))
     assert same.chain == (*CHILD_CHAIN, "same")
     assert same.recipe_hash == CHILD_HASH
     changed = load(over_child(tmp_path, "trials: {n: 3}", "changed.yaml"))
@@ -1915,7 +1968,7 @@ def test_repository_recipe_loads_through_the_default_roots(recipe_module: Module
     own = yaml.safe_load(fixture.read_text(encoding="utf-8"))
     assert own.pop("extends") == "base"
     expected = {**bible_block_data("projects/base.yaml"), **own}
-    assert recipe.data == with_defaults(expected)
+    assert recipe.data == with_defaults(expected, "project-base-user")
     assert recipe.chain == ("base", "project-base-user")
     assert recipe_module.load_recipe(fixture, roots=None, registry=fakes).recipe_hash == recipe.recipe_hash
     assert CONSTRUCTED == []
@@ -1949,7 +2002,7 @@ def test_bible_project_recipes_fit_the_schema(
     base_loop = bible_block_data("projects/base.yaml")["loop"]
     assert recipe.data["faithful"] is faithful
     assert recipe.data["loop"] == ({"max_corrections": "uncapped"} if faithful else base_loop)
-    assert recipe.data["fixes"] == {"fence_tag": not faithful}
+    assert recipe.data["fixes"] == all_fixes(not faithful)
     assert CONSTRUCTED == []
 
 

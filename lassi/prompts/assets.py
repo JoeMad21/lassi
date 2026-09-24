@@ -1,0 +1,135 @@
+"""Prompt fragments and context packs checked against their manifests (bible Design Principle 3).
+
+A manifest tree is a directory holding MANIFEST.yaml and one `<key>.txt` per
+manifest entry. The manifest maps `entries` to a list of {key, source, cell
+(optional), sha256}; sha256 is the hex digest of the file's bytes. Generated
+trees (the upstream text of OQ-018) are written by GENERATOR and are
+gitignored except their manifests, so a fresh checkout holds only the
+manifests until the generator runs.
+
+A recipe names a prompt set with `prompts` (`<root>/prompts/<set>/`) and its
+context packs with `context` (each `<root>/context/<name>/`, a tree of one
+entry). load_recipe_assets returns their text exactly as stored: UTF-8, no
+newline translation, and no template placeholders filled. Template sets
+without a manifest are rendered with lassi.prompts.render instead.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any
+
+import yaml
+
+MANIFEST = "MANIFEST.yaml"
+# The tool that regenerates the generated trees; every missing or changed file names it.
+GENERATOR = "tools/extract_lassi_assets.py"
+
+# A set, pack, or entry key: one plain path segment, so a name never reaches outside its root.
+_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+
+
+@dataclass(frozen=True)
+class RecipeAssets:
+    """The checked text a recipe names: `fragments` {key: text} of its prompt set, `packs` {name: text}."""
+
+    fragments: Mapping[str, str]
+    packs: Mapping[str, str]
+
+
+def default_root() -> Path:
+    """Return the repository's assets/ directory."""
+    return Path(__file__).resolve().parents[2] / "assets"
+
+
+def load_recipe_assets(recipe: Mapping[str, Any], root: Path | str | None = None) -> RecipeAssets:
+    """Return the fragments of the recipe's prompt set and the packs its `context` names, and only those.
+
+    `root` (default: default_root()) holds `prompts/` and `context/`. Raises
+    ValueError naming GENERATOR when a file is missing or its sha256 differs
+    from the manifest, naming the pack when a pack the recipe names has no
+    tree, and naming the key when the recipe's `prompts` or `context` is not
+    a plain name or list of names.
+    """
+    base = default_root() if root is None else Path(root)
+    set_name = _checked_name(recipe.get("prompts"), "prompts")
+    set_dir = base / "prompts" / set_name
+    if not set_dir.is_dir():
+        raise ValueError(f"no prompt set {set_name!r}: {set_dir} is not a directory")
+    fragments = load_tree(set_dir)
+    names = recipe.get("context") or []
+    if not isinstance(names, (list, tuple)):
+        raise ValueError(f"the recipe's context must be a list of pack names, got {names!r}")
+    packs: dict[str, str] = {}
+    for name in names:
+        pack_dir = base / "context" / _checked_name(name, "context")
+        if not pack_dir.is_dir():
+            raise ValueError(f"unknown context pack {name!r}: {pack_dir} is not a directory")
+        texts = load_tree(pack_dir)
+        if len(texts) != 1:
+            raise ValueError(f"context pack {name!r} must hold one entry, its manifest lists {len(texts)}")
+        packs[name] = next(iter(texts.values()))
+    return RecipeAssets(MappingProxyType(fragments), MappingProxyType(packs))
+
+
+def load_tree(tree: Path) -> dict[str, str]:
+    """Return {key: text} for every entry of the manifest tree `tree`, each file checked against its sha256.
+
+    Raises ValueError naming GENERATOR when the manifest or a file is
+    missing, unreadable, or not what the manifest records.
+    """
+    regenerate = f"regenerate it with uv run {GENERATOR}"
+    texts: dict[str, str] = {}
+    for key, digest in _manifest_entries(tree):
+        path = tree / f"{key}.txt"
+        try:
+            data = path.read_bytes()
+        except FileNotFoundError:
+            raise ValueError(f"{path} is missing; {regenerate}") from None
+        except OSError as error:
+            raise ValueError(f"cannot read {path} ({error}); {regenerate}") from error
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError(f"{path} differs from its sha256 in {tree / MANIFEST}; {regenerate}")
+        try:
+            texts[key] = data.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise ValueError(f"{path} is not UTF-8 ({error}); {regenerate}") from error
+    return texts
+
+
+def _manifest_entries(tree: Path) -> list[tuple[str, str]]:
+    """Return (key, sha256) per entry of `tree`/MANIFEST.yaml; raise ValueError naming GENERATOR if it is bad."""
+    path = tree / MANIFEST
+    try:
+        loaded = yaml.safe_load(path.read_bytes().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
+        raise ValueError(f"cannot read the manifest {path} ({error}); trees generated by {GENERATOR} "
+                         f"need their committed manifest") from error
+    entries = loaded.get("entries") if isinstance(loaded, dict) else None
+    if not isinstance(entries, list):
+        raise ValueError(f"{path} has no entries list; regenerate it with uv run {GENERATOR}")
+    pairs: list[tuple[str, str]] = []
+    for entry in entries:
+        key = entry.get("key") if isinstance(entry, dict) else None
+        digest = entry.get("sha256") if isinstance(entry, dict) else None
+        if not (isinstance(key, str) and _NAME.fullmatch(key) and isinstance(digest, str)
+                and _SHA256.fullmatch(digest)):
+            raise ValueError(f"{path}: an entry lacks a plain key or a sha256: {entry!r}; regenerate it with "
+                             f"uv run {GENERATOR}")
+        pairs.append((key, digest))
+    if len({key for key, _ in pairs}) != len(pairs):
+        raise ValueError(f"{path} repeats a key; regenerate it with uv run {GENERATOR}")
+    return pairs
+
+
+def _checked_name(value: object, recipe_key: str) -> str:
+    """Return `value` when it is one plain path segment; else raise ValueError naming the recipe key."""
+    if not isinstance(value, str) or not _NAME.fullmatch(value):
+        raise ValueError(f"the recipe's {recipe_key} must name a set or pack matching {_NAME.pattern}, got {value!r}")
+    return value

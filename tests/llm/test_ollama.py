@@ -127,14 +127,14 @@ def backend(stub_server: StubServer) -> OllamaBackend:
 def test_registered_as_llm_backend_ollama() -> None:
     entry = DEFAULT_REGISTRY.get("LLMBackend", "ollama")
     assert entry.factory is OllamaBackend
-    assert entry.capabilities == frozenset({"chat", "model_check", "unload"})
+    assert entry.capabilities == frozenset({"chat", "model_check", "unload", "unload_before_run"})
     assert llm.OllamaBackend is OllamaBackend
 
 
 def test_name_capabilities_and_default_url() -> None:
     assert OllamaBackend.name == "ollama"
     assert isinstance(OllamaBackend.capabilities, frozenset)
-    assert OllamaBackend.capabilities == frozenset({"chat", "model_check", "unload"})
+    assert OllamaBackend.capabilities == frozenset({"chat", "model_check", "unload", "unload_before_run"})
     assert DEFAULT_BASE_URL == "http://127.0.0.1:11434"
 
 

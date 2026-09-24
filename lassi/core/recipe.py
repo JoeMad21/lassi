@@ -7,14 +7,16 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
 3. follows `extends` to the root ancestor;
 4. merges from the root down, the child winning (mappings merge, anything else is replaced, and a
    kind section that names a new kind replaces the inherited one);
-5. materializes the defaults (`faithful: false`, every fix on);
+5. materializes the defaults (`project`: the loaded file's recipe name; `faithful: false`; every fix on);
 6. applies the faithful overrides (bible, Project Recipes Notes; Design Principle 4);
 7. checks types and required choices, never picking a value for a choice left open;
-8. binds components and checks their capabilities without constructing any (Component Interfaces);
+8. binds components and checks their capabilities without constructing any (Component Interfaces), and
+   refuses a faithful recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES);
 9. serializes the resolved mapping to canonical YAML and hashes it.
 
 The canonical YAML, with a two-line header, is the resolved recipe every run saves
-and can be rerun from (Design Principle 5).
+and can be rerun from (Design Principle 5). It always holds `project`, the first
+trial id segment, so a rerun from it writes the same trial ids.
 """
 
 from __future__ import annotations
@@ -39,7 +41,34 @@ FIXES: dict[str, str] = {
         "strip only the exact fence language tag;"
         " off keeps upstream's quirk that also drops a leading 'c' after cpp/c++"
     ),
+    "prompt_spaces": (
+        "keep the generation prompt's runs of spaces;"
+        " off keeps upstream's quirk that cuts every run of spaces to one before the first generation call"
+    ),
+    "baseline_both": (
+        "build and run the source reference as well as the target reference before any model call;"
+        " off keeps upstream's baseline, which builds and runs only the target reference"
+    ),
+    "prompt_newlines": (
+        "keep the correction prompt's line feeds;"
+        " off keeps upstream's quirk that removes every line feed from a correction prompt before sending it"
+    ),
+    "parsed_diagnostics": (
+        "send the parsed compile diagnostics, capped in count and bytes, in a correction prompt;"
+        " off keeps upstream's behavior of sending the whole raw compiler stderr, read in text mode"
+    ),
+    "execution_gate": (
+        "run every compiling attempt within the correction cap;"
+        " off keeps upstream's quirk that runs a compiling attempt only while its correction count is at most 7,"
+        " so a later compiling attempt ends the trial unexecuted, with an earlier run's stdout as stale output"
+    ),
 }
+
+
+# Toolchain capabilities of a proxy build that is not upstream's: `openmp_multicore` builds OpenMP target regions
+# for the host CPU (the -mp=multicore proxy, bible Harness Contract), where upstream builds them for GPU offload.
+# A recipe with faithful: true may not bind a toolchain that declares one (Design Principle 4).
+PROXY_CAPABILITIES = frozenset({"openmp_multicore"})
 
 
 class RecipeError(ValueError):
@@ -281,6 +310,7 @@ _KIND = _KindSection()
 SCHEMA = _Fields(
     {
         "extends": _STR,  # recipe files only; never kept in the resolved mapping
+        "project": _STR,  # the first trial id segment; defaults to the loaded file's recipe name
         "faithful": _BOOL,
         "fixes": _Fields({name: _BOOL for name in FIXES}),
         "llm": _Fields({"sampling": _Fields({"temperature": _NUMBER, "top_p": _NUMBER, "max_tokens": _INT})}),
@@ -289,7 +319,7 @@ SCHEMA = _Fields(
         "runs_root": _STR,
         "sandbox": _Fields({"network": _BOOL, "wall_s": _NUMBER_OR_STR, "mem_gb": _NUMBER}),
         "report": _Fields({"trial_md": _BOOL, "parquet": _BOOL}),
-        "bench": _Fields({"suite": _STR, "split": _STR}),
+        "bench": _Fields({"suite": _STR, "split": _STR, "items": _ListOf(_STR, non_empty=True)}),
         "directions": _ListOf(
             _Fields({"source": _STR, "target": _STR}, required=frozenset({"source", "target"})), non_empty=True
         ),
@@ -366,10 +396,12 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     except _SchemaError as exc:
         raise RecipeError(f"{path}: {exc}") from None
     bindings = _bindings(data)
+    registry = DEFAULT_REGISTRY if registry is None else registry
     try:
-        check_bindings(bindings, DEFAULT_REGISTRY if registry is None else registry)
+        check_bindings(bindings, registry)
     except RegistryError as exc:
         raise RecipeError(f"{path}: {exc}") from exc
+    _check_faithful_toolchains(path, data, bindings, registry)
     canonical = yaml.safe_dump(data, sort_keys=True, default_flow_style=False, allow_unicode=False, width=4096)
     return Recipe(
         name=_recipe_name(path),
@@ -654,16 +686,19 @@ def _resolve(chain: Sequence[tuple[Path, Mapping[str, Any]]]) -> dict[str, Any]:
     for _, own in chain:
         merged = _overlay(merged, {key: value for key, value in own.items() if key != "extends"})
     data = _fresh(merged)
-    _materialize_defaults(data)
+    _materialize_defaults(data, _recipe_name(chain[-1][0]))
     _apply_faithful(data)
     return data
 
 
-def _materialize_defaults(data: dict[str, Any]) -> None:
-    """Set `faithful` to false when no file sets it, and every fix the chain leaves unset to on (step 5).
+def _materialize_defaults(data: dict[str, Any], name: str) -> None:
+    """Fill in the defaults the chain leaves unset (step 5).
 
-    A value of the wrong type (or null) is left as it is for the type check to report.
+    `project` becomes `name`, the recipe name of the file being loaded (never
+    an ancestor's), `faithful` false, and every fix on. A value of the wrong
+    type (or null) is left as it is for the type check to report.
     """
+    data.setdefault("project", name)
     data.setdefault("faithful", False)
     fixes = data.setdefault("fixes", {})
     if isinstance(fixes, dict):
@@ -734,6 +769,31 @@ def _check_required(data: Mapping[str, Any]) -> None:
             if not isinstance(value, dict) or part not in value:
                 raise _SchemaError(_required_message(dotted))
             value = value[part]
+
+
+def _check_faithful_toolchains(
+    path: Path, data: Mapping[str, Any], bindings: Sequence[Binding], registry: Registry
+) -> None:
+    """Refuse a faithful recipe that binds a toolchain declaring a PROXY_CAPABILITIES capability.
+
+    Upstream builds OpenMP target regions for GPU offload; a proxy build
+    checks outputs only (bible Harness Contract), so a faithful label on it
+    would misstate what was reproduced (Design Principle 4). The capability,
+    not the toolchain's name, decides. Recipes that are not faithful may
+    bind a proxy. Runs after check_bindings, so every name is registered.
+    """
+    if data["faithful"] is not True:
+        return
+    for binding in bindings:
+        if binding.interface != "Toolchain":
+            continue
+        proxy = sorted(PROXY_CAPABILITIES & registry.get("Toolchain", binding.name).capabilities)
+        if proxy:
+            raise RecipeError(
+                f"{path}: {binding.where} binds Toolchain {binding.name!r}, which declares {', '.join(proxy)} "
+                "(a proxy build, not upstream's); a recipe with faithful: true may not bind it, so bind "
+                "upstream's toolchain or set faithful: false"
+            )
 
 
 def _bindings(data: Mapping[str, Any]) -> list[Binding]:
