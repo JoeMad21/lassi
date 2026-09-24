@@ -17,8 +17,9 @@ lassi.toolchains.pins), and PIN_BIN, the compiler's path under the pin's
 install prefix, which may name {COMPILER_SUBDIR} from the pin file. The
 stage runner (lassi.core.runner) builds each one with the pinned compiler
 and a clean environment, factory(executable=<toolchains root>/<PREFIX_NAME>/
-<PIN_BIN>, runner=EnvRunner(env)), and records the pin and that path (Agent
-Rule 10); the toolchains root is $LASSI_TOOLCHAINS. A bare factory() finds
+<PIN_BIN>, runner=SandboxedCompileRunner(...)), so every compile runs in
+the sandbox (lassi.executors.sandbox, P0.20), and records the pin and that
+path (Agent Rule 10); the toolchains root is $LASSI_TOOLCHAINS. A bare factory() finds
 "nvcc" or "nvc++" on PATH, which is for tests and local checks only. Other
 keyword settings: `runner` (a CommandRunner; None means subprocess_runner)
 and `timeout_s` (default 600.0).
@@ -26,8 +27,10 @@ and `timeout_s` (default 600.0).
 Tests inject a fake CommandRunner, so no compiler runs in them. The runner
 contract (CommandResult, CommandRunner, subprocess_runner, EnvRunner) and
 STDERR_ATTACHMENT are defined in lassi.toolchains._base and exported here,
-with capped_runner, the sandbox's default runner, which caps stdout and
-stderr (the compilers' runners keep all of their output).
+with capped_runner, the sandbox's default runner for programs, which caps
+stdout and stderr at OUTPUT_CAP_BYTES, and CappedRunner, the same at a cap
+of its own, which the compile sandbox uses far above any compiler output
+(subprocess_runner and EnvRunner keep all of it).
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from __future__ import annotations
 from lassi.toolchains import nvcc, nvcpp
 from lassi.toolchains._base import (
     STDERR_ATTACHMENT,
+    CappedRunner,
     CommandResult,
     CommandRunner,
     EnvRunner,
@@ -46,6 +50,7 @@ from lassi.toolchains.nvcpp import NvcppCc80, NvcppToolchain
 
 __all__ = [
     "STDERR_ATTACHMENT",
+    "CappedRunner",
     "CommandResult",
     "CommandRunner",
     "EnvRunner",

@@ -23,6 +23,27 @@ starts (git alone, which the runner may call for provenance, runs for real).
 The bench sources are small synthetic files, not HeCBench sources. No value in
 this module is a measurement.
 
+Compile hardening (P0.20): build_toolchain gives each pinned toolchain a
+lassi.executors.sandbox.SandboxedCompileRunner, so every compile runs as a
+sandbox command under prlimit --core=1 with the build dir as its workdir,
+the toolchains root exposed read-only, and $HOME, $LASSI_SCRATCH, and
+$LASSI_RUNS_ROOT hidden (A1, A5). The compile environment is the parent's
+PATH, LANG=C, LC_ALL=C, and the linked prefixes a pin names, with no HOME
+(A2), plus a private TMPDIR under each compile's build dir; a TMPDIR outside
+$LASSI_SCRATCH is refused (A3). build_toolchain runs `<pinned compiler>
+--version` once, through the same sandboxed compile runner (so under
+prlimit --core=1, with that environment, in a fresh directory under TMPDIR),
+and refuses a compiler whose output lacks its pin's EXPECT_VERSION before
+anything else runs (A4). The fixer round of the P0.20 review adds: the
+toolchains root is resolved once, and the executable, each linked prefix,
+and the sandbox's toolchains root all come from it (review finding); the run's
+own runs root is a hidden root too, with or without the gate's variables
+(review finding); and a compile layout the sandbox refuses is a RunError before
+the run directory exists (review finding). The fake Popen answers a
+sandbox command as the sandbox setup would and a pinned --version with a
+PLACEHOLDER banner holding the pin's EXPECT_VERSION; it learns each sandbox
+command's spec by wrapping sandbox_command.
+
 Every trial carries a copy of the run manifest in Trial.provenance (P0.18):
 commit, dirty, and device as provenance.json records them, sdk from its
 driver, and date from its started_utc. The tests check that copy against
@@ -84,10 +105,13 @@ from lassi.core.stages import CompileLoopStage, GenerateStage, RunContext, diagn
 from lassi.core.store import TextStore, read_trial, trial_dir
 from lassi.core.trial_md import PLACEHOLDER, fmt_provenance
 from lassi.executors import NoneExecutor, SandboxUnavailableError
+from lassi.executors import sandbox as sandbox_module
 from lassi.executors.workdir import build_dir
 from lassi.llm import MockBackend, model_info
 from lassi.prompts import render
 from lassi.toolchains import CommandResult, EnvRunner, NvccSm80, NvcppCc80
+from lassi.toolchains import pins as pins_module
+from lassi.toolchains._base import OUTPUT_CAP_BYTES
 from lassi.toolchains.pins import read_pin
 
 REPO = Path(__file__).resolve().parents[2]
@@ -525,11 +549,42 @@ def probe_stage(action: Callable[[RunContext], None]) -> type:
 
 @dataclass(frozen=True)
 class Spawned:
-    """One command the fake subprocess.Popen was asked to start: argv, working directory, and environment."""
+    """One command the fake subprocess.Popen was asked to start: argv, working directory, and environment.
+
+    For a sandbox command, `sandboxed` is True, `argv` is the program the
+    sandbox would run (from the pinned compiler on), `env` is the program's
+    environment (SandboxSpec.environment), and `command`, `spec`, and
+    `limits` are what lassi.executors.sandbox.sandbox_command was given and
+    built.
+    """
 
     argv: list[str]
     cwd: Path | None
     env: dict[str, str] | None
+    sandboxed: bool = False
+    command: list[str] | None = None
+    spec: Any = None
+    limits: Any = None
+
+
+@dataclass(frozen=True)
+class SandboxCall:
+    """One call of lassi.executors.sandbox.sandbox_command: the spec, the program argv, the limits, the command."""
+
+    spec: Any
+    argv: list[str]
+    limits: Any
+    command: list[str]
+
+
+# The first line the fake `--version` of each pinned compiler prints: a PLACEHOLDER holding its pin's EXPECT_VERSION.
+VERSION_BANNERS = {
+    "nvcc": "PLACEHOLDER banner holding " + read_pin("cuda")["EXPECT_VERSION"] + "\n",
+    "nvc++": "PLACEHOLDER banner holding " + read_pin("nvhpc")["EXPECT_VERSION"] + "\n",
+}
+# What the fake sandbox prints around the program's stderr, as the sandbox setup does when it ran the program.
+SANDBOX_READY = (sandbox_module.READY_MARKER + "\n").encode("ascii")
+SANDBOX_DONE = (sandbox_module.DONE_MARKER + " 1000.00 1000.50\n").encode("ascii")
 
 
 class FinishedProcess:
@@ -585,10 +640,20 @@ class FinishedProcess:
 class Processes:
     """Stands in for subprocess.Popen: records every command and starts none, except git, which runs for real.
 
-    A command whose executable lies under a watched directory is a compile:
-    when it has a working directory, the fake writes a placeholder `main`
-    there, as a compiler that succeeded would. `returncode`, `stdout`, and
-    `stderr` set what every faked command returns.
+    A command whose executable lies under a watched directory is a pinned
+    compiler. `<executable> --version` prints its VERSION_BANNERS line (or
+    `banners[<file name>]`) and exits 0 (or `version_status[<file name>]`).
+    Any other such command is a compile: when it has a working directory,
+    the fake writes a placeholder `main` there, as a compiler that succeeded
+    would. A sandbox command (prlimit first, as sandbox_command builds it) is
+    answered as the sandbox setup would answer it once it ran the program:
+    the ready line, the program's stderr, and the done line, with the
+    program's exit status; the program is the part of the argv the
+    recorded sandbox_command call was given from the pinned compiler on.
+    When `sandbox_fails` holds "version" (a --version check) or "compile"
+    (any other pinned command), the setup fails before that program instead.
+    `returncode`, `stdout`, and `stderr` set what every faked compile
+    returns.
     """
 
     def __init__(self) -> None:
@@ -598,14 +663,22 @@ class Processes:
         self.returncode = 0
         self.stdout = b""
         self.stderr = b""
+        self.banners: dict[str, bytes] = {}
+        self.version_status: dict[str, int] = {}
+        self.sandbox_fails: set[str] = set()
+        self.sandbox_calls: list[SandboxCall] = []
 
     def watch(self, directory: Path) -> None:
         """Count commands whose executable lies under `directory` as compiles."""
         self.watched.append(directory)
 
     def compiles(self) -> list[Spawned]:
-        """Return the calls whose executable lies under a watched directory, in order."""
-        return [call for call in self.calls if self._is_watched(call.argv[0])]
+        """Return the calls that ran a pinned compiler on sources (not --version), sandboxed or not, in order."""
+        return [call for call in self.calls if self._is_watched(call.argv[0]) and "--version" not in call.argv[1:]]
+
+    def versions(self) -> list[Spawned]:
+        """Return the calls that ran `<pinned compiler> --version`, in order."""
+        return [call for call in self.calls if self._is_watched(call.argv[0]) and "--version" in call.argv[1:]]
 
     def _is_watched(self, executable: str) -> bool:
         """Return True when `executable` lies under a watched directory."""
@@ -613,22 +686,53 @@ class Processes:
         roots = [os.path.normcase(os.path.abspath(directory)) + os.sep for directory in self.watched]
         return any(path.startswith(root) for root in roots)
 
-    def spawn(self, argv: list[str], kwargs: Mapping[str, Any]) -> FinishedProcess:
-        """Record one command and return a finished process; a watched command gets a placeholder `main`."""
-        cwd = None if kwargs.get("cwd") is None else Path(kwargs["cwd"])
-        env = None if kwargs.get("env") is None else dict(kwargs["env"])
-        self.calls.append(Spawned(argv=argv, cwd=cwd, env=env))
+    def _answer(self, argv: list[str], cwd: Path | None) -> tuple[int, bytes, bytes]:
+        """Return (status, stdout, stderr) of a pinned compiler's --version, or of a compile, writing its `main`."""
+        if self._is_watched(argv[0]) and "--version" in argv[1:]:
+            name = Path(argv[0]).name
+            banner = self.banners.get(name, VERSION_BANNERS.get(name, "PLACEHOLDER banner\n").encode("ascii"))
+            return self.version_status.get(name, 0), banner, b""
         if cwd is not None and self._is_watched(argv[0]):
             (cwd / "main").write_bytes(b"PLACEHOLDER artifact of a faked compile\n")
+        return self.returncode, self.stdout, self.stderr
+
+    def _sandboxed(self, command: list[str], cwd: Path | None, text: bool) -> FinishedProcess:
+        """Record a sandbox command as the program it runs and answer as the sandbox setup would."""
+        found = [call for call in self.sandbox_calls if call.command == command]
+        assert found, "a sandbox command that lassi.executors.sandbox.sandbox_command did not build"
+        call = found[-1]
+        start = next((index for index, part in enumerate(call.argv) if self._is_watched(part)), 0)
+        argv = call.argv[start:]
+        environment = getattr(call.spec, "environment", None)
+        env = None if environment is None else dict(environment)
+        self.calls.append(Spawned(argv, cwd, env, True, command, call.spec, call.limits))
+        if ("version" if "--version" in argv[1:] else "compile") in self.sandbox_fails:
+            return FinishedProcess(command, 1, (b"", b"mount: permission denied\n"), text)
+        status, stdout, stderr = self._answer(argv, cwd)
+        return FinishedProcess(command, status, (stdout, SANDBOX_READY + stderr + SANDBOX_DONE), text)
+
+    def spawn(self, argv: list[str], kwargs: Mapping[str, Any]) -> FinishedProcess:
+        """Record one command and return a finished process; a compile gets a placeholder `main`."""
+        cwd = None if kwargs.get("cwd") is None else Path(kwargs["cwd"])
+        env = None if kwargs.get("env") is None else dict(kwargs["env"])
         text = any(kwargs.get(key) for key in ("text", "universal_newlines", "encoding", "errors"))
-        return FinishedProcess(argv, self.returncode, (self.stdout, self.stderr), text)
+        if argv[:1] == ["prlimit"]:
+            return self._sandboxed(argv, cwd, text)
+        self.calls.append(Spawned(argv=argv, cwd=cwd, env=env))
+        status, stdout, stderr = self._answer(argv, cwd)
+        return FinishedProcess(argv, status, (stdout, stderr), text)
 
 
 @pytest.fixture
 def processes(monkeypatch: pytest.MonkeyPatch) -> Processes:
-    """Replace subprocess.Popen for one test: git runs for real, every other command is recorded and faked."""
+    """Replace subprocess.Popen for one test: git runs for real, every other command is recorded and faked.
+
+    lassi.executors.sandbox.sandbox_command is wrapped, so the fake knows the
+    spec, program, and limits of every sandbox command it is asked to start.
+    """
     fake = Processes()
     real_popen = subprocess.Popen
+    real_sandbox_command = sandbox_module.sandbox_command
 
     def popen(args: Any, *more: Any, **kwargs: Any) -> Any:
         items = [args] if isinstance(args, (str, bytes, os.PathLike)) else list(args)
@@ -637,17 +741,25 @@ def processes(monkeypatch: pytest.MonkeyPatch) -> Processes:
             return real_popen(args, *more, **kwargs)
         return fake.spawn(argv, kwargs)
 
+    def sandbox_command(spec: Any, argv: Sequence[str], limits: Any) -> list[str]:
+        command = real_sandbox_command(spec, argv, limits)
+        fake.sandbox_calls.append(SandboxCall(spec=spec, argv=list(argv), limits=limits, command=list(command)))
+        return command
+
     monkeypatch.setattr(subprocess, "Popen", popen)
+    monkeypatch.setattr(sandbox_module, "sandbox_command", sandbox_command)
     return fake
 
 
 @pytest.fixture
 def parent_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
-    """Set os.environ as a build host might have it and return the environment a compile may get.
+    """Set os.environ as a build host might have it and return the environment every compile gets.
 
     HOME and TMPDIR point at test directories, the locale is not C, and
-    variables that change a compile silently are set; the compile environment
-    is the parent's PATH, LANG=C, LC_ALL=C, HOME, and TMPDIR, nothing else.
+    variables that change a compile silently are set. Since P0.20 the
+    compile environment is the parent's PATH, LANG=C, and LC_ALL=C, nothing
+    else: HOME stays out on purpose, and each compile adds its own TMPDIR, a
+    private directory under its build dir (assert_compile_environment).
     """
     home, tmpdir = tmp_path / "home", tmp_path / "tmp"
     home.mkdir()
@@ -659,7 +771,23 @@ def parent_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, str
     monkeypatch.setenv("NVCC_PREPEND_FLAGS", "-DLEAKED_PREPEND")
     monkeypatch.setenv("NVCC_APPEND_FLAGS", "-DLEAKED_APPEND")
     monkeypatch.setenv("CPATH", str(tmp_path / "leaked-include"))
-    return {"PATH": os.environ["PATH"], "LANG": "C", "LC_ALL": "C", "HOME": str(home), "TMPDIR": str(tmpdir)}
+    return {"PATH": os.environ["PATH"], "LANG": "C", "LC_ALL": "C"}
+
+
+def assert_compile_environment(call: Spawned, expected: Mapping[str, str], build: Path) -> None:
+    """Check that one compile ran in the sandbox with exactly `expected` plus TMPDIR, private under `build`."""
+    assert call.sandboxed, f"a pinned compile ran outside the sandbox: {call.argv[:1]}"
+    assert call.env is not None
+    environment = dict(call.env)
+    tmpdir = Path(environment.pop("TMPDIR"))
+    assert environment == dict(expected)
+    assert build.resolve() in tmpdir.resolve().parents, f"TMPDIR {tmpdir} is not private under {build}"
+
+
+def version_environment(call: Spawned) -> dict[str, str]:
+    """Return the environment a --version check ran with, without the TMPDIR it may carry."""
+    assert call.env is not None
+    return {name: value for name, value in call.env.items() if name != "TMPDIR"}
 
 
 def pinned_root(base: Path, *executables: str) -> Path:
@@ -1919,6 +2047,7 @@ def test_refuses_a_pinned_compile_without_tmpdir(
     with pytest.raises(RunError, match="TMPDIR is not set"):
         run_recipe(SMOKE, options)
     assert processes.compiles() == [] and not (tmp_path / "runs-root").exists()
+    assert processes.versions() == [], "the refusal comes before the --version check runs anything"
 
 
 def test_refuses_a_missing_pinned_executable_and_names_its_install_script(tmp_path: Path, bench: Path) -> None:
@@ -2006,6 +2135,7 @@ def test_env_runner_returns_the_status_and_the_decoded_output(tmp_path: Path, pr
 def test_pinned_nvcc_builds_with_the_pinned_executable_and_a_clean_environment(
     tmp_path: Path, bench: Path, processes: Processes, parent_env: dict[str, str]
 ) -> None:
+    # P0.20: the compile runs in the sandbox, its environment has no HOME, and its TMPDIR is its own.
     root = pinned_root(tmp_path, NVCC_BIN)
     processes.watch(root)
     options = RunOptions(runs_root=tmp_path / "runs-root", run_id="pinned", bench_root=bench, toolchains_root=root)
@@ -2013,7 +2143,9 @@ def test_pinned_nvcc_builds_with_the_pinned_executable_and_a_clean_environment(
     (call,) = processes.compiles()
     assert Path(call.argv[0]) == root / NVCC_BIN
     assert "main.cu" in call.argv
-    assert call.env == parent_env
+    build = attempt_dir(run_dir, SMOKE_TRIAL, 0)
+    assert call.cwd is not None and call.cwd.resolve() == build
+    assert_compile_environment(call, parent_env, build)
     trial = load_trial(run_dir, SMOKE_TRIAL)
     assert trial.toolchain_pins == ToolchainPins(cuda="12.6.3")
     assert trial.final.stage_reached == COMPILED
@@ -2043,9 +2175,9 @@ def test_nvhpc_build_gets_nvhpc_cuda_home_and_records_both_pins(
     (call,) = processes.compiles()
     assert Path(call.argv[0]) == root / NVCPP_BIN
     assert call.env is not None
-    env = dict(call.env)
-    assert Path(env.pop("NVHPC_CUDA_HOME")) == root / CUDA_PREFIX
-    assert env == parent_env
+    assert call.env["NVHPC_CUDA_HOME"] == str(root.resolve() / CUDA_PREFIX)
+    expected = {**parent_env, "NVHPC_CUDA_HOME": str(root.resolve() / CUDA_PREFIX)}
+    assert_compile_environment(call, expected, attempt_dir(run_dir, NVHPC_TRIAL, 0))
     trial = load_trial(run_dir, NVHPC_TRIAL)
     assert trial.toolchain_pins == ToolchainPins(cuda="12.6.3", nvhpc="24.11")
     assert trial.final.stage_reached == COMPILED
@@ -2102,9 +2234,10 @@ def both_toolchains_recipe(directory: Path) -> Recipe:
 def built_fields(built: Any) -> tuple[Any, ...]:
     """Return what a built toolchain holds, with the toolchain object reduced to its class, executable, and runner.
 
-    The runner is reduced to its class and its environment (EnvRunner.env),
-    so two separately built toolchains compare equal when they were built
-    the same way.
+    The runner is reduced to its class, its environment, its toolchains root,
+    and its hidden roots (SandboxedCompileRunner since P0.20), so two
+    separately built toolchains compare equal when they were built the same
+    way.
     """
     toolchain = built.toolchain
     runner = getattr(toolchain, "runner", None)
@@ -2113,7 +2246,9 @@ def built_fields(built: Any) -> tuple[Any, ...]:
         type(toolchain),
         getattr(toolchain, "executable", None),
         type(runner),
-        getattr(runner, "env", None),
+        getattr(runner, "environment", None),
+        getattr(runner, "toolchains", None),
+        tuple(getattr(runner, "hidden_roots", ())),
         built.executable,
         built.environment,
         built.pins,
@@ -2121,9 +2256,10 @@ def built_fields(built: Any) -> tuple[Any, ...]:
 
 
 def test_build_toolchain_builds_each_pinned_preset_as_the_runner_does(
-    tmp_path: Path, parent_env: dict[str, str]
+    tmp_path: Path, parent_env: dict[str, str], processes: Processes
 ) -> None:
     root = pinned_root(tmp_path, NVCC_BIN, NVCPP_BIN)
+    processes.watch(root)
     built_by_runner = runner_module._toolchains(both_toolchains_recipe(tmp_path), DEFAULT_REGISTRY, root)
     from_recipe = {built.name: built for built in built_by_runner}
     for name, language in (("nvcc-sm80", "cuda"), ("nvcpp-cc80", "omp")):
@@ -2136,30 +2272,39 @@ def test_build_toolchain_builds_each_pinned_preset_as_the_runner_does(
 
 
 def test_build_toolchain_gives_the_pinned_executable_the_clean_environment_and_the_pins(
-    tmp_path: Path, parent_env: dict[str, str]
+    tmp_path: Path, parent_env: dict[str, str], processes: Processes
 ) -> None:
+    # P0.20: the runner is the sandboxed compile runner, and the environment every compile gets has no HOME and
+    # no TMPDIR (each compile adds its own).
     root = pinned_root(tmp_path, NVCC_BIN, NVCPP_BIN)
+    processes.watch(root)
+    compile_runner = sandbox_module.SandboxedCompileRunner
     nvcc = runner_module.build_toolchain("nvcc-sm80", root)
     assert nvcc.name == "nvcc-sm80"
-    assert isinstance(nvcc.toolchain, NvccSm80) and isinstance(nvcc.toolchain.runner, EnvRunner)
+    assert isinstance(nvcc.toolchain, NvccSm80) and isinstance(nvcc.toolchain.runner, compile_runner)
     assert nvcc.executable == nvcc.toolchain.executable == str(root / NVCC_BIN)
-    assert nvcc.environment == nvcc.toolchain.runner.env == parent_env
+    assert nvcc.environment == nvcc.toolchain.runner.environment == parent_env
     assert nvcc.pins == {"cuda": read_pin("cuda")}
     nvcpp = runner_module.build_toolchain("nvcpp-cc80", root, DEFAULT_REGISTRY)
-    assert isinstance(nvcpp.toolchain, NvcppCc80) and isinstance(nvcpp.toolchain.runner, EnvRunner)
+    assert isinstance(nvcpp.toolchain, NvcppCc80) and isinstance(nvcpp.toolchain.runner, compile_runner)
     assert nvcpp.executable == nvcpp.toolchain.executable == str(root / NVCPP_BIN)
-    assert nvcpp.environment is not None and nvcpp.toolchain.runner.env == nvcpp.environment
+    assert nvcpp.environment is not None and nvcpp.toolchain.runner.environment == nvcpp.environment
     environment = dict(nvcpp.environment)
     assert Path(environment.pop("NVHPC_CUDA_HOME")) == root / CUDA_PREFIX
     assert environment == parent_env
     assert nvcpp.pins == {"nvhpc": read_pin("nvhpc"), "cuda": read_pin("cuda")}
+    for built in (nvcc, nvcpp):
+        assert Path(built.toolchain.runner.toolchains) == root.resolve()
+        # The --version check's observed status and lines, as the manifest records them (review finding).
+        assert built.version_status == 0 and built.version, built.name
 
 
 def test_the_runner_builds_each_bound_toolchain_through_build_toolchain(
-    tmp_path: Path, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch, processes: Processes
 ) -> None:
     # One construction path: _toolchains calls the public function, so the capture tool builds the same thing.
     root = pinned_root(tmp_path, NVCC_BIN, NVCPP_BIN)
+    processes.watch(root)
     original = runner_module.build_toolchain
     signature = inspect.signature(original)
     calls: list[tuple[str, Any, Any]] = []
@@ -2199,7 +2344,9 @@ def test_build_toolchain_registry_defaults_to_the_default_registry() -> None:
     assert parameters["registry"].default is DEFAULT_REGISTRY
 
 
-def test_build_toolchain_refuses_what_the_runner_refuses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_toolchain_refuses_what_the_runner_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, processes: Processes
+) -> None:
     with pytest.raises(RunError, match="LASSI_TOOLCHAINS"):
         runner_module.build_toolchain("nvcc-sm80", None)
     with pytest.raises(RunError, match="absolute"):
@@ -2214,6 +2361,425 @@ def test_build_toolchain_refuses_what_the_runner_refuses(tmp_path: Path, monkeyp
     monkeypatch.delenv("TMPDIR")
     with pytest.raises(RunError, match="TMPDIR is not set"):
         runner_module.build_toolchain("nvcc-sm80", root)
+    assert processes.calls == [], "every refusal comes before anything runs, --version included"
+
+
+# ---------------------------------------------------------------------------
+# Compile hardening (P0.20): the sandboxed compile, the environment, TMPDIR, and the --version check
+
+
+def scratch_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, Path]:
+    """Set $LASSI_SCRATCH, $LASSI_RUNS_ROOT, and TMPDIR as the gate sets them; return scratch, runs root, toolchains.
+
+    The runs root, TMPDIR, and the toolchains root (with the pinned nvcc and
+    nvc++ placeholders) lie inside the scratch root, as on the build host.
+    """
+    scratch = tmp_path / "scratch"
+    runs_root, tmpdir = scratch / "lassi-runs", scratch / "tmp"
+    for directory in (runs_root, tmpdir):
+        directory.mkdir(parents=True)
+    monkeypatch.setenv("LASSI_SCRATCH", str(scratch))
+    monkeypatch.setenv("LASSI_RUNS_ROOT", str(runs_root))
+    monkeypatch.setenv("TMPDIR", str(tmpdir))
+    return scratch, runs_root, pinned_root(scratch, NVCC_BIN, NVCPP_BIN)
+
+
+def both_ways_run(tmp_path: Path, bench: Path, root: Path, runs_root: Path, trials: int = 1) -> Path:
+    """Run the both-ways recipe (nvcc-sm80 for cuda, nvcpp-cc80 for omp) with `trials` runs; return the run dir."""
+    data = smoke_data(
+        directions=[{"source": "omp", "target": "cuda"}, {"source": "cuda", "target": "omp"}],
+        toolchain={"cuda": "nvcc-sm80", "omp": "nvcpp-cc80"},
+        trials={"n": trials},
+    )
+    recipe = write_recipe(tmp_path, "both-ways", data)
+    options = RunOptions(runs_root=runs_root, run_id="hardened", bench_root=bench, toolchains_root=root)
+    return run_recipe(recipe, options)
+
+
+def test_a5_every_pinned_compile_runs_as_a_sandbox_command_under_prlimit_core_1(
+    tmp_path: Path, bench: Path, processes: Processes, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _scratch, runs_root, root = scratch_layout(tmp_path, monkeypatch)
+    processes.watch(root)
+    run_dir = both_ways_run(tmp_path, bench, root, runs_root)
+    compiles = processes.compiles()
+    assert sorted(Path(call.argv[0]).name for call in compiles) == ["nvc++", "nvcc"]
+    for call in compiles:
+        assert call.sandboxed and call.command is not None, call.argv[:1]
+        assert call.command[:3] == ["prlimit", "--core=1", "--"], call.command[:6]
+        assert sandbox_module.SETUP_SCRIPT in call.command
+        assert call.command[-len(call.argv) :] == call.argv, "the compiler argv is the sandbox command's tail"
+    for direction in ("omp-cuda", "cuda-omp"):
+        trial_id = make_trial_id("both-ways", MOCK_ID, SUITE, direction, ITEM, 1)
+        assert load_trial(run_dir, trial_id).final.stage_reached == COMPILED, direction
+
+
+def test_a1_a_pinned_compile_sees_its_build_dir_and_the_toolchains_and_not_home_scratch_or_the_runs_root(
+    tmp_path: Path, bench: Path, processes: Processes, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scratch, runs_root, root = scratch_layout(tmp_path, monkeypatch)
+    processes.watch(root)
+    run_dir = both_ways_run(tmp_path, bench, root, runs_root)
+    home = Path(os.environ["HOME"])
+    for call in processes.compiles():
+        spec = call.spec
+        assert spec is not None, call.argv[:1]
+        assert call.cwd is not None and Path(spec.workdir) == call.cwd.resolve()
+        assert run_dir.resolve() in Path(spec.workdir).parents, "the workdir is the attempt's build dir"
+        assert Path(spec.toolchains) == root.resolve()
+        assert spec.harness is None
+        hidden = [Path(item) for item in spec.hidden_roots]
+        for name, path in (("HOME", home), ("LASSI_SCRATCH", scratch), ("LASSI_RUNS_ROOT", runs_root)):
+            assert any(item == path.resolve() or item in path.resolve().parents for item in hidden), name
+
+
+def test_a2_no_compile_environment_carries_home(
+    tmp_path: Path, bench: Path, processes: Processes, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _scratch, runs_root, root = scratch_layout(tmp_path, monkeypatch)
+    processes.watch(root)
+    run_dir = both_ways_run(tmp_path, bench, root, runs_root)
+    calls = processes.compiles() + processes.versions()
+    assert len(calls) == 4, [call.argv for call in calls]
+    for call in calls:
+        assert call.env is not None and "HOME" not in call.env, call.argv
+    toolchains = json.loads(read_ascii(run_dir / "toolchains.json"))
+    for name, entry in toolchains.items():
+        assert "HOME" not in entry["environment"], name
+
+
+@pytest.mark.parametrize("where", ["sibling", "lookalike-prefix", "dot-dot-escape"])
+def test_a3_build_toolchain_refuses_a_tmpdir_outside_lassi_scratch(
+    tmp_path: Path, processes: Processes, monkeypatch: pytest.MonkeyPatch, where: str
+) -> None:
+    scratch, _runs_root, root = scratch_layout(tmp_path, monkeypatch)
+    processes.watch(root)
+    outside = {
+        "sibling": tmp_path / "elsewhere",
+        "lookalike-prefix": tmp_path / "scratch-other",
+        "dot-dot-escape": scratch / "tmp" / ".." / ".." / "escaped",
+    }[where]
+    outside.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("TMPDIR", str(outside))
+    for name in ("nvcc-sm80", "nvcpp-cc80"):
+        with pytest.raises(RunError) as refused:
+            runner_module.build_toolchain(name, root)
+        assert "TMPDIR" in str(refused.value) and "LASSI_SCRATCH" in str(refused.value), str(refused.value)
+    assert processes.calls == [], "the refusal comes before anything runs"
+
+
+def test_a3_a_run_with_a_tmpdir_outside_lassi_scratch_is_refused_before_anything_is_created(
+    tmp_path: Path, bench: Path, processes: Processes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _scratch, runs_root, root = scratch_layout(tmp_path, monkeypatch)
+    processes.watch(root)
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    monkeypatch.setenv("TMPDIR", str(outside))
+    options = RunOptions(runs_root=runs_root, run_id="x", bench_root=bench, toolchains_root=root)
+    with pytest.raises(RunError, match="TMPDIR"):
+        run_recipe(SMOKE, options)
+    assert processes.calls == []
+    assert not (runs_root / "runs").exists()
+
+
+def test_a3_each_compile_gets_a_private_tmpdir_under_its_own_build_dir_inside_lassi_scratch(
+    tmp_path: Path, bench: Path, processes: Processes, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _scratch, runs_root, root = scratch_layout(tmp_path, monkeypatch)
+    processes.watch(root)
+    run_dir = both_ways_run(tmp_path, bench, root, runs_root)
+    compiles = processes.compiles()
+    assert len(compiles) == 2
+    tmpdirs = []
+    for call in compiles:
+        assert call.cwd is not None and call.env is not None
+        tmpdir = Path(call.env["TMPDIR"]).resolve()
+        assert call.cwd.resolve() in tmpdir.parents, "under its own build dir, so the rest of scratch stays hidden"
+        assert run_dir.resolve() in tmpdir.parents
+        assert tmpdir != Path(os.environ["TMPDIR"]).resolve()
+        tmpdirs.append(tmpdir)
+    assert len(set(tmpdirs)) == 2, "each compile has its own"
+
+
+def test_a4_each_pinned_compilers_version_is_checked_once_before_the_first_compile(
+    tmp_path: Path, bench: Path, processes: Processes, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _scratch, runs_root, root = scratch_layout(tmp_path, monkeypatch)
+    processes.watch(root)
+    run_dir = both_ways_run(tmp_path, bench, root, runs_root, trials=2)
+    versions, compiles = processes.versions(), processes.compiles()
+    assert len(compiles) == 4, "two directions, two trials each"
+    assert sorted(Path(call.argv[0]) for call in versions) == sorted([root / NVCC_BIN, root / NVCPP_BIN])
+    for call in versions:
+        assert call.argv[1:] == ["--version"], call.argv
+    first_compile = processes.calls.index(compiles[0])
+    assert all(processes.calls.index(call) < first_compile for call in versions)
+    toolchains = json.loads(read_ascii(run_dir / "toolchains.json"))
+    by_executable = {Path(entry["executable"]): entry["environment"] for entry in toolchains.values()}
+    for call in versions:
+        # The same executable and environment as the builds; only TMPDIR may differ.
+        assert version_environment(call) == by_executable[Path(call.argv[0])], call.argv
+
+
+@pytest.mark.parametrize("fault", ["banner-without-the-pin", "version-exits-nonzero"])
+@pytest.mark.parametrize(
+    ("toolchain", "binary", "pin"),
+    [("nvcc-sm80", NVCC_BIN, "cuda"), ("nvcpp-cc80", NVCPP_BIN, "nvhpc")],
+    ids=["nvcc", "nvcpp"],
+)
+def test_a4_a_compiler_that_is_not_the_pinned_version_is_refused_before_anything_else_runs(
+    tmp_path: Path,
+    bench: Path,
+    processes: Processes,
+    parent_env: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    toolchain: str,
+    binary: str,
+    pin: str,
+    fault: str,
+) -> None:
+    # Agent Rule 10: a run is never labeled with a pin its compiler is not.
+    _scratch, runs_root, root = scratch_layout(tmp_path, monkeypatch)
+    processes.watch(root)
+    name = Path(binary).name
+    if fault == "banner-without-the-pin":
+        processes.banners[name] = b"PLACEHOLDER banner of another release\n"
+    else:
+        processes.version_status[name] = 1
+    with pytest.raises(RunError) as refused:
+        both_ways_run(tmp_path, bench, root, runs_root)
+    message = str(refused.value)
+    for part in ("--version", f"toolchains/{pin}.pin", read_pin(pin)["EXPECT_VERSION"]):
+        assert part in message, (part, message)
+    assert processes.compiles() == []
+    assert not (runs_root / "runs").exists(), "nothing is created before every compiler checks out"
+    with pytest.raises(RunError):
+        runner_module.build_toolchain(toolchain, root)
+
+
+def test_a4_a_pin_without_expect_version_is_refused(
+    tmp_path: Path, processes: Processes, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _scratch, _runs_root, root = scratch_layout(tmp_path, monkeypatch)
+    processes.watch(root)
+    real_read_pin = pins_module.read_pin
+
+    def without_expect_version(name: str) -> dict[str, str]:
+        pin = dict(real_read_pin(name))
+        pin.pop("EXPECT_VERSION", None)
+        return pin
+
+    monkeypatch.setattr(pins_module, "read_pin", without_expect_version)
+    monkeypatch.setattr(runner_module, "read_pin", without_expect_version, raising=False)
+    with pytest.raises(RunError, match="EXPECT_VERSION"):
+        runner_module.build_toolchain("nvcc-sm80", root)
+    assert processes.compiles() == []
+
+
+def test_a_sandboxed_compile_keeps_the_compilers_whole_stderr(
+    tmp_path: Path, bench: Path, processes: Processes, parent_env: dict[str, str]
+) -> None:
+    # compile.stderr stays whole up to the 64 MiB compile output cap; the sandbox's 1 MiB cap is for generated programs.
+    root = pinned_root(tmp_path, NVCC_BIN)
+    processes.watch(root)
+    line = b'main.cu(%d): warning #177-D: variable "v%d" was declared but never referenced\n'
+    processes.stderr = b"".join(line % (number, number) for number in range(1, 30000))
+    assert len(processes.stderr) > OUTPUT_CAP_BYTES + 65536
+    options = RunOptions(runs_root=tmp_path / "runs-root", run_id="loud", bench_root=bench, toolchains_root=root)
+    run_dir = run_recipe(SMOKE, options)
+    (call,) = processes.compiles()
+    assert call.sandboxed
+    kept = (attempt_dir(run_dir, SMOKE_TRIAL, 0) / "compile.stderr").read_bytes()
+    assert kept == processes.stderr
+
+
+def test_a_sandbox_that_cannot_run_a_compile_stops_the_run_and_nothing_compiles_unsandboxed(
+    tmp_path: Path, bench: Path, processes: Processes, parent_env: dict[str, str]
+) -> None:
+    root = pinned_root(tmp_path, NVCC_BIN)
+    processes.watch(root)
+    processes.sandbox_fails = {"compile"}
+    options = RunOptions(runs_root=tmp_path / "runs-root", run_id="nosandbox", bench_root=bench, toolchains_root=root)
+    with pytest.raises(SandboxUnavailableError):
+        run_recipe(SMOKE, options)
+    compiles = processes.compiles()
+    assert compiles and all(call.sandboxed for call in compiles), [call.argv[:1] for call in compiles]
+
+
+def test_a4_a_sandbox_that_cannot_run_the_version_check_stops_the_run_before_anything_is_created(
+    tmp_path: Path, bench: Path, processes: Processes, parent_env: dict[str, str]
+) -> None:
+    # The check runs through the compile sandbox, so a host that cannot sandbox a compile is found before the run
+    # directory exists, and the pinned compiler never runs outside the sandbox.
+    root = pinned_root(tmp_path, NVCC_BIN)
+    processes.watch(root)
+    processes.sandbox_fails = {"version"}
+    options = RunOptions(runs_root=tmp_path / "runs-root", run_id="noversion", bench_root=bench, toolchains_root=root)
+    with pytest.raises(SandboxUnavailableError):
+        run_recipe(SMOKE, options)
+    assert not (tmp_path / "runs-root").exists()
+    assert processes.compiles() == []
+    assert processes.versions() and all(call.sandboxed for call in processes.versions())
+
+
+def test_a4_the_version_check_runs_in_the_compile_sandbox_in_a_fresh_directory_under_tmpdir(
+    tmp_path: Path, bench: Path, processes: Processes, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Review finding: the check runs the builds' executable with their environment in their view
+    # (the same toolchains root and hidden roots), under prlimit --core=1, so the compiler is proven reachable in
+    # the compile view before the first build, and a crash of it stores no core with the host handler.
+    _scratch, runs_root, root = scratch_layout(tmp_path, monkeypatch)
+    processes.watch(root)
+    both_ways_run(tmp_path, bench, root, runs_root)
+    versions, compiles = processes.versions(), processes.compiles()
+    assert len(versions) == 2
+    tmpdir = Path(os.environ["TMPDIR"]).resolve()
+    compile_of = {Path(call.argv[0]).name: call for call in compiles}
+    for call in versions:
+        assert call.sandboxed and call.command is not None, call.argv
+        assert call.command[:3] == ["prlimit", "--core=1", "--"], call.command[:6]
+        assert call.argv[1:] == ["--version"]
+        build = compile_of[Path(call.argv[0]).name]
+        assert Path(call.spec.toolchains) == Path(build.spec.toolchains) == root.resolve()
+        assert tuple(call.spec.hidden_roots) == tuple(build.spec.hidden_roots)
+        assert call.cwd is not None and tmpdir in call.cwd.resolve().parents, call.cwd
+        assert call.env is not None and call.cwd.resolve() in Path(call.env["TMPDIR"]).resolve().parents
+        assert not call.cwd.exists(), "the check's directory is removed afterwards"
+    assert list(tmpdir.iterdir()) == []
+
+
+def link_dir(link: Path, target: Path) -> None:
+    """Make `link` a link to the directory `target`: a symbolic link, or a junction on Windows without that right."""
+    try:
+        os.symlink(target, link, target_is_directory=True)
+        return
+    except OSError as error:
+        if os.name != "nt":
+            pytest.skip(f"cannot make a symbolic link here: {error}")
+    import _winapi
+
+    _winapi.CreateJunction(str(target), str(link))
+
+
+@pytest.mark.parametrize("given", ["dot-dot", "link"])
+def test_f2_the_toolchains_root_is_resolved_once_for_the_executable_the_prefixes_and_the_sandbox(
+    tmp_path: Path, processes: Processes, parent_env: dict[str, str], given: str
+) -> None:
+    # The sandbox exposes the resolved root, so argv[0] and NVHPC_CUDA_HOME must name paths under it: an unresolved
+    # path would not exist inside, and env would report 127 as if the compiler had failed (review finding).
+    real = pinned_root(tmp_path / "real", NVCC_BIN, NVCPP_BIN).resolve()
+    if given == "dot-dot":
+        (tmp_path / "other").mkdir()
+        root = tmp_path / "other" / ".." / "real" / "toolchains"
+    else:
+        root = tmp_path / "linked-toolchains"
+        link_dir(root, real)
+    processes.watch(real)
+    nvcpp = runner_module.build_toolchain("nvcpp-cc80", root)
+    assert nvcpp.executable == nvcpp.toolchain.executable == str(real / NVCPP_BIN)
+    assert nvcpp.environment is not None and nvcpp.environment["NVHPC_CUDA_HOME"] == str(real / CUDA_PREFIX)
+    assert Path(nvcpp.toolchain.runner.toolchains) == real
+    (version,) = processes.versions()
+    assert version.argv[0] == str(real / NVCPP_BIN) and Path(version.spec.toolchains) == real
+
+
+def test_f2_a_pinned_compiler_that_resolves_outside_the_toolchains_root_is_refused(
+    tmp_path: Path, processes: Processes, parent_env: dict[str, str]
+) -> None:
+    # Only the toolchains root is exposed to a compile, so a prefix linked elsewhere would not exist inside.
+    elsewhere = pinned_root(tmp_path / "elsewhere", NVCC_BIN)
+    root = tmp_path / "toolchains"
+    root.mkdir()
+    link_dir(root / CUDA_PREFIX, elsewhere / CUDA_PREFIX)
+    processes.watch(tmp_path)
+    with pytest.raises(RunError) as refused:
+        runner_module.build_toolchain("nvcc-sm80", root)
+    message = str(refused.value)
+    assert "outside the toolchains root" in message and "toolchains/cuda.sh" in message, message
+    assert processes.calls == [], "the refusal comes before anything runs"
+
+
+def test_f3_a_run_hides_its_own_runs_root_even_without_the_gate_variables(
+    tmp_path: Path, bench: Path, processes: Processes, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Without $LASSI_SCRATCH and $LASSI_RUNS_ROOT only $HOME was hidden, so a compile could include another
+    # trial's sources from a runs root elsewhere (review finding).
+    for name in ("LASSI_SCRATCH", "LASSI_RUNS_ROOT"):
+        monkeypatch.delenv(name, raising=False)
+    root = pinned_root(tmp_path, NVCC_BIN)
+    processes.watch(root)
+    runs_root = tmp_path / "runs-elsewhere"
+    options = RunOptions(runs_root=runs_root, run_id="hidden", bench_root=bench, toolchains_root=root)
+    run_recipe(SMOKE, options)
+    (call,) = processes.compiles()
+    hidden = [Path(item) for item in call.spec.hidden_roots]
+    assert any(item == runs_root.resolve() or item in runs_root.resolve().parents for item in hidden), hidden
+    assert Path(os.environ["HOME"]).resolve() in hidden
+
+
+def test_f3_build_toolchain_hides_a_build_root_given_as_a_keyword(
+    tmp_path: Path, processes: Processes, parent_env: dict[str, str]
+) -> None:
+    parameters = inspect.signature(runner_module.build_toolchain).parameters
+    assert parameters["build_root"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters["build_root"].default is None
+    root = pinned_root(tmp_path, NVCC_BIN)
+    processes.watch(root)
+    captures = tmp_path / "captures"
+    built = runner_module.build_toolchain("nvcc-sm80", root, build_root=captures)
+    assert captures in [Path(item) for item in built.toolchain.runner.hidden_roots]
+    with pytest.raises(RunError, match="build root"):
+        runner_module.build_toolchain("nvcc-sm80", root, build_root=Path("relative-builds"))
+
+
+@pytest.mark.parametrize(
+    "layout", ["home-is-a-filesystem-root", "runs-root-inside-the-toolchains-root", "tmpdir-inside-the-toolchains-root"]
+)
+def test_f4_a_compile_layout_the_sandbox_refuses_stops_the_run_before_the_run_directory_exists(
+    tmp_path: Path,
+    bench: Path,
+    processes: Processes,
+    parent_env: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    layout: str,
+) -> None:
+    # The sandbox checks its layout when a compile builds its spec; the runner checks it first, so the refusal is
+    # a RunError that names it, never a ValueError at the first compile of a run that already started.
+    root = pinned_root(tmp_path, NVCC_BIN)
+    processes.watch(root)
+    runs_root = tmp_path / "runs-root"
+    if layout == "home-is-a-filesystem-root":
+        monkeypatch.setenv("HOME", tmp_path.anchor)
+    elif layout == "runs-root-inside-the-toolchains-root":
+        runs_root = root / "runs"
+    else:
+        inside = root / "tmp"
+        inside.mkdir()
+        monkeypatch.setenv("TMPDIR", str(inside))
+    options = RunOptions(runs_root=runs_root, run_id="layout", bench_root=bench, toolchains_root=root)
+    with pytest.raises(RunError) as refused:
+        run_recipe(SMOKE, options)
+    assert "sandbox" in str(refused.value), str(refused.value)
+    assert not (runs_root / "runs").exists(), "the refusal comes before the run directory exists"
+    assert processes.calls == [], "nothing runs"
+    if layout == "tmpdir-inside-the-toolchains-root":
+        assert list((root / "tmp").iterdir()) == [], "the --version check's directory is removed"
+
+
+def test_the_hidden_roots_must_be_absolute_and_at_least_one_must_be_set(
+    tmp_path: Path, processes: Processes, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = pinned_root(tmp_path, NVCC_BIN)
+    processes.watch(root)
+    monkeypatch.setenv("HOME", "relative-home")
+    with pytest.raises(RunError, match=r"\$HOME must be an absolute path"):
+        runner_module.build_toolchain("nvcc-sm80", root)
+    for name in ("HOME", "LASSI_SCRATCH", "LASSI_RUNS_ROOT"):
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(RunError, match="none of"):
+        runner_module.build_toolchain("nvcc-sm80", root)
+    assert processes.calls == []
 
 
 # ---------------------------------------------------------------------------

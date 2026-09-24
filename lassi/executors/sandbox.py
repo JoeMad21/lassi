@@ -19,7 +19,7 @@ tests pass from a clean commit. One command runs each program:
             -p TasksMax=... -p RuntimeMaxSec=... -p TimeoutStopSec=1
           unshare -rinmpfu --mount-proc --kill-child
             sh -c SETUP_SCRIPT sh <workdir> <harness> <toolchains> <disk bytes> <N> <hidden roots...>
-               <cpu> <wall> <kill-after> <argv...>
+               <cpu> <wall> <kill-after> [ENVIRONMENT_MARKER <NAME=value...>] <argv...>
 
 - prlimit --core=1 covers every process of the run, unshare included. The
   kernel aborts a core dump piped to the host handler when the soft core
@@ -129,6 +129,11 @@ tests pass from a clean commit. One command runs each program:
         program;
       - an innermost `timeout --kill-after`, which is what enforces wall
         time (the spike's second addendum measured exit status 124);
+      - only when the spec sets the program's environment
+        (SandboxSpec.environment, P0.20): `env -i -- NAME=value...` right
+        before the program, so the program gets exactly those variables
+        instead of the defaults above, while every tool of the chain, env
+        included, still comes from SANDBOX_PATH;
   12. after that namespace has ended, sets an EXIT trap that prints
       "lassi-sandbox: the setup stopped after the program ended" on stderr,
       so any failure from here on ends stderr with a line of its own; reads
@@ -166,15 +171,41 @@ itself never ends stderr then, and a done line counts only after a normal
 exit, since a signal death means the setup died before its own. After a
 signal death (the backstop, a memory kill of the setup, or the runner's own
 timeout) the result is returned as classified, with workdir_incomplete set.
-Only timeout's own failure (status 125) and a failed exec of timeout right
-after the marker (a "lassi-sandbox confine:" line and status 1) can still
-surface as the program's exit status. Sandbox.run reports a death by signal
+Only timeout's own failure (status 125), a failed exec of timeout right
+after the marker (a "lassi-sandbox confine:" line and status 1), and, when
+the spec sets the program's environment, env's own failure (125) or its
+failure to run the program (126, or 127 when the program does not exist in
+the view, each with an "env:" line) can still surface as the program's exit
+status. For compiles the stage runner rules the last one out before the
+first build: its --version check runs the pinned compiler through the same
+compile runner (lassi.core.runner). Sandbox.run reports a death by signal
 N as the shell does, 128 + N. Any OSError the runner raises (the command did
 not start) is SandboxUnavailableError too. The hang test compares the
 program's own time, the difference of the done line's two clock readings
 (SandboxResult.program_s), with the wall limit, so neither setup nor
 copy-back time counts; only when no done line counts (the whole sandbox was
 killed) does it use the whole command's time (see classify).
+
+Compiles (P0.20). SandboxedCompileRunner is the CommandRunner the stage
+runner (lassi.core.runner.build_toolchain) gives every pinned toolchain, so
+a compile of model-generated sources runs through this same command, not a
+second isolation mechanism: its build dir is the workdir, the pinned
+toolchains root is exposed read-only, and $HOME, the scratch root, and the
+runs root are hidden roots, so an absolute `#include` under them finds no
+file. SandboxSpec.environment carries the compile's environment (PATH,
+LANG=C, LC_ALL=C, a private TMPDIR under the build dir, and each variable a
+pin names), checked against ENVIRONMENT_NAMES, a fixed allowlist; each
+variable reaches the command as one NAME=value element after SETUP_SCRIPT,
+so no shell parses it. Program runs keep the defaults and the P0.16
+command (environment None). A compile keeps each stream of the compiler's
+output whole up to COMPILE_OUTPUT_CAP_BYTES (CappedRunner, far above any
+compile output seen, exploratory: 3210 bytes; OUTPUT_CAP_BYTES is for
+generated programs), and a line of
+the sandbox's own ends its stderr when a stream passed that cap, when a
+limit killed the compile, or when its whole sandbox was killed, so nothing
+is lost silently. Its wall limit is the toolchain's timeout, and its disk
+and memory limits are COMPILE_DISK_MB and COMPILE_MEMORY_MB (see
+SandboxedCompileRunner for why).
 
 Setup took 88 to 107 ms in the composite probes (I1, J2b, J3). Not measured:
 the backstop, TasksMax, the IPC and UTS namespaces, and the kernel warning
@@ -250,6 +281,10 @@ Known limits:
 - Setup needs python3, and the program's chain needs it too, in
   SANDBOX_PATH, and mount_setattr (Linux 5.12 or later); the seccomp filter
   is written for x86_64.
+- A compile gets the caller's PATH, but its directories under a hidden root
+  show empty inside, so every tool a compiler starts (the host compiler,
+  the linker) must come from the toolchains root or from elsewhere on the
+  host (on alpha01, /usr/bin). Program runs get SANDBOX_PATH.
 """
 
 from __future__ import annotations
@@ -258,13 +293,17 @@ import math
 import os
 import posixpath
 import re
+import shutil
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePath, PurePosixPath
+from types import MappingProxyType
 
 from lassi.core.interfaces import Limits
-from lassi.toolchains import CommandResult, CommandRunner, capped_runner
+from lassi.toolchains import CappedRunner, CommandResult, CommandRunner, capped_runner
+from lassi.toolchains._base import OUTPUT_TAIL_BYTES
+from lassi.toolchains.pins import PREFIX_VARIABLES
 
 # Grace seconds between the innermost timeout's SIGTERM and its SIGKILL.
 KILL_AFTER_S = 2
@@ -297,6 +336,37 @@ SYSTEM_DIRS = ("/var", "/sys")
 SANDBOX_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
 # The caller's environment variables the sandbox command keeps, when set: what systemd-run --user needs.
 PASSED_VARIABLES = ("XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")
+# The only names SandboxSpec.environment may hold (P0.20): PATH, the locale (LANG, LC_ALL), TMPDIR, and each
+# variable a pin names (lassi.toolchains.pins PREFIX_VARIABLES, NVHPC_CUDA_HOME). HOME, loader variables
+# (LD_PRELOAD, LD_LIBRARY_PATH), variables that change a compile silently (NVCC_PREPEND_FLAGS, CPATH), and
+# credentials are never on it (Agent Rule 12). It is fixed: nothing adds a name at run time.
+ENVIRONMENT_NAMES = frozenset({"PATH", "LANG", "LC_ALL", "TMPDIR", *PREFIX_VARIABLES.values()})
+# The positional element that tells SETUP_SCRIPT that the program's environment follows it, one NAME=value
+# element per variable, right before the program argv. sandbox_command refuses a program argv that starts with it.
+ENVIRONMENT_MARKER = "lassi-sandbox-environment"
+# A compile's private temporary directory under its build dir (SandboxedCompileRunner). No model file path may
+# start with "@" (lassi.core.files), so no generated file can take its place.
+COMPILE_TMPDIR = "@lassi-tmp"
+# A compile's limits (SandboxedCompileRunner), chosen with wide margin over what the 14 fixture scenarios and
+# one benchmark app (cuda with nvcc, omp with nvc++) needed on alpha01 in an exploratory run
+# (plans/spikes/p0-compile-hardening.md; a dirty snapshot, so not a measurement): at most 1.4 s of CPU, 1.7 s of
+# wall time, 216 MiB of RSS in one process, 5.5 MiB and 18 entries in TMPDIR, and 1 MiB of outputs.
+# The workdir disk cap in MiB: the tmpfs that holds everything the compiler writes in its build dir, its private
+# TMPDIR included, and its file size limit.
+COMPILE_DISK_MB = 2048
+# The memory limit in MiB (MemoryMax, tmpfs pages included): at least twice COMPILE_DISK_MB (here four times), so
+# workdir_cap_bytes never halves the disk cap, and a full disk cap still leaves 6 GiB for the compiler itself.
+COMPILE_MEMORY_MB = 8192
+# The CPU count for the CPU-time cap: each process may use wall_s x COMPILE_CPUS seconds of CPU (1200 s at the
+# default 600 s timeout), room for a compiler that runs two threads for the whole wall limit.
+COMPILE_CPUS = 2
+# A compile's output cap in bytes, for each of stdout and stderr (the CappedRunner SandboxedCompileRunner uses by
+# default): 64 MiB, over 20000 times the largest compiler stderr the fixture scenarios and the layout app printed in
+# the same exploratory run (3210 bytes), so a compile like those keeps its whole output. It bounds what the host process
+# holds, since the runner's buffers lie outside the sandbox's memory limit, and what compile.stderr takes on disk,
+# when a generated source makes the compiler print without end (review finding). A stream past it
+# keeps its head and its last OUTPUT_TAIL_BYTES bytes, and a "lassi-sandbox:" line at the end of stderr says so.
+COMPILE_OUTPUT_CAP_BYTES = 64 << 20
 # How much of a failed setup's stderr a SandboxUnavailableError quotes.
 _STDERR_TAIL = 2000
 # SETUP_SCRIPT's done line: the marker, the two /proc/uptime readings, and the incomplete mark when set.
@@ -506,7 +576,10 @@ END {
 }"""
 
 # Positional layout: workdir, harness or "", toolchains root or "", disk cap in bytes, N, the N hidden roots, cpu
-# seconds, wall seconds, kill-after seconds, then the program argv. The steps and their order are listed in the
+# seconds, wall seconds, kill-after seconds, then, only when the spec sets the program's environment,
+# ENVIRONMENT_MARKER and one NAME=value element per variable, then the program argv. The marker makes the
+# program's argv `env -i -- NAME=value... <argv>`, so env, found on SANDBOX_PATH like every other tool the
+# chain runs, gives the program exactly those variables. The steps and their order are listed in the
 # module docstring. The script stays one constant text, not a set of smaller scripts, because it must be a single
 # `sh -c` argument that takes every path and number as a positional parameter: a second script would have to be
 # found on a path or passed through the first one's text. The staging tmpfs on /tmp holds: lower (the read-only
@@ -609,6 +682,10 @@ cpu=$1
 wall=$2
 kill_after=$3
 shift 3
+if [ "$1" = @ENVIRONMENT_MARKER@ ]; then
+  shift
+  set -- env -i -- "$@"
+fi
 status=0
 read -r started rest < /proc/uptime
 unshare --pid --ipc --fork --kill-child -- env -i PATH="$PATH" HOME="$workdir" LANG=C.UTF-8 TMPDIR=/tmp \
@@ -659,6 +736,7 @@ SETUP_SCRIPT = _embed(
         "MOUNT_CHECK": MOUNT_CHECK,
         "CONFINE_PROGRAM": CONFINE_PROGRAM,
         "COPY_BACK_PROGRAM": COPY_BACK_PROGRAM,
+        "ENVIRONMENT_MARKER": ENVIRONMENT_MARKER,
     },
 )
 
@@ -723,6 +801,28 @@ def _check_int(name: str, value: object) -> None:
         raise ValueError(f"{name} must be an integer >= 1, got {value!r}")
 
 
+def _checked_environment(environment: object) -> dict[str, str] | None:
+    """Return a copy of a program environment after checking it, or None for None (the program defaults).
+
+    Raise ValueError, naming the variable, unless `environment` is a mapping
+    (not a string) whose names are in ENVIRONMENT_NAMES and whose values are
+    strings without NUL.
+    """
+    if environment is None:
+        return None
+    if isinstance(environment, (str, bytes)) or not isinstance(environment, Mapping):
+        raise ValueError(f"a sandbox environment must be a mapping of names to values, got {environment!r}")
+    checked: dict[str, str] = {}
+    for name, value in environment.items():
+        if not isinstance(name, str) or name not in ENVIRONMENT_NAMES:
+            allowed = ", ".join(sorted(ENVIRONMENT_NAMES))
+            raise ValueError(f"the sandbox environment may not set {name!r}; allowed names: {allowed}")
+        if not isinstance(value, str) or "\0" in value:
+            raise ValueError(f"the sandbox environment's {name} must be a string without NUL, got {value!r}")
+        checked[name] = value
+    return checked
+
+
 @dataclass(frozen=True)
 class SandboxSpec:
     """Where a sandboxed run may write, what it sees, and its disk cap.
@@ -736,14 +836,20 @@ class SandboxSpec:
     toolchains root; at least one is required, and duplicates and roots
     under another root are dropped (first-seen order kept). `harness` and
     `toolchains`, when set, are bind-mounted read-only at their own paths.
-    `tasks_max` caps the tasks in the run's cgroup. ValueError is raised
+    `tasks_max` caps the tasks in the run's cgroup. `environment` is the
+    program's environment: None keeps the program defaults (PATH=
+    SANDBOX_PATH, HOME=<workdir>, LANG=C.UTF-8, TMPDIR=/tmp) and the P0.16
+    command; a mapping gives the program exactly those variables, with
+    names from ENVIRONMENT_NAMES and string values without NUL, and is kept
+    as a read-only copy. ValueError is raised
     when a path is relative or lies under one of PRIVATE_DIRS (the private
     tmpfs would hide it), when the workdir, the harness, or the toolchains
     root lies under one of SYSTEM_DIRS, when a hidden root is a filesystem
     root, when the workdir is or contains a hidden root, when the harness or
     the toolchains root is, contains, or lies under the workdir, or is or
-    contains a hidden root, or when tasks_max or disk_mb is not an integer
-    >= 1. The checks are lexical; callers resolve symbolic links first
+    contains a hidden root, when tasks_max or disk_mb is not an integer
+    >= 1, or when the environment is not such a mapping. The checks are
+    lexical; callers resolve symbolic links first
     (lassi.executors.native does). Paths are stored as Path and the roots as
     a tuple.
     """
@@ -754,9 +860,10 @@ class SandboxSpec:
     toolchains: Path | None = None
     tasks_max: int = 256
     disk_mb: int = WORKDIR_DISK_MB
+    environment: Mapping[str, str] | None = None
 
     def __post_init__(self) -> None:
-        """Normalize the paths to Path and check them, tasks_max, and disk_mb; raise ValueError on the first problem."""
+        """Normalize the paths to Path, copy the environment, and check every field; ValueError on the first problem."""
         if isinstance(self.hidden_roots, (str, os.PathLike)):
             raise ValueError(f"hidden_roots must be a sequence of paths, got {self.hidden_roots!r}")
         roots = tuple(Path(root) for root in self.hidden_roots)
@@ -783,6 +890,8 @@ class SandboxSpec:
         object.__setattr__(self, "hidden_roots", _outermost(roots))
         _check_int("tasks_max", self.tasks_max)
         _check_int("disk_mb", self.disk_mb)
+        environment = _checked_environment(self.environment)
+        object.__setattr__(self, "environment", None if environment is None else MappingProxyType(environment))
 
 
 @dataclass(frozen=True)
@@ -825,12 +934,22 @@ class SandboxResult:
     program_s: float | None = None
 
 
-def _check_request(argv: Sequence[str], limits: Limits) -> None:
-    """Raise ValueError unless argv is a non-empty sequence of strings and the limits can be enforced."""
+def _check_request(argv: Sequence[str], limits: Limits, environment: Mapping[str, str] | None = None) -> None:
+    """Raise ValueError unless argv is a non-empty sequence of strings and the limits can be enforced.
+
+    The program may not be named ENVIRONMENT_MARKER, which SETUP_SCRIPT
+    reads as the start of the program's environment. With an `environment`,
+    the program runs as `env -i -- NAME=value... <argv>`, so argv[0] may not
+    hold "=" (env would read it as a variable) or be "-".
+    """
     if isinstance(argv, str) or not argv:
         raise ValueError(f"argv must be a non-empty sequence of strings, got {argv!r}")
     if not all(isinstance(part, str) for part in argv):
         raise ValueError(f"every argv element must be a string, got {list(argv)!r}")
+    if argv[0] == ENVIRONMENT_MARKER:
+        raise ValueError(f"the program may not be named {ENVIRONMENT_MARKER!r}, the sandbox's environment marker")
+    if environment is not None and ("=" in argv[0] or argv[0] == "-"):
+        raise ValueError(f"with an environment, the program's name may not hold '=' or be '-', got {argv[0]!r}")
     if not (isinstance(limits.wall_s, (int, float)) and math.isfinite(limits.wall_s) and limits.wall_s > 0):
         raise ValueError(f"wall_s must be a finite number > 0, got {limits.wall_s!r}")
     for name in ("memory_mb", "cpus"):
@@ -872,10 +991,14 @@ def sandbox_command(spec: SandboxSpec, argv: Sequence[str], limits: Limits) -> l
     sandbox PATH=SANDBOX_PATH and, from this process's environment when set,
     PASSED_VARIABLES, read when called. Every path and argument is its own
     element after SETUP_SCRIPT (read when called), in the script's
-    positional layout. Raise ValueError when argv is empty, or wall_s is not
-    > 0, or memory_mb or cpus is below 1.
+    positional layout. When spec.environment is set, ENVIRONMENT_MARKER and
+    one NAME=value element per variable, in name order, come right before
+    argv, which stays the command's tail; with None the command is the
+    P0.16 command. Raise ValueError when argv is empty or names the program
+    as _check_request refuses, or wall_s is not > 0, or memory_mb or cpus
+    is below 1.
     """
-    _check_request(argv, limits)
+    _check_request(argv, limits, spec.environment)
     wall = _wall_seconds(limits)
     cpu = max(1, math.ceil(limits.wall_s * limits.cpus))
     optional = ["" if path is None else str(path) for path in (spec.harness, spec.toolchains)]
@@ -887,6 +1010,8 @@ def sandbox_command(spec: SandboxSpec, argv: Sequence[str], limits: Limits) -> l
     namespaces = ["unshare", "-rinmpfu", "--mount-proc", "--kill-child"]
     layout = [str(spec.workdir), *optional, str(workdir_cap_bytes(spec, limits)), str(len(roots)), *roots]
     layout += [str(cpu), str(wall), str(KILL_AFTER_S)]
+    if spec.environment is not None:
+        layout += [ENVIRONMENT_MARKER, *(f"{name}={spec.environment[name]}" for name in sorted(spec.environment))]
     setup = ["sh", "-c", SETUP_SCRIPT, "sh", *layout]
     return ["prlimit", "--core=1", "--", *environment, *scope, *namespaces, *setup, *argv]
 
@@ -1080,4 +1205,194 @@ class Sandbox:
             stderr_truncated=result.stderr_truncated,
             workdir_incomplete=incomplete or steps is None,
             program_s=None if steps is None else steps / UPTIME_STEPS_PER_S,
+        )
+
+
+def _timed_out(stderr: str, timeout_s: float) -> str:
+    """Return `stderr` ending with a "timed out" line, as the toolchains' runners end a timed-out command's."""
+    lines = stderr.rstrip("\n").split("\n")
+    if lines[-1].startswith("timed out"):
+        return stderr
+    if stderr and not stderr.endswith("\n"):
+        stderr += "\n"
+    return stderr + f"timed out after {timeout_s:g} s\n"
+
+
+def _compile_stderr(result: SandboxResult, cap_bytes: int | None, timeout_s: float) -> str:
+    """Return a compile's stderr ending with a "lassi-sandbox:" line for each thing the sandbox cut or stopped.
+
+    In order: a line for each stream past the output cap `cap_bytes` (None
+    when the runner does not name its cap); one when a limit killed the
+    compile before its wall limit (SandboxResult.killed: the memory limit or
+    the CPU-time limit); one when the whole sandbox was killed before its
+    done line (program_s None), so the build dir may lack the compiler's
+    outputs; and after a hang the "timed out" line last (_timed_out). A
+    compile that ended on its own and within the cap gets none.
+    """
+    cap = "the compile output cap" if cap_bytes is None else f"the compile output cap of {cap_bytes} bytes"
+    cuts = (("stdout", result.stdout_truncated), ("stderr", result.stderr_truncated))
+    notes = [
+        f"lassi-sandbox: the compiler's {stream} was longer than {cap}; only its head and its last "
+        f"{OUTPUT_TAIL_BYTES} bytes are kept"
+        for stream, cut in cuts
+        if cut
+    ]
+    if result.killed:
+        cpu = max(1, math.ceil(timeout_s * COMPILE_CPUS))
+        notes.append(
+            f"lassi-sandbox: the compile was killed before its wall limit, probably by its memory limit "
+            f"({COMPILE_MEMORY_MB} MiB) or its CPU-time limit ({cpu} s per process), or by a SIGKILL from within"
+        )
+    if result.program_s is None and not result.hang:
+        notes.append(
+            "lassi-sandbox: the compile sandbox was killed before it finished, so the build dir may lack the "
+            "compiler's outputs"
+        )
+    stderr = result.stderr
+    if notes:
+        if stderr and not stderr.endswith("\n"):
+            stderr += "\n"
+        stderr += "".join(f"{note}\n" for note in notes)
+    return _timed_out(stderr, timeout_s) if result.hang else stderr
+
+
+class SandboxedCompileRunner:
+    """A CommandRunner that compiles model-generated sources only inside the sandbox (P0.20).
+
+    Each call runs the compiler command as sandbox_command builds it for
+    spec(cwd) and limits(timeout_s), through Sandbox.run, so the P0.16
+    mechanisms cover the compile too: prlimit --core=1 (a compiler crash
+    stores no core with the host handler, Agent Rule 7), the namespaces, the
+    read-only host, and the capped overlay on the build dir. What the
+    compiler can read:
+
+    - its build dir (`cwd`, build()'s workdir), the one writable host
+      directory, and the pinned toolchains root `toolchains`, read-only;
+    - nothing else under the hidden roots, which the stage runner sets to
+      $HOME, the scratch root ($LASSI_SCRATCH), and the runs root
+      ($LASSI_RUNS_ROOT, and the run's own runs root; those set): only the
+      path skeleton to the build dir and the toolchains root shows there, so
+      a generated `#include` of an absolute path under them, another trial
+      included, finds no file;
+    - files elsewhere keep the host user's read permission, as for program
+      runs (Known limits in the module docstring): the sandbox hides those
+      roots, not the rest of the host.
+
+    The compiler's environment is exactly `environment` (names from
+    ENVIRONMENT_NAMES; HOME and TMPDIR refused) plus TMPDIR, its private
+    directory COMPILE_TMPDIR under the build dir, which the call creates
+    fresh (mode 0700) before the compile and removes afterwards. So its
+    temporary files stay in its own view, count toward the workdir disk
+    cap, and never land in the scratch root's shared temporary directory.
+
+    Limits: the wall limit is the toolchain's timeout (600 s by default);
+    memory, disk, and CPU time are COMPILE_MEMORY_MB, COMPILE_DISK_MB, and
+    COMPILE_CPUS, set with wide margin over what the fixture scenarios and
+    one benchmark app needed on alpha01 (exploratory, see the constants).
+    The setup adds about 0.3 s to each compile there (same run).
+
+    Output: the default inner runner is CappedRunner(COMPILE_OUTPUT_CAP_BYTES),
+    so each of stdout and stderr passes through whole up to that cap, far
+    above any compile's output (the P0.15 contract keeps compile.stderr
+    whole; OUTPUT_CAP_BYTES is for generated programs only), while a
+    generated source that makes the compiler print without end fills neither
+    the host's memory (the runner's buffers lie outside the sandbox's memory
+    limit) nor the disk under compile.stderr. Nothing is cut or stopped
+    silently: a "lassi-sandbox:" line ends stderr for each stream past the
+    cap (its head and its last OUTPUT_TAIL_BYTES bytes are kept), for a
+    compile a limit killed before its wall limit (status 137: the memory or
+    the CPU-time limit), and for one whose whole sandbox was killed (the
+    build dir may lack its outputs). The status is the compiler's in the
+    shell's form (a crash by SIGSEGV is 139). A compile that reaches the wall
+    limit returns -1 with stderr ending in a "timed out" line, as the
+    toolchains' runners do, so build() reports it as a timeout.
+    SandboxUnavailableError propagates, so nothing ever compiles unsandboxed
+    instead. env's own statuses (125, 126, 127) come back as the compiler's
+    (module docstring); the stage runner's --version check runs through this
+    same runner before the first build, so a compiler missing from the view
+    stops the run before any build.
+    """
+
+    def __init__(
+        self,
+        *,
+        environment: Mapping[str, str],
+        toolchains: Path,
+        hidden_roots: Sequence[Path],
+        runner: CommandRunner | None = None,
+    ) -> None:
+        """Keep a copy of the environment, the toolchains root, the hidden roots, and the inner runner.
+
+        `runner` None means CappedRunner(COMPILE_OUTPUT_CAP_BYTES), read
+        when the runner is made. Raise ValueError when the environment holds
+        a name outside ENVIRONMENT_NAMES, a value that is not a string
+        without NUL, or TMPDIR (each compile gets its own), or when no hidden
+        root is given.
+        """
+        checked = _checked_environment(environment)
+        if checked is None or "TMPDIR" in checked:
+            raise ValueError("a compile environment is a mapping without TMPDIR; each compile gets its own TMPDIR")
+        if isinstance(hidden_roots, (str, os.PathLike)) or not hidden_roots:
+            raise ValueError(f"a compile needs a sequence of hidden roots, got {hidden_roots!r}")
+        self.environment: dict[str, str] = checked
+        self.toolchains = Path(toolchains)
+        self.hidden_roots: tuple[Path, ...] = tuple(Path(root) for root in hidden_roots)
+        self.runner: CommandRunner = CappedRunner(COMPILE_OUTPUT_CAP_BYTES) if runner is None else runner
+
+    def __repr__(self) -> str:
+        """Show the class, the environment's variable names (never their values), and the roots."""
+        return (
+            f"{type(self).__name__}(names={sorted(self.environment)!r}, toolchains={str(self.toolchains)!r}, "
+            f"hidden_roots={[str(root) for root in self.hidden_roots]!r})"
+        )
+
+    def spec(self, workdir: Path) -> SandboxSpec:
+        """Return the SandboxSpec of a compile in the build dir `workdir`; it depends on `workdir` alone.
+
+        The workdir, the toolchains root, and the hidden roots are resolved
+        (symbolic links followed), so a link cannot carry a hidden root into
+        view. There is no harness, the disk cap is COMPILE_DISK_MB, and the
+        environment is the compile environment plus TMPDIR=<build
+        dir>/COMPILE_TMPDIR. SandboxSpec raises ValueError for a layout it
+        refuses.
+        """
+        build = Path(workdir).resolve()
+        return SandboxSpec(
+            workdir=build,
+            hidden_roots=tuple(root.resolve() for root in self.hidden_roots),
+            toolchains=self.toolchains.resolve(),
+            disk_mb=COMPILE_DISK_MB,
+            environment={**self.environment, "TMPDIR": str(build / COMPILE_TMPDIR)},
+        )
+
+    def limits(self, timeout_s: float) -> Limits:
+        """Return a compile's Limits: the toolchain's timeout as wall time, COMPILE_MEMORY_MB, and COMPILE_CPUS."""
+        return Limits(wall_s=timeout_s, memory_mb=COMPILE_MEMORY_MB, cpus=COMPILE_CPUS)
+
+    def __call__(self, argv: Sequence[str], cwd: Path, timeout_s: float) -> CommandResult:
+        """Compile `argv` in the build dir `cwd` inside the sandbox; return the compiler's status and output.
+
+        The output is whole up to the runner's cap, and stderr ends with the
+        sandbox's own lines as _compile_stderr adds them. Raise
+        SandboxUnavailableError when the private TMPDIR cannot be created or
+        the sandbox cannot run the compile, and ValueError for a spec or
+        request the sandbox refuses.
+        """
+        spec = self.spec(cwd)
+        tmpdir = spec.workdir / COMPILE_TMPDIR
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        try:
+            tmpdir.mkdir(mode=0o700)
+        except OSError as exc:
+            raise SandboxUnavailableError(f"cannot create the compile's private TMPDIR {tmpdir}: {exc}") from exc
+        try:
+            result = Sandbox(runner=self.runner).run(spec, argv, self.limits(timeout_s))
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        return CommandResult(
+            -1 if result.hang else result.returncode,
+            result.stdout,
+            _compile_stderr(result, getattr(self.runner, "cap_bytes", None), timeout_s),
+            stdout_truncated=result.stdout_truncated,
+            stderr_truncated=result.stderr_truncated,
         )

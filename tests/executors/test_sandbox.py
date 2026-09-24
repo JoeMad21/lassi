@@ -649,8 +649,10 @@ def test_sandbox_spec_is_frozen_with_defaults(sandbox: ModuleType) -> None:
     assert spec.tasks_max == 256
     assert spec.disk_mb == sandbox.WORKDIR_DISK_MB
     assert spec.hidden_roots == (SCRATCH,)
+    # P0.20 adds `environment`, the program's allowlisted environment; None keeps the program defaults.
+    assert spec.environment is None
     assert {f.name for f in dataclasses.fields(sandbox.SandboxSpec)} == {
-        "workdir", "hidden_roots", "harness", "toolchains", "tasks_max", "disk_mb"
+        "workdir", "hidden_roots", "harness", "toolchains", "tasks_max", "disk_mb", "environment"
     }
     with pytest.raises(dataclasses.FrozenInstanceError):
         spec.workdir = HOME  # type: ignore[misc]
@@ -1150,6 +1152,23 @@ def test_setup_under_stubs_runs_the_program_in_nested_pid_and_ipc_namespaces_at_
     ], call  # fmt: skip
 
 
+def test_setup_under_stubs_gives_the_program_exactly_its_environment_after_the_marker(
+    sandbox: ModuleType, tmp_path: Path
+) -> None:
+    # P0.20: with SandboxSpec.environment set, the marker and one NAME=value element per variable come before
+    # the program argv, and the chain ends `timeout ... env -i -- NAME=value... <argv>`: env (from the setup's
+    # PATH, like every tool of the chain) gives the program exactly those variables, and no shell parses them.
+    layout, _values = stub_layout(tmp_path)
+    head, program = layout[:-2], layout[-2:]
+    variables = ["LANG=C", "PATH=/opt/a b/bin:$(reboot)", "TMPDIR=/x/t `id`"]
+    run = run_setup_with_stubs(sandbox, tmp_path, [*head, sandbox.ENVIRONMENT_MARKER, *variables, *program])
+    call = run.calls[the_program_call(run.calls)]
+    tail = ["timeout", "--kill-after=2", "3", "env", "-i", "--", *variables, *program]
+    assert call[-len(tail) :] == tail, call
+    assert sandbox.ENVIRONMENT_MARKER not in call
+    assert run.returncode == 0, run.stderr
+
+
 def test_setup_under_stubs_makes_nothing_writable_again_before_the_program_ends(
     full_run: tuple[StubRun, dict[str, str]],
 ) -> None:
@@ -1416,12 +1435,34 @@ def test_mount_check_refuses_any_other_writable_mount_and_names_it(
 
 
 def run_copy_back(
-    sandbox: ModuleType, upper: Path, target: Path, cap: int = 1 << 30, program: str | None = None
+    sandbox: ModuleType,
+    upper: Path,
+    target: Path,
+    cap: int = 1 << 30,
+    program: str | None = None,
+    prefix: Sequence[str] = (),
 ) -> subprocess.CompletedProcess[bytes]:
-    """Run COPY_BACK_PROGRAM (or `program`) as SETUP_SCRIPT does (python3 -I -S -c) with this interpreter."""
+    """Run COPY_BACK_PROGRAM (or `program`) as SETUP_SCRIPT does (python3 -I -S -c) with this interpreter.
+
+    `prefix` goes before the interpreter, for example namespace_root_prefix().
+    """
     code = sandbox.COPY_BACK_PROGRAM if program is None else program
-    argv = [sys.executable, "-I", "-S", "-c", code, str(upper), str(target), str(cap)]
+    argv = [*prefix, sys.executable, "-I", "-S", "-c", code, str(upper), str(target), str(cap)]
     return subprocess.run(argv, capture_output=True, timeout=60, check=False)
+
+
+def namespace_root_prefix() -> list[str]:
+    """Return [] when this process is root, else ["unshare", "-r"] when that works here; skip the test otherwise.
+
+    The sandbox runs its copy-back as root of the run's user namespace, where it may read a file the program left
+    at mode 0; a test that needs that must run the copy-back the same way.
+    """
+    if os.geteuid() == 0:
+        return []
+    unshare = shutil.which("unshare")
+    if unshare is None or subprocess.run([unshare, "-r", "true"], capture_output=True, check=False).returncode != 0:
+        pytest.skip("reading a mode-0 file needs root or an unprivileged user namespace (unshare -r)")
+    return [unshare, "-r"]
 
 
 def tree_of(root: Path) -> dict[str, bytes | None]:
@@ -1625,7 +1666,9 @@ def test_copy_back_adds_owner_read_write_and_removes_group_and_other_write(sandb
     # A read-only host file is replaced too: the new file is renamed over it, never opened for writing.
     (target / "tool").write_bytes(b"old")
     (target / "tool").chmod(0o444)
-    done = run_copy_back(sandbox, upper, target)
+    # In the sandbox the copy-back runs as root of the run's user namespace, which may read the program's mode-0
+    # file; an unprivileged test process may not, so it runs the copy-back the same way (unshare -r) or skips.
+    done = run_copy_back(sandbox, upper, target, prefix=namespace_root_prefix())
     assert done.returncode == 0, done
     modes = {path.name: stat.S_IMODE(path.stat().st_mode) for path in target.iterdir()}
     assert modes == {"open.bin": 0o755, "locked.bin": 0o600, "tool": 0o751}

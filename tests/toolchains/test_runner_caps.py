@@ -276,3 +276,35 @@ def test_the_runner_never_holds_more_than_the_cap_of_a_flood(tmp_path: Path) -> 
     assert (report["stdout_truncated"], report["stderr_truncated"]) == (True, True), report
     assert report["stdout_bytes"] <= _base.OUTPUT_CAP_BYTES and report["stderr_bytes"] <= _base.OUTPUT_CAP_BYTES
     assert report["after_kib"] - report["before_kib"] < (2 * _base.OUTPUT_CAP_BYTES >> 10) + SLACK_MIB * 1024, report
+
+
+# ---------------------------------------------------------------------------
+# CappedRunner: a runner with a cap of its own (P0.20, the compile sandbox's runner)
+
+
+def test_a_capped_runner_keeps_the_head_and_the_tail_at_its_own_cap(tmp_path: Path) -> None:
+    # The compile sandbox caps a compiler's output far above OUTPUT_CAP_BYTES, with a runner that keeps its own cap.
+    cap = 3 * _base.OUTPUT_CAP_BYTES
+    out, err = cap + 12345, cap - 1
+    runner = _base.CappedRunner(cap)
+    assert runner.cap_bytes == cap
+    result = runner([sys.executable, "-c", WRITER, str(out), str(err), "6"], tmp_path, 120.0)
+    assert result.returncode == 6
+    data = pattern(out, b"o")
+    tail = _base.OUTPUT_TAIL_BYTES
+    assert result.stdout == (data[: cap - tail] + data[-tail:]).decode("ascii")
+    assert result.stderr == pattern(err, b"e").decode("ascii"), "within the cap, a stream is kept whole"
+    assert (result.stdout_truncated, result.stderr_truncated) == (True, False)
+
+
+def test_a_capped_runner_is_exported_with_the_other_runners() -> None:
+    from lassi import toolchains
+
+    assert toolchains.CappedRunner is _base.CappedRunner
+    assert "CappedRunner" in toolchains.__all__
+
+
+@pytest.mark.parametrize("cap", [0, -1, _base.OUTPUT_TAIL_BYTES, True, 2.5, None, "1048576"])
+def test_a_capped_runner_refuses_a_cap_that_cannot_hold_its_tail(cap: object) -> None:
+    with pytest.raises(ValueError):
+        _base.CappedRunner(cap)  # type: ignore[arg-type]

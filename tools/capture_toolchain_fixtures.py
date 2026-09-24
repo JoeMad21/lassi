@@ -13,20 +13,27 @@ and never runs a built program.
 
 Each toolchain is built exactly as the stage runner builds it, with
 lassi.core.runner.build_toolchain: the pinned executable under
-$LASSI_TOOLCHAINS, the clean compile environment (PATH, LANG=C, LC_ALL=C,
-HOME, TMPDIR, and linked prefixes such as NVHPC_CUDA_HOME), and EnvRunner. An
+$LASSI_TOOLCHAINS, checked by its --version against the pin's expected
+version, the clean compile environment (PATH, LANG=C, LC_ALL=C, and linked
+prefixes such as NVHPC_CUDA_HOME; no HOME), and the sandboxed compile runner
+(lassi.executors.sandbox.SandboxedCompileRunner, P0.20), which gives each
+compile a private TMPDIR under its workdir. An
 override builds a subclass of the preset that sets only that attribute, so
-the command line keeps the adapter's form. Each scenario builds once, with
-the adapter's own build(), in a fresh workdir <out>/work/<scenario>/, and
-its compile.stderr is copied byte for byte to <out>/<scenario>.stderr.
+the command line keeps the adapter's form. build_toolchain runs once per
+toolchain and once more per scenario with an override, before anything is
+created, each time with its --version check; every other scenario reuses
+its toolchain's build, as a run reuses one build for all its trials. Each
+scenario builds once, with the adapter's own build(), in a fresh workdir
+<out>/work/<scenario>/, and its compile.stderr is copied byte for byte to
+<out>/<scenario>.stderr.
 
 <out>/manifest.json (plain ASCII JSON) records the capture's provenance
 (Agent Rules 1 and 10): date (ISO 8601 with an offset), commit and dirty
 (from git), snapshot_of, rx_run_id ($LASSI_RX_RUN_ID or null), host, and
 per toolchain its pin versions, every pair of each pin file, executable,
 environment variable names (values never, except the locale), and the
-non-blank lines and exit status of `<executable> --version` run in the
-same environment; per scenario its
+non-blank lines and exit status of `<executable> --version` as
+build_toolchain's version check ran it; per scenario its
 overrides (class attribute -> value, empty for the preset), the argv the
 adapter ran (the sources relative to the workdir), the exit status, the
 stderr sha256 and size, and how many Diagnostics the adapter parses from it.
@@ -35,9 +42,10 @@ tools/rx.py sends a dirty working tree as a snapshot commit, which is clean
 inside the slot, so dirty is false there; snapshot_of then names the commit
 the snapshot was made from. A capture is reportable only when dirty is false
 and snapshot_of is null (AGENTS.md, Results). Before anything is created,
-each toolchain's --version must exit 0 and print its pin's EXPECT_VERSION,
-so a capture is never labeled with a pin its compiler is not (Agent Rule
-10). The copy is byte for byte to
+build_toolchain checks each toolchain's --version: it must exit 0 and
+print its pin's EXPECT_VERSION, so a capture is never labeled with a pin
+its compiler is not (Agent Rule 10); the tool reuses that check and keeps
+no copy of it. The copy is byte for byte to
 compile.stderr, which build() writes from the compiler's stderr decoded as
 UTF-8 with errors replaced: a byte that is not valid UTF-8 arrives as
 U+FFFD, exactly as a run records it.
@@ -54,6 +62,7 @@ with any byte that is not ASCII shown as a backslash escape.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -72,6 +81,7 @@ sys.path.insert(0, str(REPO))
 
 from lassi.core.registry import DEFAULT_REGISTRY, Registry  # noqa: E402
 from lassi.core.runner import BuiltToolchain, RunError, build_toolchain  # noqa: E402
+from lassi.executors.sandbox import SandboxUnavailableError  # noqa: E402
 from lassi.toolchains import STDERR_ATTACHMENT, CommandResult, CommandRunner  # noqa: E402
 
 FIXTURES = REPO / "tests" / "toolchains" / "fixtures"
@@ -90,9 +100,8 @@ ENTRY_KEYS = frozenset({"toolchain", "scenario", *OVERRIDES})
 LOCALE_NAMES = ("LANG", "LC_ALL")
 # The subject tools/rx.py gives the snapshot commit of a dirty working tree; the group is the commit it came from.
 SNAPSHOT_SUBJECT = re.compile(r"rx snapshot of ([0-9a-f]{7,40})")
-# How many non-blank --version lines the manifest keeps, and how long --version and git may take, in seconds.
+# How many non-blank --version lines the manifest keeps, and how long git may take, in seconds.
 VERSION_LINES_MAX = 20
-VERSION_TIMEOUT_S = 120.0
 GIT_TIMEOUT_S = 60.0
 
 # The status main() returns when it refuses to run or a capture fails.
@@ -193,41 +202,36 @@ def scenario_registry(scenario: Scenario) -> Registry:
 # Capturing
 
 
-def toolchain_record(built: BuiltToolchain, cwd: Path) -> dict[str, Any]:
+def toolchain_record(built: BuiltToolchain) -> dict[str, Any]:
     """Return the manifest entry of a pinned toolchain: pins, pin files, executable, variable names, locale, --version.
 
-    Raises CaptureError when the toolchain declares no pin, or when
-    `<executable> --version` exits nonzero or does not print the
-    EXPECT_VERSION of the toolchain's own pin.
+    The --version lines and exit status are those build_toolchain observed
+    when it checked the compiler against the pin before it returned `built`
+    (BuiltToolchain.version and version_status), so the tool keeps no check
+    of its own. Raises CaptureError when the toolchain declares no pin.
     """
     if built.executable is None or built.environment is None:
         raise CaptureError(f"toolchain {built.name!r} declares no pin; the fixtures come from pinned compilers")
     environment = built.environment
-    result = built.toolchain.runner([built.executable, "--version"], cwd, VERSION_TIMEOUT_S)
-    output = result.stdout + result.stderr
-    pin = type(built.toolchain).PIN
-    expected = built.pins[pin].get("EXPECT_VERSION", "")
-    if not expected or result.returncode != 0 or expected not in output:
-        raise CaptureError(
-            f"{built.executable} --version exited {result.returncode} and must print the EXPECT_VERSION of "
-            f"toolchains/{pin}.pin ({expected!r}); the capture would not be of the pinned compiler"
-        )
-    lines = [line.rstrip() for line in output.splitlines() if line.strip()]
     return {
         "pins": {pin: values["VERSION"] for pin, values in built.pins.items()},
         "pin_files": {pin: dict(values) for pin, values in built.pins.items()},
         "executable": built.executable,
         "environment": sorted(environment),
         "locale": {name: environment[name] for name in LOCALE_NAMES if name in environment},
-        "version": lines[:VERSION_LINES_MAX],
-        "version_exit_status": result.returncode,
+        "version": list(built.version[:VERSION_LINES_MAX]),
+        "version_exit_status": built.version_status,
     }
 
 
-def capture_scenario(scenario: Scenario, out: Path, root: Path | None) -> tuple[dict[str, Any], bytes]:
-    """Build one scenario in <out>/work/<name>/, copy its stderr to <out>/<name>.stderr; return its entry and bytes."""
-    built = build_toolchain(scenario.toolchain, root, scenario_registry(scenario))
-    toolchain = built.toolchain
+def capture_scenario(scenario: Scenario, built: BuiltToolchain, out: Path) -> tuple[dict[str, Any], bytes]:
+    """Build one scenario in <out>/work/<name>/, copy its stderr to <out>/<name>.stderr; return its entry and bytes.
+
+    `built` is the scenario's toolchain as build_toolchain built it; the
+    scenario compiles with a shallow copy of it whose runner records the
+    command, so `built` itself stays as it was for the next scenario.
+    """
+    toolchain = copy.copy(built.toolchain)
     recorder = _Recorder(toolchain.runner)
     toolchain.runner = recorder
     workdir = out / WORK_DIR / scenario.name
@@ -359,15 +363,21 @@ def capture(chosen: Sequence[Scenario], out: Path, root: Path | None, shown: boo
     date = datetime.now().astimezone().isoformat(timespec="seconds")
     names = sorted({scenario.toolchain for scenario in chosen})
     built = {name: build_toolchain(name, root) for name in names}
-    for scenario in chosen:
-        build_toolchain(scenario.toolchain, root, scenario_registry(scenario))
-    toolchains = {name: toolchain_record(built[name], Path.cwd()) for name in names}
+    prepared = {
+        scenario.name: (
+            build_toolchain(scenario.toolchain, root, scenario_registry(scenario))
+            if scenario.overrides
+            else built[scenario.toolchain]
+        )
+        for scenario in chosen
+    }
+    toolchains = {name: toolchain_record(built[name]) for name in names}
     out.mkdir(parents=True, exist_ok=True)
     print(f"out dir: {out}", flush=True)
     commit, dirty = git_state()
     scenarios: dict[str, Any] = {}
     for scenario in chosen:
-        entry, data = capture_scenario(scenario, out, root)
+        entry, data = capture_scenario(scenario, prepared[scenario.name], out)
         scenarios[scenario.name] = entry
         print(
             f"{scenario.name}  {scenario.toolchain}  exit {entry['exit_status']}  stderr {entry['stderr_bytes']} "
@@ -400,7 +410,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         out = out_dir(args.out, os.environ["LASSI_RUNS_ROOT"])
         chosen = _chosen(load_scenarios(), args.only)
         manifest = capture(chosen, out, Path(toolchains) if toolchains else None, args.show)
-    except (CaptureError, RunError) as error:
+    except (CaptureError, RunError, SandboxUnavailableError) as error:
         print(f"capture_toolchain_fixtures: {error}", file=sys.stderr)
         return REFUSED
     (out / MANIFEST).write_bytes((json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("ascii"))

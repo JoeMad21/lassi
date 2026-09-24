@@ -51,4 +51,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.17 | READY | Parse the compiler error formats the P0.15 probes found unread | P0.15 | nvlink undefined reference, ptxas file-line error, nvc++ driver error lines; seen only in exploratory P0.15 probes (rx ids in plans/p0-core.md P0.17) |
 | P0.18 | DONE | Carry run provenance in each Trial | P0.11 | Trial.provenance {commit, dirty, device, sdk, date} copied from provenance.json by the runner; trial.md, run.md, and the Parquet trials table show it; Result Record lines of OQ-008 mirrored here |
 | P0.19 | READY | Install CUDA 12.6.3 from the redistributable archives | P0.7 | OQ-010 answered (b), 2026-09-23; check the 120G scratch cap before staging |
-| P0.20 | READY | Harden compiles of generated sources | P0.16 | compile-side items from the P0.11 audit and the P0.16 spike: host includes under the hidden roots, HOME, TMPDIR check, --version against the pin, core limit 1 |
+| P0.20 | ACTIVE | Harden compiles of generated sources | P0.16 | implementation committed after review; acceptance from the clean commit and the bible update follow |

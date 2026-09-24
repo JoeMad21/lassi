@@ -57,20 +57,40 @@ host), resolve inside it (Agent Rule 7). The tree holds:
 
 Pinned toolchains (Agent Rule 10): a toolchain class that declares PIN and
 PIN_BIN is built as factory(executable=<toolchains root>/<PREFIX_NAME>/
-<PIN_BIN>, runner=EnvRunner(env)), where the toolchains root is the
-toolchains_root option, else $LASSI_TOOLCHAINS, and the pin is read from
-toolchains/<PIN>.pin. The compile environment is the parent's PATH, LANG=C
-and LC_ALL=C (ASCII diagnostics), HOME when set, TMPDIR (required, so no
-compiler writes temporary files to /tmp on the root filesystem), and each
-variable the pin names (NVHPC_CUDA_HOME for toolchains/nvhpc.pin); nothing
-else, so a variable such as NVCC_PREPEND_FLAGS never reaches a compile. A
-class without PIN (a test fake) is built as factory(). build_toolchain is
-that construction for one registry name, public so that a tool compiles
-exactly as a run does; the runner builds every bound toolchain with it. A
-trial's toolchain_pins records the pins of the toolchain that builds its
-target language; provenance.json records every bound toolchain's pins.
-git, for the commit and dirty flag, runs through lassi.toolchains.EnvRunner,
-the audited command runner, so this module starts no process itself.
+<PIN_BIN>, runner=SandboxedCompileRunner(...)), where the toolchains root is
+the toolchains_root option, else $LASSI_TOOLCHAINS, resolved once (links and
+`..` segments followed), and the pin is read from toolchains/<PIN>.pin. The
+executable, each linked prefix, and the sandbox's read-only toolchains root
+all come from that resolved root, which is what a compile sees, and an
+executable or prefix that resolves outside it is refused. The compile
+environment is the parent's PATH, LANG=C and LC_ALL=C (ASCII diagnostics),
+and each variable the pin names (NVHPC_CUDA_HOME for toolchains/nvhpc.pin);
+nothing else, so a variable such as NVCC_PREPEND_FLAGS never reaches a
+compile, and HOME stays out on purpose (P0.20). Every compile of generated
+sources runs in the sandbox (lassi.executors.sandbox.SandboxedCompileRunner,
+P0.20): its build dir is the one writable directory, the toolchains root is
+read-only, $HOME, $LASSI_SCRATCH, and $LASSI_RUNS_ROOT (those set) and the
+run's own runs root are hidden, it runs under prlimit --core=1, and it gets
+a private TMPDIR under its build dir. TMPDIR itself is still required, and
+when $LASSI_SCRATCH is set it must resolve inside it (Agent Rule 7). The
+scratch root is hidden, and TMPDIR checked against it, only when
+$LASSI_SCRATCH is set, as the gate sets it on the build host; without it a
+compile still hides $HOME and the runs root. Before a toolchain is used, the
+compile layout is checked as the sandbox checks it, and `<executable>
+--version` runs once through the toolchain's own compile runner (so in the
+sandbox, with the builds' environment and view, in a fresh directory under
+TMPDIR) and must print the pin's EXPECT_VERSION; that also proves the
+compiler reachable in the compile's view. Every refusal comes before the
+run directory exists, and so does a SandboxUnavailableError from the
+--version check. A class without PIN (a test fake) is built as factory().
+build_toolchain is that construction for one registry name, public so that
+a tool compiles exactly as a run does; the runner builds every bound
+toolchain with it. A trial's toolchain_pins records the pins of the
+toolchain that builds its target language; provenance.json records every
+bound toolchain's pins. git, for the commit and dirty flag, runs through
+lassi.toolchains.EnvRunner, the audited command runner, and every compiler
+command through the sandbox's runner, so this module starts no process
+itself.
 """
 
 from __future__ import annotations
@@ -79,6 +99,8 @@ import dataclasses
 import os
 import platform
 import re
+import shutil
+import tempfile
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -104,6 +126,7 @@ from lassi.core.stages import PURPOSE, RunContext
 from lassi.core.store import TextStore, write_trial
 from lassi.core.trial_md import fenced, fmt, fmt_provenance
 from lassi.executors import workdir
+from lassi.executors.sandbox import SandboxedCompileRunner
 from lassi.llm import model_info
 from lassi.prompts import render
 from lassi.toolchains import EnvRunner
@@ -132,6 +155,14 @@ _RUN_TREE_NAMES = frozenset({"texts", PARQUET_DIR, RESOLVED_RECIPE, TOOLCHAINS_J
 _NOT_CARRIED_OUT = ("context", "oracle", "profiler", "adversary", "metrics", "refine", "score", "agents", "judges")
 # How long git may take to report the commit or the dirty flag, in seconds.
 _GIT_TIMEOUT_S = 60.0
+# How long a pinned compiler's --version may take, in seconds, and the name prefix of the fresh directory under
+# TMPDIR it runs in.
+_VERSION_TIMEOUT_S = 120.0
+_VERSION_PROBE_PREFIX = "lassi-version-check."
+# The build dir, under the runs root, against which the compile layout is checked before a run (never created).
+_LAYOUT_PROBE = "lassi-layout-check"
+# The environment variables that name the roots every compile hides (P0.20), in order.
+_COMPILE_HIDDEN_VARIABLES = ("HOME", "LASSI_SCRATCH", "LASSI_RUNS_ROOT")
 
 
 class RunError(RuntimeError):
@@ -198,7 +229,10 @@ class BuiltToolchain:
     build_toolchain returns one with no languages; the runner fills them in
     for each toolchain a recipe binds. `executable` and `environment` are
     None for a toolchain without a pin; `pins` maps each pin it uses to the
-    pin file's pairs.
+    pin file's pairs. `version` holds the non-blank lines the pinned
+    compiler's `--version` printed when build_toolchain checked it against
+    the pin's EXPECT_VERSION, and `version_status` the exit status it
+    observed (empty and None without a pin).
     """
 
     name: str
@@ -207,6 +241,8 @@ class BuiltToolchain:
     executable: str | None
     environment: dict[str, str] | None
     pins: dict[str, dict[str, str]]
+    version: tuple[str, ...] = ()
+    version_status: int | None = None
 
 
 @dataclass(frozen=True)
@@ -239,8 +275,11 @@ def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
     Raises RecipeError when the recipe does not load and RunError when the
     run cannot start (see the module docstring); both come before any
     directory is created or any model is asked. A component's own errors,
-    such as SandboxUnavailableError from an executor, propagate; one raised
-    during the trials leaves provenance.json with status "failed".
+    such as SandboxUnavailableError from an executor or a sandboxed compile,
+    propagate; one raised during the trials leaves provenance.json with
+    status "failed". The toolchains' --version checks run in the compile
+    sandbox before any directory is created, so a sandbox that cannot run
+    them raises SandboxUnavailableError then.
     """
     run = _prepare(Path(path), options, datetime.now(timezone.utc))
     run_dir = run.run_dir
@@ -266,7 +305,8 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     registry = DEFAULT_REGISTRY if options.registry is None else options.registry
     recipe = _load(path, options, registry)
     settings = _settings(recipe)
-    run_dir = _runs_root(options, recipe) / RUNS_DIR / _run_id(options, started)
+    runs_root = _runs_root(options, recipe)
+    run_dir = runs_root / RUNS_DIR / _run_id(options, started)
     _check_location(run_dir, f"the run directory {run_dir}")
     if run_dir.exists():
         raise RunError(f"the run directory {run_dir} already exists; choose another run id")
@@ -275,7 +315,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id)
     if "needs_reference" in backend.capabilities and not hasattr(backend, "with_reference"):
         raise RunError(f"LLMBackend {settings.backend!r} needs the reference target but has no with_reference()")
-    toolchains = _toolchains(recipe, registry, _toolchains_root(options))
+    toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
     pins = _trial_pins(toolchains)
     target_pins = {
         direction.target: _trial_pins(built for built in toolchains if direction.target in built.languages)
@@ -579,40 +619,86 @@ def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
 # Toolchains and pins
 
 
-def _toolchains(recipe: Recipe, registry: Registry, root: Path | None) -> tuple[BuiltToolchain, ...]:
-    """Build each toolchain the recipe binds, once per registry name, with build_toolchain, and set its languages."""
+def _toolchains(
+    recipe: Recipe, registry: Registry, root: Path | None, build_root: Path | None = None
+) -> tuple[BuiltToolchain, ...]:
+    """Build each toolchain the recipe binds, once per registry name, with build_toolchain, and set its languages.
+
+    `build_root` is the run's runs root, which every compile hides (see
+    build_toolchain).
+    """
     languages: dict[str, list[str]] = {}
     for language, name in sorted(recipe.data.get("toolchain", {}).items()):
         languages.setdefault(name, []).append(language)
     return tuple(
-        dataclasses.replace(build_toolchain(name, root, registry), languages=tuple(bound))
+        dataclasses.replace(build_toolchain(name, root, registry, build_root=build_root), languages=tuple(bound))
         for name, bound in languages.items()
     )
 
 
-def build_toolchain(name: str, root: Path | None, registry: Registry = DEFAULT_REGISTRY) -> BuiltToolchain:
+def build_toolchain(
+    name: str, root: Path | None, registry: Registry = DEFAULT_REGISTRY, *, build_root: Path | None = None
+) -> BuiltToolchain:
     """Build the toolchain registered as `name` exactly as the stage runner builds it, with no languages.
 
     A class that declares PIN gets its pinned executable under the
     toolchains root `root` (None means none is set, which is refused), a
     clean compile environment, and the linked prefixes its pin names, run
-    through EnvRunner (see the module docstring); a class without PIN is
-    built as factory(). Raises RunError, saying what to install or set,
-    when the pin file, the root, the executable, a linked prefix, or TMPDIR
-    is missing. The runner builds every bound toolchain through this, so a
-    tool that calls it compiles with the same command, executable, and
-    environment as a run.
+    through SandboxedCompileRunner (see the module docstring), after its
+    `--version` output was checked against the pin's EXPECT_VERSION through
+    that same runner; a class without PIN is built as factory().
+    `build_root`, when given, is the directory the build dirs lie under (a
+    run passes its runs root): every compile hides it, apart from its own
+    build dir, and the compile layout is checked against a build dir under
+    it first. Raises RunError, saying what to install or set, when the pin
+    file, the root, the executable (or it resolves outside the root), a
+    linked prefix, TMPDIR (unset, or outside $LASSI_SCRATCH), or every
+    hidden root is missing, when a hidden root is not absolute, when the
+    sandbox refuses the compile layout, or when the compiler is not the
+    pinned version; SandboxUnavailableError when the sandbox cannot run the
+    --version check. The runner builds every bound toolchain through this,
+    so a tool that calls it compiles with the same command, executable,
+    environment, and sandbox as a run.
     """
     factory = registry.get("Toolchain", name).factory
     if getattr(factory, "PIN", None) is None:
         return BuiltToolchain(name, (), factory(), None, None, {})
-    return _pinned_toolchain(name, factory, root)
+    return _pinned_toolchain(name, factory, root, build_root)
 
 
-def _pinned_toolchain(name: str, factory: type, root: Path | None) -> BuiltToolchain:
-    """Build a toolchain with its pinned executable and a clean compile environment; RunError says what is missing."""
+def _pinned_toolchain(name: str, factory: type, root: Path | None, build_root: Path | None) -> BuiltToolchain:
+    """Build a toolchain with its pinned executable and the sandboxed compile runner, checked by --version.
+
+    Every refusal is a RunError that says what is missing, raised before any
+    process starts: the pin file, the root, the executable, TMPDIR (unset,
+    or outside $LASSI_SCRATCH), a hidden root, a linked prefix, or a compile
+    layout the sandbox refuses. Then `<executable> --version` must print the
+    pin's EXPECT_VERSION in the compile sandbox.
+    """
     pin_name = factory.PIN
     pin = _pin(pin_name)
+    resolved, executable = _pinned_executable(name, factory, pin, root)
+    tmpdir = _checked_tmpdir()
+    hidden_roots = _compile_hidden_roots(build_root)
+    environment = _compile_environment()
+    pins = {pin_name: pin, **_linked_pins(name, pin_name, pin, resolved, environment)}
+    runner = _compile_runner(name, environment, resolved, hidden_roots, build_root)
+    version, status = _checked_version(name, executable, runner, Path(tmpdir), pin_name, pin)
+    toolchain = factory(executable=str(executable), runner=runner)
+    return BuiltToolchain(name, (), toolchain, str(executable), environment, pins, version, status)
+
+
+def _pinned_executable(name: str, factory: type, pin: Mapping[str, str], root: Path | None) -> tuple[Path, Path]:
+    """Return the resolved toolchains root and the pinned executable under it; RunError says what is missing.
+
+    The root is resolved once (symbolic links and `..` segments followed),
+    and the executable, every linked prefix, and the sandbox's read-only
+    toolchains root all come from that resolved root, which is what a
+    compile sees; an unresolved path would not exist in the compile's view.
+    The executable must also resolve inside the root, since nothing outside
+    it is exposed to a compile.
+    """
+    pin_name = factory.PIN
     if root is None:
         raise RunError(
             f"toolchain {name!r} uses the pinned {pin_name} {pin['VERSION']}, but no toolchains root is set; "
@@ -625,14 +711,32 @@ def _pinned_toolchain(name: str, factory: type, root: Path | None) -> BuiltToolc
     except (KeyError, ValueError) as error:
         message = f"toolchain {name!r}: PIN_BIN {factory.PIN_BIN!r} does not fit toolchains/{pin_name}.pin"
         raise RunError(f"{message} ({error!r})") from None
-    executable = root / pin["PREFIX_NAME"] / relative
+    resolved = root.resolve()
+    executable = resolved / pin["PREFIX_NAME"] / relative
     if not executable.is_file():
         raise RunError(
             f"toolchain {name!r}: the pinned compiler {executable} does not exist; "
             f"install it on the build host with toolchains/{pin_name}.sh"
         )
-    environment = _compile_environment()
-    pins = {pin_name: pin}
+    target = executable.resolve()
+    if not _within(target, resolved):
+        raise RunError(
+            f"toolchain {name!r}: the pinned compiler {executable} resolves to {target}, outside the toolchains root "
+            f"{resolved}, and a compile sees only that root; install it there with toolchains/{pin_name}.sh"
+        )
+    return resolved, executable
+
+
+def _linked_pins(
+    name: str, pin_name: str, pin: Mapping[str, str], root: Path, environment: dict[str, str]
+) -> dict[str, dict[str, str]]:
+    """Set each linked prefix the pin names in `environment` and return the linked pins, by pin name.
+
+    `root` is the resolved toolchains root. Raises RunError when a linked
+    prefix is not the installed prefix of its own pin under it, or resolves
+    outside it, where a compile could not see it.
+    """
+    linked_pins: dict[str, dict[str, str]] = {}
     for variable, prefix in linked_prefixes(pin).items():
         try:
             linked_name = prefix_pin_name(prefix)
@@ -640,15 +744,14 @@ def _pinned_toolchain(name: str, factory: type, root: Path | None) -> BuiltToolc
             raise RunError(f"{pin_name}.pin: {error}") from error
         linked = _pin(linked_name)
         home = root / prefix
-        if linked["PREFIX_NAME"] != prefix or not home.is_dir():
+        if linked["PREFIX_NAME"] != prefix or not home.is_dir() or not _within(home.resolve(), root):
             raise RunError(
-                f"toolchain {name!r} needs {home} ({pin_name}.pin), which is not the installed {linked_name} pin; "
-                f"install it on the build host with toolchains/{linked_name}.sh"
+                f"toolchain {name!r} needs {home} ({pin_name}.pin), which is not the installed {linked_name} pin "
+                f"inside the toolchains root; install it on the build host with toolchains/{linked_name}.sh"
             )
         environment[variable] = str(home)
-        pins[linked_name] = linked
-    toolchain = factory(executable=str(executable), runner=EnvRunner(environment))
-    return BuiltToolchain(name, (), toolchain, str(executable), environment, pins)
+        linked_pins[linked_name] = linked
+    return linked_pins
 
 
 def _pin(name: str) -> dict[str, str]:
@@ -663,11 +766,16 @@ def _pin(name: str) -> dict[str, str]:
     return pin
 
 
-def _compile_environment() -> dict[str, str]:
-    """Return the clean compile environment: the parent's PATH, LANG=C, LC_ALL=C, HOME when set, and TMPDIR.
+def _checked_tmpdir() -> str:
+    """Return $TMPDIR after checking that it is set and, when $LASSI_SCRATCH is set, resolves inside it.
 
-    TMPDIR is required: without it a compiler writes its temporary files to
-    /tmp, which on the build host is the root filesystem (Agent Rule 7).
+    Each compile gets a private TMPDIR under its own build dir
+    (SandboxedCompileRunner); the parent's TMPDIR holds the --version
+    check's directory, and on the build host it must stay on the scratch
+    disk (Agent Rule 7). Both paths are resolved, so a `..` segment or a
+    link cannot lead outside, and a sibling that only shares a name prefix
+    is refused. Without $LASSI_SCRATCH (the gate sets it on the build host)
+    there is no scratch root to check against.
     """
     tmpdir = os.environ.get("TMPDIR", "")
     if not tmpdir:
@@ -675,12 +783,118 @@ def _compile_environment() -> dict[str, str]:
             "TMPDIR is not set, so a compiler would write its temporary files to /tmp on the root filesystem "
             "(Agent Rule 7); set TMPDIR to a directory on the scratch disk (the gate sets it on the build host)"
         )
-    environment = {"PATH": os.environ.get("PATH", os.defpath), "LANG": "C", "LC_ALL": "C"}
-    home = os.environ.get("HOME", "")
-    if home:
-        environment["HOME"] = home
-    environment["TMPDIR"] = tmpdir
-    return environment
+    scratch = os.environ.get("LASSI_SCRATCH", "")
+    if scratch and not _within(Path(tmpdir).resolve(), Path(scratch).resolve()):
+        raise RunError(
+            f"TMPDIR ({tmpdir}) is outside $LASSI_SCRATCH ({scratch}); on the build host temporary files stay on "
+            "the scratch disk, never on the root filesystem (Agent Rule 7); set TMPDIR inside $LASSI_SCRATCH"
+        )
+    return tmpdir
+
+
+def _compile_hidden_roots(build_root: Path | None) -> tuple[Path, ...]:
+    """Return the roots every compile hides: $HOME, $LASSI_SCRATCH, and $LASSI_RUNS_ROOT (those set), then `build_root`.
+
+    Raises RunError when one of them is not an absolute path, so a bad value
+    never changes what a compile sees without notice, and when there is
+    none, since a sandbox needs at least one hidden root. Only the roots
+    set are hidden: without the gate's $LASSI_SCRATCH the scratch root is
+    not known, so a compile then hides $HOME and the build root (for a run,
+    its runs root) alone.
+    """
+    candidates = [(f"${variable}", os.environ.get(variable, "")) for variable in _COMPILE_HIDDEN_VARIABLES]
+    if build_root is not None:
+        candidates.append(("the build root", str(build_root)))
+    roots: list[Path] = []
+    for what, value in candidates:
+        if not value:
+            continue
+        path = Path(value)
+        if not path.is_absolute():
+            raise RunError(f"{what} must be an absolute path to be hidden from compiles, got {value!r}")
+        if path not in roots:
+            roots.append(path)
+    if not roots:
+        names = ", ".join(f"${variable}" for variable in _COMPILE_HIDDEN_VARIABLES)
+        raise RunError(f"none of {names} is set, so a compile would have no directory to hide; set them")
+    return tuple(roots)
+
+
+def _compile_environment() -> dict[str, str]:
+    """Return the clean compile environment: the parent's PATH, LANG=C, and LC_ALL=C.
+
+    HOME stays out on purpose (P0.20), and so does TMPDIR: each compile gets
+    its own, a private directory under its build dir (SandboxedCompileRunner).
+    """
+    return {"PATH": os.environ.get("PATH", os.defpath), "LANG": "C", "LC_ALL": "C"}
+
+
+def _compile_runner(
+    name: str, environment: Mapping[str, str], root: Path, hidden_roots: tuple[Path, ...], build_root: Path | None
+) -> SandboxedCompileRunner:
+    """Return the toolchain's sandboxed compile runner after checking its layout; RunError names what is refused.
+
+    The sandbox checks its layout (the hidden roots, the toolchains root
+    `root`, and the build dir) when a compile builds its spec. Checking it
+    here, against a build dir under `build_root`, makes a layout it refuses
+    (a hidden root that is a filesystem root, a runs root inside the
+    toolchains root, a build dir under /tmp) stop the run before the run
+    directory exists, never at its first compile. Nothing is created.
+    """
+    runner = SandboxedCompileRunner(environment=environment, toolchains=root, hidden_roots=hidden_roots)
+    if build_root is not None:
+        try:
+            runner.spec(build_root / _LAYOUT_PROBE)
+        except ValueError as error:
+            raise RunError(
+                f"toolchain {name!r}: the compile sandbox refuses a build dir under {build_root} with the toolchains "
+                f"root {root} and the hidden roots {', '.join(map(str, hidden_roots))}: {error}"
+            ) from error
+    return runner
+
+
+def _checked_version(
+    name: str, executable: Path, runner: SandboxedCompileRunner, tmpdir: Path, pin_name: str, pin: Mapping[str, str]
+) -> tuple[tuple[str, ...], int]:
+    """Run `<executable> --version` once through `runner`; return its non-blank lines and its status.
+
+    It runs through the toolchain's own compile runner, so it runs the same
+    executable with the same environment in the same view as every build,
+    under prlimit --core=1, and proves the compiler reachable there before
+    the first build. Its build dir is a fresh directory under the parent's
+    TMPDIR, removed afterwards. It must exit 0 and print the pin's
+    EXPECT_VERSION, so a run is never labeled with a pin its compiler is not
+    (Agent Rule 10); a pin without EXPECT_VERSION is refused before anything
+    runs. RunError also covers a directory TMPDIR cannot hold and a layout
+    the sandbox refuses there; SandboxUnavailableError propagates.
+    """
+    expected = pin.get("EXPECT_VERSION", "")
+    if not expected:
+        raise RunError(
+            f"toolchains/{pin_name}.pin has no EXPECT_VERSION, so toolchain {name!r} cannot check that "
+            f"{executable} is the pinned compiler (Agent Rule 10); add the --version text it must print"
+        )
+    try:
+        probe = Path(tempfile.mkdtemp(prefix=_VERSION_PROBE_PREFIX, dir=tmpdir))
+    except OSError as error:
+        raise RunError(f"toolchain {name!r}: cannot make the --version check's directory in TMPDIR: {error}") from error
+    try:
+        result = runner([str(executable), "--version"], probe, _VERSION_TIMEOUT_S)
+    except ValueError as error:
+        raise RunError(
+            f"toolchain {name!r}: the compile sandbox refuses the --version check's build dir {probe} under TMPDIR "
+            f"({tmpdir}): {error}"
+        ) from error
+    finally:
+        shutil.rmtree(probe, ignore_errors=True)
+    output = result.stdout + result.stderr
+    if result.returncode != 0 or expected not in output:
+        raise RunError(
+            f"toolchain {name!r}: {executable} --version exited {result.returncode} and must print the "
+            f"EXPECT_VERSION of toolchains/{pin_name}.pin ({expected!r}); the compiler is not the pinned one, "
+            "so the run would be labeled with a pin it does not use (Agent Rule 10)"
+        )
+    return tuple(line.rstrip() for line in output.splitlines() if line.strip()), result.returncode
 
 
 def _trial_pins(toolchains: Iterable[BuiltToolchain]) -> ToolchainPins:

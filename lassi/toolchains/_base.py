@@ -1,22 +1,26 @@
 """The command runners and the build steps shared by the compiler toolchains.
 
 lassi.toolchains re-exports CommandResult, CommandRunner, subprocess_runner,
-capped_runner, EnvRunner, and STDERR_ATTACHMENT from here. The adapters in
-lassi.toolchains.nvcc and lassi.toolchains.nvcpp subclass CompilerToolchain,
-which holds build().
+capped_runner, CappedRunner, EnvRunner, and STDERR_ATTACHMENT from here. The
+adapters in lassi.toolchains.nvcc and lassi.toolchains.nvcpp subclass
+CompilerToolchain, which holds build().
 
 Every runner drains stdout and stderr on one thread per pipe while the
 command runs, so the command never blocks on a full pipe (threads rather than
 selectors, because selectors do not work on pipes on Windows, where the local
-tests run). subprocess_runner and EnvRunner, the compilers' runners, keep all
-of the output, as they did before P0.16: compile capture is out of that
-task's scope, and the raw stderr attachment stays whole. capped_runner, the
-sandbox's default runner, keeps at most OUTPUT_CAP_BYTES of each stream
-(P0.16 R4; the design is in plans/spikes/p0-sandbox-hardening.md, probe K and
-design item 5): the first OUTPUT_CAP_BYTES - OUTPUT_TAIL_BYTES bytes and the
-last OUTPUT_TAIL_BYTES bytes, joined with no marker. The rest is read and
-dropped, and CommandResult.stdout_truncated or stderr_truncated says so. The
-tail keeps a command's final lines, such as the sandbox setup's done line,
+tests run). subprocess_runner and EnvRunner keep all of the output, as they
+did before P0.16. capped_runner, the sandbox's default runner for programs,
+keeps at most OUTPUT_CAP_BYTES of each stream (P0.16 R4; the design is in
+plans/spikes/p0-sandbox-hardening.md, probe K and design item 5): the first
+OUTPUT_CAP_BYTES - OUTPUT_TAIL_BYTES bytes and the last OUTPUT_TAIL_BYTES
+bytes, joined with no marker. CappedRunner does the same at a cap of its
+own: the compile sandbox (lassi.executors.sandbox.SandboxedCompileRunner,
+P0.20) runs every compile through one whose cap lies far above any
+compiler output seen, so the raw compiler stderr attachment stays whole
+while a compiler that prints without end cannot fill the host's memory; the
+compile runner then says in stderr that the stream was cut. Past a cap the
+rest is read and dropped, and CommandResult.stdout_truncated or
+stderr_truncated says so. The tail keeps a command's final lines, such as the sandbox setup's done line,
 when the output before them was cut. After a timeout, stderr also ends with
 the runner's own "timed out" line, which comes on top of the cap. Once a
 runner has taken its result, a pipe that a process outside the killed tree
@@ -64,9 +68,10 @@ class CommandResult:
     """How one command ended: its exit status, its stdout and stderr as text, and whether each was cut.
 
     `stdout_truncated` and `stderr_truncated` are True when a capped runner
-    (capped_runner) found the stream longer than OUTPUT_CAP_BYTES, so the
-    text holds only its head and its last OUTPUT_TAIL_BYTES bytes; the other
-    runners keep everything and leave both False.
+    (capped_runner, at OUTPUT_CAP_BYTES, or a CappedRunner, at its own cap)
+    found the stream longer than its cap, so the text holds only its head
+    and its last OUTPUT_TAIL_BYTES bytes; the other runners keep everything
+    and leave both False.
     """
 
     returncode: int
@@ -113,14 +118,45 @@ def capped_runner(argv: Sequence[str], cwd: Path, timeout_s: float) -> CommandRe
     return _run_command(argv, cwd, timeout_s, None, OUTPUT_CAP_BYTES)
 
 
+class CappedRunner:
+    """A CommandRunner like capped_runner at a cap of its own: at most `cap_bytes` of stdout and of stderr.
+
+    Past the cap a stream keeps its first cap_bytes - OUTPUT_TAIL_BYTES bytes
+    and its last OUTPUT_TAIL_BYTES bytes, and the result's truncation flag
+    for that stream is set, as with capped_runner; the command inherits the
+    parent's environment. The compile sandbox runs every compile through one
+    (lassi.executors.sandbox COMPILE_OUTPUT_CAP_BYTES, P0.20), since the
+    runner's buffers lie outside the sandbox's memory limit. The runner's
+    peak memory for the output is a small multiple of the cap.
+    """
+
+    def __init__(self, cap_bytes: int) -> None:
+        """Keep the cap in bytes; ValueError unless it is an int (not a bool) above OUTPUT_TAIL_BYTES."""
+        if isinstance(cap_bytes, bool) or not isinstance(cap_bytes, int) or cap_bytes <= OUTPUT_TAIL_BYTES:
+            raise ValueError(
+                f"cap_bytes must be an integer above OUTPUT_TAIL_BYTES ({OUTPUT_TAIL_BYTES}), got {cap_bytes!r}"
+            )
+        self.cap_bytes = cap_bytes
+
+    def __repr__(self) -> str:
+        """Show the class and the cap."""
+        return f"{type(self).__name__}(cap_bytes={self.cap_bytes})"
+
+    def __call__(self, argv: Sequence[str], cwd: Path, timeout_s: float) -> CommandResult:
+        """Run `argv` in `cwd` as capped_runner does, keeping at most cap_bytes of each stream."""
+        return _run_command(argv, cwd, timeout_s, None, self.cap_bytes)
+
+
 class EnvRunner:
     """A CommandRunner that behaves like subprocess_runner but gives the command exactly `env` as its environment.
 
     Nothing from the parent's environment reaches the command unless `env`
     holds it, so variables that change a compile silently (NVCC_PREPEND_FLAGS,
-    NVCC_APPEND_FLAGS, CPATH, and the like) stay out. The stage runner builds
-    each pinned toolchain with one (lassi.core.runner). A copy of `env` is
-    kept, so a later change to the caller's mapping changes nothing.
+    NVCC_APPEND_FLAGS, CPATH, and the like) stay out. The stage runner runs
+    git with one; since P0.20 it compiles, and checks each pinned compiler's
+    --version, through lassi.executors.sandbox.SandboxedCompileRunner instead
+    (lassi.core.runner). A copy of `env` is kept, so a later change to the
+    caller's mapping changes nothing.
     """
 
     def __init__(self, env: Mapping[str, str]) -> None:

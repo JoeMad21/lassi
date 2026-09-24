@@ -19,8 +19,8 @@ kind section is built as `factory(**binding.config)`; an LLM backend as
 caller passes them. A stage is built as `factory(context=<RunContext>)`, one
 stage object per trial (lassi.core.stages). A toolchain that declares a pin
 (PIN and PIN_BIN) is built as `factory(executable=<pinned path>,
-runner=EnvRunner(<clean environment>))`, and one without as `factory()`
-(lassi.core.runner).
+runner=SandboxedCompileRunner(<clean environment>, ...))`, and one without
+as `factory()` (lassi.core.runner).
 """
 
 from __future__ import annotations

@@ -4,7 +4,11 @@ The capture tool compiles each scenario's hand-written sources,
 tests/toolchains/fixtures/sources/<scenario>/, with the pinned toolchain built
 exactly as the stage runner builds it (lassi.core.runner.build_toolchain: the
 pinned executable, the clean compile environment, linked prefixes such as
-NVHPC_CUDA_HOME, and EnvRunner). Each scenario builds in a fresh workdir,
+NVHPC_CUDA_HOME, and, since P0.20, the sandboxed compile runner
+lassi.executors.sandbox.SandboxedCompileRunner, which gives each compile no
+HOME and a private TMPDIR under its workdir, and the --version check against
+the pin's EXPECT_VERSION, which the tool reuses rather than repeats). Each
+scenario builds in a fresh workdir,
 <out>/work/<scenario>/, and the tool copies the compiler's stderr byte for
 byte to <out>/<scenario>.stderr and writes the provenance manifest
 <out>/manifest.json (bible Component Interfaces, Toolchain contract rules;
@@ -34,10 +38,16 @@ holding empty placeholder files at the pinned executable paths, and
 subprocess.Popen is replaced: git runs for real, a pinned executable gets a
 canned reply (for --version, a PLACEHOLDER banner holding the pin's
 EXPECT_VERSION, and for a compile the current .stderr fixture of the
-scenario it builds), and any other command fails the test, so no built
-program can run either. The one `remote` test runs
-the tool with the real pinned compilers on the build host and skips
-elsewhere. No value in this module is a measurement.
+scenario it builds), a sandbox command that runs a pinned compiler is
+answered as the sandbox setup would answer it (its ready line, the
+compiler's canned stderr, its done line), and any other command fails the
+test, so no built program can run either. The fake learns each sandbox
+command's spec by wrapping lassi.executors.sandbox.sandbox_command. The
+`remote` tests run the tool with the real pinned compilers on the build host
+and skip elsewhere; one of them checks P0.20's A6, that a recapture gives
+the 12 byte-stable fixtures (all but the two linker errors, whose stderr
+names per-run temporary paths; see tests/toolchains/fixtures/README.md) byte
+for byte. No value in this module is a measurement.
 """
 
 from __future__ import annotations
@@ -62,6 +72,7 @@ from typing import Any
 import pytest
 
 from lassi.core.registry import DEFAULT_REGISTRY
+from lassi.executors import sandbox as sandbox_module
 from lassi.toolchains import NvccSm80, NvcppCc80
 from lassi.toolchains.pins import read_pin
 
@@ -72,8 +83,13 @@ TOOL_MODULE = "capture_toolchain_fixtures"
 FIXTURES = REPO / "tests" / "toolchains" / "fixtures"
 SCENARIOS = FIXTURES / "scenarios.json"
 SOURCES = FIXTURES / "sources"
+CAPTURES = FIXTURES / "captures.json"
 # The fixture names today; the scenario manifest and the source trees follow them.
 FIXTURE_NAMES = sorted(path.stem for path in FIXTURES.glob("*.stderr"))
+# The fixtures whose stderr names per-run text (temporary file names, the absolute workdir), per the README; every
+# other fixture must come back byte for byte from a recapture (P0.20 A6).
+RUN_DEPENDENT = frozenset({"nvcc_linker_error", "nvcpp_linker_error"})
+BYTE_STABLE = sorted(set(FIXTURE_NAMES) - RUN_DEPENDENT)
 
 # The pinned executables under a toolchains root as toolchains/cuda.pin and toolchains/nvhpc.pin name them,
 # and the CUDA prefix nvc++ gets as NVHPC_CUDA_HOME (as in tests/core/test_runner.py).
@@ -270,11 +286,33 @@ def test_every_scenario_has_a_source_tree_of_relative_ascii_files(name: str) -> 
 
 @dataclass(frozen=True)
 class Spawned:
-    """One command the fake subprocess.Popen was asked to start: argv, working directory, and environment."""
+    """One command the fake subprocess.Popen was asked to start: argv, working directory, and environment.
+
+    For a sandbox command, `sandboxed` is True, `argv` is the program the
+    sandbox would run (from the pinned compiler on), `env` is the program's
+    environment (SandboxSpec.environment), and `command` is the whole
+    sandbox command.
+    """
 
     argv: list[str]
     cwd: Path | None
     env: dict[str, str] | None
+    sandboxed: bool = False
+    command: list[str] | None = None
+
+
+@dataclass(frozen=True)
+class SandboxCall:
+    """One call of lassi.executors.sandbox.sandbox_command: the spec, the program argv, and the command it built."""
+
+    spec: Any
+    argv: list[str]
+    command: list[str]
+
+
+# What the fake sandbox prints around the program's stderr, as the sandbox setup does when it ran the program.
+SANDBOX_READY = (sandbox_module.READY_MARKER + "\n").encode("ascii")
+SANDBOX_DONE = (sandbox_module.DONE_MARKER + " 1000.00 1000.50\n").encode("ascii")
 
 
 @dataclass(frozen=True)
@@ -344,8 +382,12 @@ class FakeCompilers:
     otherwise. A compile runs in the
     scenario's workdir, whose name is the scenario, and returns that
     scenario's Reply; a compile that exits 0 leaves a placeholder `main`, as
-    a compiler that succeeded would. Any other command fails the test, so no
-    real compiler and no built program ever runs.
+    a compiler that succeeded would. A sandbox command (prlimit first, built
+    by the wrapped sandbox_command, whose calls are in `sandbox_calls`) that
+    runs a pinned executable gets the same reply, wrapped as the sandbox
+    setup prints it: its ready line, the program's stderr, its done line.
+    Any other command fails the test, so no real compiler and no built
+    program ever runs.
     """
 
     root: Path
@@ -353,6 +395,7 @@ class FakeCompilers:
     calls: list[Spawned] = field(default_factory=list)
     banners: dict[str, bytes] = field(default_factory=dict)
     version_status: dict[str, int] = field(default_factory=dict)
+    sandbox_calls: list[SandboxCall] = field(default_factory=list)
 
     def pinned(self, executable: str) -> bool:
         """Return True when `executable` lies under the fake toolchains root."""
@@ -360,7 +403,7 @@ class FakeCompilers:
         return path.startswith(os.path.normcase(os.path.abspath(self.root)) + os.sep)
 
     def compiles(self) -> list[Spawned]:
-        """Return the compile commands, in order."""
+        """Return the compile commands, sandboxed or not, in order."""
         return [call for call in self.calls if self.pinned(call.argv[0]) and "--version" not in call.argv[1:]]
 
     def versions(self) -> list[Spawned]:
@@ -371,25 +414,44 @@ class FakeCompilers:
         """Return the toolchain whose pinned executable `executable` is."""
         return next(name for name, binary in BINARIES.items() if Path(executable) == self.root / binary)
 
-    def spawn(self, argv: list[str], kwargs: Mapping[str, Any]) -> FinishedProcess:
-        """Record one command and return a finished process with its canned reply."""
-        cwd = None if kwargs.get("cwd") is None else Path(kwargs["cwd"])
-        env = None if kwargs.get("env") is None else dict(kwargs["env"])
-        self.calls.append(Spawned(argv=argv, cwd=cwd, env=env))
-        text = any(kwargs.get(key) for key in ("text", "universal_newlines", "encoding", "errors"))
-        if not self.pinned(argv[0]):
-            raise AssertionError(f"the capture tool started {argv!r}, which is neither git nor a pinned compiler")
+    def reply(self, argv: list[str], cwd: Path | None) -> tuple[int, bytes, bytes]:
+        """Return (status, stdout, stderr) of a pinned executable's --version or of one scenario's compile."""
         if "--version" in argv[1:]:
             toolchain = self.toolchain_of(argv[0])
             default = (pinned_line(toolchain) + "\n").encode("ascii") + VERSION_BANNER
-            banner = self.banners.get(toolchain, default)
-            return FinishedProcess(argv, self.version_status.get(toolchain, 0), (banner, b""), text)
+            return self.version_status.get(toolchain, 0), self.banners.get(toolchain, default), b""
         assert cwd is not None, f"a compile without a workdir: {argv!r}"
         reply = self.replies.get(cwd.name)
         assert reply is not None, f"a compile in {cwd}, which is no scenario's workdir"
         if reply.status == 0:
             (cwd / "main").write_bytes(b"PLACEHOLDER artifact of a faked compile\n")
-        return FinishedProcess(argv, reply.status, (b"", reply.stderr), text)
+        return reply.status, b"", reply.stderr
+
+    def sandboxed(self, command: list[str], cwd: Path | None, text: bool) -> FinishedProcess:
+        """Record a sandbox command as the pinned program it runs and answer as the sandbox setup would."""
+        found = [call for call in self.sandbox_calls if call.command == command]
+        assert found, "a sandbox command that lassi.executors.sandbox.sandbox_command did not build"
+        program = found[-1].argv
+        start = next((index for index, part in enumerate(program) if self.pinned(part)), None)
+        assert start is not None, f"the sandbox would run {program!r}, which is no pinned compiler"
+        environment = getattr(found[-1].spec, "environment", None)
+        env = None if environment is None else dict(environment)
+        self.calls.append(Spawned(argv=program[start:], cwd=cwd, env=env, sandboxed=True, command=command))
+        status, stdout, stderr = self.reply(program[start:], cwd)
+        return FinishedProcess(command, status, (stdout, SANDBOX_READY + stderr + SANDBOX_DONE), text)
+
+    def spawn(self, argv: list[str], kwargs: Mapping[str, Any]) -> FinishedProcess:
+        """Record one command and return a finished process with its canned reply."""
+        cwd = None if kwargs.get("cwd") is None else Path(kwargs["cwd"])
+        env = None if kwargs.get("env") is None else dict(kwargs["env"])
+        text = any(kwargs.get(key) for key in ("text", "universal_newlines", "encoding", "errors"))
+        if argv[:1] == ["prlimit"]:
+            return self.sandboxed(argv, cwd, text)
+        self.calls.append(Spawned(argv=argv, cwd=cwd, env=env))
+        if not self.pinned(argv[0]):
+            raise AssertionError(f"the capture tool started {argv!r}, which is neither git nor a pinned compiler")
+        status, stdout, stderr = self.reply(argv, cwd)
+        return FinishedProcess(argv, status, (stdout, stderr), text)
 
 
 @dataclass(frozen=True)
@@ -408,8 +470,10 @@ def host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Host:
 
     HOME, TMPDIR, and PATH carry marker names, the locale is not C, and
     variables that change a compile silently are set; the compile
-    environment is PATH, LANG=C, LC_ALL=C, HOME, and TMPDIR, plus
-    NVHPC_CUDA_HOME for nvc++.
+    environment is PATH, LANG=C, and LC_ALL=C, plus NVHPC_CUDA_HOME for
+    nvc++ (P0.20: no HOME, and each compile adds its own TMPDIR under its
+    workdir). sandbox_command is wrapped so the fake knows each sandbox
+    command's spec.
     """
     for name in ("LASSI_SCRATCH", "LASSI_RX_RUN_ID", "CPATH"):
         monkeypatch.delenv(name, raising=False)
@@ -431,10 +495,11 @@ def host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Host:
     monkeypatch.setenv("NVCC_APPEND_FLAGS", "-DLEAKED_APPEND")
     monkeypatch.setenv("LASSI_TOOLCHAINS", str(root))
     monkeypatch.setenv("LASSI_RUNS_ROOT", str(runs_root))
-    base = {"PATH": os.environ["PATH"], "LANG": "C", "LC_ALL": "C", "HOME": str(home), "TMPDIR": str(tmpdir)}
+    base = {"PATH": os.environ["PATH"], "LANG": "C", "LC_ALL": "C"}
     compile_env = {"nvcc-sm80": base, "nvcpp-cc80": {**base, "NVHPC_CUDA_HOME": str(root / CUDA_PREFIX)}}
     fake = FakeCompilers(root)
     real_popen = subprocess.Popen
+    real_sandbox_command = sandbox_module.sandbox_command
     # platform.node() may start a command once (`ver` on Windows) and caches the answer; ask before the fake.
     platform.node()
 
@@ -445,8 +510,20 @@ def host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Host:
             return real_popen(args, *more, **kwargs)
         return fake.spawn(argv, kwargs)
 
+    def sandbox_command(spec: Any, argv: Sequence[str], limits: Any) -> list[str]:
+        command = real_sandbox_command(spec, argv, limits)
+        fake.sandbox_calls.append(SandboxCall(spec=spec, argv=list(argv), command=list(command)))
+        return command
+
     monkeypatch.setattr(subprocess, "Popen", popen)
+    monkeypatch.setattr(sandbox_module, "sandbox_command", sandbox_command)
     return Host(root=root, runs_root=runs_root, compile_env=compile_env, fake=fake)
+
+
+def without_tmpdir(environment: Mapping[str, str] | None) -> dict[str, str]:
+    """Return a compile or --version environment without the TMPDIR it carries."""
+    assert environment is not None
+    return {name: value for name, value in environment.items() if name != "TMPDIR"}
 
 
 @pytest.fixture
@@ -597,6 +674,29 @@ def test_the_tool_refuses_a_compiler_that_is_not_the_pinned_version(
     assert not out.exists(), "nothing is created before every toolchain checks out"
 
 
+def test_the_tool_refuses_when_the_compile_sandbox_cannot_run(
+    tool: ModuleType,
+    host: Host,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # build_toolchain runs the --version check in the compile sandbox, so a sandbox that cannot start reaches the
+    # tool as SandboxUnavailableError; it must end in a refusal with the reason, not a traceback.
+    from lassi.executors.sandbox import SandboxUnavailableError
+
+    def unavailable(*args: Any, **kwargs: Any) -> Any:
+        raise SandboxUnavailableError("PLACEHOLDER: the sandbox setup did not finish")
+
+    monkeypatch.setattr(tool, "build_toolchain", unavailable)
+    out = tmp_path / "out"
+    run = run_tool(tool, ["--out", str(out)], capsys)
+    assert run.status == tool.REFUSED
+    assert "the sandbox setup did not finish" in run.err
+    assert host.fake.compiles() == []
+    assert not out.exists()
+
+
 @pytest.mark.parametrize("where", ["inside-the-repository", "outside-lassi-scratch", "non-empty-dir", "a-file"])
 def test_the_tool_refuses_a_bad_out_dir(
     tool: ModuleType,
@@ -676,17 +776,37 @@ def test_capture_builds_each_scenario_once_in_a_fresh_workdir_holding_its_source
 
 
 def test_capture_builds_each_toolchain_as_the_stage_runner_does(capture: Capture, host: Host) -> None:
+    # P0.20: each compile runs in the sandbox under prlimit --core=1, with no HOME and a private TMPDIR under its
+    # workdir; --version runs the same executable with the same environment (TMPDIR aside).
     for call in host.fake.compiles():
         assert call.cwd is not None
         entry = capture.scenarios[call.cwd.name]
         toolchain = entry["toolchain"]
         assert Path(call.argv[0]) == host.root / BINARIES[toolchain], call.cwd.name
-        assert call.env == host.compile_env[toolchain], f"{call.cwd.name}: the compile environment is not clean"
+        assert call.sandboxed and call.command is not None, f"{call.cwd.name}: compiled outside the sandbox"
+        assert call.command[:3] == ["prlimit", "--core=1", "--"], call.cwd.name
+        environment = without_tmpdir(call.env)
+        assert environment == host.compile_env[toolchain], f"{call.cwd.name}: the compile environment is not clean"
+        assert call.env is not None and call.cwd.resolve() in Path(call.env["TMPDIR"]).resolve().parents
     versions = host.fake.versions()
     assert versions, "the tool records each toolchain's --version"
     for call in versions:
         toolchain = next(name for name, binary in BINARIES.items() if Path(call.argv[0]) == host.root / binary)
-        assert call.env == host.compile_env[toolchain], "--version runs with the compile environment"
+        assert without_tmpdir(call.env) == host.compile_env[toolchain], "--version runs with the compile environment"
+        # The runner's check runs through the same compile sandbox, under prlimit --core=1.
+        assert call.sandboxed and call.command is not None and call.command[:3] == ["prlimit", "--core=1", "--"]
+
+
+def test_capture_checks_each_compilers_version_once_per_build_not_once_per_compile(
+    capture: Capture, host: Host
+) -> None:
+    # Spec F4: build_toolchain runs once per toolchain and once more per scenario that overrides a class
+    # attribute; the other scenarios reuse the toolchain's build, as a run reuses it for every trial.
+    toolchains = {entry["toolchain"] for entry in capture.scenarios.values()}
+    keys = {key for key, _attribute in OVERRIDES.values()}
+    overridden = [name for name, entry in capture.scenarios.items() if set(entry) & keys]
+    assert overridden, "the scenarios hold at least one override"
+    assert len(host.fake.versions()) == len(toolchains) + len(overridden)
 
 
 def test_capture_runs_the_adapter_command_with_only_the_override_changed(capture: Capture, host: Host) -> None:
@@ -729,6 +849,7 @@ def test_manifest_records_each_toolchain(capture: Capture, host: Host) -> None:
         assert entry["pins"] == PIN_VERSIONS[name]
         assert entry["pins"] == {pin: read_pin(pin)["VERSION"] for pin in PIN_VERSIONS[name]}
         assert Path(entry["executable"]) == host.root / BINARIES[name]
+        # P0.20: no HOME, and no TMPDIR (each compile gets its own, which the manifest does not name).
         assert sorted(entry["environment"]) == sorted(host.compile_env[name]), name
         assert entry["locale"] == LOCALE
         assert entry["version"] == [pinned_line(name), *VERSION_LINES], f"{name}: the --version lines, in order"
@@ -933,6 +1054,30 @@ def test_the_tool_is_documented_typed_ascii_and_builds_through_the_runner() -> N
     assert third_party <= ALLOWED_THIRD_PARTY, f"the tool imports {sorted(third_party)}"
 
 
+def code_strings(tree: ast.Module) -> list[str]:
+    """Return the string constants of a module's code: every one except the docstrings."""
+    docstrings = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, *FUNCTION_NODES)) and node.body:
+            first = node.body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+                docstrings.add(id(first.value))
+    return [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings
+    ]
+
+
+def test_the_tool_leaves_the_version_check_to_the_runner() -> None:
+    # P0.20 A4: build_toolchain checks each pinned compiler's --version against its pin's EXPECT_VERSION before
+    # the first build; the tool reuses that check (Agent Rule 10) instead of keeping a copy of it.
+    # A copy would read the pin's EXPECT_VERSION key itself; prose that names the key in a message is no copy.
+    tree = ast.parse(TOOL.read_bytes().decode("ascii"))
+    keys = [text for text in code_strings(tree) if text == "EXPECT_VERSION"]
+    assert not keys, "the tool reads the pin's EXPECT_VERSION itself instead of reusing the runner's check"
+
+
 # ---------------------------------------------------------------------------
 # On the build host, with the real pinned compilers
 
@@ -976,3 +1121,34 @@ def test_capture_with_the_pinned_compilers(tmp_path: Path) -> None:
     for name, preset in PRESETS.items():
         expect = read_pin(preset.PIN)["EXPECT_VERSION"]
         assert any(expect in line for line in manifest["toolchains"][name]["version"]), name
+
+
+def test_the_byte_stable_fixtures_are_the_twelve_the_readme_names() -> None:
+    # The oracle for A6: the committed fixtures and their recorded sha256 (captures.json, rx
+    # 20260923-112105-desktop-8r113ei-p0-core-ba1a) agree, and all but the two linker errors are byte-stable.
+    assert len(BYTE_STABLE) == 12 and RUN_DEPENDENT <= set(FIXTURE_NAMES)
+    recorded = json.loads(CAPTURES.read_bytes().decode("ascii"))["scenarios"]
+    for name in FIXTURE_NAMES:
+        data = (FIXTURES / f"{name}.stderr").read_bytes()
+        assert recorded[name]["stderr_sha256"] == hashlib.sha256(data).hexdigest(), name
+
+
+@pytest.mark.remote
+@pytest.mark.slow
+@pytest.mark.skipif(bool(PINNED_PROBLEM), reason=PINNED_PROBLEM or "the pinned compilers are installed")
+def test_a6_a_sandboxed_recapture_gives_the_byte_stable_fixtures_byte_for_byte(tmp_path: Path) -> None:
+    # P0.20 A6: compiles now run in the sandbox (no HOME, a private TMPDIR, prlimit --core=1), and the compiler's
+    # stderr must not change for any scenario whose stderr names no per-run path.
+    out = tmp_path / "recapture"
+    argv = [sys.executable, str(TOOL), "--out", str(out), "--only", *BYTE_STABLE]
+    done = subprocess.run(argv, cwd=REPO, capture_output=True, text=True, timeout=3600)
+    assert done.returncode == 0, done.stdout + done.stderr
+    recorded = json.loads(CAPTURES.read_bytes().decode("ascii"))["scenarios"]
+    changed = {}
+    for name in BYTE_STABLE:
+        captured = (out / f"{name}.stderr").read_bytes()
+        if captured != (FIXTURES / f"{name}.stderr").read_bytes():
+            changed[name] = captured.decode("utf-8", errors="backslashreplace")
+        else:
+            assert hashlib.sha256(captured).hexdigest() == recorded[name]["stderr_sha256"], name
+    assert not changed, changed
