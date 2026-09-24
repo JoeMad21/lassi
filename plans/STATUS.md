@@ -8,7 +8,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 
 | Phase | Branch | State | Note |
 | --- | --- | --- | --- |
-| P0 Core | p0-core | ACTIVE | base: main |
+| P0 Core | p0-core | ACTIVE | base: main; scope frozen by the owner 2026-09-23: finish P0.17, P0.19, then P0.G; no new P0 tasks |
 | P1 Faithful LASSI | p1-faithful | NOT-STARTED | - |
 | P2 Scoring | p2-scoring | NOT-STARTED | gate needs owner review |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001: alpha01, gate rngd enabled 2026-09-23); the owner records here when the phase may start |
@@ -48,7 +48,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P0.14 | DONE | Fix rx local-transport tests on Windows | - | rx local transport works on Windows; also touches tools/server/gate.py (Windows-only branches, refusals unchanged) and adds tests/tools/test_gate_windows.py; gate tests pass on Windows and on alpha01 (rx 20260923-101115-desktop-8r113ei-p0-core-d7ce) |
 | P0.15 | DONE | Replace toolchain stderr fixtures with alpha01 captures | P0.7 | fixtures are alpha01 captures (rx 20260923-112105-desktop-8r113ei-p0-core-ba1a from clean ebe6b07); expected lists hand-derived; nvcc drops GCC columns, nvc++ backend and linker places fixed; results/p0-toolchain-fixtures; unparsed formats to P0.17 |
 | P0.16 | DONE | Sandbox hardening before native runs of generated code | P0.10 | 59b5799: 46 remote tests from the clean commit (rx 20260923-173420-desktop-8r113ei-p0-core-192f); three review rounds; bible Sandbox and Decision Log at master revision 81; compile-side items to P0.20 |
-| P0.17 | READY | Parse the compiler error formats the P0.15 probes found unread | P0.15 | nvlink undefined reference, ptxas file-line error, nvc++ driver error lines; seen only in exploratory P0.15 probes (rx ids in plans/p0-core.md P0.17) |
+| P0.17 | ACTIVE | Parse the compiler error formats the P0.15 probes found unread | P0.15 | nvlink undefined reference, ptxas file-line error, nvc++ driver error lines; seen only in exploratory P0.15 probes (rx ids in plans/p0-core.md P0.17) |
 | P0.18 | DONE | Carry run provenance in each Trial | P0.11 | Trial.provenance {commit, dirty, device, sdk, date} copied from provenance.json by the runner; trial.md, run.md, and the Parquet trials table show it; Result Record lines of OQ-008 mirrored here |
 | P0.19 | READY | Install CUDA 12.6.3 from the redistributable archives | P0.7 | OQ-010 answered (b), 2026-09-23; check the 120G scratch cap before staging |
 | P0.20 | DONE | Harden compiles of generated sources | P0.16 | 1de7db6; its acceptance record landed in f9d1e68 under the hooks subject (OQ-016): 63 remote tests and a fixture recapture (12 of 12 byte-stable identical) from 1de7db6; bible at master revision 83 |

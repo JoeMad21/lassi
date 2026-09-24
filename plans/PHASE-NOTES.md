@@ -12,6 +12,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 
 ## P0 Core
 
+- Scope freeze (owner, 2026-09-23): no new P0 tasks. P0 finishes with P0.17, P0.19, and the gate P0.G; any new finding goes into these notes under a later phase, or into the owner queue when it needs a decision.
 - Already provided: AGENTS.md, docs/BIBLE.md, `.githooks/`, `.github/workflows/text-policy.yml`, `tools/check_text_policy.py`, `tools/policy_canary.py`, `tools/status.py`, `tools/rx.py`, `tools/server/`, and tests under `tests/tools/`. P0 verifies and extends them; it does not rewrite them.
 - Text-policy gate evidence: `uv run tools/policy_canary.py local` (both commits must be blocked), then `push`, `status` (the CI run on branch p0-canary must fail), and `cleanup`. The CI half is unblocked since 2026-09-23 (OQ-005 origin, OQ-007 variable and protected main).
 - Compile-only HeCBench needs nvcc or nvc++ on alpha01. Spike first (`rx exec -- 'command -v nvcc nvc++; ls /usr/local /opt'`). If absent, install user-space: the CUDA runfile in toolkit-only mode and the NVHPC tarball, both under `$LASSI_TOOLCHAINS`, each with a pin file. Record the result in the bible (Execution Backends).

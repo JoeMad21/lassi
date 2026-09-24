@@ -147,14 +147,15 @@ Answer: (a). (Given by the owner in the working session on 2026-09-23: "I agree 
 Applied: 2026-09-23. The owner set the Actions secret (last from the variable through a bash pipe, updated 21:28:26Z); the workflow reads it since ba90a9c. Canary run https://github.com/JoeMad21/lassi/actions/runs/35922699182 (commit 42ea4b6) failed on the canary in the commit message and in canary.txt, and its log shows TEXT_POLICY_PATTERNS as ***. Left for the owner: delete the variable after the P0 pull request merges (main's workflow reads it until then), and optionally delete the older run logs that show the list. Not verified: whether Actions masks each line of the multi-line secret; a real violation prints the matching pattern, so such a line could appear in a failure log.
 
 ## OQ-014 Core Files On The alpha01 Root Filesystem
-State: OPEN
+State: CLOSED
 Kind: access
 Blocks: none
 Evidence: plans/spikes/p0-sandbox-hardening.md (probes F2 and G1, inline rx exec probes on 2026-09-23); plans/p0-core.md P0.17 (nvcpfe TERMINATED by signal 11 in dirty-tree rx 20260923-104313-desktop-8r113ei-p0-core-2b22 and ...-173d)
 Question: Agent probes on 2026-09-23 caused systemd-coredump to store four core files under /var/lib/systemd/coredump on the alpha01 root filesystem, against Agent Rule 7: /usr/bin/unshare (about 20K) and /usr/bin/dash (about 21K) from the sandbox probes, and two nvcpfe cores (about 500K each) from P0.15 compiler probes. They are root-owned, so this account cannot remove them, and agents may not delete files anyway. The P0.16 sandbox now keeps crashes away from that handler (prlimit --core=1 and a seccomp filter; no core since, per coredumpctl). Compiles still run at the host's core limit of 0, which systemd-coredump ignores; task P0.20 runs them under --core=1 too. How should the four files be handled?
 Options: (a) leave them: systemd-coredump's default cleanup (systemd-tmpfiles, about 3 days) removes them. (b) ask an administrator to delete them now. (c) record only.
 Recommendation: (a); they are small and expire on their own. For awareness, outside LASSI: the spike found /var/lib/amd-metrics-exporter/amdgpu_device_metrics_exporter_grpc.socket at mode 777, so any user on alpha01 can reach that GPU metrics exporter; the sandbox hides it, and the host setting is an administrator's matter.
-Answer:
+Answer: Let's go with option A.
+Applied: 2026-09-23. Nothing to do: the four core files are left for systemd-coredump's own cleanup, and no agent touches them. Since P0.16 and P0.20, programs and compiles run under prlimit --core=1.
 
 ## OQ-015 Git Hooks Not Executable On Linux
 State: CLOSED
@@ -168,11 +169,12 @@ Answer: (a), applied by the owner in the working session on 2026-09-23 as commit
 Applied: 2026-09-23. On alpha01 the hooks now run: rx 20260923-201529-desktop-8r113ei-p0-core-e098 showed both canary commits refused, with a configuration error, since the owner's pattern list is not installed there (fail closed). Commit 60197f4 lets the canary test accept that refusal where no list is installed while still requiring real findings where one is. The full fast suite from the clean commit 60197f4 on alpha01 passed: 2442 passed, 13 skipped, pytest status 0 (rx 20260923-201618-desktop-8r113ei-p0-core-b46a).
 
 ## OQ-016 Commit f9d1e68 Holds The P0.20 Acceptance Record
-State: OPEN
+State: CLOSED
 Kind: review
 Blocks: none
 Evidence: `git show --stat f9d1e68` (pushed to origin/p0-core; CI text-policy run 35950138033 passed on it). Besides the three hook mode changes, it holds the whole staged P0.20 acceptance change: results/p0-compile-hardening/ (both provenance files and summary.md), the bible Sandbox, Toolchain Pins, and Decision Log edits (master revision 83), plans/STATUS.md (P0.20 DONE), plans/PHASE-NOTES.md, and OQ-015. An audit found every fact in it correct.
 Question: The OQ-015 instructions an agent gave told the owner to commit while the agent's P0.20 change was still staged, so one commit carries both under the subject "P0: Mark the git hooks executable". AGENTS.md wants one commit per task with a message that describes the change, and forbids rewriting pushed history. How should this stand?
 Options: (a) leave it as is: the content is correct and audited, plans/STATUS.md points the P0.20 note at f9d1e68, and this item records the mismatch. (b) rewrite the branch history (only the owner may; it changes pushed commits).
 Recommendation: (a). Agents now empty their own index, or use `git commit -- <paths>`, before giving the owner any commit command.
-Answer:
+Answer: Let's go with option A.
+Applied: 2026-09-23. f9d1e68 stays as pushed; plans/STATUS.md's P0.20 note points to it, and agents empty their index before giving the owner a commit command.

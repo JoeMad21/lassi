@@ -12,6 +12,7 @@ Constraints for every task:
 - Keep `du -sh /mnt/nvme10/joseph_ufl` under 120G as far as possible (owner cap, 2026-09-23; bible Decision Log). Check it before any install or big job, never delete files there, back files up to the workstation to save space (a large folder only with the owner's approval; removing a host copy after a backup also needs it), and recommend deletions in the owner queue.
 - Remote tasks go through `uv run tools/rx.py` only. The first remote task runs `rx doctor`; if the gate is unreachable or not installed, set every remote task BLOCKED with that evidence and add an access item to the owner queue.
 - No project-specific code in `lassi/` (Agent Rules 3); test fixtures and recipes live under `tests/` and `projects/`.
+- Scope is frozen (owner, 2026-09-23): P0 ends with the tasks already in this plan (P0.17, P0.19, then P0.G). Add no new P0 task. Record anything new a P0 task finds in plans/PHASE-NOTES.md under the phase that should take it, or in the owner queue when it needs a decision.
 
 ## Tasks
 
