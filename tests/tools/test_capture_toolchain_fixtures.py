@@ -16,10 +16,10 @@ Result Record, Diagnostic; Agent Rules 1, 7, and 10).
 tests/toolchains/fixtures/scenarios.json names each scenario's toolchain, an
 optional ARCH or GPU override of the preset, and a one-line description; its
 names are those of the .stderr fixtures plus the scenarios in
-AWAITING_CAPTURE. P0.17 stage A added those two scenarios and their sources
-before any capture from a clean commit; stage B copies their .stderr
-fixtures and empties the set. Until then the fake compiler answers them with
-PLACEHOLDER stderr.
+AWAITING_CAPTURE. P0.17 stage A added two scenarios and their sources before
+any capture from a clean commit; stage B copied their .stderr fixtures from
+the clean-commit capture rx 20260923-211958-desktop-8r113ei-p0-core-d221 and
+emptied the set, so every scenario now has its fixture.
 
 The manifest layout these tests pin (the interface the tool follows):
 
@@ -49,9 +49,9 @@ test, so no built program can run either. The fake learns each sandbox
 command's spec by wrapping lassi.executors.sandbox.sandbox_command. The
 `remote` tests run the tool with the real pinned compilers on the build host
 and skip elsewhere; one of them checks P0.20's A6, that a recapture gives
-the 12 byte-stable fixtures (all but the two linker errors, whose stderr
-names per-run temporary paths; see tests/toolchains/fixtures/README.md) byte
-for byte. No value in this module is a measurement.
+the 12 byte-stable fixtures (all but the four RUN_DEPENDENT ones, whose
+stderr names per-run text; see tests/toolchains/fixtures/README.md) byte for
+byte. No value in this module is a measurement.
 """
 
 from __future__ import annotations
@@ -90,17 +90,17 @@ SOURCES = FIXTURES / "sources"
 CAPTURES = FIXTURES / "captures.json"
 # The fixture names today; the scenario manifest and the source trees follow them.
 FIXTURE_NAMES = sorted(path.stem for path in FIXTURES.glob("*.stderr"))
-# P0.17 stage A: scenarios in scenarios.json, each with its source tree, whose .stderr fixture does not exist yet.
-# Stage B captures them from a clean commit, copies each .stderr, and removes the name from this set. The set lists
-# names exactly; a scenario missing its fixture that is not named here fails the name test.
-AWAITING_CAPTURE = frozenset({"nvcc_ptxas_inline_asm", "nvcpp_nvlink_error"})
+# Scenarios in scenarios.json, each with its source tree, whose .stderr fixture does not exist yet. P0.17 stage B
+# copied the fixtures of the two stage A scenarios and emptied it. The set lists names exactly; a scenario missing
+# its fixture that is not named here fails the name test.
+AWAITING_CAPTURE: frozenset[str] = frozenset()
 # Every scenario scenarios.json must list: the fixtures and the scenarios awaiting their capture.
 SCENARIO_NAMES = sorted({*FIXTURE_NAMES, *AWAITING_CAPTURE})
-# What the fake compiler prints for a scenario awaiting its capture; no stderr of it is recorded yet.
-AWAITING_STDERR = b"PLACEHOLDER stderr of a scenario awaiting its capture (P0.17 stage B)\n"
-# The fixtures whose stderr names per-run text (temporary file names, the absolute workdir), per the README; every
-# other fixture must come back byte for byte from a recapture (P0.20 A6).
-RUN_DEPENDENT = frozenset({"nvcc_linker_error", "nvcpp_linker_error"})
+# The fixtures whose stderr names per-run text, per the README; every other fixture must come back byte for byte
+# from a recapture (P0.20 A6). Each names the capture's absolute workdir, which holds the rx id. The two linker
+# errors also name nvcc's tmpxft_ files or a temporary object, nvcc_ptxas_inline_asm names the temporary .ptx nvcc
+# wrote in that workdir, and nvcpp_nvlink_error names a temporary object whose name is random on each run.
+RUN_DEPENDENT = frozenset({"nvcc_linker_error", "nvcpp_linker_error", "nvcc_ptxas_inline_asm", "nvcpp_nvlink_error"})
 BYTE_STABLE = sorted(set(FIXTURE_NAMES) - RUN_DEPENDENT)
 
 # The pinned executables under a toolchains root as toolchains/cuda.pin and toolchains/nvhpc.pin name them,
@@ -577,16 +577,9 @@ def run_tool(tool: ModuleType, argv: Sequence[str], capsys: pytest.CaptureFixtur
 
 
 def fixture_replies(scenarios: Mapping[str, Mapping[str, Any]]) -> dict[str, Reply]:
-    """Return a Reply per scenario: its current .stderr fixture, with FAILED when that parses into an error.
-
-    A scenario in AWAITING_CAPTURE has no fixture yet; it gets AWAITING_STDERR
-    with FAILED, since each of them is an error scenario that exits nonzero.
-    """
+    """Return a Reply per scenario: its current .stderr fixture, with FAILED when that parses into an error."""
     replies: dict[str, Reply] = {}
     for name, entry in scenarios.items():
-        if name in AWAITING_CAPTURE:
-            replies[name] = Reply(FAILED, AWAITING_STDERR)
-            continue
         stderr = (FIXTURES / f"{name}.stderr").read_bytes()
         diagnostics = PRESETS[entry["toolchain"]]().parse(stderr.decode("utf-8"), source_texts(name))
         failed = any(diagnostic.severity == "error" for diagnostic in diagnostics)
@@ -1153,7 +1146,7 @@ def test_capture_with_the_pinned_compilers(tmp_path: Path) -> None:
 
 def test_the_byte_stable_fixtures_are_the_twelve_the_readme_names() -> None:
     # The oracle for A6: the committed fixtures and their recorded sha256 (captures.json, rx
-    # 20260923-112105-desktop-8r113ei-p0-core-ba1a) agree, and all but the two linker errors are byte-stable.
+    # 20260923-211958-desktop-8r113ei-p0-core-d221) agree, and all but the four RUN_DEPENDENT ones are byte-stable.
     assert len(BYTE_STABLE) == 12 and RUN_DEPENDENT <= set(FIXTURE_NAMES)
     recorded = json.loads(CAPTURES.read_bytes().decode("ascii"))["scenarios"]
     for name in FIXTURE_NAMES:

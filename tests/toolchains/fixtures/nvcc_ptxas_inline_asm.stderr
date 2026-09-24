@@ -1,0 +1,2 @@
+ptxas /mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-211958-desktop-8r113ei-p0-core-d221/work/nvcc_ptxas_inline_asm/@lassi-tmp/tmpxft_00000002_00000000-6_main.ptx, line 28; error   : Unknown modifier '.bogus'
+ptxas fatal   : Ptx assembly aborted due to errors

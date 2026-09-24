@@ -8,6 +8,6 @@ saxpy(int, float, float const*, float*):
       9, FMA (fused multiply-add) instruction(s) generated
 main:
      16, Generated vector simd code for the loop
-/usr/bin/ld: /mnt/nvme10/joseph_ufl/tmp/nvc++xwe4ef5MXtbZI.o: in function `main':
-/mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-112105-desktop-8r113ei-p0-core-ba1a/work/nvcpp_linker_error/main.cpp:21: undefined reference to `helper(float*, int)'
+/usr/bin/ld: /mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-211958-desktop-8r113ei-p0-core-d221/work/nvcpp_linker_error/@lassi-tmp/nvc++vc-2bVcpD9.o: in function `main':
+/mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-211958-desktop-8r113ei-p0-core-d221/work/nvcpp_linker_error/main.cpp:21: undefined reference to `helper(float*, int)'
 pgacclnk: child process exit status 1: /usr/bin/ld
