@@ -1,0 +1,6 @@
+kernels/scale.cuh(5): warning #177-D: variable "unused" was declared but never referenced
+      float unused = 0.0f;
+            ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+

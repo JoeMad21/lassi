@@ -1,0 +1,15 @@
+# NVIDIA HPC SDK pin (task P0.7; bible Toolchain Pins). Shell-sourced by toolchains/nvhpc.sh.
+# The single-CUDA tarball installs in user space under $LASSI_TOOLCHAINS/$PREFIX_NAME.
+# 24.11 is the 2024 release whose bundled CUDA (12.6 update 2 and 11.8, per its release notes) is closest
+# to the CUDA 12.6.3 in toolchains/cuda.pin; it postdates the LASSI paper, so upstream did not use it.
+NAME=nvhpc
+VERSION=24.11
+URL=https://developer.download.nvidia.com/hpc-sdk/24.11/nvhpc_2024_2411_Linux_x86_64_cuda_12.6.tar.gz
+SHA256=39408ac062573936e0d41f34530ab065998ef4b85b6bcccb59287d71135a1920  # first download, 6131381079 bytes, Last-Modified 2026-06-07; clean-tree rx 20260923-045504-desktop-8r113ei-p0-core-8b48
+INSTALL_FLAGS="NVHPC_SILENT=true NVHPC_INSTALL_TYPE=single"
+PREFIX_NAME=nvhpc@24.11
+COMPILER_SUBDIR=Linux_x86_64/24.11/compilers/bin
+EXPECT_VERSION="nvc++ 24.11"
+# With no GPU driver on the host, nvc++ -gpu=cc80 needs NVHPC_CUDA_HOME set to the pinned CUDA prefix
+# ($LASSI_TOOLCHAINS/<CUDA_HOME_FROM>); the bible's compile flags stay unchanged (rx 20260923-045559-desktop-8r113ei-p0-core-778e).
+CUDA_HOME_FROM=cuda@12.6.3

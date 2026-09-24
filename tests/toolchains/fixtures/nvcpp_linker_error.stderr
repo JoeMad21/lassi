@@ -1,0 +1,13 @@
+saxpy(int, float, float const*, float*):
+      6, #omp target teams distribute parallel for
+          6, Generating "nvkernel__Z5saxpyifPKfPf_F1L6_2" GPU kernel
+          8, Loop parallelized across teams and threads(128), schedule(static)
+      6, Generating map(tofrom:y[:n]) 
+         Generating map(to:x[:n]) 
+      8, Loop not vectorized/parallelized: not countable
+      9, FMA (fused multiply-add) instruction(s) generated
+main:
+     16, Generated vector simd code for the loop
+/usr/bin/ld: /mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-211958-desktop-8r113ei-p0-core-d221/work/nvcpp_linker_error/@lassi-tmp/nvc++vc-2bVcpD9.o: in function `main':
+/mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-211958-desktop-8r113ei-p0-core-d221/work/nvcpp_linker_error/main.cpp:21: undefined reference to `helper(float*, int)'
+pgacclnk: child process exit status 1: /usr/bin/ld

@@ -1,0 +1,4 @@
+# A misspelled nested key (sandbox.netwrok): loading must fail and name the dotted path.
+extends: child
+sandbox:
+  netwrok: false

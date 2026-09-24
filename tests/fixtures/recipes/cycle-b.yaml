@@ -1,0 +1,2 @@
+# Other half of the extends cycle; it closes the loop through a relative path instead of a name.
+extends: ./cycle-a.yaml

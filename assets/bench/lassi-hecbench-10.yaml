@@ -1,0 +1,13 @@
+# LASSI's HeCBench suite (bible Benchmark Suites: natural OpenMP and CUDA pairs, eval only).
+# Sources are pinned by commit and fetched by tools/fetch_bench.py under $LASSI_SCRATCH, never into git.
+suite: lassi-hecbench-10
+repo: https://github.com/zjin-lcf/HeCBench
+# HeCBench master on 2026-09-23 (git ls-remote, rx 20260923-050523-exec-73f1). Whether this matches the
+# HeCBench revision LASSI copied its *_main sources from is unverified; P1 compares it with upstream LASSI.
+commit: 7d2d3c567be522a2104065165de0a4a233a6ea1a
+items:
+  layout:                   # one of LASSI's 10 apps (bible Source Papers, LASSI); the other nine land in P1
+    split: eval
+    languages:
+      omp: {dir: src/layout-omp, files: [main.cpp]}
+      cuda: {dir: src/layout-cuda, files: [main.cu]}

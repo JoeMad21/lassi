@@ -1,0 +1,4 @@
+# An oracle kind that no component registers: loading must fail and list the registered oracles.
+extends: child
+oracle:
+  kind: no_such_oracle

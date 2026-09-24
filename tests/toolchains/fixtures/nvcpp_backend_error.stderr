@@ -1,0 +1,13 @@
+NVC++-S-1101-The maximum stack size for a GPU kernel or procedure is limited to 524288 bytes: 1048676 (main.cpp: 4)
+spread(int, float const*, float*):
+      4, #omp target teams distribute parallel for
+          4, Generating "nvkernel__Z6spreadiPKfPf_F1L4_2" GPU kernel
+          6, Loop parallelized across teams and threads(128), schedule(static)
+      4, Generating map(from:y[:n]) 
+         Generating map(to:x[:n]) 
+      6, Loop not vectorized/parallelized: not countable
+      8, Loop not vectorized: data dependency
+         Loop unrolled 2 times
+     12, Loop not vectorized: unprofitable for target
+         Loop unrolled 2 times
+NVC++/x86-64 Linux 24.11-0: compilation completed with severe errors

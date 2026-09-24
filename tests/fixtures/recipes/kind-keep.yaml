@@ -1,0 +1,4 @@
+# A child that restates the same kind keeps merging: host stays from kind-host-parent.
+extends: kind-host-parent
+executor:
+  kind: native

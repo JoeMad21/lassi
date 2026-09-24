@@ -1,0 +1,3 @@
+# A misspelled top-level key (stagse): loading must fail rather than ignore it.
+extends: child
+stagse: [generate]

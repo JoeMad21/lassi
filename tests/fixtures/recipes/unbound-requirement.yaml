@@ -1,0 +1,3 @@
+# The profile stage needs a Profiler, and neither this recipe nor its parents bind one.
+extends: parent
+stages: [generate, profile]

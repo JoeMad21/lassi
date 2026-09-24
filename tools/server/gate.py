@@ -22,12 +22,15 @@ Standard library only; compatible with Python 3.6+.
 """
 
 import base64
+import contextlib
 import datetime
+import functools
 import glob
 import io
 import json
 import os
 import platform
+import queue
 import random
 import re
 import select
@@ -36,8 +39,12 @@ import signal
 import subprocess
 import sys
 import tarfile
+import threading
 import time
 
+# The gate runs on the Linux build host; the Windows branches exist only so the local transport
+# (tests/tools/test_rx_gate.py) works on a Windows workstation. POSIX paths are unchanged.
+WINDOWS = os.name == "nt"
 GATE_VERSION = 1
 GATE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRATCH = os.environ.get("LASSI_SCRATCH") or os.path.dirname(GATE_DIR)
@@ -104,6 +111,13 @@ def audit(entry):
 
 
 def free_gb(path):
+    if WINDOWS:
+        # Windows has no statvfs; same units (GB of 1e9 bytes, one decimal) and the same -1.0. It
+        # reports the drive's total free bytes, not the bytes free to this caller as f_bavail does.
+        try:
+            return round(shutil.disk_usage(path).free / 1e9, 1)
+        except OSError:
+            return -1.0
     try:
         st = os.statvfs(path)
     except OSError:
@@ -131,11 +145,86 @@ def git(*args, **kw):
 
 
 def pid_alive(pid):
+    if WINDOWS:
+        return win_pid_alive(pid)
     try:
         os.kill(int(pid), 0)
         return True
     except (OSError, ValueError, TypeError):
         return False
+
+
+@functools.lru_cache(maxsize=None)
+def win_api():
+    """Return (ctypes, wintypes, kernel32) with the prototypes the Windows branches use, built once.
+
+    A private WinDLL keeps these prototypes off the shared ctypes.windll.kernel32.
+    """
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    k32.OpenProcess.restype = wintypes.HANDLE
+    k32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    k32.GetExitCodeProcess.restype = wintypes.BOOL
+    k32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+    k32.GetProcessTimes.restype = wintypes.BOOL
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    k32.CloseHandle.restype = wintypes.BOOL
+    return ctypes, wintypes, k32
+
+
+@contextlib.contextmanager
+def win_process(pid):
+    """Open pid for query only on Windows; yield (alive, created), or None if it cannot be opened.
+
+    Nothing is signalled. The handle is held for the whole block, so Windows cannot reuse the pid
+    inside it. alive: the exit code is STILL_ACTIVE (259); a process that exited with code 259 also
+    reads as alive, but only while something holds it open, so its pid is not reused yet.
+    created: the creation time in FILETIME ticks (None if unreadable); with the pid it names one
+    process.
+    """
+    try:
+        pid = int(pid)
+    except (ValueError, TypeError):
+        pid = 0
+    ctypes, wintypes, k32 = win_api()
+    handle = k32.OpenProcess(0x1000, False, pid) if 0 < pid <= 0xFFFFFFFF else None  # QUERY_LIMITED
+    if not handle:
+        yield None
+        return
+    try:
+        code = wintypes.DWORD()
+        alive = bool(k32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259
+        times = [wintypes.FILETIME() for _ in range(4)]
+        created = None
+        if k32.GetProcessTimes(handle, *[ctypes.byref(t) for t in times]):
+            created = times[0].dwHighDateTime << 32 | times[0].dwLowDateTime
+        yield alive, created
+    finally:
+        k32.CloseHandle(handle)
+
+
+def win_pid_alive(pid):
+    """Probe a pid on Windows without signalling it.
+
+    On Windows os.kill(pid, 0) calls TerminateProcess, and pids are reused, so the POSIX probe
+    would kill whatever process holds the pid.
+    """
+    with win_process(pid) as state:
+        return bool(state and state[0])
+
+
+def runner_identity(pid):
+    """Meta keys that tie a job's runner_pid to one process: none on POSIX.
+
+    On Windows, the runner's creation time: pids are reused there, and win_kill_runner checks it
+    before taskkill /T /F, which would end whatever process holds the pid and its tree.
+    """
+    if not WINDOWS:
+        return {}
+    with win_process(pid) as state:
+        return {"runner_created": state[1] if state else None}
 
 
 def new_id(slot):
@@ -169,6 +258,9 @@ def host_info():
                     info["os"] = line.split("=", 1)[1].strip().strip('"')
     except OSError:
         pass
+    if WINDOWS:
+        # No /proc/meminfo and no os.getloadavg: leave out the keys, as POSIX does when they fail.
+        return info
     try:
         with open("/proc/meminfo") as fh:
             for line in fh:
@@ -371,19 +463,66 @@ def base_meta(req, kind, run_id, cfg):
 # ---------------------------------------------------------------- execution
 
 
+def new_group(detach=False):
+    """Popen arguments that start the child in its own process group, for kill_group.
+
+    On POSIX a new session also detaches the child from the terminal. On Windows (which ignores
+    start_new_session; kill_group uses taskkill /T there) a detached child, the job runner, also
+    gets its own hidden console, so closing the caller's console does not end it; its children
+    inherit that console.
+    """
+    if WINDOWS:
+        flags = subprocess.CREATE_NEW_PROCESS_GROUP
+        if detach:
+            flags |= getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        return {"creationflags": flags}
+    return {"start_new_session": True}
+
+
+def output_reader(proc):
+    """Return read(): the next chunk of proc's output, b"" at end of output, or None after 0.5 s idle."""
+    fd = proc.stdout.fileno()
+    if not WINDOWS:
+        def read():
+            ready, _, _ = select.select([fd], [], [], 0.5)
+            return os.read(fd, 65536) if ready else None
+        return read
+    # select() accepts only sockets on Windows, so a daemon thread does the blocking reads. It holds
+    # the stream so a blocked read never races a close of the pipe.
+    chunks = queue.Queue()
+
+    def pump(stream):
+        while True:
+            try:
+                chunk = os.read(stream.fileno(), 65536)
+            except OSError:
+                chunk = b""
+            chunks.put(chunk)
+            if not chunk:
+                return
+
+    threading.Thread(target=pump, args=(proc.stdout,), daemon=True).start()
+
+    def read_queue():
+        try:
+            return chunks.get(timeout=0.5)
+        except queue.Empty:
+            return None
+    return read_queue
+
+
 def stream_process(argv, cwd, env, log_path, timeout, echo):
     """Run argv, tee output to log (and stdout when echo), enforce timeout. Returns rc."""
     out = sys.stdout.buffer if echo else None
     with open(log_path, "ab") as log:
         proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, start_new_session=True)
+                                stderr=subprocess.STDOUT, **new_group())
         deadline = time.time() + timeout
-        fd = proc.stdout.fileno()
+        read = output_reader(proc)
         timed_out = False
         while True:
-            ready, _, _ = select.select([fd], [], [], 0.5)
-            if ready:
-                chunk = os.read(fd, 65536)
+            chunk = read()
+            if chunk is not None:
                 if not chunk:
                     break
                 log.write(chunk)
@@ -400,6 +539,8 @@ def stream_process(argv, cwd, env, log_path, timeout, echo):
             if time.time() > deadline:
                 timed_out = True
                 kill_group(proc.pid)
+                if WINDOWS and proc.poll() is None:
+                    proc.kill()  # taskkill failed; the Popen handle cannot reach a reused pid
                 break
         rc = proc.wait()
         if timed_out:
@@ -416,6 +557,9 @@ def stream_process(argv, cwd, env, log_path, timeout, echo):
 
 
 def kill_group(pid, grace=10):
+    if WINDOWS:
+        win_kill_tree(pid, grace)
+        return
     try:
         os.killpg(pid, signal.SIGTERM)
     except OSError:
@@ -431,6 +575,40 @@ def kill_group(pid, grace=10):
         os.killpg(pid, signal.SIGKILL)
     except OSError:
         pass
+
+
+def win_kill_tree(pid, grace):
+    """Windows kill_group: Windows has no killpg, so taskkill /T /F ends pid and the descendants
+    still linked to it by parent pid (one whose parent already exited is missed; full group
+    semantics would need a Job Object).
+
+    taskkill trusts the pid, so callers must know it is theirs: stream_process holds the child's
+    Popen handle, and job_kill goes through win_kill_runner. The exit status is ignored (the tree
+    may already be gone); then wait up to grace seconds for pid to exit.
+    """
+    taskkill = os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "System32", "taskkill.exe")
+    try:
+        subprocess.run([taskkill, "/PID", str(int(pid)), "/T", "/F"], stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+    except (OSError, ValueError, TypeError, subprocess.TimeoutExpired):
+        pass
+    end = time.time() + grace
+    while time.time() < end and pid_alive(pid):
+        time.sleep(0.5)
+
+
+def win_kill_runner(meta):
+    """Windows job_kill: end the recorded runner's tree only while its pid still names that runner.
+
+    A runner that died without updating meta (console closed, reboot) leaves a pid Windows may have
+    given to an unrelated process. So the pid must carry the creation time runner_identity recorded,
+    and the query handle held across the kill keeps the pid from being reused in between. A missing
+    or different time means the runner is gone, and nothing is killed.
+    """
+    created = meta.get("runner_created")
+    with win_process(meta.get("runner_pid")) as state:
+        if state and state[0] and created is not None and state[1] == created:
+            win_kill_tree(int(meta["runner_pid"]), 10)
 
 
 def finish_meta(run_dir, meta, rc):
@@ -457,7 +635,8 @@ def verb_run(req, cfg):
     meta["state"] = "running"
     write_meta(run_dir, meta)
     mark_busy(slot, run_id, os.getpid())
-    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
     env = build_env(cfg, {"LASSI_SLOT": slot, "LASSI_COMMIT": req.get("commit"), "LASSI_RX_RUN_ID": run_id})
     try:
         rc = stream_process(wrap(cfg, cmd), path, env, os.path.join(run_dir, "output.log"),
@@ -479,7 +658,8 @@ def verb_exec(req, cfg):
     meta = base_meta(req, "exec", run_id, cfg)
     meta.update({"cwd": SCRATCH, "start": now_iso(), "state": "running"})
     write_meta(run_dir, meta)
-    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
     rc = stream_process(wrap(cfg, cmd), SCRATCH, build_env(cfg, {"LASSI_RX_RUN_ID": run_id}),
                         os.path.join(run_dir, "output.log"), meta["timeout_s"], echo=True)
     finish_meta(run_dir, meta, rc)
@@ -503,9 +683,10 @@ def verb_job_start(req, cfg):
     write_meta(run_dir, meta)
     runner = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--jobrun", run_dir],
                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                              start_new_session=True, close_fds=True)
+                              close_fds=True, **new_group(detach=True))
     mark_busy(slot, run_id, runner.pid)
     meta["runner_pid"] = runner.pid
+    meta.update(runner_identity(runner.pid))
     write_meta(run_dir, meta)
     return {"id": run_id, "state": "starting", "slot": slot}
 
@@ -516,6 +697,7 @@ def jobrun(run_dir):
         meta = json.load(fh)
     cfg = load_config()
     meta.update({"runner_pid": os.getpid(), "start": now_iso(), "state": "running"})
+    meta.update(runner_identity(os.getpid()))
     write_meta(run_dir, meta)
     env = build_env(cfg, {"LASSI_SLOT": meta["slot"], "LASSI_COMMIT": meta["commit"],
                           "LASSI_RX_RUN_ID": meta["id"]})
@@ -572,7 +754,9 @@ def verb_job_kill(req, cfg):
     if meta.get("state") not in ("starting", "running"):
         return {"id": meta["id"], "state": meta.get("state"), "note": "not running"}
     pid = meta.get("runner_pid")
-    if pid and pid_alive(pid):
+    if WINDOWS:
+        win_kill_runner(meta)
+    elif pid and pid_alive(pid):
         kill_group(int(pid))
     meta.update({"state": "killed", "end": now_iso()})
     write_meta(os.path.join(RUNS, meta["id"]), meta)

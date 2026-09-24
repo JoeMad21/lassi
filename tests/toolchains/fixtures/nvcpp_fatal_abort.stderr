@@ -1,0 +1,2 @@
+NVC++-F-0000-Internal compiler error. child tinfo should have been created at outlining function for host    1198  (main.cpp: 8)
+NVC++/x86-64 Linux 24.11-0: compilation aborted

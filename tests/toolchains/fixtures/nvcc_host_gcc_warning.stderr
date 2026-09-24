@@ -1,0 +1,4 @@
+main.cu: In function 'int main()':
+main.cu:16:19: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<float>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+   16 |     for (int i = 0; i < host.size(); i++) {
+      |                 ~~^~~~~~~~~~~~~

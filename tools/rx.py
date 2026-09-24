@@ -38,6 +38,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -78,6 +79,12 @@ def die(msg: str, code: int = 2) -> None:
 
 
 def ssh_bin() -> str:
+    override = os.environ.get("RX_SSH")
+    if override:
+        return override
+    win = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32" / "OpenSSH" / "ssh.exe"
+    if platform.system() == "Windows" and win.is_file():
+        return str(win)
     found = shutil.which("ssh")
     if not found:
         die("ssh not found on PATH")
@@ -349,8 +356,21 @@ def upload(local: Path, remote: str, mode: str) -> None:
         die(f"upload of {local.name} failed: {p.stderr.decode(errors='replace').strip()}")
 
 
+def local_bash() -> str:
+    """Return the bash that runs setup scripts for the local transport.
+
+    On Windows, CreateProcess searches System32 before PATH, so a bare "bash"
+    can start the WSL launcher (System32/bash.exe), whose Linux bash reads
+    `C:/...` as a relative path. Resolving bash on PATH finds Git Bash there.
+    Elsewhere a bare "bash" is already a PATH lookup.
+    """
+    if os.name == "nt":
+        return shutil.which("bash") or "bash"
+    return "bash"
+
+
 def remote_sh(script: str) -> str:
-    argv = ["bash", "-c", script] if CFG["transport"] == "local" else \
+    argv = [local_bash(), "-c", script] if CFG["transport"] == "local" else \
         [ssh_bin(), "-o", "BatchMode=yes", CFG["host"], "bash -s"]
     p = subprocess.run(argv, input=None if CFG["transport"] == "local" else script.encode(),
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -360,14 +380,30 @@ def remote_sh(script: str) -> str:
     return out
 
 
+def shell_path(path: str) -> str:
+    """Return `path` quoted for the bash that runs setup scripts.
+
+    The local transport runs those scripts in bash on this machine. On Windows
+    that is Git Bash, which reads each backslash in an unquoted Windows path as
+    an escape, so `C:\\x\\scratch` became a mangled relative directory. Forward
+    slashes work for Git Bash and its tools, so the local transport uses them;
+    a remote (ssh) path is a Linux path and only gets quoted. The scratch root
+    must be an absolute path: quoting stops `~` and `$VAR` expansion.
+    """
+    if CFG["transport"] == "local":
+        path = path.replace("\\", "/")
+    return shlex.quote(path)
+
+
 def do_bootstrap(a: argparse.Namespace) -> int:
-    s = CFG["scratch"]
+    root = CFG["scratch"]
+    s = shell_path(root)
     server = REPO / "tools" / "server"
     remote_sh(f"set -e; mkdir -p {s}/lassi-gate/runs {s}/lassi-wt {s}/lassi-runs {s}/toolchains {s}/tmp "
               f"{s}/.cache {s}/bin; test -d {s}/lassi.git || git init --quiet --bare {s}/lassi.git")
-    upload(server / "gate.py", f"{s}/lassi-gate/gate.py", "755")
-    upload(server / "config.default.json", f"{s}/lassi-gate/config.default.json", "644")
-    upload(server / "pre-receive", f"{s}/lassi.git/hooks/pre-receive", "755")
+    upload(server / "gate.py", f"{root}/lassi-gate/gate.py", "755")
+    upload(server / "config.default.json", f"{root}/lassi-gate/config.default.json", "644")
+    upload(server / "pre-receive", f"{root}/lassi.git/hooks/pre-receive", "755")
     out = remote_sh(
         f"set -e; cd {s}/lassi-gate; test -f config.json || cp config.default.json config.json; "
         f"git --git-dir={s}/lassi.git config receive.denyNonFastForwards false; "

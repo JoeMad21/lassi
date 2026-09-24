@@ -1,0 +1,1 @@
+nvcc fatal   : Value 'sm_35' is not defined for option 'gpu-architecture'

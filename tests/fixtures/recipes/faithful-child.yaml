@@ -1,0 +1,5 @@
+# faithful: true over a capped parent and an explicit fix: the loop becomes uncapped and every fix turns off.
+extends: parent
+faithful: true
+fixes:
+  fence_tag: true           # an explicit fix still yields to faithful

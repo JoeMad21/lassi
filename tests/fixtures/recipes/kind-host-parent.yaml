@@ -1,0 +1,5 @@
+# Binds executor native with a config key only it accepts; kind-switch.yaml and kind-keep.yaml extend it.
+extends: parent
+executor:
+  kind: native
+  host: box1                # accepted by native, not by none

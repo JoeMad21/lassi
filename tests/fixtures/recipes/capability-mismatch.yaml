@@ -1,0 +1,4 @@
+# The run_loop stage needs an Executor that runs code, but the none executor only compiles.
+extends: child
+executor:
+  kind: none

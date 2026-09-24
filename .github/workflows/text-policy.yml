@@ -20,7 +20,7 @@ jobs:
           python-version: "3.10"
       - name: Check commits, files, branch, and pull request text
         env:
-          TEXT_POLICY_PATTERNS: ${{ vars.TEXT_POLICY_PATTERNS }}
+          TEXT_POLICY_PATTERNS: ${{ secrets.TEXT_POLICY_PATTERNS }}
           EVENT_NAME: ${{ github.event_name }}
           BEFORE_SHA: ${{ github.event.before }}
           AFTER_SHA: ${{ github.event.after }}

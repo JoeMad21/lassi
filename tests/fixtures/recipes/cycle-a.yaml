@@ -1,0 +1,2 @@
+# One half of an extends cycle (cycle-a -> cycle-b -> cycle-a): loading must fail and name the chain.
+extends: cycle-b

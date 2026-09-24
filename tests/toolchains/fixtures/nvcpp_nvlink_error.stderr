@@ -1,0 +1,13 @@
+helper.cpp:
+main.cpp:
+scale(int, float const*, float*):
+      6, #omp target teams distribute parallel for
+          6, Generating "nvkernel__Z5scaleiPKfPf_F1L6_2" GPU kernel
+          8, Loop parallelized across teams and threads(128), schedule(static)
+      6, Generating map(from:y[:n]) 
+         Generating map(to:x[:n]) 
+      8, Loop not vectorized/parallelized: contains call
+main:
+     16, Generated vector simd code for the loop
+nvlink error   : Undefined reference to '_Z5twicef' in '/mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260923-211958-desktop-8r113ei-p0-core-d221/work/nvcpp_nvlink_error/@lassi-tmp/nvc++bcdFQVDqP8.o'
+pgacclnk: child process exit status 2: /mnt/nvme10/joseph_ufl/toolchains/nvhpc@24.11/Linux_x86_64/24.11/compilers/bin/tools/nvdd

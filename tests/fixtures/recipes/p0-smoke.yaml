@@ -1,0 +1,23 @@
+# The P0 gate recipe: P0.G runs `uv run lassi run tests/fixtures/recipes/p0-smoke.yaml` on the build host,
+# after tools/fetch_bench.py. The mock backend translates one bench item in one direction, compile only,
+# so the whole path runs without a model host or a GPU.
+extends: base  # projects/base.yaml: sampling, loop cap, runs_root, sandbox, and report choices
+model:
+  backend: mock  # replies with the item's reference target in FILE blocks; no model host needed
+  id: mock-reference  # the arm segment of every trial id
+llm:
+  sampling:
+    max_tokens: 4096  # base.yaml leaves max_tokens open and the runner never picks it; the mock ignores it
+bench:
+  suite: lassi-hecbench-10  # assets/bench/lassi-hecbench-10.yaml, which lists one item so far (layout)
+  split: eval  # the suite's items are all eval items (Agent Rule 5)
+directions:
+  - {source: omp, target: cuda}  # one direction: OpenMP offload to CUDA
+prompts: p0-smoke  # assets/prompts/p0-smoke/: generate.txt and correct.txt
+toolchain:
+  cuda: nvcc-sm80  # the pinned nvcc for sm_80 (toolchains/cuda.pin) with the LASSI compile flags
+stages: [generate, compile_loop]  # generate, then build and correct until it compiles or the cap is hit
+executor:
+  kind: none  # compile only (tier 1): nothing runs, so no GPU is needed
+trials:
+  n: 1  # one trial per item and direction is enough for the smoke run

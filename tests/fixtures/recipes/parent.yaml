@@ -1,0 +1,26 @@
+# Middle of the three-level chain: extends a name found in the fixture root and adds the run choices.
+extends: fixture-base
+loop:
+  max_corrections: 3        # a capped loop; a faithful child must lift the cap
+sandbox:
+  mem_gb: 32                # nested merge: network and wall_s stay from fixture-base
+bench:
+  suite: fixture-suite
+  split: eval
+directions:
+  - {source: omp, target: cuda}
+  - {source: cuda, target: omp}
+prompts: fixture-prompts
+context: [card-a, card-b]
+toolchain:
+  omp: fake_cxx             # written before cuda; bindings still follow sorted keys
+  cuda: fake_cc
+model:
+  backend: mock_llm
+  id: fixture-model
+stages: [generate, compile_loop, run_loop, report]
+executor:
+  kind: native
+oracle:
+  kind: stdout_mask
+  passfail: true

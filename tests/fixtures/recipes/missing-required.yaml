@@ -1,0 +1,12 @@
+# A standalone recipe (no extends) that never states trials.n: loading must fail rather than pick a default.
+llm:
+  sampling: {temperature: 0.2, top_p: 0.9}
+loop: {max_corrections: 10}
+runs_root: fixture-runs
+sandbox: {network: false, wall_s: 60, mem_gb: 4}
+report: {trial_md: true, parquet: false}
+bench: {suite: fixture-suite, split: eval}
+directions:
+  - {source: omp, target: cuda}
+stages: [run_loop]
+executor: {kind: native}

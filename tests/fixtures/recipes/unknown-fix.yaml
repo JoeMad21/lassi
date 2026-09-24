@@ -1,0 +1,4 @@
+# A fix toggle that does not exist (fixes.fence_tga): an unknown fix name is an unknown key.
+extends: child
+fixes:
+  fence_tga: false

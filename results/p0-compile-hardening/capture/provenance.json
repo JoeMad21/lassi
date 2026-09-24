@@ -1,0 +1,40 @@
+{
+  "big": false,
+  "branch": "p0-core",
+  "cmd": "uv sync --quiet && git status --short | wc -l && uv run python tools/capture_toolchain_fixtures.py",
+  "commit": "1de7db6cebe32b35578a1d525f0d0abd35591f38",
+  "cwd": "/mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-p0-core",
+  "dirty": false,
+  "end": "2026-09-23T20:03:54-07:00",
+  "gate_version": 1,
+  "host": {
+    "hostname": "alpha01",
+    "kernel": "6.6.29+main+3.0.0r1-amd64-gio-epilmore-dev+",
+    "load": [
+      41.77294921875,
+      36.3369140625,
+      36.56982421875
+    ],
+    "mem_avail_gb": 2677.0,
+    "mem_gb": 3169.6,
+    "nproc": 256,
+    "os": "Ubuntu 22.04.5 LTS",
+    "python": "3.10.12"
+  },
+  "id": "20260923-200343-desktop-8r113ei-p0-core-bcf2",
+  "kind": "run",
+  "machine": "desktop-8r113ei",
+  "pins": {
+    "cuda.pin": "# CUDA toolkit pin (task P0.7; bible Toolchain Pins). Shell-sourced by toolchains/cuda.sh.\n# The NVIDIA runfile installs the toolkit only (no driver) in user space under $LASSI_TOOLCHAINS/$PREFIX_NAME.\n# 12.6.3 matches the nvcc measured on alpha01 in the P0.6 spike (plans/spikes/p0-nvcc.md).\nNAME=cuda\nVERSION=12.6.3\nURL=https://developer.download.nvidia.com/compute/cuda/12.6.3/local_installers/cuda_12.6.3_560.35.05_linux.run\nMD5=29d297908c72b810c9ceaa5177142abd  # NVIDIA md5sum.txt for 12.6.3, fetched on alpha01 2026-09-23 (rx 20260923-043558-exec-a651)\nINSTALL_FLAGS=\"--silent --toolkit --no-opengl-libs --no-man-page --no-drm --override\"\nPREFIX_NAME=cuda@12.6.3\nEXPECT_VERSION=\"Cuda compilation tools, release 12.6, V12.6.85\"\n",
+    "nvhpc.pin": "# NVIDIA HPC SDK pin (task P0.7; bible Toolchain Pins). Shell-sourced by toolchains/nvhpc.sh.\n# The single-CUDA tarball installs in user space under $LASSI_TOOLCHAINS/$PREFIX_NAME.\n# 24.11 is the 2024 release whose bundled CUDA (12.6 update 2 and 11.8, per its release notes) is closest\n# to the CUDA 12.6.3 in toolchains/cuda.pin; it postdates the LASSI paper, so upstream did not use it.\nNAME=nvhpc\nVERSION=24.11\nURL=https://developer.download.nvidia.com/hpc-sdk/24.11/nvhpc_2024_2411_Linux_x86_64_cuda_12.6.tar.gz\nSHA256=39408ac062573936e0d41f34530ab065998ef4b85b6bcccb59287d71135a1920  # first download, 6131381079 bytes, Last-Modified 2026-06-07; clean-tree rx 20260923-045504-desktop-8r113ei-p0-core-8b48\nINSTALL_FLAGS=\"NVHPC_SILENT=true NVHPC_INSTALL_TYPE=single\"\nPREFIX_NAME=nvhpc@24.11\nCOMPILER_SUBDIR=Linux_x86_64/24.11/compilers/bin\nEXPECT_VERSION=\"nvc++ 24.11\"\n# With no GPU driver on the host, nvc++ -gpu=cc80 needs NVHPC_CUDA_HOME set to the pinned CUDA prefix\n# ($LASSI_TOOLCHAINS/<CUDA_HOME_FROM>); the bible's compile flags stay unchanged (rx 20260923-045559-desktop-8r113ei-p0-core-778e).\nCUDA_HOME_FROM=cuda@12.6.3\n"
+  },
+  "rc": 0,
+  "root_free_gb": 310.4,
+  "scratch_free_gb_after": 420.4,
+  "scratch_free_gb_before": 420.4,
+  "slot": "desktop-8r113ei-p0-core",
+  "snapshot_of": null,
+  "start": "2026-09-23T20:03:43-07:00",
+  "state": "done",
+  "timeout_s": 1200
+}

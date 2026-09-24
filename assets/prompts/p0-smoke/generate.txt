@@ -1,0 +1,13 @@
+Translate the program below from $source_language to $target_language.
+
+Its $source_language source files follow, each in a fenced code block whose first line is
+// FILE: <path>
+
+$source_files
+Write the complete $target_language program as these files: $target_files.
+Keep the program's behavior and output unchanged.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

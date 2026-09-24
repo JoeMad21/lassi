@@ -1,0 +1,34 @@
+# CUDA toolkit pin (tasks P0.7 and P0.19; bible Toolchain Pins). Shell-sourced by toolchains/cuda.sh.
+# The toolkit is assembled in user space under $LASSI_TOOLCHAINS/$PREFIX_NAME from NVIDIA's per-component
+# redistributable archives for 12.6.3; no runfile or other installer runs (OQ-010, decision of 2026-09-23).
+# 12.6.3 matches the nvcc measured on alpha01 in the P0.6 spike (plans/spikes/p0-nvcc.md).
+NAME=cuda
+VERSION=12.6.3
+# The redist root: the manifest and every archive path below are relative to it.
+URL=https://developer.download.nvidia.com/compute/cuda/redist
+MANIFEST_URL=https://developer.download.nvidia.com/compute/cuda/redist/redistrib_12.6.3.json
+MANIFEST_SHA256=9c598598457a6463eb92889080c16b2b9dc04150e501b8bfc1536d403ba70aaf  # 49142 bytes, Last-Modified 2024-11-20, fetched on alpha01 2026-09-23 (rx 20260923-212205-exec-19f2)
+# The components the pinned nvcc and the nvc++ compiles through NVHPC_CUDA_HOME need (plans/spikes/p0-cuda-redist.md):
+# nvcc with ptxas, nvlink, fatbinary, cicc, and libdevice; the runtime headers and libraries; CCCL, whose
+# nv/target the runtime's cuda_fp16.h includes; and cuobjdump, which the install's sm_80 checks use.
+COMPONENTS="cuda_nvcc cuda_cudart cuda_cccl cuda_cuobjdump"
+# ARCHIVE_<COMPONENT>="<version> <size in bytes> <sha256> <relative path>", from the manifest's linux-x86_64 entry.
+ARCHIVE_CUDA_NVCC="12.6.85 49996208 840deff234d9bef20d6856439c49881cb4f29423b214f9ecd2fa59b7ac323817 cuda_nvcc/linux-x86_64/cuda_nvcc-linux-x86_64-12.6.85-archive.tar.xz"
+ARCHIVE_CUDA_CUDART="12.6.77 1126072 f74689258a60fd9c5bdfa7679458527a55e22442691ba678dcfaeffbf4391ef9 cuda_cudart/linux-x86_64/cuda_cudart-linux-x86_64-12.6.77-archive.tar.xz"
+ARCHIVE_CUDA_CCCL="12.6.77 934952 9c3145ef01f73e50c0f5fcf923f0899c847f487c529817daa8f8b1a3ecf20925 cuda_cccl/linux-x86_64/cuda_cccl-linux-x86_64-12.6.77-archive.tar.xz"
+ARCHIVE_CUDA_CUOBJDUMP="12.6.77 219068 54d0edf14284249baf8e2db1c26c71d079ad7afd1f41779e22f239ff9e8bf60f cuda_cuobjdump/linux-x86_64/cuda_cuobjdump-linux-x86_64-12.6.77-archive.tar.xz"
+# Install layout, the one the runfile gave cuda@12.6.3: an archive's bin/ and nvvm/ go to the prefix, its include/
+# and lib/ to targets/x86_64-linux/, its LICENSE to licenses/<component>/; include and lib64 are links into
+# targets/x86_64-linux, and nvcc.profile finds headers and libraries there.
+LAYOUT_PREFIX_DIRS="bin nvvm"
+LAYOUT_TARGET_DIR=targets/x86_64-linux
+LAYOUT_TARGET_DIRS="include lib"
+LAYOUT_LINKS="include:targets/x86_64-linux/include lib64:targets/x86_64-linux/lib"
+# Top-level entries left out, by name: cuda_cudart's pkg-config/ holds .pc files whose cudaroot names a system
+# CUDA root, which the runfile rewrote to the prefix; no LASSI compile uses pkg-config.
+LAYOUT_SKIP="pkg-config"
+# Planning bound, in KiB, for the space check before any download: the assembled prefix took 233316 KiB
+# (du -sk) in the spike (rx 20260923-212629-exec-290a), rounded up.
+INSTALL_KIB=250000
+PREFIX_NAME=cuda@12.6.3
+EXPECT_VERSION="Cuda compilation tools, release 12.6, V12.6.85"

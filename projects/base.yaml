@@ -1,0 +1,17 @@
+# Shared base that every project recipe extends; each value names its reason or source.
+llm:
+  sampling:
+    temperature: 0.2  # the LASSI paper's sampling temperature
+    top_p: 0.9  # the LASSI paper's top_p
+loop:
+  max_corrections: 10  # correction cap outside faithful recipes; upstream is uncapped and faithful: true lifts the cap
+trials:
+  n: 5  # trials per scenario (Evaluation Protocol)
+runs_root: /mnt/nvme10/joseph_ufl/lassi-runs  # raw run trees stay on the build host scratch disk, never in git (Agent Rule 7)
+sandbox:
+  network: false  # generated code never reaches the network (Execution Backends, Sandbox)
+  wall_s: baseline_x10  # the wall limit is ten times the baseline run's wall time
+  mem_gb: 16  # the memory limit per sandboxed run, in GB
+report:
+  trial_md: true  # write trial.md for every trial (Readability Standards, Trial row)
+  parquet: true  # write the Parquet mirror of the records (Design Principle 7)
