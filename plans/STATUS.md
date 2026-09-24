@@ -9,7 +9,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | Phase | Branch | State | Note |
 | --- | --- | --- | --- |
 | P0 Core | p0-core | ACTIVE | base: main; scope frozen by the owner 2026-09-23: finish P0.17, P0.19, then P0.G; no new P0 tasks |
-| P1 Faithful LASSI | p1-faithful | NOT-STARTED | - |
+| P1 Faithful LASSI | p1-faithful | NOT-STARTED | owner 2026-09-23: start as soon as P0 finishes (after the P0 retrospective), no pause; P2 right after |
 | P2 Scoring | p2-scoring | NOT-STARTED | gate needs owner review |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001: alpha01, gate rngd enabled 2026-09-23); the owner records here when the phase may start |
 | P4 ttsim Execution | p4-ttsim | NOT-STARTED | - |
