@@ -65,4 +65,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1.10 | DONE | lassi-repro recipes, project name, and the mock dry run | P1.6,P1.7 | project key, lassi-repro recipe, mock untagged-fence form, faithful multicore guard; local mock dry run of 20 trials at S4 on attempt 0; the remote dry run is P1.G |
 | P1.11 | DONE | Toolchain follow-ups deferred from P0 | - | toolchain follow-ups from the P0 freeze: backend place without a line, inline asm place, sample lines tied to the fixtures; one review, PASS |
 | P1.12 | OWNER | Apply OQ-018: upstream text in the repository | P1.3 | waits on OQ-018; the gate does not depend on it |
-| P1.G | READY | Phase gate: notebook replay and mock dry run 20/20 | P1.9,P1.10,P1.11 |  |
+| P1.G | ACTIVE | Phase gate: notebook replay and mock dry run 20/20 | P1.9,P1.10,P1.11 |  |
