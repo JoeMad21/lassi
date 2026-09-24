@@ -50,6 +50,9 @@
 | wall_s | PLACEHOLDER |
 | stdout_ref | PLACEHOLDER |
 | outputs_ref | PLACEHOLDER |
+| stdout_truncated | PLACEHOLDER |
+| stderr_truncated | PLACEHOLDER |
+| workdir_incomplete | PLACEHOLDER |
 
 ## Context
 
@@ -175,6 +178,9 @@ None (initial attempt).
 | wall_s | PLACEHOLDER |
 | stdout_ref | PLACEHOLDER |
 | outputs_ref | PLACEHOLDER |
+| stdout_truncated | PLACEHOLDER |
+| stderr_truncated | PLACEHOLDER |
+| workdir_incomplete | PLACEHOLDER |
 
 ### Alignment
 
@@ -283,6 +289,9 @@ None.
 | wall_s | PLACEHOLDER |
 | stdout_ref | `texts/c2/c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431.txt` |
 | outputs_ref | PLACEHOLDER |
+| stdout_truncated | false |
+| stderr_truncated | false |
+| workdir_incomplete | false |
 
 ### Alignment
 

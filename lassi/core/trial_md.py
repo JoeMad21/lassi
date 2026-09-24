@@ -9,7 +9,10 @@ as a Python backslash escape. Every value that was not measured (None) shows
 as PLACEHOLDER. Provenance values are not measurements, so an unknown one
 (None) shows as "-", as a diagnostic without a code or location does. The
 end reason shows as `<code>: <message>`, or "none" for a trial that ended
-normally.
+normally. The Reference run table and each attempt's Run table have one row
+per RunInfo field, the run flags (stdout_truncated, stderr_truncated,
+workdir_incomplete) included: true or false when recorded, PLACEHOLDER when
+not.
 
 The page is a list of blocks (headings, lines, tables, fenced code), each
 ending with one newline and separated by one blank line. Fenced text goes

@@ -19,7 +19,12 @@ compile-only trial). Otherwise it aligns the runs against the stdout of the
 target reference's run, which the baseline stage keeps in
 Trial.reference_run (stdout_ref, read through the text store), exactly as
 align_runs does; a trial holding run stdout but no reference stdout raises
-rather than go unaligned.
+rather than go unaligned. A reference stdout the executor cut at its output
+cap (reference_run.stdout_truncated True) is never aligned against: every
+alignment stays unset, and each attempt whose run holds stdout gains one
+run-stage warning, code REFERENCE_TRUNCATED (unaligned_runs). A flag that
+is False or not recorded (None) aligns as before, and a cut stderr or an
+incomplete workdir does not bear on a stdout oracle.
 
 The oracle class is looked up in the default registry, since a RunContext
 carries no registry; the runner checks the binding against its own registry
@@ -33,7 +38,7 @@ import dataclasses
 from typing import Protocol
 
 from lassi.core.interfaces import RunResult
-from lassi.core.record import Attempt, RunInfo, Trial
+from lassi.core.record import Attempt, Diagnostic, RunInfo, Trial
 from lassi.core.registry import DEFAULT_REGISTRY, register
 from lassi.core.stages import PURPOSE, RunContext
 from lassi.oracles import alignment, load_masks
@@ -41,6 +46,13 @@ from lassi.oracles import alignment, load_masks
 # The capability the stage needs from its Oracle: `for_item(masks, prints_passfail=...)` returns an ItemOracle
 # (lassi.oracles.stdout_mask).
 MASKS_STDOUT = "masks_stdout"
+
+# The run-stage warning an attempt gets when its run is not aligned because the reference stdout was cut.
+REFERENCE_TRUNCATED = "reference-stdout-truncated"
+REFERENCE_TRUNCATED_MESSAGE = (
+    "the reference run's stdout was truncated at the executor's output cap, so this run's stdout was not aligned "
+    "against it and its alignment stays unset"
+)
 
 
 class ItemOracle(Protocol):
@@ -60,7 +72,7 @@ class ItemOracle(Protocol):
 
 @register("Stage", "oracle")
 class OracleStage:
-    """Fills Attempt.alignment for every attempt whose run holds stdout; leaves compile-only attempts unset."""
+    """Fills Attempt.alignment for every attempt whose run holds stdout, unless the reference stdout was cut."""
 
     name = "oracle"
     capabilities = frozenset({"aligns"})
@@ -74,9 +86,10 @@ class OracleStage:
     def __call__(self, trial: Trial) -> Trial:
         """Return `trial` with its runs aligned against Trial.reference_run's stdout; unchanged when none ran.
 
-        Raises ValueError when an attempt holds run stdout but the trial
-        records no reference stdout (list the baseline stage, with an executor
-        that runs programs, before this one).
+        A reference stdout marked truncated is not aligned against
+        (unaligned_runs). Raises ValueError when an attempt holds run stdout
+        but the trial records no reference stdout (list the baseline stage,
+        with an executor that runs programs, before this one).
         """
         ran = [attempt.index for attempt in trial.attempts if attempt.run.stdout_ref is not None]
         if not ran:
@@ -87,7 +100,17 @@ class OracleStage:
                 f"{trial.trial_id}: attempts {ran} hold run stdout, but the trial records no reference stdout to "
                 "align them with; list the baseline stage, which runs the target reference, before the oracle stage"
             )
+        if trial.reference_run.stdout_truncated is True:
+            return self.unaligned_runs(trial)
         return self.align_runs(trial, self.context.store.get(reference))
+
+    def unaligned_runs(self, trial: Trial) -> Trial:
+        """Return `trial` with one REFERENCE_TRUNCATED warning on each attempt whose run holds stdout.
+
+        Every alignment stays unset, the attempt's other diagnostics stay in
+        order, and nothing else in the trial changes.
+        """
+        return dataclasses.replace(trial, attempts=[_warned_unaligned(attempt) for attempt in trial.attempts])
 
     def align_runs(self, trial: Trial, reference_stdout: str) -> Trial:
         """Return `trial` with every attempt that ran aligned against `reference_stdout`; nothing else changes."""
@@ -110,6 +133,14 @@ class OracleStage:
             return attempt
         value = self.oracle.align(reference, _candidate(run, self.context.store.get(run.stdout_ref)))
         return dataclasses.replace(attempt, alignment=alignment([value]))
+
+
+def _warned_unaligned(attempt: Attempt) -> Attempt:
+    """Return the attempt with a REFERENCE_TRUNCATED run-stage warning appended when its run holds stdout."""
+    if attempt.run.stdout_ref is None:
+        return attempt
+    warning = Diagnostic(stage="run", severity="warning", code=REFERENCE_TRUNCATED, message=REFERENCE_TRUNCATED_MESSAGE)
+    return dataclasses.replace(attempt, diagnostics=[*attempt.diagnostics, warning])
 
 
 def _candidate(run: RunInfo, stdout: str) -> RunResult:

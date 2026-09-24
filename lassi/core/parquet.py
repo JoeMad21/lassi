@@ -12,7 +12,10 @@ so the trials table carries each trial's provenance (its copy of the run
 manifest) as provenance_commit, provenance_dirty, provenance_device,
 provenance_sdk, and provenance_date, the target reference's baseline run as
 reference_run_<key> columns, and the end reason as final_end_reason_code
-and final_end_reason_message (null when the trial ended normally).
+and final_end_reason_message (null when the trial ended normally). The run
+flags of Trial.reference_run and Attempt.run (lassi.core.record
+RUN_FLAG_NAMES) are bool columns reference_run_<flag> and run_<flag>, right
+after the run's outputs_ref columns, null where not recorded.
 
 The requests table has one row per recorded model request (Trial.requests),
 in index order: the stage that sent it, the attempt its reply became
@@ -35,7 +38,17 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.dataset as ds
 
-from lassi.core.record import TOOLCHAIN_PIN_NAMES, Attempt, Diagnostic, Request, TextRef, Trial, parse_trial_id
+from lassi.core.record import (
+    RUN_FLAG_NAMES,
+    TOOLCHAIN_PIN_NAMES,
+    Attempt,
+    Diagnostic,
+    Request,
+    RunInfo,
+    TextRef,
+    Trial,
+    parse_trial_id,
+)
 from lassi.core.store import sha256_text
 
 TABLES = ("trials", "attempts", "diagnostics", "requests")
@@ -82,6 +95,9 @@ SCHEMAS = {
             ("reference_run_stdout_ref_path", _STRING),
             ("reference_run_outputs_ref_sha256", _STRING),
             ("reference_run_outputs_ref_path", _STRING),
+            ("reference_run_stdout_truncated", _BOOL),
+            ("reference_run_stderr_truncated", _BOOL),
+            ("reference_run_workdir_incomplete", _BOOL),
             ("context_knowledge_summary", _STRING),
             ("context_source_description", _STRING),
             ("final_stage_reached", _STRING),
@@ -113,6 +129,9 @@ SCHEMAS = {
             ("run_stdout_ref_path", _STRING),
             ("run_outputs_ref_sha256", _STRING),
             ("run_outputs_ref_path", _STRING),
+            ("run_stdout_truncated", _BOOL),
+            ("run_stderr_truncated", _BOOL),
+            ("run_workdir_incomplete", _BOOL),
             ("alignment_per_input", _DOUBLE_LIST),
             ("alignment_mean", _DOUBLE),
             ("profile_runtime_s", _DOUBLE),
@@ -194,6 +213,11 @@ def _ref_columns(prefix: str, ref: TextRef | None) -> dict[str, str | None]:
     return {f"{prefix}_sha256": ref.sha256 if ref else None, f"{prefix}_path": ref.path if ref else None}
 
 
+def _flag_columns(prefix: str, run: RunInfo) -> dict[str, bool | None]:
+    """Return the run flag columns of a RunInfo: `<prefix>_<flag>`, null where the flag was not recorded."""
+    return {f"{prefix}_{flag}": getattr(run, flag) for flag in RUN_FLAG_NAMES}
+
+
 def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
     """Return the trials row of one trial."""
     parsed = parse_trial_id(trial.trial_id)
@@ -226,6 +250,7 @@ def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
         "reference_run_wall_s": reference.wall_s,
         **_ref_columns("reference_run_stdout_ref", reference.stdout_ref),
         **_ref_columns("reference_run_outputs_ref", reference.outputs_ref),
+        **_flag_columns("reference_run", reference),
         "context_knowledge_summary": trial.context.knowledge_summary,
         "context_source_description": trial.context.source_description,
         "final_stage_reached": final.stage_reached,
@@ -257,6 +282,7 @@ def _attempt_row(attempt: Attempt, key: dict[str, str]) -> dict[str, Any]:
         "run_wall_s": run.wall_s,
         **_ref_columns("run_stdout_ref", run.stdout_ref),
         **_ref_columns("run_outputs_ref", run.outputs_ref),
+        **_flag_columns("run", run),
         "alignment_per_input": list(attempt.alignment.per_input),
         "alignment_mean": attempt.alignment.mean,
         "profile_runtime_s": profile.runtime_s,

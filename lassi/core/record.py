@@ -35,6 +35,8 @@ STAGES = ("S0", "S1", "S2", "S3", "S4", "S5")
 DIAGNOSTIC_STAGES = ("parse", "verify", "lower", "compile", "jit", "run")
 SEVERITIES = ("error", "warning", "note")
 TOOLCHAIN_PIN_NAMES = ("llvm", "polygeist", "tt_mlir", "tt_metal", "ttsim", "furiosa_sdk", "cuda", "nvhpc", "rocm")
+# The run flags RunInfo records, named as the RunResult flags they copy, in field order.
+RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # The fixed codes of Final.end_reason: why a trial ended early. baseline-compile and baseline-run end a trial
 # before any model call (a reference program did not build, or its run exited nonzero or hung); correction-cap
 # means an error remained when loop.max_corrections stopped the correction loop; upstream-crash means that, with
@@ -230,7 +232,15 @@ class Diagnostic:
 
 @dataclass(frozen=True, kw_only=True)
 class RunInfo:
-    """How one run of the built artifact ended; None means not run or not measured."""
+    """How one run of the built artifact ended; None means not run or not measured.
+
+    `stdout_truncated`, `stderr_truncated`, and `workdir_incomplete` copy the
+    RunResult flags of the same names: the executor kept only part of the
+    stream, or returned only part of what the run wrote in its workdir. A
+    stage that records a run records each flag as a bool, so a run whose
+    output was kept whole reads False; None means not recorded, as for a run
+    that did not happen or a trial.json written before the flags existed.
+    """
 
     exit_code: int | None = None
     hang: bool | None = None
@@ -238,6 +248,9 @@ class RunInfo:
     wall_s: float | None = None
     stdout_ref: TextRef | None = None
     outputs_ref: TextRef | None = None
+    stdout_truncated: bool | None = None
+    stderr_truncated: bool | None = None
+    workdir_incomplete: bool | None = None
 
     def __post_init__(self) -> None:
         """Check the field types; the wall time must be finite."""
@@ -507,12 +520,12 @@ class Trial:
     `provenance` is required: a Trial without it raises TypeError naming the
     field, and a trial.json without it fails from_dict with a ValueError.
     `reference_run` is the target reference's run from the baseline stage
-    (exit status, hang flag, wall time, and stdout by reference); it stays
-    all None when the reference was not run, as under a compile-only
-    executor. `requests` holds every model call in the order sent (Request);
-    None means not recorded, as in a trial.json written before requests
-    were, and the runner starts every trial with an empty list, so a trial
-    that asked no model records [].
+    (exit status, hang flag, wall time, stdout by reference, and the run
+    flags); it stays all None when the reference was not run, as under a
+    compile-only executor. `requests` holds every model call in the order
+    sent (Request); None means not recorded, as in a trial.json written
+    before requests were, and the runner starts every trial with an empty
+    list, so a trial that asked no model records [].
     """
 
     trial_id: str

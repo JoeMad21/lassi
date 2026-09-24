@@ -24,12 +24,13 @@ The runner checks either kind before any model is asked.
   never an attempt's), with the target language's toolchain and the item's
   support files as harness files, and runs it when the executor runs
   programs (capability `runs_code`), with the item's run arguments and
-  reference_limits. The target's run is kept in
-  Trial.reference_run (exit code, hang flag, wall time, and stdout in the
-  text store). A reference that does not build ends the trial with
-  final.end_reason `baseline-compile`, and a run that exits nonzero or hangs
-  with `baseline-run`; the runner then runs no later stage, so no model is
-  asked.
+  reference_limits. The target's run is kept in Trial.reference_run (exit
+  code, hang flag, wall time, stdout in the text store, and the RunResult
+  flags as bools); the source reference's run is never recorded. A cut
+  output does not end the trial. A reference that does not build ends the
+  trial with final.end_reason `baseline-compile`, and a run that exits
+  nonzero or hangs with `baseline-run`; the runner then runs no later stage,
+  so no model is asked.
 - summarize_context sends [system, user]: the general system prompt, then
   the summary request followed by the target language's context pack. The
   reply fills Trial.context.knowledge_summary.
@@ -55,9 +56,10 @@ The runner checks either kind before any model is asked.
   changes nothing when compile_loop already ran) and, when the executor runs
   programs (capability `runs_code`), runs each compiling attempt from its
   build directory with the item's run arguments and attempt_limits. The run
-  is kept in Attempt.run (exit code, hang flag, wall time, and stdout in the
-  text store); a clean run (exit status 0, no hang) is S5, and a failed one
-  stays S4 with a run-stage `run-error` Diagnostic. A failed run is fed back
+  is kept in Attempt.run (exit code, hang flag, wall time, stdout in the text
+  store, and the RunResult flags as bools, a failed run's included); a clean
+  run (exit status 0, no hang) is S5, and a failed one stays S4 with a
+  run-stage `run-error` Diagnostic. A failed run is fed back
   with the execute-error prompt, whose error text (run_error_text) is, under
   a fragment set, upstream's report of the run (its execute_code
   return_result, joined from the execute.* fragments), and under a template
@@ -410,6 +412,17 @@ def reference_limits(context: RunContext) -> Limits:
     return Limits(wall_s=REFERENCE_WALL_S, memory_mb=memory_mb, cpus=REFERENCE_CPUS)
 
 
+def _run_info(context: RunContext, run: RunResult) -> RunInfo:
+    """Return the RunInfo of a run that happened: exit code, hang flag, wall time, stdout in the store, run flags.
+
+    Each RunResult flag (RUN_FLAGS) is copied as a bool, so a run whose
+    output was kept whole records False, never None.
+    """
+    flags = {flag: bool(getattr(run, flag)) for flag in RUN_FLAGS}
+    stdout_ref = context.store.put(run.stdout)
+    return RunInfo(exit_code=run.exit_code, hang=run.hang, wall_s=run.wall_s, stdout_ref=stdout_ref, **flags)
+
+
 def _ended(trial: Trial, code: str, message: str) -> Trial:
     """Return `trial` with final.end_reason set to `code` and `message`; the runner then runs no later stage."""
     reason = EndReason(code=code, message=message)
@@ -647,8 +660,8 @@ class BaselineStage:
 
         A build with no artifact ends the trial with `baseline-compile`, and
         a run that exits nonzero, ends with no exit status, or hangs ends it
-        with `baseline-run`. The target's run is kept in Trial.reference_run,
-        a failed one included.
+        with `baseline-run`. The target's run is kept in Trial.reference_run
+        (_run_info), a failed one included; a cut output alone ends nothing.
         """
         context = self.context
         files = self._files(language)
@@ -661,8 +674,7 @@ class BaselineStage:
             return trial
         item = context.suite.item(context.item, purpose=PURPOSE)
         run = context.executor.run(result.artifact, list(item.run_args), reference_limits(context))
-        stdout_ref = context.store.put(run.stdout)
-        info = RunInfo(exit_code=run.exit_code, hang=run.hang, wall_s=run.wall_s, stdout_ref=stdout_ref)
+        info = _run_info(context, run)
         if language == context.direction.target:
             trial = dataclasses.replace(trial, reference_run=info)
         if run.hang:
@@ -1056,8 +1068,9 @@ class RunLoopStage:
         """Run the last attempt's program; return the trial with its run recorded, the RunResult, and the limits.
 
         A backend that declares `unload_before_run` is asked to unload first.
-        The attempt keeps the run in Attempt.run (stdout in the text store),
-        gains one warning per RunResult flag (RUN_FLAGS), and is S5 after a
+        The attempt keeps the run in Attempt.run (_run_info: stdout in the
+        text store, each RunResult flag as a bool), gains one warning per
+        RunResult flag that is set (RUN_FLAGS), and is S5 after a
         clean run; after a failed one it stays S4 with a `run-error`.
         """
         context = self.context
@@ -1072,8 +1085,7 @@ class RunLoopStage:
         run_args = list(context.suite.item(context.item, purpose=PURPOSE).run_args)
         unload_before_run(context.backend)
         run = context.executor.run(artifact, run_args, limits)
-        stdout_ref = context.store.put(run.stdout)
-        info = RunInfo(exit_code=run.exit_code, hang=run.hang, wall_s=run.wall_s, stdout_ref=stdout_ref)
+        info = _run_info(context, run)
         diagnostics = [*attempt.diagnostics, *_run_flag_warnings(run)]
         clean = run.exit_code == 0 and not run.hang
         if not clean:

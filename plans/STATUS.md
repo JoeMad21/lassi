@@ -68,7 +68,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1.G | DONE | Phase gate: notebook replay and mock dry run 20/20 | P1.9,P1.10,P1.11 | PASS: replay 47 passed, 32 cases match (rx 20260924-104048-desktop-8r113ei-p1-faithful-5fd3); mock dry run 20/20 at S4 attempt 0 (rx 20260924-104105-desktop-8r113ei-p1-faithful-c002); fe01ab1 clean; results/p1-gate |
 | P2.0 | DONE | Plan phase P2 into plans/p2-scoring.md and add its tasks here | - | plan plans/p2-scoring.md; base p1-faithful 5d5fd0c |
 | P2.1 | DONE | Record every model request | - | Trial.requests records every model call (messages by hash, reply, stage, attempt); trial.md Requests section; Parquet requests table; full suite 3114 passed |
-| P2.2 | READY | Record the reference run's flags | - |  |
+| P2.2 | DONE | Record the reference run's flags | - | RunInfo records stdout_truncated, stderr_truncated, workdir_incomplete; the oracle never aligns against a truncated reference stdout; full suite 3156 passed. The Sandbox section needed no edit (it already names the flags and the 30 s floor) |
 | P2.3 | READY | Readings the scores rest on: stage ladder and final alignment | - |  |
 | P2.4 | DONE | Spike: the paper's LASSI metric definitions | - | plans/spikes/p2-lassi-metrics.md, recounted independently: paper metric definitions and denominators; 5 of 8 published percentages do not follow from Tables VI and VII; OQ-021, OQ-022 queued |
 | P2.5 | DONE | Spike: stability of the reference output under the proxy | - | rx job 20260924-133017-p2-proxy-3a3a from 207e4dd: every item's masked reference stdout stable over 3 runs; dense-embedding not scorable under the proxy; results/p2-proxy-stability |

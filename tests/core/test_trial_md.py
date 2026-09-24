@@ -28,6 +28,12 @@ attempt's prompt is fenced only under its attempt. A trial whose requests
 were not recorded (None) shows "Not recorded.", and one that asked no model
 ([]) shows "None.". The golden trial holds a context request and one request
 per attempt; its system and request texts are synthetic.
+
+Since P2.2 the Reference run table and each attempt's Run table carry the
+run flags (stdout_truncated, stderr_truncated, workdir_incomplete) after
+outputs_ref: true or false when recorded, PLACEHOLDER when not. The golden
+trial's attempt 1 ran and records every flag False; its reference run and
+attempt 0 record none.
 """
 
 from __future__ import annotations
@@ -215,7 +221,14 @@ def golden_attempts(text_store: store.TextStore) -> list[record.Attempt]:
         files={"main.cu": CODE_1, "kernels/entropy.cuh": HEADER_1},
         diff_from_previous=DIFF_1,
         stage_reached="S5",
-        run=record.RunInfo(exit_code=0, hang=False, stdout_ref=text_store.put(STDOUT_1)),
+        run=record.RunInfo(
+            exit_code=0,
+            hang=False,
+            stdout_ref=text_store.put(STDOUT_1),
+            stdout_truncated=False,
+            stderr_truncated=False,
+            workdir_incomplete=False,
+        ),
         alignment=record.Alignment(per_input=[1.0, 0.5, 0.75, 1.0], mean=0.8125),
         guards=record.Guards(host_compute=False, harness_tamper=False),
         score=record.ScoreBreakdown(components={"stage": 0.2, "warnings": 0.0, "alignment": 0.8125, "energy": None}),
@@ -463,6 +476,9 @@ def test_golden_marks_unmeasured_values_placeholder() -> None:
     assert "| per_input | 1.0, 0.5, 0.75, 1.0 |\n" in golden
     assert golden.count("| outputs_ref | PLACEHOLDER |\n") == 3, "two attempts' runs and the reference run"
     assert golden.count("| oracle_access | PLACEHOLDER |\n") == 2
+    for flag in ("stdout_truncated", "stderr_truncated", "workdir_incomplete"):
+        assert golden.count(f"| {flag} | PLACEHOLDER |\n") == 2, f"{flag}: the reference run and attempt 0"
+        assert golden.count(f"| {flag} | false |\n") == 1, f"{flag}: attempt 1's run recorded it"
 
 
 def test_golden_is_plain_ascii_lf() -> None:
@@ -537,7 +553,10 @@ def test_trial_without_attempts_or_recorded_requests_ends_after_the_requests(tex
         "| sim_ub | PLACEHOLDER |\n"
         "| wall_s | PLACEHOLDER |\n"
         "| stdout_ref | PLACEHOLDER |\n"
-        "| outputs_ref | PLACEHOLDER |\n\n"
+        "| outputs_ref | PLACEHOLDER |\n"
+        "| stdout_truncated | PLACEHOLDER |\n"
+        "| stderr_truncated | PLACEHOLDER |\n"
+        "| workdir_incomplete | PLACEHOLDER |\n\n"
         "## Context\n\n"
         "### Knowledge summary\n\n"
         "None.\n\n"
@@ -722,7 +741,15 @@ def test_value_formatting_in_tables(text_store: store.TextStore) -> None:
     ref = text_store.put("out\n")
     md = render_attempt(
         text_store,
-        run=record.RunInfo(exit_code=3, hang=True, sim_ub=False, wall_s=0.5, stdout_ref=ref),
+        run=record.RunInfo(
+            exit_code=3,
+            hang=True,
+            sim_ub=False,
+            wall_s=0.5,
+            stdout_ref=ref,
+            stdout_truncated=True,
+            stderr_truncated=False,
+        ),
         alignment=record.Alignment(per_input=[0.25, 1.0]),
         profile=record.Profile(runtime_s=0.25, energy_j=37.5),
         guards=record.Guards(host_compute=True, oracle_access=False),
@@ -732,6 +759,7 @@ def test_value_formatting_in_tables(text_store: store.TextStore) -> None:
         "### Run\n\n| Field | Value |\n| --- | --- |\n"
         "| exit_code | 3 |\n| hang | true |\n| sim_ub | false |\n| wall_s | 0.5 |\n"
         f"| stdout_ref | `{ref.path}` |\n| outputs_ref | PLACEHOLDER |\n"
+        "| stdout_truncated | true |\n| stderr_truncated | false |\n| workdir_incomplete | PLACEHOLDER |\n"
     )
     alignment = "### Alignment\n\n| Field | Value |\n| --- | --- |\n| per_input | 0.25, 1.0 |\n| mean | PLACEHOLDER |\n"
     profile = (

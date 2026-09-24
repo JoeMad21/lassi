@@ -697,7 +697,15 @@ def test_trial_and_part_defaults() -> None:
     assert trial.attempts == []
     assert trial.final == record.Final(stage_reached=None, alignment=None, score=None, corrections=0, wall_s=None)
     assert record.RunInfo() == record.RunInfo(
-        exit_code=None, hang=None, sim_ub=None, wall_s=None, stdout_ref=None, outputs_ref=None
+        exit_code=None,
+        hang=None,
+        sim_ub=None,
+        wall_s=None,
+        stdout_ref=None,
+        outputs_ref=None,
+        stdout_truncated=None,
+        stderr_truncated=None,
+        workdir_incomplete=None,
     )
     assert record.Alignment() == record.Alignment(per_input=[], mean=None)
     assert record.Profile() == record.Profile(runtime_s=None, avg_power_w=None, energy_j=None)
@@ -1292,6 +1300,9 @@ def test_minimal_attempt_to_dict_exact() -> None:
             "wall_s": None,
             "stdout_ref": None,
             "outputs_ref": None,
+            "stdout_truncated": None,
+            "stderr_truncated": None,
+            "workdir_incomplete": None,
         },
         "alignment": {"per_input": [], "mean": None},
         "profile": {"runtime_s": None, "avg_power_w": None, "energy_j": None},

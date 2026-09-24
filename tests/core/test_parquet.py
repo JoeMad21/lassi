@@ -24,6 +24,11 @@ a context request), message_roles and message_sha256 (string lists in the
 order sent), reply_ref_sha256, reply_ref_path, and diagnostic_count. A
 trial whose requests were not recorded (None) or that asked no model ([])
 has no rows.
+
+The run flags of Trial.reference_run and Attempt.run (P2.2) are bool
+columns right after the run's outputs_ref columns: reference_run_<flag> in
+the trials table and run_<flag> in the attempts table, for stdout_truncated,
+stderr_truncated, and workdir_incomplete, null where not recorded.
 """
 
 from __future__ import annotations
@@ -64,6 +69,9 @@ REFERENCE_RUN_COLUMNS = (
     "reference_run_stdout_ref_path",
     "reference_run_outputs_ref_sha256",
     "reference_run_outputs_ref_path",
+    "reference_run_stdout_truncated",
+    "reference_run_stderr_truncated",
+    "reference_run_workdir_incomplete",
 )
 END_REASON_COLUMNS = ("final_end_reason_code", "final_end_reason_message")
 TRIAL_COLUMNS = (
@@ -119,6 +127,9 @@ ATTEMPT_COLUMNS = (
     "run_stdout_ref_path",
     "run_outputs_ref_sha256",
     "run_outputs_ref_path",
+    "run_stdout_truncated",
+    "run_stderr_truncated",
+    "run_workdir_incomplete",
     "alignment_per_input",
     "alignment_mean",
     "profile_runtime_s",
@@ -205,8 +216,14 @@ BOOL_COLUMNS = frozenset(
         "provenance_dirty",
         "reference_run_hang",
         "reference_run_sim_ub",
+        "reference_run_stdout_truncated",
+        "reference_run_stderr_truncated",
+        "reference_run_workdir_incomplete",
         "run_hang",
         "run_sim_ub",
+        "run_stdout_truncated",
+        "run_stderr_truncated",
+        "run_workdir_incomplete",
         "guards_host_compute",
         "guards_harness_tamper",
         "guards_oracle_access",
@@ -388,6 +405,9 @@ def filled_attempts() -> list[record.Attempt]:
             wall_s=1.5,
             stdout_ref=text_ref("stdout b0\n"),
             outputs_ref=text_ref("outputs b0\n"),
+            stdout_truncated=False,
+            stderr_truncated=True,
+            workdir_incomplete=False,
         ),
         alignment=record.Alignment(per_input=[0.5], mean=0.625),
         profile=record.Profile(runtime_s=0.25, avg_power_w=150.0, energy_j=37.5),
@@ -408,6 +428,9 @@ def filled_attempts() -> list[record.Attempt]:
             wall_s=2.5,
             stdout_ref=text_ref("stdout b1\n"),
             outputs_ref=text_ref("outputs b1\n"),
+            stdout_truncated=False,
+            stderr_truncated=False,
+            workdir_incomplete=True,
         ),
         alignment=record.Alignment(per_input=[0.75, 0.25], mean=0.5),
         profile=record.Profile(runtime_s=0.5, avg_power_w=75.0, energy_j=37.25),
@@ -426,6 +449,9 @@ def filled_reference_run() -> record.RunInfo:
         wall_s=4.5,
         stdout_ref=text_ref("reference stdout b\n"),
         outputs_ref=text_ref("reference outputs b\n"),
+        stdout_truncated=True,
+        stderr_truncated=False,
+        workdir_incomplete=False,
     )
 
 
@@ -604,6 +630,9 @@ def expected_attempt_rows_a_omp_entropy() -> list[dict[str, Any]]:
         "run_stdout_ref_path": None,
         "run_outputs_ref_sha256": None,
         "run_outputs_ref_path": None,
+        "run_stdout_truncated": None,
+        "run_stderr_truncated": None,
+        "run_workdir_incomplete": None,
     }
     unset_profile = {"profile_runtime_s": None, "profile_avg_power_w": None, "profile_energy_j": None}
     first = {
@@ -765,6 +794,9 @@ def expected_trial_row_b_omp_filled() -> dict[str, Any]:
         "reference_run_stdout_ref_path": text_ref("reference stdout b\n").path,
         "reference_run_outputs_ref_sha256": text_ref("reference outputs b\n").sha256,
         "reference_run_outputs_ref_path": text_ref("reference outputs b\n").path,
+        "reference_run_stdout_truncated": True,
+        "reference_run_stderr_truncated": False,
+        "reference_run_workdir_incomplete": False,
         "context_knowledge_summary": "knowledge b\n",
         "context_source_description": "source b\n",
         "final_stage_reached": "S4",
@@ -799,6 +831,9 @@ def expected_attempt_row_b_omp_filled_0() -> dict[str, Any]:
         "run_stdout_ref_path": stdout.path,
         "run_outputs_ref_sha256": outputs.sha256,
         "run_outputs_ref_path": outputs.path,
+        "run_stdout_truncated": False,
+        "run_stderr_truncated": True,
+        "run_workdir_incomplete": False,
         "alignment_per_input": [0.5],
         "alignment_mean": 0.625,
         "profile_runtime_s": 0.25,
@@ -833,6 +868,9 @@ def expected_attempt_row_b_omp_filled_1() -> dict[str, Any]:
         "run_stdout_ref_path": stdout.path,
         "run_outputs_ref_sha256": outputs.sha256,
         "run_outputs_ref_path": outputs.path,
+        "run_stdout_truncated": False,
+        "run_stderr_truncated": False,
+        "run_workdir_incomplete": True,
         "alignment_per_input": [0.75, 0.25],
         "alignment_mean": 0.5,
         "profile_runtime_s": 0.5,
