@@ -142,6 +142,7 @@ from lassi.core.record import (
     Provenance,
     ToolchainPins,
     Trial,
+    arm_segment,
     json_text,
     make_trial_id,
 )
@@ -803,7 +804,8 @@ def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
     for direction in settings.directions:
         for item in bench.items:
             try:
-                trial_id = make_trial_id(recipe.name, settings.model_id, bench.suite.name, direction.name, item, 1)
+                arm = arm_segment(settings.model_id)
+                trial_id = make_trial_id(recipe.name, arm, bench.suite.name, direction.name, item, 1)
             except ValueError as error:
                 raise RunError(f"{recipe.path}: {error}") from error
             key = trial_id.casefold()
@@ -1213,7 +1215,9 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
     if "needs_reference" in backend.capabilities:
         backend = backend.with_reference(suite.reference_target(item, direction, run.bench.root, purpose=PURPOSE))
     trial = Trial(
-        trial_id=make_trial_id(run.recipe.name, settings.model_id, suite.name, direction.name, item, number),
+        trial_id=make_trial_id(
+            run.recipe.name, arm_segment(settings.model_id), suite.name, direction.name, item, number
+        ),
         recipe_hash=run.recipe.recipe_hash,
         toolchain_pins=run.target_pins[direction.target],
         provenance=provenance,

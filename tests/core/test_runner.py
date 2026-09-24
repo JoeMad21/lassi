@@ -2988,3 +2988,26 @@ def test_importing_the_runner_registers_every_component(module: str) -> None:
     assert {"nvcc-sm80", "nvcpp-cc80"} <= set(names["Toolchain"])
     assert {"none", "native"} <= set(names["Executor"])
     assert {"generate", "compile_loop"} <= set(names["Stage"])
+
+
+# ---------------------------------------------------------------------------
+# A model id with '/' (a Hugging Face id) as the trial id's arm segment
+
+
+def test_arm_segment_maps_each_slash_of_a_model_id_to_two_dashes() -> None:
+    assert record_module.arm_segment("furiosa-ai/Llama-3.1-8B-Instruct") == "furiosa-ai--Llama-3.1-8B-Instruct"
+    assert record_module.arm_segment(MOCK_ID) == MOCK_ID
+    trial_id = record_module.make_trial_id(
+        "demo", record_module.arm_segment("org/sub/name"), SUITE, "omp-cuda", ITEM, 1
+    )
+    assert trial_id.split("/")[1] == "org--sub--name"
+
+
+def test_a_model_id_with_a_slash_runs_with_its_arm_segment(tmp_path: Path, bench: Path) -> None:
+    data = smoke_data(model={"backend": "mock", "id": f"org/{MOCK_ID}"})
+    recipe = write_recipe(tmp_path, "slash-model", data)
+    run_dir = run(recipe, tmp_path / "runs-root", bench, make_registry(BuildLog()), run_id="slash")
+    trial_id = f"slash-model/org--{MOCK_ID}/{SUITE}/omp-cuda/{ITEM}/run01"
+    trial = load_trial(run_dir, trial_id)
+    assert trial.trial_id == trial_id
+    assert trial.model.id == f"org/{MOCK_ID}", "the record keeps the model id exactly as served"

@@ -540,6 +540,15 @@ def make_trial_id(project: str, arm: str, bench: str, direction: str, item: str,
     return trial_id
 
 
+def arm_segment(model_id: str) -> str:
+    """Return the trial_id arm segment for a model id: each '/' becomes '--', as the Hugging Face cache spells it.
+
+    A served model id such as "furiosa-ai/Llama-3.1-8B-Instruct" holds '/', which
+    a trial_id segment may not; the record keeps the model id itself unchanged.
+    """
+    return model_id.replace("/", "--")
+
+
 # ---------------------------------------------------------------------------
 # Unified diff
 
