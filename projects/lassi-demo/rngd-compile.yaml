@@ -1,0 +1,37 @@
+# The LASSI pipeline on a model served from one Furiosa RNGD card, compile-only (tier 1).
+# Not a faithful recipe: every upstream quirk the stages reproduce is on (every fix off), but the correction
+# loop stops at a cap, because upstream's loop is uncapped and a real model can keep failing to compile.
+# A cap hit ends the trial with final.end_reason correction-cap. No NVIDIA GPU exists here (OQ-003), so nothing
+# generated runs; results are compile outcomes, never performance.
+extends: base  # projects/base.yaml: sampling (temperature 0.2, top_p 0.9), runs_root, sandbox, and report choices
+faithful: false  # the cap below departs from upstream, so the recipe is not labeled faithful
+fixes:  # every fix off: the stages reproduce upstream's quirks (bible, LASSI quirk table)
+  fence_tag: false
+  prompt_spaces: false
+  baseline_both: false
+  prompt_newlines: false
+  parsed_diagnostics: false
+loop:
+  max_corrections: 5  # the demo's cap; upstream has none
+model:
+  backend: openai_compat  # furiosa-llm's OpenAI-compatible server at http://127.0.0.1:8123/v1 (Serving Rules)
+  id: furiosa-ai/Llama-3.1-8B-Instruct  # served at revision v2026.2 on one RNGD card (plans/spikes/p3-rngd-demo.md)
+llm:
+  sampling:
+    max_tokens: 4096  # upstream sets none; a bound keeps one reply from running for minutes
+bench:
+  suite: lassi-hecbench-10  # the ten apps upstream LASSI used, pinned at HeCBench 692cba3
+  split: eval  # every item is an eval item (Agent Rule 5)
+directions:
+  - {source: omp, target: cuda}
+  - {source: cuda, target: omp}
+prompts: lassi-2024  # upstream's prompts, generated from the pinned checkout (tools/extract_lassi_assets.py)
+context: [openmp-4.0-card, cuda-12.5-ch5]  # upstream's two context packs, generated the same way
+toolchain:
+  cuda: nvcc-sm80  # the pinned nvcc with upstream's flags
+  omp: nvcpp-cc80  # the pinned nvc++ with upstream's flags
+stages: [baseline, summarize_context, describe_source, generate, compile_loop]
+executor:
+  kind: none  # compile only: nothing generated runs
+trials:
+  n: 1  # one trial per app and direction: 20 trials

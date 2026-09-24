@@ -58,7 +58,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1.3 | DONE | lassi-2024 prompt set and context packs from pinned upstream | P1.1 | tools/extract_lassi_assets.py writes 54 prompt fragments and 2 packs, gitignored; 3 MANIFEST.yaml tracked (OQ-018); tests/prompts 41 passed |
 | P1.4 | DONE | Faithful generation: summarize_context, describe_source, generate | P1.3 | Faithful summarize_context, describe_source, generate with fence-quirk and prompt_spaces fixes; tests/core 1146 passed |
 | P1.5 | DONE | Baseline stage and the faithful correction loop | P1.2,P1.4 | baseline stage, Trial.reference_run, final.end_reason, faithful correction prompt with prompt_newlines and parsed_diagnostics fixes; full suite 2923 passed |
-| P1.6 | READY | run_loop: execution gate, stale output, run flags, Ollama unload | P1.5 |  |
+| P1.6 | ACTIVE | run_loop: execution gate, stale output, run flags, Ollama unload | P1.5 |  |
 | P1.7 | DONE | Oracles: stdout_mask and passfail | P1.2 | stdout_mask and passfail oracles, masks for all ten apps, runner oracle checks; the stage aligns run stdout once the baseline records the reference stdout (P1.5) |
 | P1.8 | DONE | Sim-T and Sim-L | P1.1 | lassi/scoring/similarity.py: faithful sim_t and sim_l equal upstream on 400 ordered pairs under the upstream guard; C-aware sim_t_c added |
 | P1.9 | READY | Replay backend and the upstream notebook replay harness | P1.6,P1.8 |  |

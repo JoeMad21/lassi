@@ -1,0 +1,4 @@
+# A two-trial check of rngd-compile.yaml against the live server before the full run: one app, both directions.
+extends: rngd-compile.yaml
+bench:
+  items: [layout]  # the app the P0 gate used
