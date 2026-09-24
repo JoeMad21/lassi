@@ -1,0 +1,29 @@
+# Weights of the df-v0 score profile (task P2.6; bible Training Module, Reward Function).
+# lassi.scoring.df_v0 reads every weight from this file and holds none; a file missing a key is refused.
+# The formula: R = b(s) - 0.02 min(W, 10) + 0.8 A 1[s = S5]; a guard violation sets R = -1;
+# multi-turn episodes use R_final - 0.05 x corrections.
+# Changing a value is a Decision Log entry.
+
+# b(s), the base score of the stage reached: the Reward Function's stage table, Base score column.
+stage_base:
+  S0: -1.0  # no extractable output
+  S1: -0.8  # parses
+  S2: -0.6  # verifies (MLIR verifier)
+  S3: -0.4  # lowers (all passes)
+  S4: 0.0  # compiles (host and kernel JIT)
+  S5: 0.2  # runs clean: no crash, UB, or hang
+
+# The 0.02 of the formula's 0.02 min(W, 10) term: the cost of each unique warning after a successful compile.
+warning_weight: 0.02
+
+# The 10 of the formula's min(W, 10) term: the most warnings charged.
+warning_cap: 10
+
+# The 0.8 of the formula's 0.8 A 1[s = S5] term: the weight of the mean alignment A at S5.
+alignment_weight: 0.8
+
+# The R a guard violation sets (host compute, harness tamper, oracle access): the Reward Function's "sets R = -1".
+guard_violation: -1.0
+
+# The 0.05 of R_final - 0.05 x corrections, for multi-turn episodes (Reward Function; Algorithms, Episodes).
+correction_penalty: 0.05
