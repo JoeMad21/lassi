@@ -1,5 +1,5 @@
 # The LASSI pipeline on a model served from one Furiosa RNGD card, compile-only (tier 1).
-# Not a faithful recipe: every upstream quirk the stages reproduce is on (every fix off), but the correction
+# Not a faithful recipe: every upstream quirk the listed stages reproduce is on (their fixes off), but the correction
 # loop stops at a cap, because upstream's loop is uncapped and a real model can keep failing to compile.
 # A cap hit ends the trial with final.end_reason correction-cap. No NVIDIA GPU exists here (OQ-003), so nothing
 # generated runs; results are compile outcomes, never performance.

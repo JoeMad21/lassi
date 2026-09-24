@@ -4,12 +4,12 @@
 # The correction prompts still name upstream's compiler and flags, since they are upstream's text.
 extends: rngd-compile.yaml
 fixes:
-  execution_gate: false  # run_loop is listed, so upstream's execution gate is reproduced too
+  execution_gate: false  # run_loop reproduces upstream's gate; with the cap of 5 below 8 it never triggers
 directions:
   - {source: cuda, target: omp}  # only OpenMP can run here: there is no NVIDIA GPU (OQ-003)
 toolchain:
   omp: nvcpp-multicore  # nvc++ -mp=multicore, the proxy; the CUDA toolchain stays bound but builds nothing here
-stages: [baseline, summarize_context, describe_source, generate, compile_loop, run_loop, oracle]
+stages: [baseline, summarize_context, describe_source, generate, compile_loop, run_loop, oracle]  # upstream's, plus the oracle
 executor:
   kind: native  # the reference and every compiling attempt run in the sandbox on the host CPU
 oracle:
