@@ -255,3 +255,13 @@ Options: (a) Add the prompt, preset, banner, and inference table to P4's scope (
 Recommendation: (a). The work is small and needs no hardware, P4 is the next plan to be written, and the training table waits for training to exist.
 Answer: Let's go with option A.
 Applied: 2026-09-24. The Build Roadmap's P4 scope names the graphics prompt and preset, the LASSI-DF banner, and the live inference table, and P7's names the live training table; P4's gate is unchanged (bible Readability Standards, Terminal Presentation, and the Decision Log). plans/PHASE-NOTES.md, P4, carries the note for P4's plan.
+
+## OQ-024 P2 Gate Review: Score Components On Run demo-rngd-cpu-1
+State: OPEN
+Kind: review
+Blocks: none
+Evidence: results/p2-gate/summary.md, results/p2-gate/score/review.md, results/p2-gate/score/metrics.md
+Question: The P2 gate is your review of the score components on one full run. Both profiles scored all 10 trials of demo-rngd-cpu-1 from clean commit a10fdd0, and the load check scored p1-gate-dry-run and demo-rngd-1 (20 trials each). Do the components, the readings behind them, and the weights hold? The summary lists eight review questions: the run's limits, the planning decisions, the in-task readings, the lassi profile's nulls, the run metric populations, the faithful Sim-T staying below 0.01 on every trial (bearing on OQ-022's review), OQ-021, and any df-v0 weight to change.
+Options: (a) Accept: P2 becomes DONE. (b) Accept with changes: name each change; each becomes a task in the next phase or a Decision Log entry for a weight. (c) Hold for a faithful run: P2 stays GATE-OWNER until a faithful run (P3 or P10) is scored.
+Recommendation: (b) if any reading or weight should change, else (a). The run is a demo model on the CPU proxy, so the review checks the scoring, not the model.
+Answer:

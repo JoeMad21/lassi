@@ -10,7 +10,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | --- | --- | --- | --- |
 | P0 Core | p0-core | DONE | base: main; gate passed 2026-09-23 (results/p0-gate); merged into main as c3cf248 (PR 1) |
 | P1 Faithful LASSI | p1-faithful | DONE | base: main at c3cf248 (P0 merged, PR 1); plan plans/p1-faithful.md; owner 2026-09-23: scope fixed at planning, P2 follows without pause; owner 2026-09-24: curated LASSI demo at 15:00 EDT |
-| P2 Scoring | p2-scoring | ACTIVE | base: p1-faithful at 5d5fd0c (P1 DONE, PR 2 open, not merged); plan plans/p2-scoring.md; gate is an owner review on run demo-rngd-cpu-1, then GATE-OWNER and P4 |
+| P2 Scoring | p2-scoring | GATE-OWNER | base: p1-faithful at 5d5fd0c (P1 DONE, PR 2 open, not merged); plan plans/p2-scoring.md; gate is an owner review on run demo-rngd-cpu-1, then GATE-OWNER and P4 |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
 | P4 ttsim Execution | p4-ttsim | NOT-STARTED | - |
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
@@ -77,4 +77,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2.8 | DONE | Run metrics per arm and direction | P2.6,P2.7 | lassi.analysis metrics per arm and direction; bible rev 151 |
 | P2.9 | DONE | lassi score: score a finished run and write the review packet | P2.2,P2.8 | lassi score writes the score tree and review packet; bible rev 156 |
 | P2.10 | DONE | Recipes bind score and metrics in lassi run | P2.9 | lassi run binds score and metrics; run.md Metrics section; bible rev 180 |
-| P2.G | READY | Phase gate: owner review of score components on run demo-rngd-cpu-1 | P2.1,P2.2,P2.5,P2.9,P2.10 |  |
+| P2.G | DONE | Phase gate: owner review of score components on run demo-rngd-cpu-1 | P2.1,P2.2,P2.5,P2.9,P2.10 | checks passed at a10fdd0 (rx e027, 1b00); owner review OQ-024 |

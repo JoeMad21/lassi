@@ -1,0 +1,56 @@
+{
+  "score_id": "p2-gate-load-demo-rngd-1",
+  "commit": "a10fdd0048267f9034fb87ca387dbd0f4f5c2d8f",
+  "dirty": false,
+  "date": "2026-09-25T00:47:14+00:00",
+  "python": "3.10.12",
+  "profiles": [
+    {
+      "name": "df-v0",
+      "file": "assets/scoring/df-v0.yaml",
+      "sha256": "1bd8b1ea88ea4da9b2c655e1c8287fd4f25ee4d7262aa32b200f178748a14ca4"
+    },
+    {
+      "name": "lassi",
+      "file": "assets/scoring/lassi.yaml",
+      "sha256": "cebc187cd29f7b9651636dc699a07e3f6be16f8d807b76b984be2c915566462a"
+    }
+  ],
+  "bench_root": "/mnt/nvme10/joseph_ufl/bench/lassi-hecbench-10@692cba32c5744f6ef024cca59f65e9488edba8bf",
+  "metrics": {
+    "paper": {
+      "file": "assets/scoring/lassi-paper.yaml",
+      "sha256": "414fbbc67d60d559f91b1c9844075109723d5bff998ddf9e1931ed3545a03fa8"
+    }
+  },
+  "trials": 20,
+  "source_run": {
+    "path": "/mnt/nvme10/joseph_ufl/lassi-runs/runs/demo-rngd-1",
+    "provenance": {
+      "run_id": "demo-rngd-1",
+      "status": "complete",
+      "recipe": "rngd-compile",
+      "recipe_path": "projects/lassi-demo/rngd-compile.yaml",
+      "recipe_chain": [
+        "base",
+        "rngd-compile"
+      ],
+      "recipe_hash": "b7290b165f7e51d7a467e25a68284f7aa0c094472bd37b4e3f856eb518a4e2cb",
+      "commit": "7c5cad7ce5befed69a7d579ac20affac7ac53449",
+      "dirty": false,
+      "host": "alpha01",
+      "platform": "Linux-6.6.29+main+3.0.0r1-amd64-gio-epilmore-dev+-x86_64-with-glibc2.35",
+      "python": "3.10.12",
+      "executor": "none",
+      "device": "none (compile only)",
+      "driver": null,
+      "started_utc": "2026-09-24T15:30:55+00:00",
+      "finished_utc": "2026-09-24T16:26:21+00:00",
+      "pins": {
+        "cuda": "12.6.3",
+        "nvhpc": "24.11"
+      }
+    },
+    "recipe_hash": "b7290b165f7e51d7a467e25a68284f7aa0c094472bd37b4e3f856eb518a4e2cb"
+  }
+}
