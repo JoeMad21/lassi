@@ -85,7 +85,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.4 | READY | binary_io oracle over output files | P4.3 |  |
 | P4.5 | READY | Native C++ toolchain and executors per language | - |  |
 | P4.6 | READY | Record readings for simulator runs | - |  |
-| P4.7 | READY | Graphics setting, preset, and banner | - |  |
+| P4.7 | DONE | Graphics setting, preset, and banner | - | graphics setting, preset, banner; bible rev 211 |
 | P4.8 | READY | Progress hook and live inference table | P4.7 |  |
 | P4.9 | READY | Spike: ttsim runtime facts, unpack_to_dest, and Watcher | P4.2 |  |
 | P4.10 | READY | tt-metal host toolchain | P4.2,P4.5 |  |
