@@ -231,14 +231,27 @@ Evidence: plans/spikes/p2-lassi-metrics.md
 Question: Five of the eight percentages in the LASSI results table do not follow from the paper's own Tables VI and VII: within 10% or faster in both directions, Sim-T >= 0.6 in both, and CUDA -> OMP first try. Each recount differs from the published value by 1 to 5 trials, and the sources do not say why. When the reproduction marks a headline metric reproduced or reports its gap, which paper value is the reference?
 Options: (a) The published percentages only: this matches the paper's claims, but part of a gap may be the paper's own inconsistency, unmarked. (b) Both values side by side, with the gap reported against each and the difference noted: nothing is hidden, but tables get wider and five metrics carry two gaps. (c) The recounts only: consistent with the published rows and the Reporting Rules' recompute-from-raw rule, but departs from the paper's stated headline numbers.
 Recommendation: (b). The sources cannot tell which value is right, so neither is picked silently.
-Answer:
+Answer: I wasn't aware there was a discrepancy in the paper? Could you send the links and give page numbers to the sources you are using?
+Response (2026-09-24): The sources, with every step in plans/spikes/p2-lassi-metrics.md (Sources, Recount). Paper: arXiv:2407.01638, https://arxiv.org/abs/2407.01638; PDFs https://arxiv.org/pdf/2407.01638v1 and https://arxiv.org/pdf/2407.01638v2 (8 pages each, the same tables and percentages; pages below are v2's). Published percentages: p. 6, Sec. V-B (OMP -> CUDA: 78.1% within 10% or faster, 65.6% first try, 40.6% Sim-T >= 0.6, each of the 32 correct trials) and Sec. V-C (CUDA -> OMP: 61.8%, 55.9%, 47.1%, each of the 34 correct trials). Per-trial values: Table VI, p. 6 (OMP -> CUDA) and Table VII, p. 7 (CUDA -> OMP), columns Runtime, Ratio, Sim-T, Sim-L, Self-corr, one line per app with two models per panel, N/A for a failed trial; reference runtimes in Table IV, p. 5. Counting the rows: OMP -> CUDA within 10% is 23/32 by the printed Ratios (9 below 0.9), 24/32 with GPT-4's atomicCost Ratio recomputed from Table IV (its printed row repeats the layout row above it), against 25/32 published; OMP -> CUDA Sim-T >= 0.6 is 8/32 against 13/32 (only a threshold of 0.54 gives 13); CUDA -> OMP within 10% is 20/34 against 21/34; CUDA -> OMP first try (Self-corr 0) is 18/34 against 19/34; CUDA -> OMP Sim-T >= 0.6 is 15/34 against 16/34. Correct output (32/40, 34/40) and OMP -> CUDA first try (21/32) count to their published values. The spike lists the trials behind each count and the script that counts them; a second, independent count from both PDFs and the HTML gave the same values. State stays OPEN for a choice among (a), (b), and (c); write it on a second Answer line below.
 
 ## OQ-022 Which Token Similarity Is The Paper's Sim-T
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: none
 Evidence: plans/spikes/p2-lassi-metrics.md (Findings 5); lassi/scoring/similarity.py
 Question: The pinned notebook computes and stores two token similarities, one over Python tokenize tokens and one over tiktoken cl100k_base ids. The paper names one Sim-T and does not say which. The faithful sim_t uses Python tokenize (quirk table). The paper's generated codes are unpublished, so no data can settle this. P2's scope is fixed, so a second measure would come in a later phase.
 Options: (a) Keep sim_t as the faithful Sim-T and label every paper comparison of Sim-T "tokenizer not stated by the paper": no new dependency, and the comparison stays caveated. (b) As (a), and add sim_t_tiktoken under its own name in a later phase: both candidates are reported, but this adds the tiktoken dependency and its cl100k_base file, which must be cached under the scratch root before offline use on alpha01. (c) Make the tiktoken similarity the faithful Sim-T: this changes the quirk table's Sim-T row and the P1.9 replay comparison, and no evidence favors it.
 Recommendation: (a). A second measure cannot resolve a question that no published data can settle, and (a) keeps the documented design.
-Answer:
+Answer: Keep both token similarities and give me a notice to review this later.
+Applied: 2026-09-24. Option (b): both similarities are kept: the faithful sim_t (Python tokenize) stays the Sim-T compared with the paper, labeled with the open tokenizer, and a tiktoken cl100k_base similarity, sim_t_tiktoken, joins under its own name in a later phase (bible Evaluation Protocol, LASSI Paper Metrics, and the Decision Log). The review-later notice is in plans/PHASE-NOTES.md, All Phases.
+
+## OQ-023 Which Phase Builds Terminal Presentation
+State: CLOSED
+Kind: decision
+Blocks: none
+Evidence: docs/BIBLE.md (Readability Standards, Terminal Presentation; Decision Log 2026-09-24)
+Question: Terminal presentation (the graphics prompt and saved preset, the LASSI-DF banner, the live inference table, and the live training table) is designed in the bible but named in no Build Roadmap row, so no phase plan would pick it up. Which phase builds it?
+Options: (a) Add the prompt, preset, banner, and inference table to P4's scope (the next phase in the work order, not yet planned) and the training table to P7's (training first exists there): the next plan includes it, P4 grows a little, and P4's gate is unchanged. (b) A separate small phase before P4 with its own gate (a recorded terminal session of lassi run on a mock recipe): the cleanest scope, but it adds a roadmap row and delays P4. (c) After P5, once the hardware-free phases are done: no delay to the core path, but the demo's table stays a one-off script until then.
+Recommendation: (a). The work is small and needs no hardware, P4 is the next plan to be written, and the training table waits for training to exist.
+Answer: Let's go with option A.
+Applied: 2026-09-24. The Build Roadmap's P4 scope names the graphics prompt and preset, the LASSI-DF banner, and the live inference table, and P7's names the live training table; P4's gate is unchanged (bible Readability Standards, Terminal Presentation, and the Decision Log). plans/PHASE-NOTES.md, P4, carries the note for P4's plan.

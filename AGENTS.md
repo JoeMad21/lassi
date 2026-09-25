@@ -45,6 +45,8 @@ Hard rules:
 
 Work is unattended by default. The owner reviews asynchronously through `plans/OWNER-QUEUE.md`, run reports in `plans/runs/`, pushed branches, and pull requests. Never wait for an answer and never ask questions in an unattended session; record the question in the owner queue and continue with other work.
 
+Once terminal graphics exist (bible, Readability Standards, Terminal Presentation), run `lassi` commands in unattended sessions with `--graphics off` or `LASSI_GRAPHICS=off`, so no command can wait on the graphics prompt, and never save a graphics preset for the owner.
+
 ## Session Loop
 
 1. Orient: `git status`, current branch, `uv run tools/status.py summary`. Read `plans/OWNER-QUEUE.md`; apply every item in state ANSWERED first (record the decision where it belongs, unblock tasks, set the item CLOSED).
