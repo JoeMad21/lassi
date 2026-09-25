@@ -79,7 +79,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2.10 | DONE | Recipes bind score and metrics in lassi run | P2.9 | lassi run binds score and metrics; run.md Metrics section; bible rev 180 |
 | P2.G | DONE | Phase gate: owner review of score components on run demo-rngd-cpu-1 | P2.1,P2.2,P2.5,P2.9,P2.10 | checks passed at a10fdd0 (rx e027, 1b00); owner review OQ-024 |
 | P4.0 | DONE | Plan phase P4 into plans/p4-ttsim.md and add its tasks here | - | plan written; commit P4.0: plan phase |
-| P4.1 | ACTIVE | Spike: joint pin of tt-mlir, tt-metal, and ttsim; build budget | - |  |
+| P4.1 | DONE | Spike: joint pin of tt-mlir, tt-metal, and ttsim; build budget | - | joint pin tt-mlir 0.9.0.dev20260221, tt-metal 5280a9cf, ttsim v1.3.4 (OQ-026 a); bible rev 198 |
 | P4.2 | READY | Install the pinned tt-metal and ttsim | P4.1 |  |
 | P4.3 | READY | lassi_io harness and its binary file format | - |  |
 | P4.4 | READY | binary_io oracle over output files | P4.3 |  |

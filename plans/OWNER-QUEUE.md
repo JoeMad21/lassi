@@ -284,3 +284,15 @@ Answer: Are we training models? I thought that was a feature for later phases. P
 Response (2026-09-24): No phase before P7 trains a model. Training (P7 offline, P8 online) fine-tunes a model on translation examples. Agent Rule 5 forbids ever training on an eval item, so each benchmark item carries a split label, and P4 creates the Tier A suite, so it needs a label now; unassigned works as a label that decides nothing.
 Owner's choice (asked in the working session after the response above, 2026-09-24; recorded by the agent): option (d), every item unassigned until P7.
 Applied: 2026-09-24. Every tt-pairs-v0 item will stay unassigned, and training will refuse it as it refuses eval items (P4.13 builds the suite and that refusal); the owner assigns its split before any training run reads the suite, in P7 (bible Risks And Questions, question 10; Decision Log). Task P4.14 records this and changes no manifest; plans/PHASE-NOTES.md carries the P7 reminder.
+
+## OQ-026 Joint Pin: tt-mlir's Releases Are Stale Nightlies
+State: CLOSED
+Kind: decision
+Blocks: none
+Evidence: plans/spikes/p4-tt-pins.md
+Question: The P4 plan's joint-pin rule takes the newest tt-mlir release. tt-mlir's GitHub releases are all nightly prereleases, the last 0.9.0.dev20260221, so the rule pins tt-metal 5280a9cf (2026-02-17) and ttsim v1.3.4, while tt-mlir main pins tt-metal d04395ed (2026-08-29) with ttsim v1.10.3. Keep the rule's result, or use main?
+Options: (a) Keep: tt-mlir 0.9.0.dev20260221, tt-metal 5280a9cf, ttsim v1.3.4; tagged (its release notes mark the nightly's own test run failed, run 22211454385), with tt-metal's own Wormhole ttsim CI passing at that commit, and closest to the TurboQuant checkout's tt-metal; seven months of ttsim fixes are absent. (b) Main: tt-mlir 70b7117e, tt-metal d04395ed, ttsim v1.10.3; current simulator and dialects, but an untagged commit and 7385 commits past the TurboQuant checkout.
+Recommendation: (a). Tagged artifacts with upstream CI evidence on Wormhole meet the rule; revisit before P5 if P4.9 finds simulator gaps a newer ttsim closes.
+Answer:
+Owner's choice (asked in the working session, 2026-09-24; recorded by the agent): option (a), the Feb 2026 nightly.
+Applied: 2026-09-24. The joint pin is in the bible's Toolchain Pins and ttsim Facts with a Decision Log entry; P4.2 installs it under $LASSI_TOOLCHAINS.
