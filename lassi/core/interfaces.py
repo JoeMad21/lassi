@@ -226,7 +226,13 @@ class Judge(Component, Protocol):
 
 
 class ScoreProfile(Component, Protocol):
-    """Turns a trial into score components, a scalar, and notes on its null components."""
+    """Turns a trial into score components, a scalar, and notes on its null components.
+
+    A built profile may declare `trial_components`, the names of its trial
+    Score's components in order; `lassi run` offers them as metrics a
+    recipe may name (lassi.scoring.run_scoring). One that declares none
+    offers none.
+    """
 
     def score(self, trial: Trial) -> Score:
         """Return the score breakdown for `trial`."""

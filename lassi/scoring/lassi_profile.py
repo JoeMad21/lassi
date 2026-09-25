@@ -241,6 +241,11 @@ class LassiProfile:
         self.profile = load_profile(self.profile_path)
         self._suites: dict[str, Suite] = {}
 
+    @property
+    def trial_components(self) -> tuple[str, ...]:
+        """Return the trial Score's components in the profile file's order; `lassi run` offers them as metrics."""
+        return self.profile.components
+
     def score(self, trial: Trial) -> Score:
         """Return the trial's Score: every component in the profile file's order, the scalar, and the notes."""
         notes = self.profile.notes

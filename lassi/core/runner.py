@@ -4,8 +4,9 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
 
 1. loads the recipe with the registry (every component registers when this
    module is imported, since it imports lassi.llm, lassi.toolchains,
-   lassi.executors, lassi.core.stages, and lassi.core.oracle_stage, which
-   imports lassi.oracles);
+   lassi.executors, lassi.core.stages, lassi.core.oracle_stage, which
+   imports lassi.oracles, and lassi.scoring, which registers every
+   ScoreProfile);
 2. refuses what it cannot run, before any directory is created or any model
    is asked: arms without a model (the model registry that maps arms to
    backends comes later) and arms beside a model; a recipe with no
@@ -37,6 +38,10 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    ValueError, as for an unset oracle.passfail); a backend that declares
    `unload_before_run` but has no unload(), or `needs_reference` but has no
    with_reference() (or, with fixes.fence_tag off, no with_untagged_fence());
+   a `score` profile or, when the recipe names metrics, any registered
+   ScoreProfile that cannot be built, and a `metrics` name that no
+   registered provider offers, that two offer, or that is named twice
+   (lassi.scoring.run_scoring.plan_scoring);
    and, when the executor runs programs, a sandbox.wall_s that is neither a
    number of seconds above 0 nor `baseline_x10`, or a sandbox.mem_gb that
    is not above 0 (the limits of every run, lassi.core.stages
@@ -44,8 +49,10 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    `sandboxed` when a listed stage declares `runs_model_code` (Agent Rule 6).
    A stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id), each toolchain
-   with its pinned compiler and a clean environment (below), and the
-   executor as factory(**config);
+   with its pinned compiler and a clean environment (below), the executor
+   as factory(**config), and the ScoreProfiles `score` and `metrics` need
+   (lassi.scoring.profiles.build_profile, with the bench root for a profile
+   that declares reads_bench_sources);
 4. loads the suite manifest assets/bench/<bench.suite>.yaml and finds the
    fetched sources (tools/fetch_bench.py puts them under $LASSI_SCRATCH);
 5. runs every trial, direction by direction in recipe order, item by item in
@@ -60,8 +67,13 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    prompt set's fragments and the context packs by language), then the
    trial's final block, whose alignment is that of the attempt whose output
    stands (_final). A stage that sets final.end_reason ends the trial:
-   no later stage runs, and the final block keeps the end reason;
-6. writes the run tree and prints one line per trial and the run directory.
+   no later stage runs, and the final block keeps the end reason. With
+   `score`, the bound profile then sets final.score, and each Attempt.score
+   when it declares scores_attempts, before the trial is written;
+6. with `metrics`, scores every trial again with each profile that gives a
+   named metric (these Scores stay out of the trials) and builds the run
+   metric tables (lassi.scoring.run_scoring.compute_metrics);
+7. writes the run tree and prints one line per trial and the run directory.
 
 The run tree is <runs root>/runs/<run_id>, where the runs root is the
 runs_root option, else $LASSI_RUNS_ROOT, else the recipe's runs_root. The
@@ -84,12 +96,16 @@ host), resolve inside it (Agent Rule 7). The tree holds:
   changed, so a trial and its manifest never disagree;
 - run.md: the page a person reads (Readability Standards, Run row). Its
   summary shows the manifest's provenance, with an unknown value (null) as
-  "-" as trial.md shows it, since provenance is not a measurement;
+  "-" as trial.md shows it, since provenance is not a measurement. With
+  `metrics` it ends in a Metrics section
+  (lassi.scoring.run_scoring.metrics_section);
 - one directory per trial (one level per trial_id segment) with trial.json,
   trial.md, and attempt<NN>/build, each attempt's fresh build directory
   (the run directory is the stages' build root, so a rerun of the recipe
   never meets an earlier run's builds);
-- texts/, the text store of prompts and replies; parquet/, the mirror.
+- texts/, the text store of prompts and replies; parquet/, the mirror, which
+  with `metrics` also holds the metric tables and the named components'
+  values (lassi.scoring.run_scoring.write_metrics).
 
 Pinned toolchains (Agent Rule 10): a toolchain class that declares PIN and
 PIN_BIN is built as factory(executable=<toolchains root>/<PREFIX_NAME>/
@@ -171,6 +187,16 @@ from lassi.executors.sandbox import SandboxedCompileRunner
 from lassi.llm import model_info
 from lassi.prompts import assets as prompt_assets
 from lassi.prompts import load_recipe_assets, render
+from lassi.scoring.run_scoring import (
+    RunMetrics,
+    ScoringPlan,
+    compute_metrics,
+    metrics_section,
+    plan_scoring,
+    score_trial,
+    write_metrics,
+)
+from lassi.scoring.score_run import ScoreError
 from lassi.toolchains import EnvRunner
 from lassi.toolchains.pins import linked_prefixes, prefix_pin_name, read_pin
 
@@ -194,7 +220,7 @@ _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
 # put its trial directories among the text store or the Parquet tables.
 _RUN_TREE_NAMES = frozenset({"texts", PARQUET_DIR, RESOLVED_RECIPE, TOOLCHAINS_JSON, PROVENANCE_JSON, RUN_MD})
 # Recipe sections this runner does not carry out; a recipe that sets one is refused, never run without it.
-_NOT_CARRIED_OUT = ("profiler", "adversary", "metrics", "refine", "score", "agents", "judges")
+_NOT_CARRIED_OUT = ("profiler", "adversary", "refine", "agents", "judges")
 # How long git may take to report the commit or the dirty flag, in seconds.
 _GIT_TIMEOUT_S = 60.0
 # How long a pinned compiler's --version may take, in seconds, and the name prefix of the fresh directory under
@@ -298,7 +324,8 @@ class _Run:
     """Everything the trial loop and the run files read: the recipe, its components, the bench, and provenance.
 
     `pins` holds every bound toolchain's pin versions and `target_pins` those
-    of the toolchain that builds each target language.
+    of the toolchain that builds each target language. `scoring` holds the
+    built ScoreProfiles of `score` and `metrics` (lassi.scoring.run_scoring).
     """
 
     recipe: Recipe
@@ -315,6 +342,7 @@ class _Run:
     started: datetime
     commit: str | None
     dirty: bool | None
+    scoring: ScoringPlan
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -325,9 +353,11 @@ def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
     directory is created or any model is asked. A component's own errors,
     such as SandboxUnavailableError from an executor or a sandboxed compile,
     propagate; one raised during the trials leaves provenance.json with
-    status "failed". The toolchains' --version checks run in the compile
-    sandbox before any directory is created, so a sandbox that cannot run
-    them raises SandboxUnavailableError then.
+    status "failed", and so does a RunError from a ScoreProfile that cannot
+    score a trial or from metric tables that cannot be built. The
+    toolchains' --version checks run in the compile sandbox before any
+    directory is created, so a sandbox that cannot run them raises
+    SandboxUnavailableError then.
     """
     run = _prepare(Path(path), options, datetime.now(timezone.utc))
     run_dir = run.run_dir
@@ -337,9 +367,12 @@ def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
     _write(run_dir / PROVENANCE_JSON, json_text(manifest))
     try:
         trials = _run_trials(run, _trial_provenance(manifest))
+        metrics = _metrics(run, trials)
         provenance = _final_provenance(manifest, COMPLETE)
-        _write(run_dir / RUN_MD, _run_md(run, provenance, trials))
+        _write(run_dir / RUN_MD, _run_md(run, provenance, trials, metrics))
         write_run_parquet(trials, run_dir / PARQUET_DIR)
+        if metrics is not None:
+            write_metrics(metrics, run_dir / PARQUET_DIR)
     except BaseException:
         _write(run_dir / PROVENANCE_JSON, json_text(_final_provenance(manifest, FAILED)))
         raise
@@ -361,6 +394,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     bench = _bench(recipe, settings, options)
     _check_plan(recipe, registry, settings, bench)
     _check_oracle(recipe, registry)
+    scoring = _scoring(recipe, registry, bench)
     backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id)
     _check_backend(recipe, settings, backend)
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
@@ -395,7 +429,21 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         started=started,
         commit=commit,
         dirty=dirty,
+        scoring=scoring,
     )
+
+
+def _scoring(recipe: Recipe, registry: Registry, bench: _Bench) -> ScoringPlan:
+    """Build the ScoreProfiles `score` and `metrics` need and check every metrics name; RunError says why not.
+
+    lassi.scoring.run_scoring.plan_scoring decides, with the run's bench
+    root for a profile that reads bench sources, before any directory is
+    created or any model is asked.
+    """
+    try:
+        return plan_scoring(recipe.data, registry, bench.root)
+    except (OSError, ValueError) as error:
+        raise RunError(f"{recipe.path}: {error}") from error
 
 
 def _check_backend(recipe: Recipe, settings: _Settings, backend: Any) -> None:
@@ -1275,12 +1323,16 @@ def _toolchains_record(toolchains: Sequence[BuiltToolchain]) -> dict[str, Any]:
 
 
 def _run_trials(run: _Run, provenance: Provenance) -> list[Trial]:
-    """Run and write every trial, each with `provenance`: directions in recipe order, items sorted, runs 1 to n."""
+    """Run and write every trial, each with `provenance`: directions in recipe order, items sorted, runs 1 to n.
+
+    The recipe's `score` profile, when it binds one, scores each trial
+    before it is written (_scored).
+    """
     trials: list[Trial] = []
     for direction in run.settings.directions:
         for item in run.bench.items:
             for number in range(1, run.settings.trials + 1):
-                trial = _run_trial(run, provenance, direction, item, number)
+                trial = _scored(run, _run_trial(run, provenance, direction, item, number))
                 write_trial(trial, run.run_dir, run.store)
                 trials.append(trial)
                 final = trial.final
@@ -1348,6 +1400,30 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
         if trial.final.end_reason is not None:
             break
     return dataclasses.replace(trial, final=_final(trial, time.monotonic() - started))
+
+
+def _scored(run: _Run, trial: Trial) -> Trial:
+    """Return the trial with the bound ScoreProfile's scores (lassi.scoring.run_scoring.score_trial).
+
+    A profile that cannot score the trial raises RunError, which leaves
+    provenance.json with status "failed".
+    """
+    try:
+        return score_trial(run.scoring, trial)
+    except ScoreError as error:
+        raise RunError(f"{run.recipe.path}: score {run.scoring.score!r}: {error}") from error
+
+
+def _metrics(run: _Run, trials: Sequence[Trial]) -> RunMetrics | None:
+    """Return the run's named metrics (lassi.scoring.run_scoring.compute_metrics); None when it names none.
+
+    A profile that cannot score a trial, or tables that cannot be built,
+    raise RunError, which leaves provenance.json with status "failed".
+    """
+    try:
+        return compute_metrics(run.scoring, trials)
+    except (ScoreError, ValueError) as error:
+        raise RunError(f"{run.recipe.path}: metrics: {error}") from error
 
 
 def _final(trial: Trial, wall_s: float) -> Final:
@@ -1508,10 +1584,14 @@ def _trial_blocks(trials: Sequence[Trial]) -> list[str]:
     return blocks or ["No trials.\n"]
 
 
-def _run_md(run: _Run, provenance: Mapping[str, Any], trials: Sequence[Trial]) -> str:
+def _run_md(
+    run: _Run, provenance: Mapping[str, Any], trials: Sequence[Trial], metrics: RunMetrics | None = None
+) -> str:
     """Return run.md: the run summary, the resolved recipe, the toolchain pins, and one trials table per arm.
 
-    It is deterministic for given records, plain ASCII (non-ASCII becomes
+    With `metrics` (the recipe names metrics), a Metrics section follows
+    the trials (lassi.scoring.run_scoring.metrics_section). It is
+    deterministic for given records, plain ASCII (non-ASCII becomes
     backslash escapes) with LF newlines, and names no absolute run path, so
     it reads the same wherever the run tree is copied.
     """
@@ -1532,6 +1612,8 @@ def _run_md(run: _Run, provenance: Mapping[str, Any], trials: Sequence[Trial]) -
     pin_header = ("Toolchain", "Languages", "Pin", "Version", "Install prefix")
     blocks += ["## Toolchain pins\n", _md_table(pin_header, _pin_rows(run.toolchains))]
     blocks += ["## Trials\n", *_trial_blocks(trials)]
+    if metrics is not None:
+        blocks.append(metrics_section(metrics, run.scoring.score))
     return "\n".join(blocks).encode("ascii", "backslashreplace").decode("ascii")
 
 

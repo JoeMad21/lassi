@@ -162,6 +162,8 @@ class DfV0Profile:
 
     name = "df-v0"
     capabilities = frozenset({SCORES_ATTEMPTS})
+    # The components of the trial's Score, in order; `lassi run` offers them as metrics (lassi.scoring.run_scoring).
+    trial_components = (SINGLE_TURN, MULTI_TURN)
 
     def __init__(self, *, weights_path: str | Path | None = None) -> None:
         """Read and check the weights file: `weights_path`, or WEIGHTS_FILE when it is None."""

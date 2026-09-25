@@ -12,6 +12,8 @@
 - lassi.scoring.score_run: `lassi score`, which scores a finished run tree
   and writes its review packet under <runs root>/scores/<score id>. It is
   not imported here; import it by name.
+- lassi.scoring.run_scoring: the recipe's `score` and `metrics` in `lassi run`
+  (the runner imports it).
 
 Importing this package registers the ScoreProfiles `df-v0` and `lassi` in the
 default registry.

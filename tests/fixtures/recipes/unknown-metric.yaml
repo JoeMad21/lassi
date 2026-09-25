@@ -1,0 +1,4 @@
+# Task P2.10: a recipe whose metrics line names a metric that no registered score profile and no run analysis
+# provides. The runner refuses it, naming the metric, before any directory is created or any model is asked.
+extends: p0-smoke.yaml  # tests/fixtures/recipes/p0-smoke.yaml: the mock, one item, one direction, compile only
+metrics: [no_such_metric]  # provided by no ScoreProfile component and no lassi.analysis.metrics row

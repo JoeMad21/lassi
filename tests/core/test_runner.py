@@ -1880,7 +1880,7 @@ def test_refuses_a_stage_order_that_cannot_run(tmp_path: Path, bench: Path, stag
     [
         ({"report": {"trial_md": False}}, r"report\.trial_md is false"),
         ({"report": {"parquet": False}}, r"report\.parquet is false"),
-        ({"metrics": ["pass-at-1"]}, "sets metrics, which this runner does not carry out"),
+        ({"metrics": ["pass-at-1"]}, "pass-at-1"),  # a metric no registered provider offers (task P2.10)
     ],
     ids=["no-trial-md", "no-parquet", "metrics"],
 )

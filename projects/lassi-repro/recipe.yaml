@@ -1,6 +1,5 @@
 # LASSI reproduction (bible Project Recipes, lassi-repro block): upstream's pipeline on its ten apps, faithful.
 # Keys of the block that P1 cannot carry out are left out, each until its phase:
-# metrics: left out until P2, which scores the records (correct, within_10pct, first_try, sim_t, sim_l, self_corr)
 # arms: left out until P3, whose model registry maps arms to backends; until then a child recipe names the model
 # executor: the block's gpu executor on an A100 host comes in P10; the block's tier-1 executor runs here
 # max_tokens: llm.sampling.max_tokens stays unset until P3 names each arm's limit (upstream sets none)
@@ -15,3 +14,4 @@ toolchain: {cuda: nvcc-sm80, omp: nvcpp-cc80}  # the pinned nvcc and nvc++ with 
 stages: [baseline, summarize_context, describe_source, generate, compile_loop, run_loop, oracle]  # baseline first
 executor: {kind: none}  # tier 1, compile only: nothing runs until the gpu executor of P10
 oracle: {kind: stdout_mask, passfail: true}  # timing lines masked; apps that print PASS or FAIL must print PASS
+metrics: [correct, within_10pct, first_try, sim_t, sim_l, self_corr]  # lassi profile components; run.md adds the metric tables

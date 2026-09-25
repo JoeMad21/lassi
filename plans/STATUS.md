@@ -76,5 +76,5 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2.7 | DONE | lassi score profile | P2.3,P2.4 | lassi profile: 12 components, correct needs a clean run; bible rev 148 |
 | P2.8 | DONE | Run metrics per arm and direction | P2.6,P2.7 | lassi.analysis metrics per arm and direction; bible rev 151 |
 | P2.9 | DONE | lassi score: score a finished run and write the review packet | P2.2,P2.8 | lassi score writes the score tree and review packet; bible rev 156 |
-| P2.10 | READY | Recipes bind score and metrics in lassi run | P2.9 |  |
+| P2.10 | DONE | Recipes bind score and metrics in lassi run | P2.9 | lassi run binds score and metrics; run.md Metrics section; bible rev 180 |
 | P2.G | READY | Phase gate: owner review of score components on run demo-rngd-cpu-1 | P2.1,P2.2,P2.5,P2.9,P2.10 |  |
