@@ -10,9 +10,9 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | --- | --- | --- | --- |
 | P0 Core | p0-core | DONE | base: main; gate passed 2026-09-23 (results/p0-gate); merged into main as c3cf248 (PR 1) |
 | P1 Faithful LASSI | p1-faithful | DONE | base: main at c3cf248 (P0 merged, PR 1); plan plans/p1-faithful.md; owner 2026-09-23: scope fixed at planning, P2 follows without pause; owner 2026-09-24: curated LASSI demo at 15:00 EDT |
-| P2 Scoring | p2-scoring | GATE-OWNER | base: p1-faithful at 5d5fd0c (P1 DONE, PR 2 open, not merged); plan plans/p2-scoring.md; gate is an owner review on run demo-rngd-cpu-1, then GATE-OWNER and P4 |
+| P2 Scoring | p2-scoring | DONE | base: p1-faithful at 5d5fd0c; plan plans/p2-scoring.md; gate evidence results/p2-gate; owner review OQ-024 accepted with option (b), review questions moved to P4.15; PR 3 merged |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
-| P4 ttsim Execution | p4-ttsim | NOT-STARTED | - |
+| P4 ttsim Execution | p4-ttsim | ACTIVE | base: main at 75eceef (P2 DONE, PR 3 merged); plan plans/p4-ttsim.md |
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
 | P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
@@ -78,3 +78,20 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2.9 | DONE | lassi score: score a finished run and write the review packet | P2.2,P2.8 | lassi score writes the score tree and review packet; bible rev 156 |
 | P2.10 | DONE | Recipes bind score and metrics in lassi run | P2.9 | lassi run binds score and metrics; run.md Metrics section; bible rev 180 |
 | P2.G | DONE | Phase gate: owner review of score components on run demo-rngd-cpu-1 | P2.1,P2.2,P2.5,P2.9,P2.10 | checks passed at a10fdd0 (rx e027, 1b00); owner review OQ-024 |
+| P4.0 | DONE | Plan phase P4 into plans/p4-ttsim.md and add its tasks here | - | plan written; commit P4.0: plan phase |
+| P4.1 | READY | Spike: joint pin of tt-mlir, tt-metal, and ttsim; build budget | - |  |
+| P4.2 | READY | Install the pinned tt-metal and ttsim | P4.1 |  |
+| P4.3 | READY | lassi_io harness and its binary file format | - |  |
+| P4.4 | READY | binary_io oracle over output files | P4.3 |  |
+| P4.5 | READY | Native C++ toolchain and executors per language | - |  |
+| P4.6 | READY | Record readings for simulator runs | - |  |
+| P4.7 | READY | Graphics setting, preset, and banner | - |  |
+| P4.8 | READY | Progress hook and live inference table | P4.7 |  |
+| P4.9 | READY | Spike: ttsim runtime facts, unpack_to_dest, and Watcher | P4.2 |  |
+| P4.10 | READY | tt-metal host toolchain | P4.2,P4.5 |  |
+| P4.11 | READY | ttsim executor and the smoke driver | P4.6,P4.9,P4.10 |  |
+| P4.12 | READY | CPU -> TT guard | P4.6,P4.10 |  |
+| P4.13 | READY | Tier A suite tt-pairs-v0 | P4.4,P4.5,P4.11,P4.12 |  |
+| P4.14 | OWNER | Apply the owner's Tier A splits (OQ-025) | P4.13 | waits for OQ-025 |
+| P4.15 | READY | Carry the P2 review questions (OQ-024) | - |  |
+| P4.G | READY | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 |  |

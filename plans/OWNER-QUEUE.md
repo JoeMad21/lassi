@@ -233,6 +233,8 @@ Options: (a) The published percentages only: this matches the paper's claims, bu
 Recommendation: (b). The sources cannot tell which value is right, so neither is picked silently.
 Answer: I wasn't aware there was a discrepancy in the paper? Could you send the links and give page numbers to the sources you are using?
 Response (2026-09-24): The sources, with every step in plans/spikes/p2-lassi-metrics.md (Sources, Recount). Paper: arXiv:2407.01638, https://arxiv.org/abs/2407.01638; PDFs https://arxiv.org/pdf/2407.01638v1 and https://arxiv.org/pdf/2407.01638v2 (8 pages each, the same tables and percentages; pages below are v2's). Published percentages: p. 6, Sec. V-B (OMP -> CUDA: 78.1% within 10% or faster, 65.6% first try, 40.6% Sim-T >= 0.6, each of the 32 correct trials) and Sec. V-C (CUDA -> OMP: 61.8%, 55.9%, 47.1%, each of the 34 correct trials). Per-trial values: Table VI, p. 6 (OMP -> CUDA) and Table VII, p. 7 (CUDA -> OMP), columns Runtime, Ratio, Sim-T, Sim-L, Self-corr, one line per app with two models per panel, N/A for a failed trial; reference runtimes in Table IV, p. 5. Counting the rows: OMP -> CUDA within 10% is 23/32 by the printed Ratios (9 below 0.9), 24/32 with GPT-4's atomicCost Ratio recomputed from Table IV (its printed row repeats the layout row above it), against 25/32 published; OMP -> CUDA Sim-T >= 0.6 is 8/32 against 13/32 (only a threshold of 0.54 gives 13); CUDA -> OMP within 10% is 20/34 against 21/34; CUDA -> OMP first try (Self-corr 0) is 18/34 against 19/34; CUDA -> OMP Sim-T >= 0.6 is 15/34 against 16/34. Correct output (32/40, 34/40) and OMP -> CUDA first try (21/32) count to their published values. The spike lists the trials behind each count and the script that counts them; a second, independent count from both PDFs and the HTML gave the same values. State stays OPEN for a choice among (a), (b), and (c); write it on a second Answer line below.
+Answer to Reply: It looks like https://arxiv.org/pdf/2407.01638v2 is a 2025 revision. More recent than the 2024 publication. Consider this the authoritative copy.
+Response (2026-09-24): Applied: v2 is the authoritative copy (bible Evaluation Protocol, LASSI Paper Metrics, and the Decision Log); its page citations were already v2's. The five mismatches are inside v2 itself: its Tables VI (p. 6) and VII (p. 7) against its own percentages (p. 6, Sec. V-B and V-C), and v1 prints the same numbers. So the choice among (a), (b), and (c) is still open. Until it is answered the metric tables show both values, which decides nothing; a headline metric is not marked reproduced until you choose.
 
 ## OQ-022 Which Token Similarity Is The Paper's Sim-T
 State: CLOSED
@@ -257,11 +259,22 @@ Answer: Let's go with option A.
 Applied: 2026-09-24. The Build Roadmap's P4 scope names the graphics prompt and preset, the LASSI-DF banner, and the live inference table, and P7's names the live training table; P4's gate is unchanged (bible Readability Standards, Terminal Presentation, and the Decision Log). plans/PHASE-NOTES.md, P4, carries the note for P4's plan.
 
 ## OQ-024 P2 Gate Review: Score Components On Run demo-rngd-cpu-1
-State: OPEN
+State: CLOSED
 Kind: review
 Blocks: none
 Evidence: results/p2-gate/summary.md, results/p2-gate/score/review.md, results/p2-gate/score/metrics.md
 Question: The P2 gate is your review of the score components on one full run. Both profiles scored all 10 trials of demo-rngd-cpu-1 from clean commit a10fdd0, and the load check scored p1-gate-dry-run and demo-rngd-1 (20 trials each). Do the components, the readings behind them, and the weights hold? The summary lists eight review questions: the run's limits, the planning decisions, the in-task readings, the lassi profile's nulls, the run metric populations, the faithful Sim-T staying below 0.01 on every trial (bearing on OQ-022's review), OQ-021, and any df-v0 weight to change.
 Options: (a) Accept: P2 becomes DONE. (b) Accept with changes: name each change; each becomes a task in the next phase or a Decision Log entry for a weight. (c) Hold for a faithful run: P2 stays GATE-OWNER until a faithful run (P3 or P10) is scored.
 Recommendation: (b) if any reading or weight should change, else (a). The run is a demo model on the CPU proxy, so the review checks the scoring, not the model.
+Answer: Let's go with option B. Mark P2 as done and move them to the next phase.
+Applied: 2026-09-24. P2 is DONE (plans/STATUS.md), and its pull request 3 is merged. The eight review questions of results/p2-gate/summary.md move to P4 as task P4.15 (plans/p4-ttsim.md), which settles each one by evidence, brings each choice back as an owner-queue item with a recommendation, or records why a reading stands; no reading or weight changes without your answer. Decision Log entry of 2026-09-24.
+
+## OQ-025 Tier A Item Splits For tt-pairs-v0
+State: OPEN
+Kind: decision
+Blocks: P4.14
+Evidence: docs/BIBLE.md (Benchmark Suites, the tt-pairs-v0 Tier A row, Split by item; Risks And Questions, question 10; Agent Rule 5); plans/p4-ttsim.md (P4.13, P4.14)
+Question: The bible splits Tier A by item but names no split for its five items (loopback, eltwise_binary, eltwise_sfpu, matmul_single_core, matmul_multi_core). An eval item can never later join training (Agent Rule 5), so the split must be chosen before any training run reads the suite. Which items are eval and which train?
+Options: (a) All five eval: the cleanest held-out set, but the lassi-df training recipe (projects/lassi-df/train.yaml) gets no Tier A items. (b) Train loopback, eltwise_binary, and matmul_single_core; eval eltwise_sfpu and matmul_multi_core: both lassi-df recipes get Tier A items while one eltwise and one matmul item stay held out. (c) All five train: the most training data, and no Tier A item measures generalization. (d) Leave every item unassigned until P7: nothing is decided now, and the registry refuses unassigned items to training as it refuses eval items.
+Recommendation: (b). It is the only option that gives the training recipe Tier A items while holding out one item of each kernel family. Caveat: the public tt-metal examples may already be in a model's pretraining data, so a Tier A eval item measures less than a private one would.
 Answer:
