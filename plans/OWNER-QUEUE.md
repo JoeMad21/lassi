@@ -224,7 +224,7 @@ Answer: Go ahead with option A for now. Make a notice to review this question ag
 Applied: 2026-09-24. The checker stays as it is; third-party code is pinned with manifests and fetch tools. Recorded in the bible (Decision Log); the review note is in plans/PHASE-NOTES.md (All Phases).
 
 ## OQ-021 LASSI Paper Values That Do Not Follow From Its Tables
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: none (P2.8 carries both values; the choice applies when a headline metric is marked reproduced or reported with its gap, Acceptance Criteria)
 Evidence: plans/spikes/p2-lassi-metrics.md
@@ -235,6 +235,9 @@ Answer: I wasn't aware there was a discrepancy in the paper? Could you send the 
 Response (2026-09-24): The sources, with every step in plans/spikes/p2-lassi-metrics.md (Sources, Recount). Paper: arXiv:2407.01638, https://arxiv.org/abs/2407.01638; PDFs https://arxiv.org/pdf/2407.01638v1 and https://arxiv.org/pdf/2407.01638v2 (8 pages each, the same tables and percentages; pages below are v2's). Published percentages: p. 6, Sec. V-B (OMP -> CUDA: 78.1% within 10% or faster, 65.6% first try, 40.6% Sim-T >= 0.6, each of the 32 correct trials) and Sec. V-C (CUDA -> OMP: 61.8%, 55.9%, 47.1%, each of the 34 correct trials). Per-trial values: Table VI, p. 6 (OMP -> CUDA) and Table VII, p. 7 (CUDA -> OMP), columns Runtime, Ratio, Sim-T, Sim-L, Self-corr, one line per app with two models per panel, N/A for a failed trial; reference runtimes in Table IV, p. 5. Counting the rows: OMP -> CUDA within 10% is 23/32 by the printed Ratios (9 below 0.9), 24/32 with GPT-4's atomicCost Ratio recomputed from Table IV (its printed row repeats the layout row above it), against 25/32 published; OMP -> CUDA Sim-T >= 0.6 is 8/32 against 13/32 (only a threshold of 0.54 gives 13); CUDA -> OMP within 10% is 20/34 against 21/34; CUDA -> OMP first try (Self-corr 0) is 18/34 against 19/34; CUDA -> OMP Sim-T >= 0.6 is 15/34 against 16/34. Correct output (32/40, 34/40) and OMP -> CUDA first try (21/32) count to their published values. The spike lists the trials behind each count and the script that counts them; a second, independent count from both PDFs and the HTML gave the same values. State stays OPEN for a choice among (a), (b), and (c); write it on a second Answer line below.
 Answer to Reply: It looks like https://arxiv.org/pdf/2407.01638v2 is a 2025 revision. More recent than the 2024 publication. Consider this the authoritative copy.
 Response (2026-09-24): Applied: v2 is the authoritative copy (bible Evaluation Protocol, LASSI Paper Metrics, and the Decision Log); its page citations were already v2's. The five mismatches are inside v2 itself: its Tables VI (p. 6) and VII (p. 7) against its own percentages (p. 6, Sec. V-B and V-C), and v1 prints the same numbers. So the choice among (a), (b), and (c) is still open. Until it is answered the metric tables show both values, which decides nothing; a headline metric is not marked reproduced until you choose.
+Answer to Reply: I see now. Let's go with the percentages used not in the abstract.
+Owner's choice (asked in the working session to settle the line above, 2026-09-24; recorded by the agent): option (c), the counts from Tables VI and VII.
+Applied: 2026-09-24. The recount from Tables VI and VII is each paper metric's reference value; the printed percentage is shown for reference only; for OMP -> CUDA within 10% or faster the reference is 24/32 under the Reporting Rules' recompute-from-raw rule, with 23/32 beside it (bible Evaluation Protocol, LASSI Paper Metrics and Run Metrics; Decision Log). Task P4.15 relabels the metric tables' paper columns and swaps the recount and its alternate for OMP -> CUDA within 10% in assets/scoring/lassi-paper.yaml.
 
 ## OQ-022 Which Token Similarity Is The Paper's Sim-T
 State: CLOSED
@@ -270,11 +273,14 @@ Answer: Let's go with option B. Mark P2 as done and move them to the next phase.
 Applied: 2026-09-24. P2 is DONE (plans/STATUS.md), and its pull request 3 is merged. The eight review questions of results/p2-gate/summary.md move to P4 as task P4.15 (plans/p4-ttsim.md), which settles each one by evidence, brings each choice back as an owner-queue item with a recommendation, or records why a reading stands; no reading or weight changes without your answer. Decision Log entry of 2026-09-24.
 
 ## OQ-025 Tier A Item Splits For tt-pairs-v0
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: P4.14
 Evidence: docs/BIBLE.md (Benchmark Suites, the tt-pairs-v0 Tier A row, Split by item; Risks And Questions, question 10; Agent Rule 5); plans/p4-ttsim.md (P4.13, P4.14)
 Question: The bible splits Tier A by item but names no split for its five items (loopback, eltwise_binary, eltwise_sfpu, matmul_single_core, matmul_multi_core). An eval item can never later join training (Agent Rule 5), so the split must be chosen before any training run reads the suite. Which items are eval and which train?
 Options: (a) All five eval: the cleanest held-out set, but the lassi-df training recipe (projects/lassi-df/train.yaml) gets no Tier A items. (b) Train loopback, eltwise_binary, and matmul_single_core; eval eltwise_sfpu and matmul_multi_core: both lassi-df recipes get Tier A items while one eltwise and one matmul item stay held out. (c) All five train: the most training data, and no Tier A item measures generalization. (d) Leave every item unassigned until P7: nothing is decided now, and the registry refuses unassigned items to training as it refuses eval items.
 Recommendation: (b). It is the only option that gives the training recipe Tier A items while holding out one item of each kernel family. Caveat: the public tt-metal examples may already be in a model's pretraining data, so a Tier A eval item measures less than a private one would.
-Answer:
+Answer: Are we training models? I thought that was a feature for later phases. Please explain what you mean by training.
+Response (2026-09-24): No phase before P7 trains a model. Training (P7 offline, P8 online) fine-tunes a model on translation examples. Agent Rule 5 forbids ever training on an eval item, so each benchmark item carries a split label, and P4 creates the Tier A suite, so it needs a label now; unassigned works as a label that decides nothing.
+Owner's choice (asked in the working session after the response above, 2026-09-24; recorded by the agent): option (d), every item unassigned until P7.
+Applied: 2026-09-24. Every tt-pairs-v0 item will stay unassigned, and training will refuse it as it refuses eval items (P4.13 builds the suite and that refusal); the owner assigns its split before any training run reads the suite, in P7 (bible Risks And Questions, question 10; Decision Log). Task P4.14 records this and changes no manifest; plans/PHASE-NOTES.md carries the P7 reminder.

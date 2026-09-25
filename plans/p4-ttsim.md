@@ -20,12 +20,12 @@ Decisions taken at planning (the named task records each in the bible with a Dec
 - Executors per language (P4.5): a recipe binds an executor per language, as `toolchain` does, so a baseline runs the C++ reference natively and the TT reference on ttsim; the single-executor form stays valid with unchanged hashes. The host g++ is pinned by version and path (`toolchains/gcc.pin`), not installed.
 - Simulator readings (P4.6): a kernel JIT failure leaves the attempt at S1 with jit-stage errors and is corrected like a compile error (S4 needs host and kernel JIT, Reward Function). UndefinedBehavior is a failed run fed back to the model. UnimplementedFunctionality and UnsupportedFunctionality end the trial with a new end reason, sim-gap. A reference run with UB ends at baseline-run and one with a gap at sim-gap. A timeout carries the Harness Contract's hang diagnostic.
 - binary_io (P4.4): a candidate's output files are compared with the target reference's. `threshold: from_baseline` reads the source reference's agreement with the target reference, measured in the baseline with baseline_both on; items may declare exact match; any further tolerance is an explicit recipe value with no default. A pair whose references miss the item's declared tolerance ends at the baseline under a new end reason. Output files are stored by hash in a binary store beside the text store.
-- Tier A (P4.13): upstream kernels are used unmodified from the pinned tt-metal, fetched under the scratch root; the TT host programs (inputs and outputs through lassi_io.h, no golden) and the C++ counterparts are written here and tracked. Each item's declared tolerance is its upstream example's own check (P4.9). Until OQ-025 is answered each split is `unassigned`, refused to training as eval is, so nothing is picked and no item can later leave eval.
+- Tier A (P4.13): upstream kernels are used unmodified from the pinned tt-metal, fetched under the scratch root; the TT host programs (inputs and outputs through lassi_io.h, no golden) and the C++ counterparts are written here and tracked. Each item's declared tolerance is its upstream example's own check (P4.9). OQ-025 is answered with option (d): each split stays `unassigned` until P7, refused to training as eval is, so nothing is picked and no item can later leave eval; the owner assigns the splits before any training run.
 - Progress hook (P4.8; the bible leaves it [OPEN] for this plan): an in-process observer passed through RunOptions and RunContext. The runner and stages send it events (trial start, stage start, model request sent, attempt appended or updated, trial end), each carrying the immutable Trial. It writes nothing and nothing depends on it; an observer error drops the observer for the rest of the run and changes no record, file, or exit status. Rejected: polling trial.json (written only at trial end) and a progress file (presentation writes no file).
 - Preset (P4.7): on a POSIX host the preset is never saved on the filesystem that holds `/` (Agent Rule 7; PHASE-NOTES P4); the answer then applies to that invocation only, and the prompt names LASSI_CONFIG_DIR. So on a Linux machine whose home is on `/`, the preset saves only with LASSI_CONFIG_DIR or LASSI_SCRATCH set; P4.7's Decision Log entry states this.
 - Gate drivers: `tools/ttsim_smoke.py` for the example (P4.11) and a mock dry run of Tier A in both directions (P4.13), as P1.G used the mock. P4.11 and P4.13 record them in their Decision Log entries.
 
-PHASE-NOTES P4 items, by task: terminal presentation, P4.7 and P4.8; the tt-metal checkout, P4.1 and P4.2; the ttsim environment, P4.9 and P4.11; unpack_to_dest, P4.9 and P4.13. Also taken: PHASE-NOTES P2, device in native runs (P4.5). Owner queue: OQ-025 (Tier A splits) blocks P4.14 only; the gate does not wait for it, and if it is answered after P4 is DONE, P4.14 lands on the next phase's branch.
+PHASE-NOTES P4 items, by task: terminal presentation, P4.7 and P4.8; the tt-metal checkout, P4.1 and P4.2; the ttsim environment, P4.9 and P4.11; unpack_to_dest, P4.9 and P4.13. Also taken: PHASE-NOTES P2, device in native runs (P4.5). Owner queue: OQ-025 (Tier A splits) is answered with option (d), every item unassigned until P7; P4.14 records it.
 
 ## Tasks
 
@@ -139,19 +139,20 @@ PHASE-NOTES P4 items, by task: terminal presentation, P4.7 and P4.8; the tt-meta
 - Files: `assets/bench/`, `lassi/bench/registry.py`, `tools/fetch_bench.py`, `tests/`, `docs/BIBLE.md`.
 - Remote: the fetch and `rx run` of the remote tests. Depends: P4.4, P4.5, P4.11, P4.12.
 
-### P4.14 Apply the owner's Tier A splits (OQ-025)
+### P4.14 Record the owner's Tier A split answer (OQ-025)
 - Bible: Benchmark Suites (split rules), Risks And Questions (question 10), Agent Rule 5.
-- Accept: the manifest carries the owner's split for each Tier A item; the registry refuses each eval item to training (test); question 10 records the Tier A answer with a Decision Log entry; any recipe hash change is noted.
+- Accept: OQ-025 was answered with option (d): the manifest keeps every Tier A item `unassigned`, and a test checks that each is refused to training; the bible's question 10 already records the answer (Decision Log 2026-09-24), so this task confirms the manifest matches it and changes no recipe hash.
 - Files: `assets/bench/tt-pairs-v0.yaml`, `tests/bench/`, `docs/BIBLE.md`.
-- Remote: none. Depends: P4.13 and OQ-025's answer (state OWNER).
+- Remote: none. Depends: P4.13.
 
 ### P4.15 Carry the P2 review questions (OQ-024)
 - Bible: Evaluation Protocol (LASSI Paper Metrics, LASSI Score Profile, Run Metrics), Reward Function (scoring decisions), Result Record; results/p2-gate/summary.md (Review questions for J); OQ-022 and OQ-024.
 - Accept:
   - `plans/spikes/p4-p2-review.md` closes each of the eight review questions one way: settled by evidence (commands, outputs, sources) and recorded in the bible with a Decision Log entry; brought back as an owner-queue item with options and a recommendation, when it is a choice; or recorded as standing, with the reason. No reading, weight, or paper value changes without an owner answer.
   - Question 6: `sim_t_tiktoken` joins the lassi profile under its own name (the OQ-022 pending item): tiktoken pinned in pyproject.toml, its cl100k_base file cached under the scratch root for offline use on alpha01, the component in assets/scoring/lassi.yaml with its note naming the tokenizer and interpreter, and tests. A clean-commit `lassi score` of demo-rngd-cpu-1 reports its values beside sim_t and sim_t_c. Whether it is compared with the paper's Sim-T stays OQ-022's review.
+  - Question 7 (OQ-021) is answered with option (c): assets/scoring/lassi-paper.yaml swaps `recount` and `recount_alternate` for omp-cuda within_10pct_rate, so the reference is the recomputed 24/32 and 23/32 from the printed Ratios is the alternate (a test pins it; the file's rule makes the change a Decision Log entry); the metric tables name the recount as the reference value and label the published value as shown for reference only (lassi.analysis tables and assets/scoring/lassi-paper.yaml as needed, with tests).
   - Bible edits with Decision Log entries; `results/p4-p2-review/` holds the scoring pass's provenance and summary.
-- Files: `plans/spikes/p4-p2-review.md`, `lassi/scoring/`, `assets/scoring/lassi.yaml`, `pyproject.toml`, `uv.lock`, `tests/scoring/`, `results/p4-p2-review/`, `plans/OWNER-QUEUE.md`, `docs/BIBLE.md`.
+- Files: `plans/spikes/p4-p2-review.md`, `lassi/scoring/`, `lassi/analysis/`, `assets/scoring/lassi.yaml`, `assets/scoring/lassi-paper.yaml`, `tests/analysis/`, `pyproject.toml`, `uv.lock`, `tests/scoring/`, `results/p4-p2-review/`, `plans/OWNER-QUEUE.md`, `docs/BIBLE.md`.
 - Remote: `rx doctor`; an `rx run` that caches cl100k_base under the scratch root; `rx run` of the scoring pass. Depends: none.
 
 ### P4.G Phase gate

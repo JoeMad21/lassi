@@ -79,7 +79,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2.10 | DONE | Recipes bind score and metrics in lassi run | P2.9 | lassi run binds score and metrics; run.md Metrics section; bible rev 180 |
 | P2.G | DONE | Phase gate: owner review of score components on run demo-rngd-cpu-1 | P2.1,P2.2,P2.5,P2.9,P2.10 | checks passed at a10fdd0 (rx e027, 1b00); owner review OQ-024 |
 | P4.0 | DONE | Plan phase P4 into plans/p4-ttsim.md and add its tasks here | - | plan written; commit P4.0: plan phase |
-| P4.1 | READY | Spike: joint pin of tt-mlir, tt-metal, and ttsim; build budget | - |  |
+| P4.1 | ACTIVE | Spike: joint pin of tt-mlir, tt-metal, and ttsim; build budget | - |  |
 | P4.2 | READY | Install the pinned tt-metal and ttsim | P4.1 |  |
 | P4.3 | READY | lassi_io harness and its binary file format | - |  |
 | P4.4 | READY | binary_io oracle over output files | P4.3 |  |
@@ -92,6 +92,6 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.11 | READY | ttsim executor and the smoke driver | P4.6,P4.9,P4.10 |  |
 | P4.12 | READY | CPU -> TT guard | P4.6,P4.10 |  |
 | P4.13 | READY | Tier A suite tt-pairs-v0 | P4.4,P4.5,P4.11,P4.12 |  |
-| P4.14 | OWNER | Apply the owner's Tier A splits (OQ-025) | P4.13 | waits for OQ-025 |
+| P4.14 | READY | Apply the owner's Tier A splits (OQ-025) | P4.13 | OQ-025 answered (d): keep every Tier A item unassigned; confirm the manifest |
 | P4.15 | READY | Carry the P2 review questions (OQ-024) | - |  |
 | P4.G | READY | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 |  |

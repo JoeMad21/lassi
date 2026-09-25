@@ -1,6 +1,6 @@
 # LASSI Project Bible
 
-Repository mirror of the project bible, master revision 182 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
+Repository mirror of the project bible, master revision 194 (2026-09-24). The owner keeps the master copy; AGENTS.md describes how edits are mirrored. The Local Tooling section is kept outside the repository.
 
 ## Purpose And Scope
 
@@ -803,7 +803,7 @@ Five of the eight published percentages do not follow from the paper's Tables VI
 
 | Direction | Metric | Published | Recount from Tables VI and VII |
 | --- | --- | --- | --- |
-| OMP -> CUDA | Within 10% or faster | 78.1% (25/32) | 23/32 from the printed Ratios; 24/32 with GPT-4's atomicCost Ratio recomputed |
+| OMP -> CUDA | Within 10% or faster | 78.1% (25/32) | 24/32 with GPT-4's atomicCost Ratio recomputed, the reference (OQ-021); 23/32 from the printed Ratios |
 | OMP -> CUDA | Sim-T >= 0.6 | 40.6% (13/32) | 8/32 |
 | CUDA -> OMP | Within 10% or faster | 61.8% (21/34) | 20/34 |
 | CUDA -> OMP | First try | 55.9% (19/34) | 18/34 |
@@ -815,6 +815,7 @@ Rules for the reproduction:
 
 - The paper criterion for correct output is a manual judgment, so it is never computed: it is None and labeled. The automated oracle gives correct.
 - A rate shown next to a paper value uses the paper's denominator. [DESIGN]
+- The reference value for each paper metric is the recount from Tables VI and VII, not the printed percentage (OQ-021, owner: option (c)): a headline metric is marked reproduced, or its gap reported, against the recount, and the printed percentage is shown beside it for reference only. For OMP -> CUDA within 10% or faster the recount is 24/32, GPT-4's atomicCost Ratio recomputed from Table IV and its Runtime, as the Reporting Rules recompute every ratio from raw runtimes; 23/32 from the printed Ratios is shown beside it. [DESIGN]
 - The notebook keeps, per trial, the last attempt's code, the last successful build, and one metadata file. The file holds the configuration, the direction's system and translation prompts, the generation loop's wall time, both token similarities and Sim-L at two decimals, the correction count, the reference stdout, and the stdout of the last attempt that ran. The notebook records no program runtime, no verdict on correctness, and no per-attempt history, so the paper's runtimes and verdicts were taken outside it.
 
 [OPEN], because the sources do not say:
@@ -822,7 +823,7 @@ Rules for the reproduction:
 - What else counted as a stdout match (tolerance, which lines), and why each N/A trial failed.
 - The exact within-10% inequality (Ratio >= 0.9 and Ratio >= 1/1.1 count the same on the printed Ratios), how many runs the generated code's mean used, and how runtimes were timed. Settle these before within_10pct is computed (P10).
 - Which of the notebook's two token similarities the Sim-T column is: Python tokenize, or tiktoken cl100k_base. The owner's answer to OQ-022 (2026-09-24): keep both. The faithful sim_t (Python tokenize; quirk table, Sim-T row) stays the Sim-T compared with the paper, labeled with the open tokenizer, and a tiktoken cl100k_base similarity joins under its own name, sim_t_tiktoken, in a later phase, once tiktoken and its cl100k_base file are cached under the scratch root for offline use. The owner reviews the question again later.
-- What the percentages that do not recount were computed from; OQ-021 asks the owner which values the reproduction compares against.
+- What the percentages that do not recount were computed from. The reproduction compares against the recounts (OQ-021, answered).
 - Which pipeline version produced the paper's results. Both committed notebooks postdate the paper's v1. Codestral's CUDA -> OMP pathfinder (Self-corr 34, correct, with a runtime) cannot come from the pinned notebook's stored output, because its execution gate leaves attempt 34 unrun.
 - How a trial that never reached a clean run was stopped. The pinned loop has no cap, and the paper names no stopping rule.
 
@@ -862,7 +863,7 @@ lassi.analysis (task P2.8) gives one metric table per arm and direction, in Mark
 | first_try_rate, sim_t_ge_0.6_rate | The correct trials (correct = 1), the paper's denominator. sim_t_ge_0.6_rate compares the faithful sim_t, unrounded, with 0.6; the paper prints Sim-T to two decimals and states no tokenizer ([OPEN], OQ-022), and the row's note says so |
 | within_10pct_rate | Not computed: PLACEHOLDER until a timing profiler exists (P10) |
 | pass@1, pass@3 | Per scenario (bench item), the unbiased pass@k (Chen et al. 2021, arXiv:2107.03374) over its trials whose correct is not null, averaged over the scenarios. The interval is Wilson on the sum of the per-scenario values over the scenario count, so the scenario is the unit. Null, with n and k in the note, when any scenario has fewer than k such trials |
-| Paper values | The published value and the recount (and the alternate recount where LASSI Paper Metrics gives one), each with its Wilson interval on the paper's own count and denominator, citing LASSI Paper Metrics. The B0 criterion's interval is Wilson on the paper's WizardCoder correct count |
+| Paper values | The published value and the recount (and the alternate recount where LASSI Paper Metrics gives one), each with its Wilson interval on the paper's own count and denominator, citing LASSI Paper Metrics. The recount is the reference value and the published value is shown for reference only (OQ-021, option (c)); task P4.15 labels the table columns so. For OMP -> CUDA within 10% or faster the reference recount is the recomputed 24/32, which P2.8 recorded as the alternate, and 23/32 from the printed Ratios is shown beside it; P4.15 swaps the two in assets/scoring/lassi-paper.yaml. The B0 criterion's interval is Wilson on the paper's WizardCoder correct count |
 
 Rules:
 
@@ -1050,7 +1051,7 @@ Open questions:
 7. Op set, type system, and first non-Tenstorrent target for the df dialect.
 8. Is the alpha01 copy of the corpus pipeline ahead of GitHub commit 3ccd280?
 9. Role of the existing xDSL dialect framework beyond hosting the Cerebras dialects.
-10. Item-level split assignment for Tier A, Tier C, csl-pairs-v0, and xlang-v0.
+10. Item-level split assignment for Tier A, Tier C, csl-pairs-v0, and xlang-v0. Tier A (tt-pairs-v0): every item stays unassigned, refused to training as eval items are, until training exists; the owner assigns its splits before any training run reads the suite, in P7 (OQ-025, owner: option (d)).
 11. Is TCL kernel authoring documented for users, and is furiosa-kernels source readable for tcl-pairs-v0?
 12. Cerebras SDK access: request directly, or through the Sandia collaboration? 2026-09-23 (OQ-004): J reports access incoming; it is pending on J's side and needs no agent action.
 13. Does tblgen-to-irdl cover every df construct that xDSL needs?
@@ -1058,10 +1059,12 @@ Open questions:
 
 ## Decision Log
 
-Seventy-eight decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and thirty-two on 2026-09-24; add new entries at the top, newest first.
+Eighty decisions have been made: twenty-six on 2026-09-22, twenty on 2026-09-23, and thirty-four on 2026-09-24; add new entries at the top, newest first.
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-24 | Tier A splits wait for training (OQ-025, owner: option (d)). Every tt-pairs-v0 item stays unassigned until training exists, and training refuses unassigned items as it refuses eval items (P4.13 builds the suite and that refusal); the owner assigns the splits before any training run reads the suite, in P7. Task P4.14 records this and changes no manifest | No phase before P7 trains a model, so no split is needed yet, and an eval label can never be undone (Agent Rule 5). Leaving the items unassigned decides nothing and still lets P4 evaluate them |
+| 2026-09-24 | The paper's reference values are the recounts from Tables VI and VII (OQ-021, owner: option (c)). A headline metric is marked reproduced, or its gap reported, against the recount; the printed percentage is shown for reference only. For OMP -> CUDA within 10% or faster the recount is 24/32, GPT-4's atomicCost Ratio recomputed from raw runtimes as the Reporting Rules require, with 23/32 from the printed Ratios shown beside it. Task P4.15 relabels the metric tables' paper columns and swaps the recount and its alternate for OMP -> CUDA within 10% in assets/scoring/lassi-paper.yaml, replacing P2.8's designation of 24/32 as the alternate | Five of the eight printed percentages do not follow from the per-trial rows of the paper's own Tables VI and VII (v2, the authoritative copy). The recounts come from the rows the paper publishes and follow the Reporting Rules' recompute-from-raw rule; the owner chose them over the printed values after reviewing the sources |
 | 2026-09-24 | The P2 gate review is accepted with changes (OQ-024, owner: option (b)). P2 is DONE. The eight review questions of results/p2-gate/summary.md move to P4 as task P4.15, which settles each by evidence, brings each choice back to the owner with a recommendation, or records why a reading stands, and adds sim_t_tiktoken under its own name (OQ-022's pending item). No reading, weight, or paper value changes without an owner answer | The owner accepted the scoring and asked that the open questions move to the next phase instead of holding P2. The questions name readings and a Sim-T finding, not specific changes, so the task that carries them decides nothing on the owner's behalf |
 | 2026-09-24 | arXiv:2407.01638v2, the 2025 revision, is the authoritative copy of the LASSI paper (OQ-021, owner). The choice OQ-021 asks, which paper values mark a headline metric reproduced when the published percentages and the recounts differ, stays open | The owner named v2 authoritative. LASSI Paper Metrics already cites v2's pages, and v1 prints the same tables and percentages, so the five mismatches are inside v2 itself (Tables VI and VII against Sec. V-B and V-C), and naming the copy does not settle them |
 | 2026-09-24 | Terminal presentation's phases (OQ-023, owner: option (a)). P4 builds the graphics prompt and preset, the LASSI-DF banner, and the live inference table, and its Build Roadmap scope names them; P7 builds the live training table, and its scope names it. P4's gate is unchanged. How the runner hands live progress to the table is [OPEN] for P4's plan. The Result Record Scores paragraph also names the score id among the provenance.json fields, as lassi score writes it | The work is small and needs no hardware, and P4 is the next phase plan to be written, so that plan picks it up; the training table needs training to exist. The runner writes trial.json only when a trial ends, so a live table needs a progress hook, an interface addition that P4's plan decides and logs. The score id line corrects the P2.9 field list to match the code |
