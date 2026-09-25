@@ -1,4 +1,4 @@
-"""Tests for trial.md rendering (P0.2), including the trial's provenance (P0.18).
+"""Tests for trial.md rendering (P0.2), including the trial's provenance (P0.18) and requests (P2.1).
 
 render_trial_md in lassi/core/trial_md.py must reproduce the committed golden
 file tests/core/golden/trial.md for one fixed two-attempt Trial. The golden
@@ -19,6 +19,21 @@ Since P1.5 the summary table ends with an "End reason" row (`<code>:
 <message>`, or "none" for a trial that ended normally), and a "## Reference
 run" table (Trial.reference_run, PLACEHOLDER for a value not measured)
 follows the toolchain pins.
+
+Since P2.1 a "## Requests" section follows the context: every model request
+in order, each with its stage and attempt, a table of its messages (index,
+role, sha256, and where the text is shown), each message text not shown
+before fenced once, the reply's sha256, and the request's diagnostics. An
+attempt's prompt is fenced only under its attempt. A trial whose requests
+were not recorded (None) shows "Not recorded.", and one that asked no model
+([]) shows "None.". The golden trial holds a context request and one request
+per attempt; its system and request texts are synthetic.
+
+Since P2.2 the Reference run table and each attempt's Run table carry the
+run flags (stdout_truncated, stderr_truncated, workdir_incomplete) after
+outputs_ref: true or false when recorded, PLACEHOLDER when not. The golden
+trial's attempt 1 ran and records every flag False; its reference run and
+attempt 0 record none.
 """
 
 from __future__ import annotations
@@ -115,6 +130,10 @@ STDOUT_1 = "PASS\n"
 RESPONSE_0 = "// FILE: main.cu\n" + CODE_0
 RESPONSE_1 = "// FILE: main.cu\n" + CODE_1 + "// FILE: kernels/entropy.cuh\n" + HEADER_1 + "\n"
 UNDEFINED_MESSAGE = 'identifier "blockDimx" is undefined'
+# The golden trial's request texts, all synthetic: two system prompts and the summary request.
+SYSTEM_GENERAL = "Synthetic general system prompt of the trial.md golden test.\n"
+SYSTEM_DIRECTION = "Synthetic OpenMP to CUDA system prompt of the trial.md golden test.\n"
+SUMMARY_REQUEST = "Summarize the synthetic CUDA notes of the trial.md golden test.\n"
 PIPE_MESSAGE = '1 error detected in the compilation of "main.cu" | build stopped'
 
 
@@ -137,6 +156,11 @@ def fence_block(text: str, lang: str, width: int = 3) -> str:
     fence = "`" * width
     body = text if text.endswith("\n") else text + "\n"
     return f"{fence}{lang}\n{ascii_form(body)}{fence}\n"
+
+
+def sha(text: str) -> str:
+    """Return the sha256 hex of the UTF-8 bytes of text."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def stored_line(text: str) -> str:
@@ -197,12 +221,53 @@ def golden_attempts(text_store: store.TextStore) -> list[record.Attempt]:
         files={"main.cu": CODE_1, "kernels/entropy.cuh": HEADER_1},
         diff_from_previous=DIFF_1,
         stage_reached="S5",
-        run=record.RunInfo(exit_code=0, hang=False, stdout_ref=text_store.put(STDOUT_1)),
+        run=record.RunInfo(
+            exit_code=0,
+            hang=False,
+            stdout_ref=text_store.put(STDOUT_1),
+            stdout_truncated=False,
+            stderr_truncated=False,
+            workdir_incomplete=False,
+        ),
         alignment=record.Alignment(per_input=[1.0, 0.5, 0.75, 1.0], mean=0.8125),
         guards=record.Guards(host_compute=False, harness_tamper=False),
         score=record.ScoreBreakdown(components={"stage": 0.2, "warnings": 0.0, "alignment": 0.8125, "energy": None}),
     )
     return [first, second]
+
+
+def golden_requests(text_store: store.TextStore) -> list[record.Request]:
+    """Return the golden trial's three requests (summary, generation, one correction), their texts in the store."""
+
+    def messages(system: str, user: str) -> list[record.RequestMessage]:
+        return [
+            record.RequestMessage(role="system", ref=text_store.put(system)),
+            record.RequestMessage(role="user", ref=text_store.put(user)),
+        ]
+
+    return [
+        record.Request(
+            index=0,
+            stage="summarize_context",
+            attempt_index=None,
+            messages=messages(SYSTEM_GENERAL, SUMMARY_REQUEST),
+            reply_ref=text_store.put(KNOWLEDGE),
+        ),
+        record.Request(
+            index=1,
+            stage="generate",
+            attempt_index=0,
+            messages=messages(SYSTEM_DIRECTION, PROMPT_0),
+            reply_ref=text_store.put(RESPONSE_0),
+        ),
+        record.Request(
+            index=2,
+            stage="compile_loop",
+            attempt_index=1,
+            messages=messages(SYSTEM_DIRECTION, PROMPT_1),
+            reply_ref=text_store.put(RESPONSE_1),
+        ),
+    ]
 
 
 def golden_trial(text_store: store.TextStore) -> record.Trial:
@@ -215,6 +280,7 @@ def golden_trial(text_store: store.TextStore) -> record.Trial:
         bench_item=bench_item(),
         model=model_info(),
         context=record.Context(knowledge_summary=KNOWLEDGE),
+        requests=golden_requests(text_store),
         attempts=golden_attempts(text_store),
         final=record.Final(stage_reached="S5", alignment=0.8125, corrections=1),
     )
@@ -326,6 +392,41 @@ def test_golden_contains_each_attempts_code() -> None:
     assert golden.index("#### `kernels/entropy.cuh`") < golden.rindex("#### `main.cu`")
 
 
+def test_golden_shows_every_request_in_order_between_the_context_and_the_attempts() -> None:
+    golden = read_golden()
+    assert golden.index("## Context\n") < golden.index("## Requests\n") < golden.index("## Attempt 0\n")
+    section = golden[golden.index("## Requests\n") : golden.index("## Attempt 0\n")]
+    order = [
+        *(SYSTEM_GENERAL, SUMMARY_REQUEST, KNOWLEDGE),
+        *(SYSTEM_DIRECTION, PROMPT_0, RESPONSE_0),
+        *(SYSTEM_DIRECTION, PROMPT_1, RESPONSE_1),
+    ]
+    position = 0
+    for text in order:
+        found = section.find(sha(text), position)
+        assert found >= 0, f"the Requests section shows sha256 {sha(text)} after the one before it"
+        position = found + len(sha(text))
+    headings = ("### Request 0\n", "### Request 1\n", "### Request 2\n")
+    assert [section.index(heading) for heading in headings] == sorted(section.index(h) for h in headings)
+    assert "Stage: summarize_context. Attempt: none (context request).\n" in section
+    assert "Stage: compile_loop. Attempt: 1.\n" in section
+    assert f"Reply: sha256 `{sha(KNOWLEDGE)}` (kept in Trial.context).\n" in section
+    assert f"Reply: sha256 `{sha(RESPONSE_1)}` (attempt 1's response).\n" in section
+
+
+def test_golden_fences_each_message_text_once() -> None:
+    golden = read_golden()
+    section = golden[golden.index("## Requests\n") : golden.index("## Attempt 0\n")]
+    for text in (SYSTEM_GENERAL, SUMMARY_REQUEST, SYSTEM_DIRECTION):
+        assert golden.count(fence_block(text, "text")) == 1, text
+        assert fence_block(text, "text") in section, text
+    for prompt in (PROMPT_0, PROMPT_1):
+        assert golden.count(fence_block(prompt, "text")) == 1, "an attempt's prompt is fenced under its attempt only"
+    assert f"| 1 | user | `{sha(PROMPT_0)}` | Attempt 0 prompt |\n" in section
+    assert f"| 0 | system | `{sha(SYSTEM_DIRECTION)}` | below |\n" in section
+    assert f"| 0 | system | `{sha(SYSTEM_DIRECTION)}` | request 1 message 0 |\n" in section
+
+
 def test_golden_contains_the_unified_diff() -> None:
     golden = read_golden()
     assert "### Diff from previous attempt\n\nNone (initial attempt).\n" in golden
@@ -375,6 +476,9 @@ def test_golden_marks_unmeasured_values_placeholder() -> None:
     assert "| per_input | 1.0, 0.5, 0.75, 1.0 |\n" in golden
     assert golden.count("| outputs_ref | PLACEHOLDER |\n") == 3, "two attempts' runs and the reference run"
     assert golden.count("| oracle_access | PLACEHOLDER |\n") == 2
+    for flag in ("stdout_truncated", "stderr_truncated", "workdir_incomplete"):
+        assert golden.count(f"| {flag} | PLACEHOLDER |\n") == 2, f"{flag}: the reference run and attempt 0"
+        assert golden.count(f"| {flag} | false |\n") == 1, f"{flag}: attempt 1's run recorded it"
 
 
 def test_golden_is_plain_ascii_lf() -> None:
@@ -416,7 +520,7 @@ def test_output_is_ascii_for_non_ascii_input(text_store: store.TextStore) -> Non
     assert "### Source description\n\n```text\n" + BACKSLASH + "U0001f600\n```\n" in md
 
 
-def test_trial_without_attempts_ends_after_context(text_store: store.TextStore) -> None:
+def test_trial_without_attempts_or_recorded_requests_ends_after_the_requests(text_store: store.TextStore) -> None:
     trial = base_trial([], model=record.ModelInfo(backend="mock", id="m", sampling=interfaces.Sampling(0.0, 1.0, 16)))
     pins = "".join(f"| {name} | not used |\n" for name in record.TOOLCHAIN_PIN_NAMES)
     expected = (
@@ -449,14 +553,65 @@ def test_trial_without_attempts_ends_after_context(text_store: store.TextStore) 
         "| sim_ub | PLACEHOLDER |\n"
         "| wall_s | PLACEHOLDER |\n"
         "| stdout_ref | PLACEHOLDER |\n"
-        "| outputs_ref | PLACEHOLDER |\n\n"
+        "| outputs_ref | PLACEHOLDER |\n"
+        "| stdout_truncated | PLACEHOLDER |\n"
+        "| stderr_truncated | PLACEHOLDER |\n"
+        "| workdir_incomplete | PLACEHOLDER |\n\n"
         "## Context\n\n"
         "### Knowledge summary\n\n"
         "None.\n\n"
         "### Source description\n\n"
-        "None.\n"
+        "None.\n\n"
+        "## Requests\n\n"
+        "Not recorded.\n"
     )
     assert trial_md.render_trial_md(trial, text_store) == expected
+
+
+def test_a_trial_that_asked_no_model_shows_no_requests(text_store: store.TextStore) -> None:
+    md = trial_md.render_trial_md(base_trial([], requests=[]), text_store)
+    assert_layout(md)
+    assert md.endswith("### Source description\n\nNone.\n\n## Requests\n\nNone.\n")
+
+
+def test_a_request_shows_its_diagnostics_and_its_message_texts(text_store: store.TextStore) -> None:
+    warning = record.Diagnostic(
+        stage="parse", severity="warning", code="invalid-text", message="SYNTHETIC: 1 lone surrogate replaced"
+    )
+    user = f"Describe the synthetic source; caf{E_ACUTE}.\r\n"
+    request = record.Request(
+        index=0,
+        stage="describe_source",
+        attempt_index=None,
+        messages=[record.RequestMessage(role="user", ref=text_store.put(user))],
+        reply_ref=text_store.put("SYNTHETIC description \ufffd\n"),
+        diagnostics=[warning],
+    )
+    md = trial_md.render_trial_md(base_trial([], requests=[request]), text_store)
+    assert_layout(md)
+    header = "| Message | Role | sha256 | Text |\n| --- | --- | --- | --- |\n"
+    table = header + f"| 0 | user | `{sha(user)}` | below |\n"
+    assert "### Request 0\n\nStage: describe_source. Attempt: none (context request).\n\n" + table in md
+    assert "#### Message 0 (user)\n\n```text\nDescribe the synthetic source; caf\\xe9.\n```\n" in md
+    diagnostics = (
+        "#### Diagnostics\n\n| Stage | Severity | Code | Location | Message |\n| --- | --- | --- | --- | --- |\n"
+        "| parse | warning | invalid-text | - | SYNTHETIC: 1 lone surrogate replaced |\n"
+    )
+    assert md.endswith(diagnostics)
+
+
+def test_a_request_message_is_resolved_through_the_store(text_store: store.TextStore) -> None:
+    digest = sha("never stored")
+    missing = record.TextRef(sha256=digest, path=f"texts/{digest[:2]}/{digest}.txt")
+    request = record.Request(
+        index=0,
+        stage="summarize_context",
+        attempt_index=None,
+        messages=[record.RequestMessage(role="user", ref=missing)],
+        reply_ref=text_store.put("reply\n"),
+    )
+    with pytest.raises(store.TextNotFoundError):
+        trial_md.render_trial_md(base_trial([], requests=[request]), text_store)
 
 
 def test_empty_attempt_sections_render_none(text_store: store.TextStore) -> None:
@@ -586,7 +741,15 @@ def test_value_formatting_in_tables(text_store: store.TextStore) -> None:
     ref = text_store.put("out\n")
     md = render_attempt(
         text_store,
-        run=record.RunInfo(exit_code=3, hang=True, sim_ub=False, wall_s=0.5, stdout_ref=ref),
+        run=record.RunInfo(
+            exit_code=3,
+            hang=True,
+            sim_ub=False,
+            wall_s=0.5,
+            stdout_ref=ref,
+            stdout_truncated=True,
+            stderr_truncated=False,
+        ),
         alignment=record.Alignment(per_input=[0.25, 1.0]),
         profile=record.Profile(runtime_s=0.25, energy_j=37.5),
         guards=record.Guards(host_compute=True, oracle_access=False),
@@ -596,6 +759,7 @@ def test_value_formatting_in_tables(text_store: store.TextStore) -> None:
         "### Run\n\n| Field | Value |\n| --- | --- |\n"
         "| exit_code | 3 |\n| hang | true |\n| sim_ub | false |\n| wall_s | 0.5 |\n"
         f"| stdout_ref | `{ref.path}` |\n| outputs_ref | PLACEHOLDER |\n"
+        "| stdout_truncated | true |\n| stderr_truncated | false |\n| workdir_incomplete | PLACEHOLDER |\n"
     )
     alignment = "### Alignment\n\n| Field | Value |\n| --- | --- |\n| per_input | 0.25, 1.0 |\n| mean | PLACEHOLDER |\n"
     profile = (

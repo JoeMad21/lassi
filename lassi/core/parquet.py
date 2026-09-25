@@ -1,8 +1,8 @@
 """The Parquet mirror of a run's Trial records.
 
 Parquet mirrors the JSON records and never replaces them (bible Design
-Principle 7). A run's trials flatten into three tables, trials, attempts, and
-diagnostics, each written as Hive-partitioned Parquet under
+Principle 7). A run's trials flatten into four tables, trials, attempts,
+diagnostics, and requests, each written as Hive-partitioned Parquet under
 `<out_dir>/<table>/project=.../arm=.../bench=.../direction=.../part-0.parquet`.
 Partition values come from the parsed trial_id and are URI-encoded in
 directory names as pyarrow does by default, so a '+' is written as `%2B` and
@@ -12,7 +12,18 @@ so the trials table carries each trial's provenance (its copy of the run
 manifest) as provenance_commit, provenance_dirty, provenance_device,
 provenance_sdk, and provenance_date, the target reference's baseline run as
 reference_run_<key> columns, and the end reason as final_end_reason_code
-and final_end_reason_message (null when the trial ended normally).
+and final_end_reason_message (null when the trial ended normally). The run
+flags of Trial.reference_run and Attempt.run (lassi.core.record
+RUN_FLAG_NAMES) are bool columns reference_run_<flag> and run_<flag>, right
+after the run's outputs_ref columns, null where not recorded.
+
+The requests table has one row per recorded model request (Trial.requests),
+in index order: the stage that sent it, the attempt its reply became
+(attempt_index, null for a context request), the role and the sha256 of each
+message as lists in the order sent, the reply's text reference, and the
+count of its diagnostics. Message and reply texts stay in the text store. A
+trial whose requests were not recorded (None) has no rows, as does one that
+asked no model.
 """
 
 from __future__ import annotations
@@ -27,10 +38,20 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.dataset as ds
 
-from lassi.core.record import TOOLCHAIN_PIN_NAMES, Attempt, Diagnostic, TextRef, Trial, parse_trial_id
+from lassi.core.record import (
+    RUN_FLAG_NAMES,
+    TOOLCHAIN_PIN_NAMES,
+    Attempt,
+    Diagnostic,
+    Request,
+    RunInfo,
+    TextRef,
+    Trial,
+    parse_trial_id,
+)
 from lassi.core.store import sha256_text
 
-TABLES = ("trials", "attempts", "diagnostics")
+TABLES = ("trials", "attempts", "diagnostics", "requests")
 PARTITION_COLUMNS = ("project", "arm", "bench", "direction")
 
 _STRING = pa.string()
@@ -38,6 +59,7 @@ _INT = pa.int64()
 _DOUBLE = pa.float64()
 _BOOL = pa.bool_()
 _DOUBLE_LIST = pa.list_(pa.float64())
+_STRING_LIST = pa.list_(pa.string())
 _INT64_MIN = -(2**63)
 _INT64_MAX = 2**63 - 1
 
@@ -73,6 +95,9 @@ SCHEMAS = {
             ("reference_run_stdout_ref_path", _STRING),
             ("reference_run_outputs_ref_sha256", _STRING),
             ("reference_run_outputs_ref_path", _STRING),
+            ("reference_run_stdout_truncated", _BOOL),
+            ("reference_run_stderr_truncated", _BOOL),
+            ("reference_run_workdir_incomplete", _BOOL),
             ("context_knowledge_summary", _STRING),
             ("context_source_description", _STRING),
             ("final_stage_reached", _STRING),
@@ -104,6 +129,9 @@ SCHEMAS = {
             ("run_stdout_ref_path", _STRING),
             ("run_outputs_ref_sha256", _STRING),
             ("run_outputs_ref_path", _STRING),
+            ("run_stdout_truncated", _BOOL),
+            ("run_stderr_truncated", _BOOL),
+            ("run_workdir_incomplete", _BOOL),
             ("alignment_per_input", _DOUBLE_LIST),
             ("alignment_mean", _DOUBLE),
             ("profile_runtime_s", _DOUBLE),
@@ -130,12 +158,26 @@ SCHEMAS = {
             ("message", _STRING),
         ]
     ),
+    "requests": pa.schema(
+        [
+            *_KEY_FIELDS,
+            ("index", _INT),
+            ("stage", _STRING),
+            ("attempt_index", _INT),
+            ("message_roles", _STRING_LIST),
+            ("message_sha256", _STRING_LIST),
+            ("reply_ref_sha256", _STRING),
+            ("reply_ref_path", _STRING),
+            ("diagnostic_count", _INT),
+        ]
+    ),
 }
 
 _SORT_KEYS = {
     "trials": ("trial_id",),
     "attempts": ("trial_id", "index"),
     "diagnostics": ("trial_id", "attempt_index", "ordinal"),
+    "requests": ("trial_id", "index"),
 }
 
 
@@ -171,6 +213,11 @@ def _ref_columns(prefix: str, ref: TextRef | None) -> dict[str, str | None]:
     return {f"{prefix}_sha256": ref.sha256 if ref else None, f"{prefix}_path": ref.path if ref else None}
 
 
+def _flag_columns(prefix: str, run: RunInfo) -> dict[str, bool | None]:
+    """Return the run flag columns of a RunInfo: `<prefix>_<flag>`, null where the flag was not recorded."""
+    return {f"{prefix}_{flag}": getattr(run, flag) for flag in RUN_FLAG_NAMES}
+
+
 def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
     """Return the trials row of one trial."""
     parsed = parse_trial_id(trial.trial_id)
@@ -203,6 +250,7 @@ def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
         "reference_run_wall_s": reference.wall_s,
         **_ref_columns("reference_run_stdout_ref", reference.stdout_ref),
         **_ref_columns("reference_run_outputs_ref", reference.outputs_ref),
+        **_flag_columns("reference_run", reference),
         "context_knowledge_summary": trial.context.knowledge_summary,
         "context_source_description": trial.context.source_description,
         "final_stage_reached": final.stage_reached,
@@ -234,6 +282,7 @@ def _attempt_row(attempt: Attempt, key: dict[str, str]) -> dict[str, Any]:
         "run_wall_s": run.wall_s,
         **_ref_columns("run_stdout_ref", run.stdout_ref),
         **_ref_columns("run_outputs_ref", run.outputs_ref),
+        **_flag_columns("run", run),
         "alignment_per_input": list(attempt.alignment.per_input),
         "alignment_mean": attempt.alignment.mean,
         "profile_runtime_s": profile.runtime_s,
@@ -258,6 +307,20 @@ def _diagnostic_row(diagnostic: Diagnostic, key: dict[str, str], attempt_index: 
     }
 
 
+def _request_row(request: Request, key: dict[str, str]) -> dict[str, Any]:
+    """Return the requests row of one request; its messages become role and sha256 lists in the order sent."""
+    return {
+        **key,
+        "index": request.index,
+        "stage": request.stage,
+        "attempt_index": request.attempt_index,
+        "message_roles": [message.role for message in request.messages],
+        "message_sha256": [message.ref.sha256 for message in request.messages],
+        **_ref_columns("reply_ref", request.reply_ref),
+        "diagnostic_count": len(request.diagnostics),
+    }
+
+
 def trial_rows(trials: Sequence[Trial]) -> dict[str, list[dict[str, Any]]]:
     """Flatten trials into rows for each table, in column order and sorted by trial_id, index, and ordinal.
 
@@ -278,6 +341,8 @@ def trial_rows(trials: Sequence[Trial]) -> dict[str, list[dict[str, Any]]]:
             rows["attempts"].append(_attempt_row(attempt, key))
             for ordinal, diagnostic in enumerate(attempt.diagnostics):
                 rows["diagnostics"].append(_diagnostic_row(diagnostic, key, attempt.index, ordinal))
+        for request in trial.requests or []:
+            rows["requests"].append(_request_row(request, key))
     return {table: _sorted_rows(table, [_typed_row(table, row) for row in rows[table]]) for table in TABLES}
 
 
@@ -328,7 +393,7 @@ def _arrow_tables(rows: dict[str, list[dict[str, Any]]]) -> dict[str, pa.Table]:
 
 
 def write_run_parquet(trials: Sequence[Trial], out_dir: Path) -> None:
-    """Write the three tables of `trials` as Hive-partitioned Parquet under `out_dir`.
+    """Write the four tables of `trials` as Hive-partitioned Parquet under `out_dir`.
 
     Each table directory is removed first, so the result holds only these
     trials; other files in `out_dir` are kept. A table with no rows gets no

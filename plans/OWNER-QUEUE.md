@@ -191,31 +191,77 @@ Answer: Went with option A. Deleted the files.
 Applied: 2026-09-23. Verified read-only: only toolchains/cuda@12.6.3 remains, and `du -sh /mnt/nvme10/joseph_ufl` is 94G (rx 20260923-222319-exec-07d8).
 
 ## OQ-018 Upstream LASSI Text In The Public Repository
-State: OPEN
+State: CLOSED
 Kind: policy
 Blocks: P1.12 (the P1 gate and the demo do not wait on it)
 Evidence: plans/p1-faithful.md (P1.3, P1.12). Upstream SPEAR-UIC/LASSI at 74b4681 is GPL-3.0 (bible Source Papers, LASSI). Its prompt_dictionary.py holds the lassi-2024 system and translation prompts and both context packs: about 28.6 KB of OpenMP reference card text and 18.2 KB of CUDA C++ Programming Guide chapter 5 text. The repository is public (OQ-005) and has no LICENSE file. An exploratory local check on 2026-09-24 ran prompt_dictionary.py, the notebook, and the 20 *_main sources through tools/check_text_policy.py --text-stdin: no pattern hits; the only failures were a non-ASCII copyright sign in the two layout sources, which are never committed. Each upstream system prompt opens with a sentence that casts the model in its role; the Attribution Policy covers this repository's own text, so publishing upstream wording word for word is worth a deliberate choice.
 Question: The bible puts the lassi-2024 prompts under assets/prompts/ and the context packs under assets/context/. That text is upstream's, word for word, so committing it publishes GPL-3.0 text and third-party documentation excerpts in an unlicensed public repository. May agents commit it?
 Options: (a) commit all generated text with a NOTICE naming the upstream commit and its GPL-3.0 license: the repository reads as the bible describes, but carries GPL-3.0 material and the two documentation excerpts. (b) commit only the manifests (upstream key and sha256) and generate the text from the pinned upstream checkout before each run: nothing third-party is published, readers see the prompts in each trial.md, and the bible's Repository Layout note is updated. (c) commit the prompts with a NOTICE and generate only the two context packs: the short prompts stay readable in the repository and the documentation excerpts stay out.
 Recommendation: (c); it keeps the prompt templates readable (Readability Standards, Prompts row) and keeps copyrighted documentation text out of a public repository. Until you answer, P1.3 keeps all generated upstream text gitignored, so nothing is published first. The gate and the demo do not wait, because the text is byte-identical either way. Note from P1.3: its leak-guard test fails when any tracked file outside the upstream checkout holds a generated fragment of 40 or more characters. It exempts only the experimental_setup compiler and flag literals that docs/BIBLE.md already records (today the CUDA flag text); every other literal, upstream's absolute nvc++ path included, stays guarded.
-Answer:
+Answer: I did not want the LASSI prompts in the repository. Remove them and keep the prompts local only.
+Applied: 2026-09-24. Nothing had been committed to remove: no upstream prompt or documentation text was ever tracked; only the three MANIFEST.yaml files (keys, source cells, sha256) are, and the loader needs them to verify the local files. The prompts and context packs stay generated locally by tools/extract_lassi_assets.py into gitignored trees, and the tests/prompts leak guard keeps any upstream text out of tracked files. Recorded in the bible (Repository Layout, Decision Log); P1.12 is DONE.
 
 ## OQ-019 Agent Rule 8: furiosa-smi ps Misses Other Tenants
-State: OPEN
+State: CLOSED
 Kind: policy
 Blocks: none (serving checks furiosa-smi status too in the meantime)
 Evidence: plans/spikes/p3-rngd-demo.md, section 2 (exploratory, 2026-09-24)
 Question: Agent Rule 8 requires `furiosa-smi ps` before claiming NPUs. On alpha01 it lists only the caller's own processes: it showed no rows while another tenant's server held npu4-npu7 (45.93 of 47.50 GiB each in `furiosa-smi status`). Should the rule also name `furiosa-smi status`?
 Options: (a) amend Rule 8 to "run furiosa-smi ps and furiosa-smi status; claim only a card whose memory reads 0.00 GiB", changing the bible and AGENTS.md together. (b) keep the rule as written and record the extra check only in Host Facts and the Serving Rules; the rule alone would still allow claiming an occupied card. (c) also have the gate refuse a furiosa-llm command whose --devices names a card with nonzero memory; mechanical, but a gate change you reinstall.
 Recommendation: (a) now, (c) later. Agents already check the Memory column before every claim; that is stricter than Rule 8, not looser.
-Answer:
+Answer: Go ahead with option A with a note to review this question again later.
+Applied: 2026-09-24. Agent Rule 8 amended in the bible and AGENTS.md (furiosa-smi ps and furiosa-smi status; claim only a card at 0.00 GiB), with a Decision Log entry. The review note is in plans/PHASE-NOTES.md (All Phases).
 
 ## OQ-020 Text-Policy Checker Refuses Staged Gitlinks
-State: OPEN
+State: CLOSED
 Kind: policy
 Blocks: none (P1.1 pins upstream with a manifest and a fetch tool instead)
 Evidence: plans/spikes/p1-hecbench-pin.md (Upstream pin); tools/check_text_policy.py, check_staged (it reads every staged path with `git show :<path>`)
 Question: A gitlink (mode 160000) names a commit in another repository, so `git show :<path>` fails on it and the pre-commit check refuses the commit. No submodule can be committed while the checker reads gitlinks this way. P1.1 pinned upstream LASSI with assets/upstream/lassi.yaml and tools/fetch_upstream.py into a gitignored checkout, which works and is tested. Should the checker skip gitlinks?
 Options: (a) leave the checker as it is and pin third-party code with manifests and fetch tools: no checker change; submodules stay impossible. (b) skip mode-160000 entries in check_staged (or check the gitlink's commit id as text): submodules become possible; a gitlink holds no text of this repository to scan. Either way the owner makes the change, since agents may not edit the checker.
 Recommendation: (a) for P1, since the manifest pin works; decide (b) before any later phase that needs a submodule.
+Answer: Go ahead with option A for now. Make a notice to review this question again later.
+Applied: 2026-09-24. The checker stays as it is; third-party code is pinned with manifests and fetch tools. Recorded in the bible (Decision Log); the review note is in plans/PHASE-NOTES.md (All Phases).
+
+## OQ-021 LASSI Paper Values That Do Not Follow From Its Tables
+State: OPEN
+Kind: decision
+Blocks: none (P2.8 carries both values; the choice applies when a headline metric is marked reproduced or reported with its gap, Acceptance Criteria)
+Evidence: plans/spikes/p2-lassi-metrics.md
+Question: Five of the eight percentages in the LASSI results table do not follow from the paper's own Tables VI and VII: within 10% or faster in both directions, Sim-T >= 0.6 in both, and CUDA -> OMP first try. Each recount differs from the published value by 1 to 5 trials, and the sources do not say why. When the reproduction marks a headline metric reproduced or reports its gap, which paper value is the reference?
+Options: (a) The published percentages only: this matches the paper's claims, but part of a gap may be the paper's own inconsistency, unmarked. (b) Both values side by side, with the gap reported against each and the difference noted: nothing is hidden, but tables get wider and five metrics carry two gaps. (c) The recounts only: consistent with the published rows and the Reporting Rules' recompute-from-raw rule, but departs from the paper's stated headline numbers.
+Recommendation: (b). The sources cannot tell which value is right, so neither is picked silently.
+Answer: I wasn't aware there was a discrepancy in the paper? Could you send the links and give page numbers to the sources you are using?
+Response (2026-09-24): The sources, with every step in plans/spikes/p2-lassi-metrics.md (Sources, Recount). Paper: arXiv:2407.01638, https://arxiv.org/abs/2407.01638; PDFs https://arxiv.org/pdf/2407.01638v1 and https://arxiv.org/pdf/2407.01638v2 (8 pages each, the same tables and percentages; pages below are v2's). Published percentages: p. 6, Sec. V-B (OMP -> CUDA: 78.1% within 10% or faster, 65.6% first try, 40.6% Sim-T >= 0.6, each of the 32 correct trials) and Sec. V-C (CUDA -> OMP: 61.8%, 55.9%, 47.1%, each of the 34 correct trials). Per-trial values: Table VI, p. 6 (OMP -> CUDA) and Table VII, p. 7 (CUDA -> OMP), columns Runtime, Ratio, Sim-T, Sim-L, Self-corr, one line per app with two models per panel, N/A for a failed trial; reference runtimes in Table IV, p. 5. Counting the rows: OMP -> CUDA within 10% is 23/32 by the printed Ratios (9 below 0.9), 24/32 with GPT-4's atomicCost Ratio recomputed from Table IV (its printed row repeats the layout row above it), against 25/32 published; OMP -> CUDA Sim-T >= 0.6 is 8/32 against 13/32 (only a threshold of 0.54 gives 13); CUDA -> OMP within 10% is 20/34 against 21/34; CUDA -> OMP first try (Self-corr 0) is 18/34 against 19/34; CUDA -> OMP Sim-T >= 0.6 is 15/34 against 16/34. Correct output (32/40, 34/40) and OMP -> CUDA first try (21/32) count to their published values. The spike lists the trials behind each count and the script that counts them; a second, independent count from both PDFs and the HTML gave the same values. State stays OPEN for a choice among (a), (b), and (c); write it on a second Answer line below.
+
+## OQ-022 Which Token Similarity Is The Paper's Sim-T
+State: CLOSED
+Kind: decision
+Blocks: none
+Evidence: plans/spikes/p2-lassi-metrics.md (Findings 5); lassi/scoring/similarity.py
+Question: The pinned notebook computes and stores two token similarities, one over Python tokenize tokens and one over tiktoken cl100k_base ids. The paper names one Sim-T and does not say which. The faithful sim_t uses Python tokenize (quirk table). The paper's generated codes are unpublished, so no data can settle this. P2's scope is fixed, so a second measure would come in a later phase.
+Options: (a) Keep sim_t as the faithful Sim-T and label every paper comparison of Sim-T "tokenizer not stated by the paper": no new dependency, and the comparison stays caveated. (b) As (a), and add sim_t_tiktoken under its own name in a later phase: both candidates are reported, but this adds the tiktoken dependency and its cl100k_base file, which must be cached under the scratch root before offline use on alpha01. (c) Make the tiktoken similarity the faithful Sim-T: this changes the quirk table's Sim-T row and the P1.9 replay comparison, and no evidence favors it.
+Recommendation: (a). A second measure cannot resolve a question that no published data can settle, and (a) keeps the documented design.
+Answer: Keep both token similarities and give me a notice to review this later.
+Applied: 2026-09-24. Option (b): both similarities are kept: the faithful sim_t (Python tokenize) stays the Sim-T compared with the paper, labeled with the open tokenizer, and a tiktoken cl100k_base similarity, sim_t_tiktoken, joins under its own name in a later phase (bible Evaluation Protocol, LASSI Paper Metrics, and the Decision Log). The review-later notice is in plans/PHASE-NOTES.md, All Phases.
+
+## OQ-023 Which Phase Builds Terminal Presentation
+State: CLOSED
+Kind: decision
+Blocks: none
+Evidence: docs/BIBLE.md (Readability Standards, Terminal Presentation; Decision Log 2026-09-24)
+Question: Terminal presentation (the graphics prompt and saved preset, the LASSI-DF banner, the live inference table, and the live training table) is designed in the bible but named in no Build Roadmap row, so no phase plan would pick it up. Which phase builds it?
+Options: (a) Add the prompt, preset, banner, and inference table to P4's scope (the next phase in the work order, not yet planned) and the training table to P7's (training first exists there): the next plan includes it, P4 grows a little, and P4's gate is unchanged. (b) A separate small phase before P4 with its own gate (a recorded terminal session of lassi run on a mock recipe): the cleanest scope, but it adds a roadmap row and delays P4. (c) After P5, once the hardware-free phases are done: no delay to the core path, but the demo's table stays a one-off script until then.
+Recommendation: (a). The work is small and needs no hardware, P4 is the next plan to be written, and the training table waits for training to exist.
+Answer: Let's go with option A.
+Applied: 2026-09-24. The Build Roadmap's P4 scope names the graphics prompt and preset, the LASSI-DF banner, and the live inference table, and P7's names the live training table; P4's gate is unchanged (bible Readability Standards, Terminal Presentation, and the Decision Log). plans/PHASE-NOTES.md, P4, carries the note for P4's plan.
+
+## OQ-024 P2 Gate Review: Score Components On Run demo-rngd-cpu-1
+State: OPEN
+Kind: review
+Blocks: none
+Evidence: results/p2-gate/summary.md, results/p2-gate/score/review.md, results/p2-gate/score/metrics.md
+Question: The P2 gate is your review of the score components on one full run. Both profiles scored all 10 trials of demo-rngd-cpu-1 from clean commit a10fdd0, and the load check scored p1-gate-dry-run and demo-rngd-1 (20 trials each). Do the components, the readings behind them, and the weights hold? The summary lists eight review questions: the run's limits, the planning decisions, the in-task readings, the lassi profile's nulls, the run metric populations, the faithful Sim-T staying below 0.01 on every trial (bearing on OQ-022's review), OQ-021, and any df-v0 weight to change.
+Options: (a) Accept: P2 becomes DONE. (b) Accept with changes: name each change; each becomes a task in the next phase or a Decision Log entry for a weight. (c) Hold for a faithful run: P2 stays GATE-OWNER until a faithful run (P3 or P10) is scored.
+Recommendation: (b) if any reading or weight should change, else (a). The run is a demo model on the CPU proxy, so the review checks the scoring, not the model.
 Answer:

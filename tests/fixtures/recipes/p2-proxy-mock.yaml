@@ -1,0 +1,8 @@
+# P2.5 spike: is each item's masked reference stdout stable under the CPU proxy? The mock answers with the item's
+# reference target, so every candidate is the reference program again: its passes check the path, never a model.
+extends: ../../../projects/lassi-demo/rngd-cpu.yaml  # CUDA to OpenMP, nvcpp-multicore, native executor, stdout_mask
+model:
+  backend: mock  # replies with the item's reference target; no model host is used
+  id: mock-reference  # the arm segment of every trial id
+trials:
+  n: 3  # three runs of every item: three reference runs and three candidate runs each

@@ -14,3 +14,7 @@ One codebase that reproduces LASSI, reproduces LASSI-EE, and builds LASSI-DF: LL
 4. `uv sync` and `uv run tools/check_setup.py`.
 
 Remote work on the build host goes through `uv run tools/rx.py` (see AGENTS.md, Remote Execution).
+
+## Terminal Graphics (planned)
+
+`lassi` commands will be able to show a LASSI-DF banner and live tables of inference and training in the terminal. Graphics are optional: the first interactive command asks whether to show them and offers to save the answer as your preset, `lassi settings graphics on|off` changes it, and `--graphics on|off` or `LASSI_GRAPHICS` overrides it for one command. Nothing is asked without an interactive terminal, and graphics never change records or results. Design: `docs/BIBLE.md`, Readability Standards, Terminal Presentation.

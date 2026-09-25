@@ -20,7 +20,9 @@ caller passes them. A stage is built as `factory(context=<RunContext>)`, one
 stage object per trial (lassi.core.stages). A toolchain that declares a pin
 (PIN and PIN_BIN) is built as `factory(executable=<pinned path>,
 runner=SandboxedCompileRunner(<clean environment>, ...))`, and one without
-as `factory()` (lassi.core.runner).
+as `factory()` (lassi.core.runner). A ScoreProfile that declares
+`reads_bench_sources` is built as `factory(bench_root=<suite sources>)`, and
+one without as `factory()` (lassi.scoring.profiles.build_profile).
 """
 
 from __future__ import annotations

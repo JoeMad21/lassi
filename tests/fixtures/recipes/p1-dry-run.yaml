@@ -2,8 +2,11 @@
 # tools/fetch_upstream.py, tools/extract_lassi_assets.py, and tools/fetch_bench.py. It is lassi-repro with the
 # mock LLM, which answers every request with the item's reference target: a compile-stage run with the mock,
 # never compared with the paper.
+# P1.G ran this file before it bound score: df-v0 and before lassi-repro gained its metrics line, so the P1.G
+# run's recipe hash (ad12fb6dd08e) predates both.
 extends: lassi-repro  # projects/lassi-repro/recipe.yaml; its project key starts every trial id with lassi-repro/
 model: {backend: mock, id: mock-reference}  # the mock; under faithful extraction it answers in one untagged fence
+score: df-v0  # final.score and each Attempt.score; the metrics line comes from lassi-repro
 llm:
   sampling:
     max_tokens: 4096  # lassi-repro leaves max_tokens open and the runner never picks it; the mock ignores it

@@ -31,7 +31,7 @@ Hard rules:
 5. Evaluation splits are untouchable: no training, prompt tuning, or corpus harvest on eval items, under any method.
 6. Model-generated code runs only through the sandbox executor, never directly in a shell.
 7. Nothing on the alpha01 root filesystem. Builds, venvs, HF caches, JIT caches, SDK containers, and results live under `/mnt/nvme10/joseph_ufl`; check free space before large runs.
-8. Before claiming NPUs, run `furiosa-smi ps`. Never claim npu0 (another tenant). Serve on port 8123 and confirm `/v1/models` returns the expected id. Wait for full process exit before relaunching (EBUSY).
+8. Before claiming NPUs, run `furiosa-smi ps` and `furiosa-smi status`, and claim only a card whose memory reads 0.00 GiB in `furiosa-smi status` (`furiosa-smi ps` lists only the caller's own processes). Never claim npu0 (another tenant). Serve on port 8123 and confirm `/v1/models` returns the expected id. Wait for full process exit before relaunching (EBUSY).
 9. Tenstorrent silicon: one placement at a time, never looped device opens (they have taken alpha01's network down twice). RL rewards never execute on silicon; silicon runs are evaluation runs a human starts.
 10. Every run records its resolved recipe and toolchain pins. Never upgrade a pinned toolchain mid-run; changing a pin is a Decision Log entry.
 11. IR is committed in custom assembly format only, never generic form. Corpus IR is never truncated to fit a limit; split it by function or drop it.
@@ -44,6 +44,8 @@ Hard rules:
 ## Operating Mode
 
 Work is unattended by default. The owner reviews asynchronously through `plans/OWNER-QUEUE.md`, run reports in `plans/runs/`, pushed branches, and pull requests. Never wait for an answer and never ask questions in an unattended session; record the question in the owner queue and continue with other work.
+
+Once terminal graphics exist (bible, Readability Standards, Terminal Presentation), run `lassi` commands in unattended sessions with `--graphics off` or `LASSI_GRAPHICS=off`, so no command can wait on the graphics prompt, and never save a graphics preset for the owner.
 
 ## Session Loop
 

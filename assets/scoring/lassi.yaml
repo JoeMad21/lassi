@@ -1,0 +1,38 @@
+# The lassi score profile (task P2.7; bible Evaluation Protocol, LASSI reproduction row and LASSI Paper Metrics).
+# lassi.scoring.lassi_profile reads this file: the component names in the order a Score lists them, the component
+# that is the scalar, and every note text. The definitions of the components live in that module and in the bible.
+# Changing a name, the order, the scalar, or a note is a Decision Log entry.
+
+# Every component of a trial's Score, in order; the file must list each one the profile computes, once.
+components:
+  - correct  # automated oracle: a clean run of the output that stands, aligned at 1.0
+  - correct_paper  # the paper's criterion, a manual judgment; never computed
+  - within_10pct  # runtime within 10% of the reference or faster; None until a timing profiler exists
+  - first_try  # correct with final.corrections = 0
+  - sim_t  # faithful Sim-T (Python tokenize over the C text)
+  - sim_t_c  # C-aware Sim-T
+  - sim_l  # faithful Sim-L
+  - self_corr  # final.corrections
+  - cap_hit  # the trial ended at correction-cap
+  - fence_quirk  # fence-quirk diagnostics over all attempts
+  - compiled  # the last attempt reached S4 or S5
+  - compiled_first_try  # compiled with final.corrections = 0
+
+# The component that is the Score's scalar.
+scalar: correct
+
+# Note texts, plain ASCII. The profile gives within_10pct and correct_paper as they stand, and compile_only,
+# not_aligned, and baseline as the note of correct (and of first_try) when correct is None. baseline also notes
+# compiled, compiled_first_try, and the similarity values of a trial that ended at the baseline, with the end
+# reason code appended; no_attempt notes the similarity values of any other trial with no attempt. Each similarity
+# note gets the interpreter that computed the value.
+notes:
+  within_10pct: "not measured: no timing profiler exists yet, and the proxy checks outputs, never runtime"
+  correct_paper: "not computed: the paper's criterion is a manual inspection of stdout against the reference"
+  compile_only: "compile-stage reproduction: no program ran, so correct output was not checked"
+  not_aligned: "not computed: the output that stands came from a clean run that the oracle did not align"
+  baseline: "not computed: the trial ended at the baseline, before any model call"
+  no_attempt: "not computed: the trial holds no attempt to compare"
+  sim_t: "faithful Sim-T: Python tokenize tokens, difflib ratio with autojunk on"
+  sim_t_c: "C-aware Sim-T: 2M/T over C tokens, difflib with autojunk off"
+  sim_l: "faithful Sim-L: stripped lines matched in any order over the larger line count"

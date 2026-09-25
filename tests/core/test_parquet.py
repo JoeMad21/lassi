@@ -1,7 +1,7 @@
-"""Tests for the Parquet mirror of Result records (P0.2).
+"""Tests for the Parquet mirror of Result records (P0.2), with the requests table (P2.1).
 
-lassi/core/parquet.py flattens Trials into three tables (trials, attempts,
-diagnostics), writes them as Hive-partitioned Parquet by project, arm, bench,
+lassi/core/parquet.py flattens Trials into four tables (trials, attempts,
+diagnostics, requests), writes them as Hive-partitioned Parquet by project, arm, bench,
 and direction, and reads them back to exactly the rows trial_rows produces.
 Parquet mirrors the JSON records and never replaces them (bible Design
 Principle 7). The fixtures span two arms and two directions, with None values,
@@ -17,6 +17,18 @@ after the toolchain pins as the bible's Trial block orders them, and typed
 string, bool, string, string, string. Like every column they are nullable
 in the Arrow schema; a value is null where the trial's provenance is unknown,
 and date is never null because the record always sets it.
+
+The requests table (P2.1) has one row per Trial.requests entry, sorted by
+trial_id and index: the key columns, index, stage, attempt_index (null for
+a context request), message_roles and message_sha256 (string lists in the
+order sent), reply_ref_sha256, reply_ref_path, and diagnostic_count. A
+trial whose requests were not recorded (None) or that asked no model ([])
+has no rows.
+
+The run flags of Trial.reference_run and Attempt.run (P2.2) are bool
+columns right after the run's outputs_ref columns: reference_run_<flag> in
+the trials table and run_<flag> in the attempts table, for stdout_truncated,
+stderr_truncated, and workdir_incomplete, null where not recorded.
 """
 
 from __future__ import annotations
@@ -57,6 +69,9 @@ REFERENCE_RUN_COLUMNS = (
     "reference_run_stdout_ref_path",
     "reference_run_outputs_ref_sha256",
     "reference_run_outputs_ref_path",
+    "reference_run_stdout_truncated",
+    "reference_run_stderr_truncated",
+    "reference_run_workdir_incomplete",
 )
 END_REASON_COLUMNS = ("final_end_reason_code", "final_end_reason_message")
 TRIAL_COLUMNS = (
@@ -112,6 +127,9 @@ ATTEMPT_COLUMNS = (
     "run_stdout_ref_path",
     "run_outputs_ref_sha256",
     "run_outputs_ref_path",
+    "run_stdout_truncated",
+    "run_stderr_truncated",
+    "run_workdir_incomplete",
     "alignment_per_input",
     "alignment_mean",
     "profile_runtime_s",
@@ -139,7 +157,27 @@ DIAGNOSTIC_COLUMNS = (
     "column",
     "message",
 )
-COLUMNS = {"trials": TRIAL_COLUMNS, "attempts": ATTEMPT_COLUMNS, "diagnostics": DIAGNOSTIC_COLUMNS}
+REQUEST_COLUMNS = (
+    "project",
+    "arm",
+    "bench",
+    "direction",
+    "trial_id",
+    "index",
+    "stage",
+    "attempt_index",
+    "message_roles",
+    "message_sha256",
+    "reply_ref_sha256",
+    "reply_ref_path",
+    "diagnostic_count",
+)
+COLUMNS = {
+    "trials": TRIAL_COLUMNS,
+    "attempts": ATTEMPT_COLUMNS,
+    "diagnostics": DIAGNOSTIC_COLUMNS,
+    "requests": REQUEST_COLUMNS,
+}
 
 INT64_COLUMNS = frozenset(
     {
@@ -178,14 +216,21 @@ BOOL_COLUMNS = frozenset(
         "provenance_dirty",
         "reference_run_hang",
         "reference_run_sim_ub",
+        "reference_run_stdout_truncated",
+        "reference_run_stderr_truncated",
+        "reference_run_workdir_incomplete",
         "run_hang",
         "run_sim_ub",
+        "run_stdout_truncated",
+        "run_stderr_truncated",
+        "run_workdir_incomplete",
         "guards_host_compute",
         "guards_harness_tamper",
         "guards_oracle_access",
     }
 )
 LIST_DOUBLE_COLUMNS = frozenset({"alignment_per_input"})
+LIST_STRING_COLUMNS = frozenset({"message_roles", "message_sha256"})
 
 ID_A_OMP_ENTROPY = f"{PROJECT}/arm-a/{SUITE}/omp-cuda/entropy/run01"
 ID_A_OMP_LAYOUT = f"{PROJECT}/arm-a/{SUITE}/omp-cuda/layout/run01"
@@ -223,6 +268,11 @@ def text_ref(text: str) -> record.TextRef:
     return record.TextRef(sha256=digest, path=f"texts/{digest[:2]}/{digest}.txt")
 
 
+def message(role: str, text: str) -> record.RequestMessage:
+    """Return a request message whose text reference is computed with hashlib."""
+    return record.RequestMessage(role=role, ref=text_ref(text))
+
+
 def fixture_provenance(**changes: Any) -> record.Provenance:
     """Return the provenance of a compile-only run with git available and no sdk reported, with the given changes."""
     fields: dict[str, Any] = {
@@ -253,7 +303,7 @@ def make_trial(trial_id: str, attempts: list[record.Attempt], **changes: Any) ->
 
 
 def trial_a_omp_entropy() -> record.Trial:
-    """Return a two-attempt trial with diagnostics, None values, and an empty per_input list."""
+    """Return a two-attempt trial with diagnostics, None values, an empty per_input list, and two requests."""
     first = record.Attempt(
         index=0,
         prompt_ref=text_ref("prompt 0\n"),
@@ -276,17 +326,34 @@ def trial_a_omp_entropy() -> record.Trial:
         guards=record.Guards(host_compute=False),
         score=record.ScoreBreakdown(components={"energy": None, "alignment": 0.75}),
     )
+    requests = [
+        record.Request(
+            index=0,
+            stage="summarize_context",
+            attempt_index=None,
+            messages=[message("system", "system general\n"), message("user", "summary request\n")],
+            reply_ref=text_ref("summary\n"),
+        ),
+        record.Request(
+            index=1,
+            stage="generate",
+            attempt_index=0,
+            messages=[message("system", "system direction\n"), message("user", "prompt 0\n")],
+            reply_ref=text_ref("response 0\n"),
+        ),
+    ]
     return make_trial(
         ID_A_OMP_ENTROPY,
         [first, second],
         toolchain_pins=record.ToolchainPins(cuda="fixture-cuda"),
         context=record.Context(knowledge_summary="summary\n"),
+        requests=requests,
         final=record.Final(stage_reached="S5", alignment=0.75, corrections=1),
     )
 
 
 def trial_a_omp_layout() -> record.Trial:
-    """Return a one-attempt trial with every attempt field at its default, sharing a partition."""
+    """Return a one-attempt trial sharing a partition, every attempt field at its default, requests not recorded."""
     return make_trial(ID_A_OMP_LAYOUT, [record.Attempt(index=0, stage_reached="S0")])
 
 
@@ -306,14 +373,18 @@ def trial_b_omp_entropy() -> record.Trial:
 
 
 def trial_a_cuda_entropy() -> record.Trial:
-    """Return a trial without attempts in the second direction, from a run where git was unavailable."""
-    return make_trial(ID_A_CUDA_ENTROPY, [], provenance=fixture_provenance(commit=None, dirty=None))
+    """Return a trial that asked no model in the second direction, from a run where git was unavailable."""
+    return make_trial(ID_A_CUDA_ENTROPY, [], provenance=fixture_provenance(commit=None, dirty=None), requests=[])
 
 
 def trial_b_cuda_stencil() -> record.Trial:
-    """Return a trial whose bench name is all digits, with one run-stage warning."""
+    """Return a trial whose bench name is all digits, with one run-stage warning and one request."""
     warning = record.Diagnostic(stage="run", severity="warning", file="k.cu", line=7, message="w")
-    return make_trial(ID_B_CUDA_STENCIL, [record.Attempt(index=0, stage_reached="S5", diagnostics=[warning])])
+    request = record.Request(
+        index=0, stage="generate", attempt_index=0, messages=[message("user", "prompt s\n")], reply_ref=text_ref("")
+    )
+    attempt = record.Attempt(index=0, stage_reached="S5", diagnostics=[warning])
+    return make_trial(ID_B_CUDA_STENCIL, [attempt], requests=[request])
 
 
 def filled_attempts() -> list[record.Attempt]:
@@ -334,6 +405,9 @@ def filled_attempts() -> list[record.Attempt]:
             wall_s=1.5,
             stdout_ref=text_ref("stdout b0\n"),
             outputs_ref=text_ref("outputs b0\n"),
+            stdout_truncated=False,
+            stderr_truncated=True,
+            workdir_incomplete=False,
         ),
         alignment=record.Alignment(per_input=[0.5], mean=0.625),
         profile=record.Profile(runtime_s=0.25, avg_power_w=150.0, energy_j=37.5),
@@ -354,6 +428,9 @@ def filled_attempts() -> list[record.Attempt]:
             wall_s=2.5,
             stdout_ref=text_ref("stdout b1\n"),
             outputs_ref=text_ref("outputs b1\n"),
+            stdout_truncated=False,
+            stderr_truncated=False,
+            workdir_incomplete=True,
         ),
         alignment=record.Alignment(per_input=[0.75, 0.25], mean=0.5),
         profile=record.Profile(runtime_s=0.5, avg_power_w=75.0, energy_j=37.25),
@@ -372,10 +449,51 @@ def filled_reference_run() -> record.RunInfo:
         wall_s=4.5,
         stdout_ref=text_ref("reference stdout b\n"),
         outputs_ref=text_ref("reference outputs b\n"),
+        stdout_truncated=True,
+        stderr_truncated=False,
+        workdir_incomplete=False,
     )
 
 
 FILLED_END_REASON = record.EndReason(code="correction-cap", message="synthetic: the cap stopped the loop")
+
+
+def filled_requests() -> list[record.Request]:
+    """Return a context request with a warning, then one request per attempt, each index unlike its attempt index.
+
+    attempt_index is null only on the context request, where the record
+    requires it.
+    """
+    warning = record.Diagnostic(stage="parse", severity="warning", code="invalid-text", message="w-r0")
+    notes = [
+        record.Diagnostic(stage="parse", severity="warning", code="fence-quirk", message="w-r2a"),
+        record.Diagnostic(stage="parse", severity="note", message="w-r2b"),
+    ]
+    return [
+        record.Request(
+            index=0,
+            stage="describe_source",
+            attempt_index=None,
+            messages=[message("system", "system b\n"), message("user", "describe b\n")],
+            reply_ref=text_ref("source b\n"),
+            diagnostics=[warning],
+        ),
+        record.Request(
+            index=1,
+            stage="generate",
+            attempt_index=0,
+            messages=[message("system", "direction b\n"), message("user", "prompt b0\n")],
+            reply_ref=text_ref("response b0\n"),
+        ),
+        record.Request(
+            index=2,
+            stage="run_loop",
+            attempt_index=1,
+            messages=[message("user", "prompt b1\n")],
+            reply_ref=text_ref("response b1\n"),
+            diagnostics=notes,
+        ),
+    ]
 
 
 def trial_b_omp_filled() -> record.Trial:
@@ -391,6 +509,7 @@ def trial_b_omp_filled() -> record.Trial:
         model=record.ModelInfo(backend="mock", id="mock-filled", sampling=sampling),
         reference_run=filled_reference_run(),
         context=record.Context(knowledge_summary="knowledge b\n", source_description="source b\n"),
+        requests=filled_requests(),
         final=record.Final(
             stage_reached="S4", alignment=0.25, score=0.5, corrections=1, wall_s=3.5, end_reason=FILLED_END_REASON
         ),
@@ -424,6 +543,11 @@ def snapshot(root: Path) -> dict[str, bytes]:
     return {path: (root / path).read_bytes() for path in files_under(root)}
 
 
+def is_string_type(value_type: pa.DataType) -> bool:
+    """Return True for an Arrow string or large string type."""
+    return pa.types.is_string(value_type) or pa.types.is_large_string(value_type)
+
+
 def column_check(name: str) -> Callable[[pa.DataType], bool]:
     """Return a predicate for the Arrow type the contract gives a column."""
     if name in INT64_COLUMNS:
@@ -434,7 +558,9 @@ def column_check(name: str) -> Callable[[pa.DataType], bool]:
         return lambda t: t == pa.bool_()
     if name in LIST_DOUBLE_COLUMNS:
         return lambda t: pa.types.is_list(t) and t.value_type == pa.float64()
-    return lambda t: pa.types.is_string(t) or pa.types.is_large_string(t)
+    if name in LIST_STRING_COLUMNS:
+        return lambda t: pa.types.is_list(t) and is_string_type(t.value_type)
+    return is_string_type
 
 
 def assert_rows_identical(got: dict[str, list[dict[str, Any]]], want: dict[str, list[dict[str, Any]]]) -> None:
@@ -504,6 +630,9 @@ def expected_attempt_rows_a_omp_entropy() -> list[dict[str, Any]]:
         "run_stdout_ref_path": None,
         "run_outputs_ref_sha256": None,
         "run_outputs_ref_path": None,
+        "run_stdout_truncated": None,
+        "run_stderr_truncated": None,
+        "run_workdir_incomplete": None,
     }
     unset_profile = {"profile_runtime_s": None, "profile_avg_power_w": None, "profile_energy_j": None}
     first = {
@@ -583,6 +712,58 @@ def expected_diagnostic_rows_a_omp_entropy() -> list[dict[str, Any]]:
     ]
 
 
+def expected_request_rows_a_omp_entropy() -> list[dict[str, Any]]:
+    """Return the two requests rows for trial_a_omp_entropy."""
+    summary, response = text_ref("summary\n"), text_ref("response 0\n")
+    return [
+        {
+            **partition(ID_A_OMP_ENTROPY),
+            "index": 0,
+            "stage": "summarize_context",
+            "attempt_index": None,
+            "message_roles": ["system", "user"],
+            "message_sha256": [sha("system general\n"), sha("summary request\n")],
+            "reply_ref_sha256": summary.sha256,
+            "reply_ref_path": summary.path,
+            "diagnostic_count": 0,
+        },
+        {
+            **partition(ID_A_OMP_ENTROPY),
+            "index": 1,
+            "stage": "generate",
+            "attempt_index": 0,
+            "message_roles": ["system", "user"],
+            "message_sha256": [sha("system direction\n"), sha("prompt 0\n")],
+            "reply_ref_sha256": response.sha256,
+            "reply_ref_path": response.path,
+            "diagnostic_count": 0,
+        },
+    ]
+
+
+def expected_request_rows_b_omp_filled() -> list[dict[str, Any]]:
+    """Return the three requests rows for trial_b_omp_filled."""
+    requests = [
+        ("describe_source", None, ["system", "user"], ["system b\n", "describe b\n"], "source b\n", 1),
+        ("generate", 0, ["system", "user"], ["direction b\n", "prompt b0\n"], "response b0\n", 0),
+        ("run_loop", 1, ["user"], ["prompt b1\n"], "response b1\n", 2),
+    ]
+    return [
+        {
+            **partition(ID_B_OMP_FILLED),
+            "index": index,
+            "stage": stage,
+            "attempt_index": attempt_index,
+            "message_roles": roles,
+            "message_sha256": [sha(text) for text in texts],
+            "reply_ref_sha256": text_ref(reply).sha256,
+            "reply_ref_path": text_ref(reply).path,
+            "diagnostic_count": count,
+        }
+        for index, (stage, attempt_index, roles, texts, reply, count) in enumerate(requests)
+    ]
+
+
 def expected_trial_row_b_omp_filled() -> dict[str, Any]:
     """Return the trials row for trial_b_omp_filled."""
     return {
@@ -613,6 +794,9 @@ def expected_trial_row_b_omp_filled() -> dict[str, Any]:
         "reference_run_stdout_ref_path": text_ref("reference stdout b\n").path,
         "reference_run_outputs_ref_sha256": text_ref("reference outputs b\n").sha256,
         "reference_run_outputs_ref_path": text_ref("reference outputs b\n").path,
+        "reference_run_stdout_truncated": True,
+        "reference_run_stderr_truncated": False,
+        "reference_run_workdir_incomplete": False,
         "context_knowledge_summary": "knowledge b\n",
         "context_source_description": "source b\n",
         "final_stage_reached": "S4",
@@ -647,6 +831,9 @@ def expected_attempt_row_b_omp_filled_0() -> dict[str, Any]:
         "run_stdout_ref_path": stdout.path,
         "run_outputs_ref_sha256": outputs.sha256,
         "run_outputs_ref_path": outputs.path,
+        "run_stdout_truncated": False,
+        "run_stderr_truncated": True,
+        "run_workdir_incomplete": False,
         "alignment_per_input": [0.5],
         "alignment_mean": 0.625,
         "profile_runtime_s": 0.25,
@@ -681,6 +868,9 @@ def expected_attempt_row_b_omp_filled_1() -> dict[str, Any]:
         "run_stdout_ref_path": stdout.path,
         "run_outputs_ref_sha256": outputs.sha256,
         "run_outputs_ref_path": outputs.path,
+        "run_stdout_truncated": False,
+        "run_stderr_truncated": False,
+        "run_workdir_incomplete": True,
         "alignment_per_input": [0.75, 0.25],
         "alignment_mean": 0.5,
         "profile_runtime_s": 0.5,
@@ -712,6 +902,7 @@ def expected_rows_b_omp_filled() -> dict[str, list[dict[str, Any]]]:
         "trials": [expected_trial_row_b_omp_filled()],
         "attempts": [expected_attempt_row_b_omp_filled_0(), expected_attempt_row_b_omp_filled_1()],
         "diagnostics": [diagnostic],
+        "requests": expected_request_rows_b_omp_filled(),
     }
 
 
@@ -720,7 +911,7 @@ def expected_rows_b_omp_filled() -> dict[str, list[dict[str, Any]]]:
 
 
 def test_table_and_partition_constants() -> None:
-    assert parquet.TABLES == ("trials", "attempts", "diagnostics")
+    assert parquet.TABLES == ("trials", "attempts", "diagnostics", "requests")
     assert parquet.PARTITION_COLUMNS == ("project", "arm", "bench", "direction")
 
 
@@ -738,6 +929,7 @@ def test_trial_rows_values() -> None:
     assert rows["trials"] == [expected_trial_row_a_omp_entropy()]
     assert rows["attempts"] == expected_attempt_rows_a_omp_entropy()
     assert rows["diagnostics"] == expected_diagnostic_rows_a_omp_entropy()
+    assert rows["requests"] == expected_request_rows_a_omp_entropy()
 
 
 def test_trial_rows_values_with_every_field_set(tmp_path: Path) -> None:
@@ -752,6 +944,7 @@ def test_trial_rows_for_trial_without_attempts() -> None:
     rows = parquet.trial_rows([trial_a_cuda_entropy()])
     assert rows["attempts"] == []
     assert rows["diagnostics"] == []
+    assert rows["requests"] == [], "a trial that asked no model has no request rows"
     (row,) = rows["trials"]
     assert row["run"] == 2
     assert row["direction"] == "cuda-omp"
@@ -803,6 +996,16 @@ def test_trial_rows_sorted() -> None:
     diagnostic_keys = [(row["trial_id"], row["attempt_index"], row["ordinal"]) for row in forward["diagnostics"]]
     assert diagnostic_keys == sorted(diagnostic_keys)
     assert len(diagnostic_keys) == 3
+    request_keys = [(row["trial_id"], row["index"]) for row in forward["requests"]]
+    assert request_keys == sorted(request_keys)
+    assert len(request_keys) == 3
+
+
+def test_a_trial_whose_requests_were_not_recorded_has_no_request_rows() -> None:
+    assert trial_a_omp_layout().requests is None
+    assert parquet.trial_rows([trial_a_omp_layout()])["requests"] == []
+    rows = parquet.trial_rows(run_trials())["requests"]
+    assert {row["trial_id"] for row in rows} == {ID_A_OMP_ENTROPY, ID_B_CUDA_STENCIL}
 
 
 def test_trial_rows_of_nothing() -> None:
@@ -826,6 +1029,8 @@ def test_hive_layout(tmp_path: Path) -> None:
         f"attempts/{PARTITION_B_CUDA}/part-0.parquet",
         f"diagnostics/{PARTITION_A_OMP}/part-0.parquet",
         f"diagnostics/{PARTITION_B_CUDA}/part-0.parquet",
+        f"requests/{PARTITION_A_OMP}/part-0.parquet",
+        f"requests/{PARTITION_B_CUDA}/part-0.parquet",
     }
 
 
@@ -867,10 +1072,12 @@ def test_table_without_rows_gets_no_directory(tmp_path: Path) -> None:
     assert (out / "trials").is_dir()
     assert not (out / "attempts").exists()
     assert not (out / "diagnostics").exists()
+    assert not (out / "requests").exists()
     back = parquet.read_run_parquet(out)
     assert back == parquet.trial_rows([trial_a_cuda_entropy()])
     assert back["attempts"] == []
     assert back["diagnostics"] == []
+    assert back["requests"] == []
 
 
 def test_empty_run(tmp_path: Path) -> None:
@@ -1082,8 +1289,8 @@ def test_a_value_arrow_cannot_encode_leaves_every_table_unchanged(tmp_path: Path
     parquet.write_run_parquet(run_trials(), out)
     before = snapshot(out)
     # A lone surrogate passes the record checks but has no UTF-8 form. It sits in
-    # the diagnostics table, which is written last, so the trials and attempts
-    # tables must not be replaced before the failure.
+    # the diagnostics table, which is written after the trials and attempts
+    # tables, so those must not be replaced before the failure.
     bad = diagnostic_trial(file="k.cu", line=1, code="a\ud800b")
     with pytest.raises(ValueError) as info:
         parquet.write_run_parquet([trial_b_omp_entropy(), bad], out)

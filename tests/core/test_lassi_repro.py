@@ -10,17 +10,20 @@ The contract these tests fix, from the P1.10 acceptance criteria
 
 - projects/lassi-repro/recipe.yaml sets `project: lassi-repro` and matches
   the bible's lassi-repro block, except the keys P1 cannot carry out, which
-  it leaves out with a comment naming their phase: `metrics` (P2), `arms`
-  (P3), and the `gpu` executor (P10), in whose place it keeps the block's
-  tier-1 executor `{kind: none}`. It sets no other key. It leaves
-  llm.sampling.max_tokens unset with a comment naming P3 (upstream sets
-  none). Its stages are the block's, baseline first and run_loop listed
-  (every faithful: true recipe must list it). It binds no model (arms are
-  P3), so it loads once a child names the model and nothing else.
+  it leaves out with a comment naming their phase: `arms` (P3) and the
+  `gpu` executor (P10), in whose place it keeps the block's tier-1
+  executor `{kind: none}`. Its `metrics` line, left out until P2, is the
+  block's since task P2.10 (tests/core/test_lassi_repro_metrics.py). It
+  sets no other key. It leaves llm.sampling.max_tokens unset with a comment
+  naming P3 (upstream sets none). Its stages are the block's, baseline
+  first and run_loop listed (every faithful: true recipe must list it). It
+  binds no model (arms are P3), so it loads once a child names the model
+  and nothing else.
 - tests/fixtures/recipes/p1-dry-run.yaml extends it with the mock backend,
   a max_tokens value for the mock, executor `none`, all 10 items, both
   directions, and n = 1. Its resolved project is lassi-repro, so its trial
-  ids start with `lassi-repro/`.
+  ids start with `lassi-repro/`. Since task P2.10 it also binds
+  `score: df-v0`, so the test registry registers both ScoreProfiles.
 - Under faithful extraction (fixes.fence_tag off) the mock answers in one
   untagged fence, the form upstream's system prompts ask for, so its
   attempt 0 holds the reference target with no fence-quirk or no-fence
@@ -96,10 +99,12 @@ DIRECTIONS = ({"source": "omp", "target": "cuda"}, {"source": "cuda", "target": 
 STAGES = ("baseline", "summarize_context", "describe_source", "generate", "compile_loop", "run_loop", "oracle")
 # The block's tier-1 executor (its comment on the executor line): compile only.
 TIER_1_EXECUTOR = {"kind": "none"}
-# Keys of the bible block P1 leaves out, and the phase each comment names.
-LEFT_OUT_KEYS = {"metrics": "P2", "arms": "P3"}
-# Every left-out choice and the phase its comment names: the two keys, the gpu executor, and max_tokens.
-LEFT_OUT_COMMENTS = (("metrics", "P2"), ("arms", "P3"), ("gpu", "P10"), ("max_tokens", "P3"))
+# Keys of the bible block the recipe leaves out, and the phase each comment names (metrics joined in P2.10).
+LEFT_OUT_KEYS = {"arms": "P3"}
+# Every left-out choice and the phase its comment names: the key, the gpu executor, and max_tokens.
+LEFT_OUT_COMMENTS = (("arms", "P3"), ("gpu", "P10"), ("max_tokens", "P3"))
+# The ScoreProfiles p1-dry-run.yaml binds (score: df-v0) or its metrics line needs (lassi), registered for its runs.
+SCORE_PROFILES = ("df-v0", "lassi")
 # The fake toolchains are registered under the names lassi-repro binds, one per target language.
 TOOLCHAIN_OF = {"cuda": "nvcc-sm80", "omp": "nvcpp-cc80"}
 COMPILED = "S4"
@@ -341,7 +346,7 @@ def fake_toolchain(name: str, builds: list[Build]) -> type:
 
 
 def make_registry(builds: list[Build]) -> Registry:
-    """Return a test Registry: the real mock, stages, none executor, and stdout_mask oracle; fake toolchains."""
+    """Return a test Registry: the real mock, stages, none executor, oracle, and ScoreProfiles; fake toolchains."""
     registry = Registry()
     registry.register("LLMBackend", "mock", MockBackend)
     registry.register("Executor", "none", NoneExecutor)
@@ -350,6 +355,8 @@ def make_registry(builds: list[Build]) -> Registry:
         registry.register("Toolchain", name, fake_toolchain(name, builds))
     for name in STAGES:
         registry.register("Stage", name, DEFAULT_REGISTRY.get("Stage", name).factory)
+    for name in SCORE_PROFILES:
+        registry.register("ScoreProfile", name, DEFAULT_REGISTRY.get("ScoreProfile", name).factory)
     return registry
 
 

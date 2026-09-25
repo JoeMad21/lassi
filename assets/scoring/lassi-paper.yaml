@@ -1,0 +1,64 @@
+# Reference values of the LASSI paper, arXiv:2407.01638 (task P2.8; bible Evaluation Protocol, LASSI Paper Metrics).
+# lassi.analysis.paper reads this file, and the P2.8 metric tables show these values next to a run's rates; the
+# code holds none. Numbers and citations only: no upstream text. Every value is a count copied from the bible's
+# LASSI Paper Metrics tables, written <count>/<denominator>. The published values are the paper's; the recounts
+# were read from the paper's Tables VI and VII (plans/spikes/p2-lassi-metrics.md). None is a measurement by this
+# project. Both are carried while OQ-021 (which paper value a reproduction compares with) is open.
+# Changing a value is a Decision Log entry.
+
+# The model whose per-direction correct counts bound the B0 acceptance criterion: B0 pass@1 must fall inside the
+# Wilson 95% interval around that model's counts.
+b0_model: WizardCoder
+b0_cite: "Evaluation Protocol, Acceptance Criteria (LASSI reproduction, B0); LASSI Paper Metrics (counts per model)"
+
+# Per direction, keyed as trial ids spell it. `metrics` is keyed by the P2.8 metric row names; a row the paper does
+# not report is absent. Each metric has its published value, its recount, and, where the bible gives a second
+# reading, recount_alternate. `correct_by_model` is each model's correct count over the 10 apps.
+directions:
+  omp-cuda:
+    metrics:
+      correct_rate:
+        published: 32/40  # 80%, over all 40 trials of the direction
+        recount: 32/40  # recounts to the published value
+        cite: "Evaluation Protocol, LASSI Paper Metrics: definitions table (Correct output); recount as published"
+      within_10pct_rate:
+        published: 25/32  # 78.1%, over the 32 correct trials
+        recount: 23/32  # from the printed Ratios
+        recount_alternate: 24/32  # with GPT-4's atomicCost Ratio recomputed from the listed runtimes
+        cite: "Evaluation Protocol, LASSI Paper Metrics: definitions table (Within 10% or faster); recount table"
+      first_try_rate:
+        published: 21/32  # 65.6%, over the 32 correct trials
+        recount: 21/32  # recounts to the published value
+        cite: "Evaluation Protocol, LASSI Paper Metrics: definitions table (First try); recount as published"
+      sim_t_ge_0.6_rate:
+        published: 13/32  # 40.6%, over the 32 correct trials
+        recount: 8/32
+        cite: "Evaluation Protocol, LASSI Paper Metrics: definitions table (Sim-T >= 0.6); recount table"
+    correct_by_model:
+      GPT-4: 7/10
+      Codestral: 9/10
+      WizardCoder: 9/10
+      DeepSeek-Coder-V2: 7/10
+  cuda-omp:
+    metrics:
+      correct_rate:
+        published: 34/40  # 85%, over all 40 trials of the direction
+        recount: 34/40  # recounts to the published value
+        cite: "Evaluation Protocol, LASSI Paper Metrics: definitions table (Correct output); recount as published"
+      within_10pct_rate:
+        published: 21/34  # 61.8%, over the 34 correct trials
+        recount: 20/34
+        cite: "Evaluation Protocol, LASSI Paper Metrics: definitions table (Within 10% or faster); recount table"
+      first_try_rate:
+        published: 19/34  # 55.9%, over the 34 correct trials
+        recount: 18/34
+        cite: "Evaluation Protocol, LASSI Paper Metrics: definitions table (First try); recount table"
+      sim_t_ge_0.6_rate:
+        published: 16/34  # 47.1%, over the 34 correct trials
+        recount: 15/34
+        cite: "Evaluation Protocol, LASSI Paper Metrics: definitions table (Sim-T >= 0.6); recount table"
+    correct_by_model:
+      GPT-4: 9/10
+      Codestral: 8/10
+      WizardCoder: 10/10
+      DeepSeek-Coder-V2: 7/10

@@ -2,12 +2,13 @@
 
 Bible Component Interfaces, Stage row. Stages are pure over the trial record
 (Stage contract rules): a stage reads the Trial's fields, appends an attempt,
-annotates the last one, or fills Trial.context, and returns a new Trial; the
-Trial it was given is never changed. Side effects go through components: the
-LLM backend, the toolchain, and the text store that keeps each prompt. Each
-stage is built as `factory(context=<RunContext>)` once per trial
-(lassi.core.registry states the construction convention), so a stage object
-never carries state from one trial to the next.
+annotates the last one, fills Trial.context, or records a model request, and
+returns a new Trial; the Trial it was given is never changed. Side effects go
+through components: the LLM backend, the toolchain, and the text store that
+keeps each message and reply. Each stage is built as
+`factory(context=<RunContext>)` once per trial (lassi.core.registry states
+the construction convention), so a stage object never carries state from one
+trial to the next.
 
 Prompts are data files, never string literals here (Design Principle 3). A
 template set (lassi.prompts.render) holds `generate.txt` and `correct.txt`;
@@ -23,12 +24,13 @@ The runner checks either kind before any model is asked.
   never an attempt's), with the target language's toolchain and the item's
   support files as harness files, and runs it when the executor runs
   programs (capability `runs_code`), with the item's run arguments and
-  reference_limits. The target's run is kept in
-  Trial.reference_run (exit code, hang flag, wall time, and stdout in the
-  text store). A reference that does not build ends the trial with
-  final.end_reason `baseline-compile`, and a run that exits nonzero or hangs
-  with `baseline-run`; the runner then runs no later stage, so no model is
-  asked.
+  reference_limits. The target's run is kept in Trial.reference_run (exit
+  code, hang flag, wall time, stdout in the text store, and the RunResult
+  flags as bools); the source reference's run is never recorded. A cut
+  output does not end the trial. A reference that does not build ends the
+  trial with final.end_reason `baseline-compile`, and a run that exits
+  nonzero or hangs with `baseline-run`; the runner then runs no later stage,
+  so no model is asked.
 - summarize_context sends [system, user]: the general system prompt, then
   the summary request followed by the target language's context pack. The
   reply fills Trial.context.knowledge_summary.
@@ -54,9 +56,10 @@ The runner checks either kind before any model is asked.
   changes nothing when compile_loop already ran) and, when the executor runs
   programs (capability `runs_code`), runs each compiling attempt from its
   build directory with the item's run arguments and attempt_limits. The run
-  is kept in Attempt.run (exit code, hang flag, wall time, and stdout in the
-  text store); a clean run (exit status 0, no hang) is S5, and a failed one
-  stays S4 with a run-stage `run-error` Diagnostic. A failed run is fed back
+  is kept in Attempt.run (exit code, hang flag, wall time, stdout in the text
+  store, and the RunResult flags as bools, a failed run's included); a clean
+  run (exit status 0, no hang) is S5, and a failed one stays S4 with a
+  run-stage `run-error` Diagnostic. A failed run is fed back
   with the execute-error prompt, whose error text (run_error_text) is, under
   a fragment set, upstream's report of the run (its execute_code
   return_result, joined from the execute.* fragments), and under a template
@@ -80,9 +83,17 @@ and generate names the fields its fragment prompt joins, when a pack serves
 the target, in `joins_context`; the runner checks that an earlier stage
 fills each joined field. A context reply is kept as returned, except that
 each lone surrogate becomes U+FFFD, as in an attempt's reply (it is not
-Unicode text and cannot be stored). Trial.context carries no diagnostics,
-so generate adds to attempt 0 one `invalid-text` warning per context field
-that holds U+FFFD.
+Unicode text and cannot be stored).
+
+Every model call is recorded in Trial.requests (lassi.core.record Request):
+the stage that sends it keeps each message it sends in the text store
+before sending, system messages included, and appends a Request with those
+references, the attempt its reply became (None for a context request), and
+the reply as kept. A correction is recorded under the loop stage that asked
+for it: compile_loop for a compile error, run_loop for a failed run. An
+attempt's own `invalid-text` warning stays on the attempt; Trial.context
+carries no diagnostics, so a context reply that held a lone surrogate gives
+its request one parse-stage `invalid-text` warning.
 
 Upstream quirks are reproduced when their fixes (lassi.core.recipe.FIXES)
 are off, and each stage class names the fixes it reproduces in
@@ -102,7 +113,8 @@ never on the recipe's `faithful` flag:
   first line adds a parse-stage warning Diagnostic with code `fence-quirk`.
   compile_loop builds such an S0 attempt's empty file, as upstream compiles
   the empty file it writes. With the fix on, the model answers with FILE
-  blocks, which lassi.core.files parses, and an S0 attempt is not built.
+  blocks, which lassi.core.files parses, and an attempt with a FILE-block
+  error (S0, or S1 missing an expected file) is not built.
 - `parsed_diagnostics` off: a correction prompt's error text is the whole
   raw stderr attachment of the build (BuildResult.stderr_ref), read as a
   file opened in text mode reads it (CRLF and CR become LF), uncapped, as
@@ -124,10 +136,14 @@ Stage reached (Result Record, Attempt.stage_reached) is the bible's stage
 ladder (Training Module, Reward Function), the one scale every record, metric,
 and reward reads (Design Principle 2):
 
-- S0, no extractable output: the reply held no FILE block, or its FILE
-  blocks had an error (a bad path, a repeated or unclosed block, or a
-  missing expected file), so it did not yield the expected files.
-- S1, parses: the FILE blocks gave the files with no FILE-block error.
+- S0, no extractable output: the FILE blocks gave no file (the reply held
+  no FILE block, or each was dropped), or they had an error other than a
+  missing expected file (a bad path, or a repeated or unclosed block).
+- S1, parses: the FILE blocks gave at least one file, and every FILE-block
+  error is `missing-file`, an expected file with no block. That error is
+  the build error of the Harness Contract: compile_loop feeds it back to
+  the model in the correction prompt without building the incomplete
+  files, so the attempt stays S1.
 - S2, verifies, and S3, lowers: the MLIR verifier and the lowering passes.
   Source-level translation has neither step, so these stages never record
   S2 or S3.
@@ -157,7 +173,18 @@ from lassi.core.capabilities import declares, unload_before_run
 from lassi.core.files import parse_file_blocks, render_file_blocks
 from lassi.core.interfaces import BuildResult, Executor, Limits, LLMBackend, Message, RunResult, Sampling, Toolchain
 from lassi.core.recipe import Recipe
-from lassi.core.record import Attempt, Context, Diagnostic, EndReason, RunInfo, TextRef, Trial, unified_diff
+from lassi.core.record import (
+    Attempt,
+    Diagnostic,
+    EndReason,
+    Request,
+    RequestMessage,
+    RunInfo,
+    TextRef,
+    Trial,
+    standing_attempt,
+    unified_diff,
+)
 from lassi.core.registry import register
 from lassi.core.store import TextStore
 from lassi.executors.workdir import build_dir, fresh_build_dir
@@ -171,6 +198,9 @@ NO_OUTPUT = "S0"
 PARSED = "S1"
 COMPILED = "S4"
 RAN_CLEAN = "S5"
+# The FILE-block error code (lassi.core.files parse_file_blocks) of an expected file with no block: the one block
+# error an S1 attempt may hold (see the module docstring).
+MISSING_FILE = "missing-file"
 
 # The end codes these stages set in final.end_reason (lassi.core.record END_REASONS).
 BASELINE_COMPILE = "baseline-compile"
@@ -391,6 +421,17 @@ def reference_limits(context: RunContext) -> Limits:
     return Limits(wall_s=REFERENCE_WALL_S, memory_mb=memory_mb, cpus=REFERENCE_CPUS)
 
 
+def _run_info(context: RunContext, run: RunResult) -> RunInfo:
+    """Return the RunInfo of a run that happened: exit code, hang flag, wall time, stdout in the store, run flags.
+
+    Each RunResult flag (RUN_FLAGS) is copied as a bool, so a run whose
+    output was kept whole records False, never None.
+    """
+    flags = {flag: bool(getattr(run, flag)) for flag in RUN_FLAGS}
+    stdout_ref = context.store.put(run.stdout)
+    return RunInfo(exit_code=run.exit_code, hang=run.hang, wall_s=run.wall_s, stdout_ref=stdout_ref, **flags)
+
+
 def _ended(trial: Trial, code: str, message: str) -> Trial:
     """Return `trial` with final.end_reason set to `code` and `message`; the runner then runs no later stage."""
     reason = EndReason(code=code, message=message)
@@ -452,55 +493,35 @@ def _parse_warning(code: str, message: str) -> Diagnostic:
     return Diagnostic(stage="parse", severity="warning", code=code, message=message)
 
 
-def _context_text(reply: str) -> str:
-    """Return a context reply with each lone surrogate replaced by U+FFFD, so it can be stored and sent."""
-    return _SURROGATE.sub(_REPLACEMENT, reply)
-
-
-def _context_warnings(context: Context) -> list[Diagnostic]:
-    """Return one `invalid-text` warning per Trial.context field that holds U+FFFD, for attempt 0 to carry.
-
-    The context stages replace each lone surrogate in a reply with U+FFFD
-    (_context_text), and Trial.context has no diagnostics of its own, so
-    attempt 0 keeps the note. A reply may also hold U+FFFD itself; the
-    message states only what the field holds.
-    """
-    warnings = []
-    for name in ("knowledge_summary", "source_description"):
-        count = getattr(context, name).count(_REPLACEMENT)
-        if count:
-            message = (
-                f"Trial.context.{name} holds {count} U+FFFD replacement character(s); a context stage writes one "
-                "for each lone surrogate in its reply, which is not Unicode text"
-            )
-            warnings.append(_parse_warning("invalid-text", message))
-    return warnings
-
-
-def _storable(reply: str) -> tuple[str, list[Diagnostic]]:
+def _storable(reply: str, before: str = "the FILE blocks were read") -> tuple[str, list[Diagnostic]]:
     """Return the reply with each lone surrogate replaced by U+FFFD, and a warning saying so when there was one.
 
     A lone surrogate cannot be stored as UTF-8 or written into a source
     file, so it would stop the run; the warning keeps the change visible in
-    the record and the next correction prompt.
+    the record and the next correction prompt. `before` ends its message:
+    what the reply went on to be used for.
     """
     count = len(_SURROGATE.findall(reply))
     if not count:
         return reply, []
     message = (
         f"the reply held {count} lone surrogate code point(s), which are not Unicode text; "
-        "each was replaced with U+FFFD before the FILE blocks were read"
+        f"each was replaced with U+FFFD before {before}"
     )
-    return _SURROGATE.sub(_REPLACEMENT, reply), [
-        Diagnostic(stage="parse", severity="warning", code="invalid-text", message=message)
-    ]
+    return _SURROGATE.sub(_REPLACEMENT, reply), [_parse_warning("invalid-text", message)]
 
 
 def _parsed_attempt(index: int, prompt_ref: TextRef, reply: str, expected: Sequence[str]) -> Attempt:
-    """Return the attempt for one model reply: its FILE blocks parsed, S1 when usable and S0 otherwise."""
+    """Return the attempt for one model reply: its FILE blocks parsed, S1 when usable and S0 otherwise.
+
+    The reply is usable when its blocks gave at least one file and every
+    block error is MISSING_FILE. The diagnostics are parse_file_blocks'
+    own, after any `invalid-text` warning.
+    """
     text, warnings = _storable(reply)
     parsed = parse_file_blocks(text, expected)
-    usable = bool(parsed.files) and not _has_error(parsed.diagnostics)
+    errors = [diagnostic for diagnostic in parsed.diagnostics if diagnostic.severity == "error"]
+    usable = bool(parsed.files) and all(error.code == MISSING_FILE for error in errors)
     return Attempt(
         index=index,
         prompt_ref=prompt_ref,
@@ -539,16 +560,65 @@ def _fenced_attempt(index: int, prompt_ref: TextRef, reply: str, expected: Seque
     )
 
 
-def _reply(context: RunContext, prompt: str, system: str | None = None) -> str:
-    """Send `prompt` as the user message, after `system` as the system message when given; return the reply text."""
+def _reply_attempt(
+    context: RunContext, index: int, prompt_ref: TextRef, reply: str, expected: Sequence[str]
+) -> Attempt:
+    """Return the attempt for one reply: FILE blocks with fixes.fence_tag on, the first fenced block with it off."""
+    if fix_on(context, "fence_tag"):
+        return _parsed_attempt(index, prompt_ref, reply, expected)
+    return _fenced_attempt(index, prompt_ref, reply, expected)
+
+
+def _send(context: RunContext, prompt: str, system: str | None = None) -> tuple[list[RequestMessage], str]:
+    """Send `prompt` as the user message, after `system` as the system message when given.
+
+    Each message is kept in the text store before anything is sent. Returns
+    the messages as a Request records them (role and text reference, in the
+    order sent; the user message is last) and the reply text as returned.
+    """
     messages = [Message("user", prompt)] if system is None else [Message("system", system), Message("user", prompt)]
-    return context.backend.complete(messages, context.sampling).text
+    recorded = [RequestMessage(role=message.role, ref=context.store.put(message.content)) for message in messages]
+    return recorded, context.backend.complete(messages, context.sampling).text
 
 
-def _ask(context: RunContext, prompt: str, system: str | None = None) -> tuple[TextRef, str]:
-    """Store `prompt`, send it as _reply does, and return its reference and the reply text."""
-    ref = context.store.put(prompt)
-    return ref, _reply(context, prompt, system)
+def _recorded(
+    context: RunContext,
+    trial: Trial,
+    stage: str,
+    attempt_index: int | None,
+    messages: Sequence[RequestMessage],
+    reply: str,
+    diagnostics: Sequence[Diagnostic] = (),
+) -> Trial:
+    """Return `trial` with the request `stage` sent appended to Trial.requests; `reply` is kept in the text store.
+
+    `reply` is the reply as kept (no lone surrogate), `attempt_index` the
+    attempt it became (None for a context request), and `diagnostics` what
+    was noted about it that no attempt carries.
+    """
+    request = Request(
+        index=len(trial.requests or []),
+        stage=stage,
+        attempt_index=attempt_index,
+        messages=list(messages),
+        reply_ref=context.store.put(reply),
+        diagnostics=list(diagnostics),
+    )
+    return trial.with_request(request)
+
+
+def _context_reply(
+    context: RunContext, trial: Trial, stage: str, name: str, messages: Sequence[RequestMessage], reply: str
+) -> Trial:
+    """Return `trial` with Trial.context field `name` set to the reply as kept, and the request recorded.
+
+    Each lone surrogate in the reply becomes U+FFFD; when there was one, the
+    request carries one parse-stage `invalid-text` warning, since
+    Trial.context has no diagnostics of its own.
+    """
+    text, warnings = _storable(reply, f"the reply was kept in Trial.context.{name}")
+    trial = dataclasses.replace(trial, context=dataclasses.replace(trial.context, **{name: text}))
+    return _recorded(context, trial, stage, None, messages, text, warnings)
 
 
 @register("Stage", "baseline")
@@ -605,8 +675,8 @@ class BaselineStage:
 
         A build with no artifact ends the trial with `baseline-compile`, and
         a run that exits nonzero, ends with no exit status, or hangs ends it
-        with `baseline-run`. The target's run is kept in Trial.reference_run,
-        a failed one included.
+        with `baseline-run`. The target's run is kept in Trial.reference_run
+        (_run_info), a failed one included; a cut output alone ends nothing.
         """
         context = self.context
         files = self._files(language)
@@ -619,8 +689,7 @@ class BaselineStage:
             return trial
         item = context.suite.item(context.item, purpose=PURPOSE)
         run = context.executor.run(result.artifact, list(item.run_args), reference_limits(context))
-        stdout_ref = context.store.put(run.stdout)
-        info = RunInfo(exit_code=run.exit_code, hang=run.hang, wall_s=run.wall_s, stdout_ref=stdout_ref)
+        info = _run_info(context, run)
         if language == context.direction.target:
             trial = dataclasses.replace(trial, reference_run=info)
         if run.hang:
@@ -665,29 +734,23 @@ class GenerateStage:
         self.context = context
 
     def __call__(self, trial: Trial) -> Trial:
-        """Return `trial` with attempt 0 appended: S1 when the reply yields the target files, else S0.
+        """Return `trial` with attempt 0 appended: S1 when the reply yields usable files, else S0.
 
         The prompt comes from _prompt; with the prompt_spaces fix off, each
         run of spaces in it is cut to one. It is kept in the text store and
         sent as the user message, after the system prompt when there is one.
         With the fence_tag fix on the reply's FILE blocks are parsed, and with
         it off its first fenced block is read as upstream reads it. The
-        attempt's diagnostics start with _context_warnings.
+        request is recorded with attempt 0 as the attempt its reply became.
         """
         context = self.context
         expected = target_files(context)
         system, prompt = self._prompt(trial, expected)
         if not fix_on(context, "prompt_spaces"):
             prompt = fragment_text.collapse_spaces(prompt)
-        ref, reply = _ask(context, prompt, system)
-        if fix_on(context, "fence_tag"):
-            attempt = _parsed_attempt(0, ref, reply, expected)
-        else:
-            attempt = _fenced_attempt(0, ref, reply, expected)
-        notes = _context_warnings(trial.context)
-        if notes:
-            attempt = dataclasses.replace(attempt, diagnostics=[*notes, *attempt.diagnostics])
-        return trial.with_attempt(attempt)
+        messages, reply = _send(context, prompt, system)
+        attempt = _reply_attempt(context, 0, messages[-1].ref, reply, expected)
+        return _recorded(context, trial.with_attempt(attempt), self.name, 0, messages, attempt.response_text)
 
     def _prompt(self, trial: Trial, expected: Sequence[str]) -> tuple[str | None, str]:
         """Return the system prompt (None for a template set) and the user prompt.
@@ -752,14 +815,14 @@ class SummarizeContextStage:
 
         The general system prompt and the summary request, followed by the
         target language's pack, go to the backend unchanged. The reply is
-        kept as returned, except that each lone surrogate becomes U+FFFD
-        (_context_text).
+        kept as returned, except that each lone surrogate becomes U+FFFD, and
+        the request is recorded (_context_reply).
         """
         context = self.context
         pack = context.packs[context.direction.target]
         prompt = fragment_text.summary_request(context.fragments, context.direction, pack)
-        reply = _context_text(_reply(context, prompt, context.fragments[fragment_text.GENERAL_SYSTEM]))
-        return dataclasses.replace(trial, context=dataclasses.replace(trial.context, knowledge_summary=reply))
+        messages, reply = _send(context, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        return _context_reply(context, trial, self.name, "knowledge_summary", messages, reply)
 
     def describe(self) -> str:
         """Return a one-line description of the stage."""
@@ -787,12 +850,12 @@ class DescribeSourceStage:
         The general system prompt and the description request, followed by
         the source as text mode reads it, go to the backend unchanged. The
         reply is kept as returned, except that each lone surrogate becomes
-        U+FFFD (_context_text).
+        U+FFFD, and the request is recorded (_context_reply).
         """
         context = self.context
         prompt = fragment_text.description_request(context.fragments, source_as_read(context))
-        reply = _context_text(_reply(context, prompt, context.fragments[fragment_text.GENERAL_SYSTEM]))
-        return dataclasses.replace(trial, context=dataclasses.replace(trial.context, source_description=reply))
+        messages, reply = _send(context, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        return _context_reply(context, trial, self.name, "source_description", messages, reply)
 
     def describe(self) -> str:
         """Return a one-line description of the stage."""
@@ -824,10 +887,10 @@ class CompileLoopStage:
         when the toolchain reported none, and "unwritable" when a file name
         could not be written. While the latest attempt has an error and is
         not S4, the stage asks for a correction (_correction), appends the
-        reply with its diff from the previous files, and builds that. When
-        the cap (corrections are the attempts after the first) stops the loop
-        with an error remaining, final.end_reason is set to `correction-cap`.
-        A cap of None never stops the loop.
+        reply with its diff from the previous files and records the request,
+        and builds that. When the cap (corrections are the attempts after the
+        first) stops the loop with an error remaining, final.end_reason is set
+        to `correction-cap`. A cap of None never stops the loop.
         """
         if not trial.attempts:
             raise ValueError(f"{trial.trial_id}: compile_loop needs an attempt; run the generate stage first")
@@ -838,8 +901,7 @@ class CompileLoopStage:
             if cap is not None and len(trial.attempts) - 1 >= cap:
                 message = f"an error remained after {cap} correction(s), the cap loop.max_corrections sets"
                 return _ended(trial, CORRECTION_CAP, message)
-            correction = self._correction(trial.attempts[-1], expected, stderr)
-            trial, stderr = self._build_last(trial.with_attempt(correction))
+            trial, stderr = self._build_last(self._correction(trial, expected, stderr))
         return trial
 
     def describe(self) -> str:
@@ -866,7 +928,8 @@ class CompileLoopStage:
 
         Under the fence_tag quirk an S0 attempt holds the empty target file
         upstream writes and compiles. An attempt that is S4 or holds a
-        compile error was built already.
+        compile error was built already, or, as an S1 attempt with a
+        MISSING_FILE error, is not built with its files incomplete.
         """
         if _has_error(attempt.diagnostics):
             return False
@@ -929,8 +992,8 @@ class CompileLoopStage:
         )
         return BuildResult(artifact=None, diagnostics=[_compile_error("unwritable", message)])
 
-    def _correction(self, previous: Attempt, expected: Sequence[str], stderr: str | None) -> Attempt:
-        """Return the next attempt for a compile error of `previous` (_corrected).
+    def _correction(self, trial: Trial, expected: Sequence[str], stderr: str | None) -> Trial:
+        """Return `trial` with the correction of its last attempt's compile error appended (_corrected).
 
         The error text is the raw stderr (`stderr`, which _build_last reads
         only with fixes.parsed_diagnostics off) when it is not empty, else
@@ -938,8 +1001,8 @@ class CompileLoopStage:
         stderr as a success, so a failed build that left none (a sandbox
         timeout, say) has no upstream counterpart.
         """
-        errors = stderr if stderr else diagnostics_text(previous.diagnostics)
-        return _corrected(self.context, previous, expected, errors, run_error=False)
+        errors = stderr if stderr else diagnostics_text(trial.attempts[-1].diagnostics)
+        return _corrected(self.context, trial, self.name, expected, errors, run_error=False)
 
 
 @register("Stage", "run_loop")
@@ -1002,8 +1065,7 @@ class RunLoopStage:
                 message = f"a run error remained after {cap} correction(s), the cap loop.max_corrections sets"
                 return _ended(trial, CORRECTION_CAP, message)
             errors = run_error_text(run, limits, context.fragments)
-            correction = _corrected(context, trial.attempts[-1], target_files(context), errors, run_error=True)
-            trial = compile_loop(trial.with_attempt(correction))
+            trial = compile_loop(_corrected(context, trial, self.name, target_files(context), errors, run_error=True))
         return trial
 
     def describe(self) -> str:
@@ -1022,8 +1084,9 @@ class RunLoopStage:
         """Run the last attempt's program; return the trial with its run recorded, the RunResult, and the limits.
 
         A backend that declares `unload_before_run` is asked to unload first.
-        The attempt keeps the run in Attempt.run (stdout in the text store),
-        gains one warning per RunResult flag (RUN_FLAGS), and is S5 after a
+        The attempt keeps the run in Attempt.run (_run_info: stdout in the
+        text store, each RunResult flag as a bool), gains one warning per
+        RunResult flag that is set (RUN_FLAGS), and is S5 after a
         clean run; after a failed one it stays S4 with a `run-error`.
         """
         context = self.context
@@ -1038,8 +1101,7 @@ class RunLoopStage:
         run_args = list(context.suite.item(context.item, purpose=PURPOSE).run_args)
         unload_before_run(context.backend)
         run = context.executor.run(artifact, run_args, limits)
-        stdout_ref = context.store.put(run.stdout)
-        info = RunInfo(exit_code=run.exit_code, hang=run.hang, wall_s=run.wall_s, stdout_ref=stdout_ref)
+        info = _run_info(context, run)
         diagnostics = [*attempt.diagnostics, *_run_flag_warnings(run)]
         clean = run.exit_code == 0 and not run.hang
         if not clean:
@@ -1133,9 +1195,10 @@ def _run_flag_warnings(run: RunResult) -> list[Diagnostic]:
 def _past_gate(trial: Trial) -> Trial:
     """Return `trial` ended at a compiling attempt past the execution gate, as upstream's loop ends there.
 
-    When an earlier attempt ran, the last attempt gains a `stale-output`
-    warning naming the last attempt that ran, whose stdout stands as the
-    trial's output. When none ran, the trial ends with `upstream-crash`.
+    The last attempt compiled but was not run, so the attempt whose output
+    stands (lassi.core.record standing_attempt) is an earlier one. When one
+    ran, the last attempt gains a `stale-output` warning naming it. When
+    none ran, the trial ends with `upstream-crash`.
     """
     last = trial.attempts[-1]
     head = (
@@ -1143,35 +1206,35 @@ def _past_gate(trial: Trial) -> Trial:
         f"compiling attempt runs only while its correction count is at most {EXECUTION_GATE_CORRECTIONS}), so it "
         "was not run"
     )
-    ran = [attempt.index for attempt in trial.attempts[:-1] if attempt.run.stdout_ref is not None]
-    if not ran:
+    standing = standing_attempt(trial)
+    if standing is None:
         message = f"{head}; no earlier attempt ran, so upstream's notebook has no run output to read and raises there"
         return _ended(trial, UPSTREAM_CRASH, message)
-    message = f"{head}; the stdout of attempt {ran[-1]}, the last attempt that ran, stands as the trial's output"
+    message = f"{head}; the stdout of attempt {standing.index}, the last attempt that ran, stands as the trial's output"
     warning = Diagnostic(stage="run", severity="warning", code=STALE_OUTPUT, message=message)
     stale = dataclasses.replace(last, diagnostics=[*last.diagnostics, warning])
     return dataclasses.replace(trial, attempts=[*trial.attempts[:-1], stale])
 
 
 def _corrected(
-    context: RunContext, previous: Attempt, expected: Sequence[str], errors: str, *, run_error: bool
-) -> Attempt:
-    """Return the next attempt: the correction prompt for `previous` with `errors` sent, the reply read, and the diff.
+    context: RunContext, trial: Trial, stage: str, expected: Sequence[str], errors: str, *, run_error: bool
+) -> Trial:
+    """Return `trial` with the next attempt appended and its request recorded under `stage`.
 
-    The prompt comes from _correction_messages. With fixes.prompt_newlines
-    off every line feed is removed from it before it is stored and sent. The
-    reply is read as generate reads attempt 0: FILE blocks with
-    fixes.fence_tag on, the first fenced block with it off.
+    The correction prompt for the last attempt with `errors` comes from
+    _correction_messages. With fixes.prompt_newlines off every line feed is
+    removed from it before it is stored and sent. The reply is read as
+    generate reads attempt 0 (_reply_attempt), and the attempt keeps its diff
+    from the last attempt's files.
     """
+    previous = trial.attempts[-1]
     system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error)
     if not fix_on(context, "prompt_newlines"):
         prompt = prompt.replace("\n", "")
-    ref, reply = _ask(context, prompt, system)
-    if fix_on(context, "fence_tag"):
-        attempt = _parsed_attempt(previous.index + 1, ref, reply, expected)
-    else:
-        attempt = _fenced_attempt(previous.index + 1, ref, reply, expected)
-    return dataclasses.replace(attempt, diff_from_previous=unified_diff(previous.files, attempt.files))
+    messages, reply = _send(context, prompt, system)
+    attempt = _reply_attempt(context, previous.index + 1, messages[-1].ref, reply, expected)
+    attempt = dataclasses.replace(attempt, diff_from_previous=unified_diff(previous.files, attempt.files))
+    return _recorded(context, trial.with_attempt(attempt), stage, attempt.index, messages, attempt.response_text)
 
 
 def _correction_messages(

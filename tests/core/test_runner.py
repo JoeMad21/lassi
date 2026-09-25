@@ -1503,12 +1503,13 @@ def test_reply_without_a_file_block_is_s0_and_never_compiled(tmp_path: Path, ben
     assert (result.trial.final.stage_reached, result.trial.final.corrections) == ("S0", 0)
 
 
-def test_a_file_block_error_is_s0_even_with_other_files(tmp_path: Path, bench: Path) -> None:
+def test_a_missing_expected_file_beside_other_files_is_s1_and_never_built(tmp_path: Path, bench: Path) -> None:
     reply = render_file_blocks({"other.cu": GOOD_SOURCE})
     result = run_loop(tmp_path, bench, [reply], loop=0)
     (attempt,) = result.trial.attempts
     parsed = parse_file_blocks(reply, ["main.cu"])
-    assert attempt.stage_reached == "S0"
+    assert [item.code for item in parsed.diagnostics] == ["missing-file"]
+    assert attempt.stage_reached == "S1", "the only FILE-block error is the missing expected file (P2.3)"
     assert (attempt.files, attempt.diagnostics) == (parsed.files, parsed.diagnostics)
     assert result.log.builds == []
 
@@ -1879,7 +1880,7 @@ def test_refuses_a_stage_order_that_cannot_run(tmp_path: Path, bench: Path, stag
     [
         ({"report": {"trial_md": False}}, r"report\.trial_md is false"),
         ({"report": {"parquet": False}}, r"report\.parquet is false"),
-        ({"metrics": ["pass-at-1"]}, "sets metrics, which this runner does not carry out"),
+        ({"metrics": ["pass-at-1"]}, "pass-at-1"),  # a metric no registered provider offers (task P2.10)
     ],
     ids=["no-trial-md", "no-parquet", "metrics"],
 )

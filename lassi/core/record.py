@@ -35,6 +35,8 @@ STAGES = ("S0", "S1", "S2", "S3", "S4", "S5")
 DIAGNOSTIC_STAGES = ("parse", "verify", "lower", "compile", "jit", "run")
 SEVERITIES = ("error", "warning", "note")
 TOOLCHAIN_PIN_NAMES = ("llvm", "polygeist", "tt_mlir", "tt_metal", "ttsim", "furiosa_sdk", "cuda", "nvhpc", "rocm")
+# The run flags RunInfo records, named as the RunResult flags they copy, in field order.
+RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # The fixed codes of Final.end_reason: why a trial ended early. baseline-compile and baseline-run end a trial
 # before any model call (a reference program did not build, or its run exited nonzero or hung); correction-cap
 # means an error remained when loop.max_corrections stopped the correction loop; upstream-crash means that, with
@@ -230,7 +232,15 @@ class Diagnostic:
 
 @dataclass(frozen=True, kw_only=True)
 class RunInfo:
-    """How one run of the built artifact ended; None means not run or not measured."""
+    """How one run of the built artifact ended; None means not run or not measured.
+
+    `stdout_truncated`, `stderr_truncated`, and `workdir_incomplete` copy the
+    RunResult flags of the same names: the executor kept only part of the
+    stream, or returned only part of what the run wrote in its workdir. A
+    stage that records a run records each flag as a bool, so a run whose
+    output was kept whole reads False; None means not recorded, as for a run
+    that did not happen or a trial.json written before the flags existed.
+    """
 
     exit_code: int | None = None
     hang: bool | None = None
@@ -238,6 +248,9 @@ class RunInfo:
     wall_s: float | None = None
     stdout_ref: TextRef | None = None
     outputs_ref: TextRef | None = None
+    stdout_truncated: bool | None = None
+    stderr_truncated: bool | None = None
+    workdir_incomplete: bool | None = None
 
     def __post_init__(self) -> None:
         """Check the field types; the wall time must be finite."""
@@ -295,6 +308,52 @@ class ScoreBreakdown:
     def __post_init__(self) -> None:
         """Check the field types; every component and the scalar must be finite."""
         _check_fields(self)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RequestMessage:
+    """One message of a model request: its chat role and its text in the text store, by reference."""
+
+    role: str
+    ref: TextRef
+
+    def __post_init__(self) -> None:
+        """Check the field types and that the role is a non-empty string."""
+        _check_fields(self)
+        _check_non_empty("RequestMessage", "role", self.role)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Request:
+    """One model call of a trial, in Trial.requests at position `index`.
+
+    `stage` is the registered name of the stage that sent it (a correction
+    names the loop stage that asked for it). `attempt_index` is the attempt
+    the reply became, and None for a request whose reply fills Trial.context.
+    `messages` holds every message sent, in order, system messages included,
+    each by text-store reference; `reply_ref` is the reply as kept, each lone
+    surrogate replaced by U+FFFD. `diagnostics` holds what was noted about a
+    reply that no attempt carries, such as a context reply's `invalid-text`
+    warning. Every field but `diagnostics` is required, so a missing value is
+    never read as a context request or an empty call.
+    """
+
+    index: int
+    stage: str
+    attempt_index: int | None
+    messages: list[RequestMessage]
+    reply_ref: TextRef
+    diagnostics: list[Diagnostic] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        """Check the field types, the indexes, the stage name, and that at least one message was sent."""
+        _check_fields(self)
+        _check_non_negative("Request", "index", self.index)
+        _check_non_empty("Request", "stage", self.stage)
+        if self.attempt_index is not None:
+            _check_non_negative("Request", "attempt_index", self.attempt_index)
+        if not self.messages:
+            _fail("Request", "messages", self.messages, "must hold at least one message")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -434,8 +493,10 @@ class EndReason:
 class Final:
     """The outcome of the whole trial; None means not reached or not measured.
 
-    `end_reason` is None when the trial ended normally, and otherwise says
-    why it ended early (EndReason).
+    `alignment` is the alignment mean of the attempt whose output stands
+    (standing_attempt), None when no attempt ran or that one was not
+    aligned. `end_reason` is None when the trial ended normally, and
+    otherwise says why it ended early (EndReason).
     """
 
     stage_reached: str | None = None
@@ -461,9 +522,12 @@ class Trial:
     `provenance` is required: a Trial without it raises TypeError naming the
     field, and a trial.json without it fails from_dict with a ValueError.
     `reference_run` is the target reference's run from the baseline stage
-    (exit status, hang flag, wall time, and stdout by reference); it stays
-    all None when the reference was not run, as under a compile-only
-    executor.
+    (exit status, hang flag, wall time, stdout by reference, and the run
+    flags); it stays all None when the reference was not run, as under a
+    compile-only executor. `requests` holds every model call in the order
+    sent (Request); None means not recorded, as in a trial.json written
+    before requests were, and the runner starts every trial with an empty
+    list, so a trial that asked no model records [].
     """
 
     trial_id: str
@@ -474,11 +538,16 @@ class Trial:
     model: ModelInfo
     reference_run: RunInfo = field(default_factory=RunInfo)
     context: Context = field(default_factory=Context)
+    requests: list[Request] | None = None
     attempts: list[Attempt] = field(default_factory=list)
     final: Final = field(default_factory=Final)
 
     def __post_init__(self) -> None:
-        """Check the field types, the id, the recipe hash, the id against the bench item, and the attempt order."""
+        """Check the field types, the id, the recipe hash, the id against the bench item, and the list orders.
+
+        Each attempt's and each request's index must be its position, and a
+        request's attempt_index must name an attempt of the trial.
+        """
         _check_fields(self)
         parsed = parse_trial_id(self.trial_id)
         _check_sha256("Trial", "recipe_hash", self.recipe_hash)
@@ -490,6 +559,12 @@ class Trial:
         for position, attempt in enumerate(self.attempts):
             if attempt.index != position:
                 _fail("Trial", f"attempts[{position}].index", attempt.index, f"must be {position}")
+        for position, request in enumerate(self.requests or []):
+            if request.index != position:
+                _fail("Trial", f"requests[{position}].index", request.index, f"must be {position}")
+            if request.attempt_index is not None and request.attempt_index >= len(self.attempts):
+                where = f"requests[{position}].attempt_index"
+                _fail("Trial", where, request.attempt_index, f"must name one of the {len(self.attempts)} attempt(s)")
 
     def with_attempt(self, attempt: Attempt) -> Trial:
         """Return a new Trial with `attempt` appended; its index must equal the current attempt count."""
@@ -497,6 +572,33 @@ class Trial:
         if attempt.index != expected:
             raise ValueError(f"Trial.with_attempt: attempt.index must be {expected}, got {attempt.index!r}")
         return dataclasses.replace(self, attempts=[*self.attempts, attempt])
+
+    def with_request(self, request: Request) -> Trial:
+        """Return a new Trial with `request` appended; its index must equal the current request count.
+
+        A trial whose requests were not recorded (None) starts its list with
+        this request.
+        """
+        requests = self.requests or []
+        if request.index != len(requests):
+            raise ValueError(f"Trial.with_request: request.index must be {len(requests)}, got {request.index!r}")
+        return dataclasses.replace(self, requests=[*requests, request])
+
+
+# ---------------------------------------------------------------------------
+# Readings
+
+
+def standing_attempt(trial: Trial) -> Attempt | None:
+    """Return the attempt whose output stands as the trial's output, or None when no attempt ran.
+
+    It is the last attempt that ran: the last one whose Attempt.run holds
+    stdout (run.stdout_ref is set), whether or not later attempts exist that
+    did not run, so stale output past the execution gate stands (bible
+    Oracles). Final.alignment is its alignment mean.
+    """
+    ran = [attempt for attempt in trial.attempts if attempt.run.stdout_ref is not None]
+    return ran[-1] if ran else None
 
 
 # ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | --- | --- | --- | --- |
 | P0 Core | p0-core | DONE | base: main; gate passed 2026-09-23 (results/p0-gate); merged into main as c3cf248 (PR 1) |
 | P1 Faithful LASSI | p1-faithful | DONE | base: main at c3cf248 (P0 merged, PR 1); plan plans/p1-faithful.md; owner 2026-09-23: scope fixed at planning, P2 follows without pause; owner 2026-09-24: curated LASSI demo at 15:00 EDT |
-| P2 Scoring | p2-scoring | NOT-STARTED | gate needs owner review |
+| P2 Scoring | p2-scoring | GATE-OWNER | base: p1-faithful at 5d5fd0c (P1 DONE, PR 2 open, not merged); plan plans/p2-scoring.md; gate is an owner review on run demo-rngd-cpu-1, then GATE-OWNER and P4 |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
 | P4 ttsim Execution | p4-ttsim | NOT-STARTED | - |
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
@@ -64,5 +64,17 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1.9 | DONE | Replay backend and the upstream notebook replay harness | P1.6,P1.8 | c825f2c replay backend, 526a550 harness; tests/replay runs the pinned notebook and the faithful stages on 16 scripted synthetic scenarios in both directions and compares every decision (47 tests); the remote run is P1.G |
 | P1.10 | DONE | lassi-repro recipes, project name, and the mock dry run | P1.6,P1.7 | project key, lassi-repro recipe, mock untagged-fence form, faithful multicore guard; local mock dry run of 20 trials at S4 on attempt 0; the remote dry run is P1.G |
 | P1.11 | DONE | Toolchain follow-ups deferred from P0 | - | toolchain follow-ups from the P0 freeze: backend place without a line, inline asm place, sample lines tied to the fixtures; one review, PASS |
-| P1.12 | OWNER | Apply OQ-018: upstream text in the repository | P1.3 | waits on OQ-018; the gate does not depend on it |
+| P1.12 | DONE | Apply OQ-018: upstream text in the repository | P1.3 | OQ-018 answered: the prompts stay local; nothing tracked held upstream text; bible Repository Layout and Decision Log record it |
 | P1.G | DONE | Phase gate: notebook replay and mock dry run 20/20 | P1.9,P1.10,P1.11 | PASS: replay 47 passed, 32 cases match (rx 20260924-104048-desktop-8r113ei-p1-faithful-5fd3); mock dry run 20/20 at S4 attempt 0 (rx 20260924-104105-desktop-8r113ei-p1-faithful-c002); fe01ab1 clean; results/p1-gate |
+| P2.0 | DONE | Plan phase P2 into plans/p2-scoring.md and add its tasks here | - | plan plans/p2-scoring.md; base p1-faithful 5d5fd0c |
+| P2.1 | DONE | Record every model request | - | Trial.requests records every model call (messages by hash, reply, stage, attempt); trial.md Requests section; Parquet requests table; full suite 3114 passed |
+| P2.2 | DONE | Record the reference run's flags | - | RunInfo records stdout_truncated, stderr_truncated, workdir_incomplete; the oracle never aligns against a truncated reference stdout; full suite 3156 passed. The Sandbox section needed no edit (it already names the flags and the 30 s floor) |
+| P2.3 | DONE | Readings the scores rest on: stage ladder and final alignment | - | S1 for a reply whose only FILE-block errors are missing-file; standing_attempt names the output that stands and sets final.alignment; tests/core, replay, oracles 1516 passed |
+| P2.4 | DONE | Spike: the paper's LASSI metric definitions | - | plans/spikes/p2-lassi-metrics.md, recounted independently: paper metric definitions and denominators; 5 of 8 published percentages do not follow from Tables VI and VII; OQ-021, OQ-022 queued |
+| P2.5 | DONE | Spike: stability of the reference output under the proxy | - | rx job 20260924-133017-p2-proxy-3a3a from 207e4dd: every item's masked reference stdout stable over 3 runs; dense-embedding not scorable under the proxy; results/p2-proxy-stability |
+| P2.6 | DONE | df-v0 score profile | P2.3 | df-v0 ScoreProfile, weights in assets/scoring/df-v0.yaml; 65 tests; W, A, guard, R_final, single and multi-turn readings recorded in the bible |
+| P2.7 | DONE | lassi score profile | P2.3,P2.4 | lassi profile: 12 components, correct needs a clean run; bible rev 148 |
+| P2.8 | DONE | Run metrics per arm and direction | P2.6,P2.7 | lassi.analysis metrics per arm and direction; bible rev 151 |
+| P2.9 | DONE | lassi score: score a finished run and write the review packet | P2.2,P2.8 | lassi score writes the score tree and review packet; bible rev 156 |
+| P2.10 | DONE | Recipes bind score and metrics in lassi run | P2.9 | lassi run binds score and metrics; run.md Metrics section; bible rev 180 |
+| P2.G | DONE | Phase gate: owner review of score components on run demo-rngd-cpu-1 | P2.1,P2.2,P2.5,P2.9,P2.10 | checks passed at a10fdd0 (rx e027, 1b00); owner review OQ-024 |
