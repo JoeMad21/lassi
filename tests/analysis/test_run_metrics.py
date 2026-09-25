@@ -729,6 +729,17 @@ def test_the_markdown_shows_both_distributions() -> None:
         assert [str(value), str(count)] in lines, f"corrections line for {value} with {count}"
 
 
+def test_a_trial_whose_provenance_names_no_device_reads_not_recorded() -> None:
+    """The runner records device None for the native executor; the table names that, never raising."""
+    pairs = [(replace(trial, provenance=replace(trial.provenance, device=None)), score)
+             for trial, score in pairs_of(MAIN)]
+    pairs[0] = (replace(pairs[0][0], provenance=replace(pairs[0][0].provenance, device="SYNTHETIC device")),
+                pairs[0][1])
+    table = only_table(pairs)
+    assert table.devices == ("SYNTHETIC device", "not recorded")
+    assert "Device: SYNTHETIC device, not recorded." in markdown_of(table)
+
+
 def test_the_metrics_document_holds_every_table() -> None:
     tables = list(tables_of(all_group_pairs()).values())
     document = module(TABLES).metrics_markdown(tables)

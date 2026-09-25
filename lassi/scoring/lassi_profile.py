@@ -57,6 +57,7 @@ from typing import Any
 import yaml
 
 from lassi.bench import Direction, Suite, load_suite
+from lassi.core.capabilities import READS_BENCH_SOURCES
 from lassi.core.fragments import as_text_mode
 from lassi.core.interfaces import Score
 from lassi.core.record import RunInfo, Trial, standing_attempt
@@ -223,11 +224,12 @@ class LassiProfile:
     Built as `LassiProfile(bench_root=<root of the suite's fetched sources>)`
     it reads PROFILE_FILE; `profile_path` names another profile file. The
     file is read and checked, and the bench root must be a directory, when
-    the profile is built.
+    the profile is built. It declares READS_BENCH_SOURCES, so
+    lassi.scoring.profiles.build_profile passes it the bench root.
     """
 
     name = "lassi"
-    capabilities = frozenset({"scores_trials"})
+    capabilities = frozenset({"scores_trials", READS_BENCH_SOURCES})
 
     def __init__(self, *, bench_root: str | Path, profile_path: str | Path | None = None) -> None:
         """Check the bench root and read the profile file: `profile_path`, or PROFILE_FILE when it is None."""

@@ -17,12 +17,16 @@ write_metrics_parquet writes three tables, metrics, stage_reached, and
 corrections, as Hive-partitioned Parquet under
 `<out_dir>/<table>/arm=.../direction=.../part-0.parquet`, as
 lassi.core.parquet does for trials; read_metrics_parquet reads them back.
+It is metrics_arrow, which builds the three Arrow tables in memory and
+raises for any value a column cannot hold, then write_metrics_arrow, which
+only writes them; a caller that must refuse before creating a directory
+builds first and writes later.
 """
 
 from __future__ import annotations
 
 import shutil
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -208,7 +212,7 @@ def _partitioning() -> ds.Partitioning:
     return ds.HivePartitioning(pa.schema(_KEYS))
 
 
-def _check_partition_dirs(tables: Sequence[MetricTable]) -> None:
+def check_partition_dirs(tables: Sequence[MetricTable]) -> None:
     """Raise ValueError when two tables share (arm, direction) or their values would not map to distinct directories.
 
     Windows and macOS compare directory names without letter case, and
@@ -231,18 +235,28 @@ def _check_partition_dirs(tables: Sequence[MetricTable]) -> None:
                 raise ValueError(f"partition values {other} and {prefix} differ only by letter case")
 
 
-def write_metrics_parquet(tables: Sequence[MetricTable], out_dir: Path) -> None:
-    """Write the metrics, stage_reached, and corrections tables of `tables` as Parquet under `out_dir`.
+def metrics_arrow(tables: Sequence[MetricTable]) -> dict[str, pa.Table]:
+    """Return the metrics, stage_reached, and corrections tables of `tables` as Arrow tables, keyed by name.
+
+    Nothing is written. Raises ValueError from check_partition_dirs, and
+    whatever pyarrow raises for a value its column cannot hold, such as
+    OverflowError for a corrections count beyond int64 or UnicodeEncodeError
+    for a string holding a lone surrogate.
+    """
+    check_partition_dirs(tables)
+    rows = metrics_rows(tables)
+    return {name: pa.Table.from_pylist(rows[name], schema=SCHEMAS[name]) for name in TABLES}
+
+
+def write_metrics_arrow(arrow: Mapping[str, pa.Table], out_dir: Path) -> None:
+    """Write the tables metrics_arrow built as Hive-partitioned Parquet under `out_dir`.
 
     Each table directory is removed first, so the result holds only these
     tables; other files in `out_dir` are kept, and a table with no rows gets
-    no directory. Every table is built before any directory is removed, so a
-    ValueError (tables sharing an arm and direction, or partition values
-    that differ only by letter case) leaves `out_dir` unchanged.
+    no directory. Only I/O happens here: no value is checked, and pyarrow's
+    default cap of 1024 partitions per write is lifted, so the number of arms
+    and directions cannot make a write fail.
     """
-    _check_partition_dirs(tables)
-    rows = metrics_rows(tables)
-    arrow = {name: pa.Table.from_pylist(rows[name], schema=SCHEMAS[name]) for name in TABLES}
     for name in TABLES:
         table_dir = Path(out_dir) / name
         if table_dir.exists():
@@ -256,7 +270,21 @@ def write_metrics_parquet(tables: Sequence[MetricTable], out_dir: Path) -> None:
             partitioning=_partitioning(),
             basename_template="part-{i}.parquet",
             existing_data_behavior="error",
+            max_partitions=arrow[name].num_rows,
         )
+
+
+def write_metrics_parquet(tables: Sequence[MetricTable], out_dir: Path) -> None:
+    """Write the metrics, stage_reached, and corrections tables of `tables` as Parquet under `out_dir`.
+
+    Each table directory is removed first, so the result holds only these
+    tables; other files in `out_dir` are kept, and a table with no rows gets
+    no directory. Every table is built (metrics_arrow) before any directory
+    is removed (write_metrics_arrow), so a ValueError (tables sharing an arm
+    and direction, or partition values that differ only by letter case)
+    leaves `out_dir` unchanged.
+    """
+    write_metrics_arrow(metrics_arrow(tables), out_dir)
 
 
 def read_metrics_parquet(out_dir: Path) -> dict[str, list[dict[str, Any]]]:

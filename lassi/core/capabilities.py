@@ -15,6 +15,15 @@ from typing import Iterable, Protocol, cast, runtime_checkable
 # the backend's type.
 UNLOAD_BEFORE_RUN = "unload_before_run"
 
+# The capability of a ScoreProfile that also scores each attempt: it provides score_attempts(trial), one Score per
+# attempt in attempt order. A scoring pass writes attempt scores only for a profile that declares it.
+SCORES_ATTEMPTS = "scores_attempts"
+
+# The capability of a ScoreProfile that reads the suite's fetched bench sources (such as a reference target). It is
+# built as factory(bench_root=<root of those sources>) and every other profile as factory()
+# (lassi.scoring.profiles.build_profile), so a scoring pass looks for a bench root only when a profile declares it.
+READS_BENCH_SOURCES = "reads_bench_sources"
+
 
 @runtime_checkable
 class Component(Protocol):

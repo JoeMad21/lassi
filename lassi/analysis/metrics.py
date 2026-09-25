@@ -55,6 +55,9 @@ from lassi.analysis.stats import pass_at_k, wilson_interval
 from lassi.core.interfaces import Score
 from lassi.core.record import STAGES, Trial, parse_trial_id
 
+# The registered ScoreProfile whose Scores metric_tables reads; a scoring pass (lassi.scoring.score_run) computes
+# the metric tables only when this profile is among those it runs.
+SCORE_PROFILE = "lassi"
 # The label of a run whose correctness was never checked (bible Evaluation Protocol, Acceptance Criteria).
 COMPILE_STAGE = "compile-stage reproduction"
 NO_STAGE = "none"
@@ -62,6 +65,8 @@ STAGE_KEYS = (*STAGES, NO_STAGE)
 CLEAN_RUN = "S5"
 SIM_T_THRESHOLD = 0.6
 PASS_AT = (1, 3)
+# A trial whose provenance names no device (the runner records none for the native executor; PHASE-NOTES P2).
+DEVICE_NOT_RECORDED = "not recorded"
 
 # The lassi profile components the rows read.
 CORRECT, FIRST_TRY, SIM_T = "correct", "first_try", "sim_t"
@@ -127,7 +132,8 @@ class MetricTable:
     to the count of trials whose last attempt reached it. `corrections`
     maps each final.corrections value that occurs, ascending, to its count
     of trials. `trials_per_scenario` maps each scenario, `<bench>/<item>`,
-    to its trial count. `devices` lists the trials' provenance devices.
+    to its trial count. `devices` lists the trials' provenance devices,
+    DEVICE_NOT_RECORDED for a trial whose provenance names none.
     """
 
     arm: str
@@ -282,7 +288,7 @@ def _table(arm: str, direction: str, pairs: Sequence[Pair], paper: PaperValues) 
         compile_only=compile_only,
         trials=len(pairs),
         trials_per_scenario=MappingProxyType(dict(sorted(scenarios.items()))),
-        devices=tuple(sorted({trial.provenance.device for trial, _ in pairs})),
+        devices=tuple(sorted({trial.provenance.device or DEVICE_NOT_RECORDED for trial, _ in pairs})),
         rows=_rows(pairs, direction, compile_only, paper),
         stage_reached=MappingProxyType({key: stages.get(key, 0) for key in STAGE_KEYS}),
         corrections=MappingProxyType(dict(sorted(corrections.items()))),

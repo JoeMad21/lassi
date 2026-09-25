@@ -47,6 +47,7 @@ from typing import Any
 
 import yaml
 
+from lassi.core.capabilities import SCORES_ATTEMPTS
 from lassi.core.interfaces import Score
 from lassi.core.record import STAGES, Attempt, Guards, ScoreBreakdown, Trial
 from lassi.core.registry import register
@@ -160,7 +161,7 @@ class DfV0Profile:
     """
 
     name = "df-v0"
-    capabilities = frozenset({"scores_attempts"})
+    capabilities = frozenset({SCORES_ATTEMPTS})
 
     def __init__(self, *, weights_path: str | Path | None = None) -> None:
         """Read and check the weights file: `weights_path`, or WEIGHTS_FILE when it is None."""
