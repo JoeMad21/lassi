@@ -1,0 +1,23 @@
+{
+  "derivation": "Seven lines. 'main.cpp: In function ...' is a context line, no diagnostic. Two GCC style errors follow, each with a source echo and a caret line that give nothing. The first, main.cpp:6:5, reports the missing semicolon at the next token, 'for' on line 6 (four blanks, then 'for' at column 5). The second, main.cpp:6:21, is GCC's recovery: the for header was not parsed as a declaration, so 'i' in 'i < 4' (column 21) is undeclared. main.cpp is a built file, so both columns are kept as printed; neither line ends in a bracketed option, so both codes are null; each message is the text after 'error: '.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.cpp",
+      "line": 6,
+      "column": 5,
+      "message": "expected ',' or ';' before 'for'"
+    },
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.cpp",
+      "line": 6,
+      "column": 21,
+      "message": "'i' was not declared in this scope"
+    }
+  ]
+}

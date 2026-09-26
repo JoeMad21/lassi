@@ -1,0 +1,16 @@
+main.cpp: In function 'int main()':
+main.cpp:18:10: error: no matching function for call to 'scale(int [4], int)'
+   18 |     scale(values, 4);
+      |     ~~~~~^~~~~~~~~~~
+main.cpp:4:6: note: candidate: 'void scale(float*, int)'
+    4 | void scale(float *x, int n) {
+      |      ^~~~~
+main.cpp:4:19: note:   no known conversion for argument 1 from 'int [4]' to 'float*'
+    4 | void scale(float *x, int n) {
+      |            ~~~~~~~^
+main.cpp:10:6: note: candidate: 'void scale(double*, int)'
+   10 | void scale(double *x, int n) {
+      |      ^~~~~
+main.cpp:10:20: note:   no known conversion for argument 1 from 'int [4]' to 'double*'
+   10 | void scale(double *x, int n) {
+      |            ~~~~~~~~^

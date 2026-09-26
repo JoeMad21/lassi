@@ -1,0 +1,5 @@
+In file included from main.cpp:2:
+kernels/scale.h: In function 'void scale(float*, int)':
+kernels/scale.h:6:17: error: 'factor' was not declared in this scope
+    6 |         x[i] *= factor;
+      |                 ^~~~~~

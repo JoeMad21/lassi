@@ -1,0 +1,139 @@
+{
+  "commit": "94368a41ba63c71a68773daecda83d184d543f0e",
+  "date": "2026-09-25T19:54:21-07:00",
+  "dirty": false,
+  "host": "alpha01",
+  "rx_run_id": "20260925-195420-desktop-8r113ei-detached-94368a41-e825",
+  "scenarios": {
+    "gcc_clean": {
+      "argv": [
+        "/usr/bin/g++-12",
+        "-O3",
+        "-fopenmp",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 0,
+      "exit_status": 0,
+      "overrides": {},
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "toolchain": "gcc-native"
+    },
+    "gcc_header_error": {
+      "argv": [
+        "/usr/bin/g++-12",
+        "-O3",
+        "-fopenmp",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 1,
+      "exit_status": 1,
+      "overrides": {},
+      "stderr_bytes": 222,
+      "stderr_sha256": "9f058adf192b461b23ba6d50f6d9733b3457d91a3854c1e5239671498c919c4e",
+      "toolchain": "gcc-native"
+    },
+    "gcc_note_chain": {
+      "argv": [
+        "/usr/bin/g++-12",
+        "-O3",
+        "-fopenmp",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 5,
+      "exit_status": 1,
+      "overrides": {},
+      "stderr_bytes": 710,
+      "stderr_sha256": "2b681e04d923268762e79b8e13533fb0518fad32af6d1b6b95ed2d2cb2d359f2",
+      "toolchain": "gcc-native"
+    },
+    "gcc_syntax_error": {
+      "argv": [
+        "/usr/bin/g++-12",
+        "-O3",
+        "-fopenmp",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 2,
+      "exit_status": 1,
+      "overrides": {},
+      "stderr_bytes": 277,
+      "stderr_sha256": "7690d37b83f201a670f83c3960b7d469e90745cdaac1addf98c32364383c46f1",
+      "toolchain": "gcc-native"
+    },
+    "gcc_undeclared_identifier": {
+      "argv": [
+        "/usr/bin/g++-12",
+        "-O3",
+        "-fopenmp",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 1,
+      "exit_status": 1,
+      "overrides": {},
+      "stderr_bytes": 208,
+      "stderr_sha256": "0e1f1ee3bb7b06935e8a5fd3cffe863a3857c36eb217958e3efcca8c4a3fd7af",
+      "toolchain": "gcc-native"
+    },
+    "gcc_wall_warning": {
+      "argv": [
+        "/usr/bin/g++-12",
+        "-O3",
+        "-fopenmp",
+        "-o",
+        "main",
+        "main.cpp"
+      ],
+      "diagnostics": 1,
+      "exit_status": 0,
+      "overrides": {},
+      "stderr_bytes": 155,
+      "stderr_sha256": "7f36591dd8deb7fd08bd43bd889e462826ff75311f01748994a8034c762b697d",
+      "toolchain": "gcc-native"
+    }
+  },
+  "snapshot_of": null,
+  "toolchains": {
+    "gcc-native": {
+      "environment": [
+        "LANG",
+        "LC_ALL",
+        "PATH"
+      ],
+      "executable": "/usr/bin/g++-12",
+      "locale": {
+        "LANG": "C",
+        "LC_ALL": "C"
+      },
+      "pin_files": {
+        "gcc": {
+          "EXECUTABLE": "/usr/bin/g++-12",
+          "EXPECT_VERSION": "(Ubuntu 12.3.0-1ubuntu1~22.04.3) 12.3.0",
+          "FLAGS": "-O3 -fopenmp",
+          "NAME": "gcc",
+          "VERSION": "12.3.0"
+        }
+      },
+      "pins": {
+        "gcc": "12.3.0"
+      },
+      "version": [
+        "g++-12 (Ubuntu 12.3.0-1ubuntu1~22.04.3) 12.3.0",
+        "Copyright (C) 2022 Free Software Foundation, Inc.",
+        "This is free software; see the source for copying conditions.  There is NO",
+        "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+      ],
+      "version_exit_status": 0
+    }
+  }
+}

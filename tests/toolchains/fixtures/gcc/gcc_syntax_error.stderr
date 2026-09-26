@@ -1,0 +1,7 @@
+main.cpp: In function 'int main()':
+main.cpp:6:5: error: expected ',' or ';' before 'for'
+    6 |     for (int i = 0; i < 4; ++i) {
+      |     ^~~
+main.cpp:6:21: error: 'i' was not declared in this scope
+    6 |     for (int i = 0; i < 4; ++i) {
+      |                     ^
