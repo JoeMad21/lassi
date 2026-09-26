@@ -1,0 +1,32 @@
+{
+  "derivation": "Ten lines. 'main.cpp:18:5: error: ...' is one error: file main.cpp, line 18, and column 5 as printed (line 18 is four blanks, then 'scale(values, 4);'), code null, the message the text after 'error: '. 'main.cpp:4:6: note: ...' and 'main.cpp:10:6: note: ...' are one note each, at the name 'scale' in the float overload's declaration (line 4) and the double overload's (line 10), after 'void ' at column 6; code null; each message the text after 'note: '. main.cpp is a built file, so every column is kept. The three source echoes, the three caret lines, and '1 error generated.' give nothing.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.cpp",
+      "line": 18,
+      "column": 5,
+      "message": "no matching function for call to 'scale'"
+    },
+    {
+      "stage": "compile",
+      "severity": "note",
+      "code": null,
+      "file": "main.cpp",
+      "line": 4,
+      "column": 6,
+      "message": "candidate function not viable: no known conversion from 'int[4]' to 'float *' for 1st argument"
+    },
+    {
+      "stage": "compile",
+      "severity": "note",
+      "code": null,
+      "file": "main.cpp",
+      "line": 10,
+      "column": 6,
+      "message": "candidate function not viable: no known conversion from 'int[4]' to 'double *' for 1st argument"
+    }
+  ]
+}

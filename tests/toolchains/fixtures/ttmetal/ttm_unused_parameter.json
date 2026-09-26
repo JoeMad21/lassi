@@ -1,0 +1,14 @@
+{
+  "derivation": "Four lines. 'main.cpp:4:39: warning: ... [-Wunused-parameter]' is one warning: file main.cpp and line 4 as printed; main.cpp is a built file, so the column 39 is kept (line 4 is 'static int scale_value(int value, int ' before 'factor', which starts at column 39); the trailing ' [-Wunused-parameter]' starts with '-', so it is the code and is not part of the message, which is the text after 'warning: ' up to it. The source echo, the caret line, and '1 warning generated.' give nothing. The build exited 0: without -Werror (OQ-027, option (b)) the warning does not fail it.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "warning",
+      "code": "-Wunused-parameter",
+      "file": "main.cpp",
+      "line": 4,
+      "column": 39,
+      "message": "unused parameter 'factor'"
+    }
+  ]
+}

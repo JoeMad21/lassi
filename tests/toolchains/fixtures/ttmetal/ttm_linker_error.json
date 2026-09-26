@@ -1,0 +1,23 @@
+{
+  "derivation": "Four lines. 'ld.lld: error: undefined symbol: helper(int)' is an lld line with no place: one error, file, line, and column null, code null, the message the text after 'ld.lld: error: '. The two lines that start with '>>> ' are lld's context (the source file named by the object, then the temporary object under the capture's workdir), so no diagnostic. 'clang++-20: error: linker command failed with exit code 1 (use -v to see invocation)' is a clang driver line with no place: one error, the message the text after 'clang++-20: error: '.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": null,
+      "line": null,
+      "column": null,
+      "message": "undefined symbol: helper(int)"
+    },
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": null,
+      "line": null,
+      "column": null,
+      "message": "linker command failed with exit code 1 (use -v to see invocation)"
+    }
+  ]
+}

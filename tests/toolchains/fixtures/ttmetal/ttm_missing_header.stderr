@@ -1,0 +1,4 @@
+main.cpp:3:10: fatal error: 'tt-metalium/p410_no_such_header.hpp' file not found
+    3 | #include <tt-metalium/p410_no_such_header.hpp>
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 error generated.

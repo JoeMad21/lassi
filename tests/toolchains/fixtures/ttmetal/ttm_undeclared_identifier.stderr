@@ -1,0 +1,4 @@
+main.cpp:7:18: error: use of undeclared identifier 'undefined_var'
+    7 |         total += undefined_var;
+      |                  ^
+1 error generated.

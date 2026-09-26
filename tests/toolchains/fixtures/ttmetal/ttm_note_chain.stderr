@@ -1,0 +1,10 @@
+main.cpp:18:5: error: no matching function for call to 'scale'
+   18 |     scale(values, 4);
+      |     ^~~~~
+main.cpp:4:6: note: candidate function not viable: no known conversion from 'int[4]' to 'float *' for 1st argument
+    4 | void scale(float *x, int n) {
+      |      ^     ~~~~~~~~
+main.cpp:10:6: note: candidate function not viable: no known conversion from 'int[4]' to 'double *' for 1st argument
+   10 | void scale(double *x, int n) {
+      |      ^     ~~~~~~~~~
+1 error generated.

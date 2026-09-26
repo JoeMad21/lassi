@@ -1,0 +1,4 @@
+main.cpp:4:39: warning: unused parameter 'factor' [-Wunused-parameter]
+    4 | static int scale_value(int value, int factor) {
+      |                                       ^
+1 warning generated.

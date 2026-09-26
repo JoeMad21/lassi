@@ -1,0 +1,5 @@
+In file included from main.cpp:4:
+./host/scale.h:5:20: error: use of undeclared identifier 'factor'
+    5 |     return value * factor;
+      |                    ^
+1 error generated.

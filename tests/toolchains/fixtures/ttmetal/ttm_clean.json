@@ -1,0 +1,4 @@
+{
+  "derivation": "The capture's stderr is empty (0 bytes) and clang++-20 exited 0: a clean build prints nothing, so there is no diagnostic. The kernel kernels/dataflow/p410_noop.cpp, which includes the device header dataflow_api.h, was written beside main.cpp and was not compiled, or the host compiler would have reported that header missing.",
+  "diagnostics": []
+}
