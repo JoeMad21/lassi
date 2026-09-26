@@ -80,7 +80,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2.G | DONE | Phase gate: owner review of score components on run demo-rngd-cpu-1 | P2.1,P2.2,P2.5,P2.9,P2.10 | checks passed at a10fdd0 (rx e027, 1b00); owner review OQ-024 |
 | P4.0 | DONE | Plan phase P4 into plans/p4-ttsim.md and add its tasks here | - | plan written; commit P4.0: plan phase |
 | P4.1 | DONE | Spike: joint pin of tt-mlir, tt-metal, and ttsim; build budget | - | joint pin tt-mlir 0.9.0.dev20260221, tt-metal 5280a9cf, ttsim v1.3.4 (OQ-026 a); bible rev 198 |
-| P4.2 | ACTIVE | Install the pinned tt-metal and ttsim | P4.1 | scripts committed; build job to run from a clean worktree |
+| P4.2 | DONE | Install the pinned tt-metal and ttsim | P4.1 | tt-metal@5280a9cf and ttsim@v1.3.4 installed (rx job 20260925-173117-p4-tt-metal-9c48, clean f9bb560); 25 CPM packages recorded, not pinned (PHASE-NOTES P4); bible rev 217 |
 | P4.3 | DONE | lassi_io harness and its binary file format | - | lassi_io format, Python side, C header; remote tests 7 passed (rx 20260925-165726, exploratory snapshot of the staged code); bible rev 215 |
 | P4.4 | READY | binary_io oracle over output files | P4.3 |  |
 | P4.5 | READY | Native C++ toolchain and executors per language | - |  |
@@ -88,7 +88,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.7 | DONE | Graphics setting, preset, and banner | - | graphics setting, preset, banner; bible rev 211 |
 | P4.8 | READY | Progress hook and live inference table | P4.7 |  |
 | P4.9 | READY | Spike: ttsim runtime facts, unpack_to_dest, and Watcher | P4.2 |  |
-| P4.10 | READY | tt-metal host toolchain | P4.2,P4.5 |  |
+| P4.10 | READY | tt-metal host toolchain | P4.2,P4.5 | also compare lassi-cpm-sources.txt with results/p4-tt-install before using a rebuilt tree (PHASE-NOTES P4) |
 | P4.11 | READY | ttsim executor and the smoke driver | P4.6,P4.9,P4.10 |  |
 | P4.12 | READY | CPU -> TT guard | P4.6,P4.10 |  |
 | P4.13 | READY | Tier A suite tt-pairs-v0 | P4.4,P4.5,P4.11,P4.12 |  |

@@ -23,6 +23,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - Give agents task-specific log names in the shared scratchpad (for example p43-full-suite.txt). Two agents wrote the same full-suite.txt, and one read the other's failure as its own (P4.3).
 - Brief build scripts for the smallest build that serves the task. The first P4.2 draft built everything with Python bindings on; the owner wants minimal host activity, so name the needed targets in the brief.
 - Writing a task's tests and then its implementation took roughly 45 minutes of wall time in P4.3 (run times, not a measurement). Write the next task's tests while the current task is implemented, when their files do not overlap.
+- Never kill processes by image name on the workstation (`taskkill /IM python.exe`): it ends every Python process, including a parallel agent's test run (P4.5 did it once while P4.4 was running). Kill a hung process by its PID.
 
 ## Owner queue
 
@@ -43,4 +44,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - `rx pull --path <file>` extracts into .rx/pulls/<basename>, so two single-file pulls overwrite each other and `--into` copies nothing for a file. Pull a directory into its own folder, then pick files.
 - The gate refuses any command text that names the Tenstorrent device path or the Tenstorrent SMI tool, even in a read-only probe. Keep those strings out of rx command lines.
 - Look for shared state before running another project's tooling on a shared host. tt-metal's JIT deletes other entries in its cache root at every program start, and the default root sits under HOME, which the TurboQuant project shares; always set TT_METAL_CACHE and TT_METAL_RUNTIME_ROOT (PHASE-NOTES P4). Read an upstream tool's startup and cleanup code before its first run.
+- `rx pull --path` reaches only lassi-gate/runs, lassi-runs, and lassi-wt; a file under the toolchains root (an install record, a fetched-sources list) is read with one `rx exec cat` and quoted in the task's summary.md.
+- The P4.2 job, building only the needed targets (676 Ninja steps) at 32 jobs, took 3 minutes 44 seconds in all: fetch, configure, build, checks, and the ttsim install (results/p4-tt-install). Name only the targets a task needs; match the `rx job wait --interval` to the expected length (300 seconds for a long job, the default for a build of this size) so a short job is not left waiting on a poll.
+- A results/<name>/ folder holds what `rx pull --into` wrote plus summary.md (AGENTS.md, Results). Evidence read by `rx exec` goes inside summary.md with the exec id, not in extra files; P4.2 wrote two extra files and had to fold them back.
 - A clean-commit remote run needs a clean checkout. When the main tree holds other staged work, commit the task, then run rx from the detached clean worktree C:/dev/lassi-clean checked out at that commit, as the P1 and P2 evidence runs did.
