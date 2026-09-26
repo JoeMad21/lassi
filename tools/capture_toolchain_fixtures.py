@@ -2,18 +2,21 @@
 
 Usage (on the build host, through tools/rx.py):
 
-    uv run python tools/capture_toolchain_fixtures.py [--out DIR] [--only NAME ...] [--show]
+    uv run python tools/capture_toolchain_fixtures.py [--fixtures DIR] [--out DIR] [--only NAME ...] [--show]
 
-tests/toolchains/fixtures/scenarios.json names each scenario: its toolchain
-(a registry name), an optional override of the preset's ARCH ("arch") or GPU
-("gpu") class attribute, and a one-line description. The files a scenario
-compiles are tests/toolchains/fixtures/sources/<scenario>/, as relative
-paths. These sources are hand-written fixtures; the tool only compiles them
-and never runs a built program.
+A fixture set is a directory holding scenarios.json and sources/: the
+default set is tests/toolchains/fixtures, and --fixtures DIR names another
+(tests/toolchains/fixtures/gcc holds the gcc-native set, task P4.5). Its
+scenarios.json names each scenario: its toolchain (a registry name), an
+optional override of the preset's ARCH ("arch") or GPU ("gpu") class
+attribute, and a one-line description. The files a scenario compiles are
+DIR/sources/<scenario>/, as relative paths. These sources are hand-written
+fixtures; the tool only compiles them and never runs a built program.
 
 Each toolchain is built exactly as the stage runner builds it, with
 lassi.core.runner.build_toolchain: the pinned executable under
-$LASSI_TOOLCHAINS, checked by its --version against the pin's expected
+$LASSI_TOOLCHAINS (or, for a host pin such as toolchains/gcc.pin, the pin's
+EXECUTABLE), checked by its --version against the pin's expected
 version, the clean compile environment (PATH, LANG=C, LC_ALL=C, and linked
 prefixes such as NVHPC_CUDA_HOME; no HOME), and the sandboxed compile runner
 (lassi.executors.sandbox.SandboxedCompileRunner, P0.20), which gives each
@@ -331,6 +334,11 @@ def out_dir(given: str | None, runs_root: str) -> Path:
 def _arguments(argv: Sequence[str] | None) -> argparse.Namespace:
     """Parse the command line."""
     parser = argparse.ArgumentParser(description="Capture the toolchain stderr fixtures with the pinned compilers.")
+    parser.add_argument(
+        "--fixtures",
+        metavar="DIR",
+        help="the fixture set: DIR/scenarios.json over DIR/sources (default: tests/toolchains/fixtures)",
+    )
     parser.add_argument("--out", help="the out dir (default: $LASSI_RUNS_ROOT/fixture-captures/<rx run id or time>)")
     parser.add_argument("--only", nargs="+", metavar="NAME", help="capture only these scenarios")
     parser.add_argument("--show", action="store_true", help="also print each captured stderr")
@@ -408,7 +416,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     toolchains = os.environ.get("LASSI_TOOLCHAINS", "")
     try:
         out = out_dir(args.out, os.environ["LASSI_RUNS_ROOT"])
-        chosen = _chosen(load_scenarios(), args.only)
+        fixtures = FIXTURES if args.fixtures is None else Path(os.path.abspath(args.fixtures))
+        chosen = _chosen(load_scenarios(fixtures / SCENARIOS_JSON.name, fixtures / SOURCES.name), args.only)
         manifest = capture(chosen, out, Path(toolchains) if toolchains else None, args.show)
     except (CaptureError, RunError, SandboxUnavailableError) as error:
         print(f"capture_toolchain_fixtures: {error}", file=sys.stderr)

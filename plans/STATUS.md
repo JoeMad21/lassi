@@ -83,7 +83,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.2 | DONE | Install the pinned tt-metal and ttsim | P4.1 | tt-metal@5280a9cf and ttsim@v1.3.4 installed (rx job 20260925-173117-p4-tt-metal-9c48, clean f9bb560); 25 CPM packages recorded, not pinned (PHASE-NOTES P4); bible rev 217 |
 | P4.3 | DONE | lassi_io harness and its binary file format | - | lassi_io format, Python side, C header; remote tests 7 passed (rx 20260925-165726, exploratory snapshot of the staged code); bible rev 215 |
 | P4.4 | DONE | binary_io oracle over output files | P4.3 | binary_io oracle, item tolerances, binary store, output_stats; bible rev 222 |
-| P4.5 | READY | Native C++ toolchain and executors per language | - |  |
+| P4.5 | ACTIVE | Native C++ toolchain and executors per language | - | commit A: gcc-native, executors per language, device(); fixture capture and diagnostics tests pending |
 | P4.6 | READY | Record readings for simulator runs | - |  |
 | P4.7 | DONE | Graphics setting, preset, and banner | - | graphics setting, preset, banner; bible rev 211 |
 | P4.8 | READY | Progress hook and live inference table | P4.7 |  |

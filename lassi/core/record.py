@@ -34,7 +34,9 @@ from lassi.core.interfaces import Sampling
 STAGES = ("S0", "S1", "S2", "S3", "S4", "S5")
 DIAGNOSTIC_STAGES = ("parse", "verify", "lower", "compile", "jit", "run")
 SEVERITIES = ("error", "warning", "note")
-TOOLCHAIN_PIN_NAMES = ("llvm", "polygeist", "tt_mlir", "tt_metal", "ttsim", "furiosa_sdk", "cuda", "nvhpc", "rocm")
+TOOLCHAIN_PIN_NAMES = (
+    "llvm", "polygeist", "tt_mlir", "tt_metal", "ttsim", "furiosa_sdk", "cuda", "nvhpc", "rocm", "gcc"
+)
 # The run flags RunInfo records, named as the RunResult flags they copy, in field order.
 RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # The fixed codes of Final.end_reason: why a trial ended early. baseline-compile and baseline-run end a trial
@@ -451,6 +453,7 @@ class ToolchainPins:
     cuda: str | None = None
     nvhpc: str | None = None
     rocm: str | None = None
+    gcc: str | None = None
 
     def __post_init__(self) -> None:
         """Check that every pin is a string or None."""
@@ -463,12 +466,13 @@ class Provenance:
 
     The run's provenance.json stays authoritative (bible Result Record,
     Storage); the runner fills this copy from that manifest, key by key:
-    commit from "commit", dirty from "dirty", device from "device", sdk from
-    "driver", and date from "started_utc". The types are what the manifest
-    holds: commit and dirty are None when git is unavailable, device is None
-    when the executor names no device, sdk is None until an executor reports
-    an SDK or driver version, and date (the run's start, ISO 8601 UTC with
-    seconds) is always set. A known commit is a full git object id (40 or 64
+    commit from "commit", dirty from "dirty", device from "device", or, with
+    executors per language, from "devices" at the trial's target language,
+    sdk from "driver", and date from "started_utc". The types are what the
+    manifest holds: commit and dirty are None when git is unavailable, device
+    is None when the executor names no device, sdk is None until an executor
+    reports an SDK or driver version, and date (the run's start, ISO 8601 UTC
+    with seconds) is always set. A known commit is a full git object id (40 or 64
     lowercase hex characters), a known device or sdk is a non-empty string,
     and date must parse as an ISO 8601 time in UTC. Every field is required,
     so a missing value is never read as unknown.

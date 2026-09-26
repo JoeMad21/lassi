@@ -6,7 +6,8 @@ registry name. Contract rules (bible, Component Interfaces):
 - Toolchains return diagnostics parsed into Diagnostic records; raw stderr is
   kept as an attachment and never consumed downstream.
 - Executors enforce wall time, memory, and CPU limits and return exit status,
-  stdout, stderr, output files, and a hang flag.
+  stdout, stderr, output files, and a hang flag; each names the device its
+  programs run on (device()).
 - Oracles never trust a program's self-reported PASS as the only signal.
 - Stages are pure over the trial record: read fields, append an attempt or
   annotation, return. Side effects go through components.
@@ -182,10 +183,22 @@ class Toolchain(Component, Protocol):
 
 
 class Executor(Component, Protocol):
-    """Runs an artifact on inputs under enforced limits."""
+    """Runs an artifact on inputs under enforced limits, and names the device its programs run on."""
 
     def run(self, artifact: Path, inputs: Sequence[str], limits: Limits) -> RunResult:
         """Run `artifact` with `inputs` and return its RunResult."""
+        ...
+
+    def device(self) -> str:
+        """Return the device the programs run on, starting no process and never using the sandbox (task P4.5).
+
+        The result is one non-empty line of printable ASCII with no leading
+        or trailing blank. The runner (lassi.core.runner) asks each bound
+        executor once, before the run directory exists, and refuses any
+        other result except None, which it records as no device (null). An
+        executor without device() is read as naming "none (compile only)"
+        when it declares compile_only, and no device (null) otherwise.
+        """
         ...
 
 

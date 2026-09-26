@@ -39,6 +39,7 @@
 | cuda | fixture-cuda |
 | nvhpc | fixture-nvhpc |
 | rocm | not used |
+| gcc | not used |
 
 ## Reference run
 

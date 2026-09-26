@@ -22,11 +22,12 @@ The runner checks either kind before any model is asked.
 - baseline builds the item's target reference program in a fresh
   directory under the trial's directory (<trial>/baseline-<language>/build,
   never an attempt's), with the target language's toolchain and the item's
-  support files as harness files, and runs it when the executor runs
-  programs (capability `runs_code`), with the item's run arguments and
-  reference_limits. The target's run is kept in Trial.reference_run (exit
-  code, hang flag, wall time, stdout in the text store, and the RunResult
-  flags as bools); the source reference's run is never recorded. A cut
+  support files as harness files, and runs it when that language's
+  executor (executor_for) runs programs (capability `runs_code`), with the
+  item's run arguments and reference_limits. The target's run is kept in
+  Trial.reference_run (exit code, hang flag, wall time, stdout in the text
+  store, and the RunResult flags as bools); the source reference's run is
+  never recorded. A cut
   output does not end the trial. A reference that does not build ends the
   trial with final.end_reason `baseline-compile`, and a run that exits
   nonzero or hangs with `baseline-run`; the runner then runs no later stage,
@@ -327,6 +328,10 @@ class RunContext:
     """What every stage of one trial reads: the recipe, the components, the bench item, and the run's settings.
 
     `toolchains` maps a language to the toolchain that builds it.
+    `executor` runs the trial's attempts: the target language's executor.
+    `executors` maps each language to its executor when the recipe binds
+    executors per language (task P4.5), and is empty for the single form,
+    whose one executor is `executor`; executor_for reads both.
     `build_root` is the root that lassi.executors.workdir.build_dir places each
     attempt's build directory under; the runner passes the run directory, so
     one run's builds never meet another's. `prompts` is the prompt set, and
@@ -355,6 +360,23 @@ class RunContext:
     fragments: Mapping[str, str] = field(default_factory=dict)
     packs: Mapping[str, str] = field(default_factory=dict)
     artifacts: dict[int, Path] = field(default_factory=dict)
+    executors: Mapping[str, Executor] = field(default_factory=dict)
+
+
+def executor_for(context: RunContext, language: str) -> Executor:
+    """Return the executor that runs programs in `language`: its own with executors per language, else the one.
+
+    With executors per language, a language without one raises ValueError
+    rather than run on another language's executor; the runner refuses such
+    a recipe before any directory exists.
+    """
+    if not context.executors:
+        return context.executor
+    executor = context.executors.get(language)
+    if executor is None:
+        bound = ", ".join(sorted(context.executors))
+        raise ValueError(f"no executor is bound for {language!r}; executors are bound for: {bound}")
+    return executor
 
 
 def target_files(context: RunContext) -> list[str]:
@@ -708,9 +730,10 @@ class BaselineStage:
     def __call__(self, trial: Trial) -> Trial:
         """Return `trial` with the target reference's run kept, or ended with a baseline end reason.
 
-        The target reference is built, and run when the executor runs
-        programs; with the baseline_both fix on, the source reference follows
-        (unless the direction's two languages are one). The first failure
+        The target reference is built, and run when its language's executor
+        runs programs; with the baseline_both fix on, the source reference
+        follows (unless the direction's two languages are one), on the source
+        language's executor (executor_for). The first failure
         sets final.end_reason and stops the stage. Then the references'
         agreement is measured when it applies (_agreement).
         """
@@ -728,19 +751,28 @@ class BaselineStage:
         return self._agreement(trial, runs)
 
     def describe(self) -> str:
-        """Return a one-line description of the stage."""
+        """Return a one-line description of the stage: each reference it builds, and runs on its own executor.
+
+        A reference runs only when its language's executor runs programs
+        (executor_for), so with a compile-only source executor the source
+        reference is described as built, not run.
+        """
         direction = self.context.direction
-        both = fix_on(self.context, "baseline_both")
-        which = f"the {direction.target} and {direction.source}" if both else f"only the {direction.target}"
-        runs = RUNS_CODE in getattr(self.context.executor, "capabilities", ())
-        action = "build and run" if runs else "build"
-        text = f"baseline: {action} {which} reference program(s) before any model call"
-        if runs and self.files_oracle is not None:
-            text += ", keeping their output files for the oracle"
+        both = fix_on(self.context, "baseline_both") and direction.source != direction.target
+        languages = [direction.target, direction.source] if both else [direction.target]
+        running = [RUNS_CODE in getattr(executor_for(self.context, lang), "capabilities", ()) for lang in languages]
+        only = "" if fix_on(self.context, "baseline_both") else "only "
+        parts = [
+            f"{'build and run' if runs else 'build'} {only}the {language} reference program"
+            for language, runs in zip(languages, running, strict=True)
+        ]
+        text = f"baseline: {' and '.join(parts)} before any model call"
+        if any(running) and self.files_oracle is not None:
+            text += ", keeping the target reference's output files for the oracle"
         return text
 
     def _reference(self, trial: Trial, language: str) -> tuple[Trial, RunResult | None]:
-        """Build the item's reference in `language` and run it when the executor runs programs.
+        """Build the item's reference in `language` and run it when that language's executor runs programs.
 
         Returns the trial and the RunResult (None when nothing ran). A build
         with no artifact ends the trial with `baseline-compile`, and a run
@@ -760,10 +792,11 @@ class BaselineStage:
         result = _harness_build(context, toolchain, files, workdir)
         if result.artifact is None:
             return _ended(trial, BASELINE_COMPILE, self._build_message(language, files, toolchain, result)), None
-        if RUNS_CODE not in getattr(context.executor, "capabilities", ()):
+        executor = executor_for(context, language)
+        if RUNS_CODE not in getattr(executor, "capabilities", ()):
             return trial, None
         item = context.suite.item(context.item, purpose=PURPOSE)
-        run = context.executor.run(result.artifact, list(item.run_args), reference_limits(context))
+        run = executor.run(result.artifact, list(item.run_args), reference_limits(context))
         target = language == context.direction.target
         info = _run_info(context, run, keep_outputs=target and self.files_oracle is not None)
         if target:

@@ -1,0 +1,16 @@
+# Host g++ pin (task P4.5; bible Toolchain Pins, Execution Backends native row). The project does not install
+# this compiler: it is the build host's g++-12 package, pinned by version and path, so there is no gcc.sh and no
+# PREFIX_NAME. lassi.core.runner runs EXECUTABLE --version in the compile sandbox before the first build and
+# refuses output without EXPECT_VERSION (Agent Rule 10).
+NAME=gcc
+# gcc-12 and g++-12 12.3.0 on alpha01: plans/spikes/p4-tt-pins.md, Host build prerequisites (dpkg read in
+# rx 20260924-185249-exec-1540).
+VERSION=12.3.0
+# The versioned driver of that package, outside the scratch disk; /usr/bin/g++ is the host's default, which may move.
+EXECUTABLE=/usr/bin/g++-12
+# The native row's flags, in order; lassi.toolchains.gcc builds with exactly these.
+FLAGS="-O3 -fopenmp"
+# The banner text after the program name: /usr/bin/g++-12 --version printed
+# "g++-12 (Ubuntu 12.3.0-1ubuntu1~22.04.3) 12.3.0" in rx 20260925-192127-exec-fcd6 (a link to
+# x86_64-linux-gnu-g++-12); GCC prints the invoked name first, so the program name is left out.
+EXPECT_VERSION="(Ubuntu 12.3.0-1ubuntu1~22.04.3) 12.3.0"

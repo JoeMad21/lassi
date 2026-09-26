@@ -1,0 +1,26 @@
+{
+  "gcc_clean": {
+    "scenario": "Clean build: an OpenMP parallel loop with a reduction under the native flags, empty stderr, exit status 0",
+    "toolchain": "gcc-native"
+  },
+  "gcc_header_error": {
+    "scenario": "Error in an included header: main.cpp includes kernels/scale.h, whose inline function uses the undeclared identifier factor, so GCC prints the include chain and the function context before the error",
+    "toolchain": "gcc-native"
+  },
+  "gcc_note_chain": {
+    "scenario": "Note chain: main calls scale with an int array, which matches neither the float nor the double overload, so the error is followed by a candidate note and a conversion note for each overload",
+    "toolchain": "gcc-native"
+  },
+  "gcc_syntax_error": {
+    "scenario": "Syntax error: the declaration of total in main has no semicolon before the for loop",
+    "toolchain": "gcc-native"
+  },
+  "gcc_undeclared_identifier": {
+    "scenario": "Undeclared identifier: a loop body in main uses undefined_var, which is never declared",
+    "toolchain": "gcc-native"
+  },
+  "gcc_wall_warning": {
+    "scenario": "Warning that -Wall enables: an unused variable in main, with -Wunused-variable turned on by a diagnostic pragma since the native flags hold no -Wall; the build succeeds",
+    "toolchain": "gcc-native"
+  }
+}

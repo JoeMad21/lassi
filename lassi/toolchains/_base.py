@@ -2,8 +2,8 @@
 
 lassi.toolchains re-exports CommandResult, CommandRunner, subprocess_runner,
 capped_runner, CappedRunner, EnvRunner, and STDERR_ATTACHMENT from here. The
-adapters in lassi.toolchains.nvcc and lassi.toolchains.nvcpp subclass
-CompilerToolchain, which holds build().
+adapters in lassi.toolchains.nvcc, lassi.toolchains.nvcpp, and
+lassi.toolchains.gcc subclass CompilerToolchain, which holds build().
 
 Every runner drains stdout and stderr on one thread per pipe while the
 command runs, so the command never blocks on a full pipe (threads rather than

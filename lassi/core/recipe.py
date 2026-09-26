@@ -5,14 +5,25 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
 1. parses each file strictly (a repeated key is an error, never a silent overwrite, and nesting is bounded);
 2. refuses any key the schema below does not list, naming the file and dotted path;
 3. follows `extends` to the root ancestor;
-4. merges from the root down, the child winning (mappings merge, anything else is replaced, and a
-   kind section that names a new kind replaces the inherited one);
+4. merges from the root down, the child winning (mappings merge, anything else is replaced, a
+   kind section that names a new kind replaces the inherited one, and an executor section that
+   switches between its two forms replaces the inherited one);
 5. materializes the defaults (`project`: the loaded file's recipe name; `faithful: false`; every fix on);
 6. applies the faithful overrides (bible, Project Recipes Notes; Design Principle 4);
 7. checks types and required choices, never picking a value for a choice left open;
 8. binds components and checks their capabilities without constructing any (Component Interfaces), and
    refuses a faithful recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES);
 9. serializes the resolved mapping to canonical YAML and hashes it.
+
+`executor` has two forms (task P4.5). The single form is a kind section, `{kind: <name>, <config>...}`,
+binding one Executor at executor.kind for every language. The per-language form is a non-empty mapping
+without `kind`, from a language to an Executor name (`cuda: native`) or to a kind section with that
+executor's config (`omp: {kind: native, harness: ...}`), like `toolchain`; it binds one Executor per
+language, at executor.<language> or executor.<language>.kind, in sorted language order
+(executor_languages). A mapping with `kind` is always the single form, so a file that sets only config keys
+of an inherited single form restates its kind. Within the per-language form a child merges entry by entry:
+two mappings for one language merge unless the child names another kind, which replaces the inherited entry,
+and any other child entry replaces it.
 
 The canonical YAML, with a two-line header, is the resolved recipe every run saves
 and can be rerun from (Design Principle 5). It always holds `project`, the first
@@ -244,6 +255,66 @@ class _KindSection:
                 _check_free(item, _join(path, key))
 
 
+@dataclass(frozen=True)
+class _ExecutorSection:
+    """The executor section: a kind section (the single form) or a mapping from language to executor.
+
+    A mapping with `kind`, and an empty mapping, are checked as a kind
+    section. Any other mapping is the per-language form: each key a
+    language, each value an Executor name (a string) or a kind section,
+    checked at executor.<language>; a value that is neither is refused there.
+    """
+
+    def keys(self, value: Any, path: str) -> None:
+        """Config keys are checked later, against each bound component."""
+
+    def check(self, value: Any, path: str) -> None:
+        """Check the section in whichever form it has; refuse an entry that is neither a name nor a kind section."""
+        if _executor_form(value) != _PER_LANGUAGE:
+            _KIND.check(value, path)
+            return
+        for language, entry in value.items():
+            where = _join(path, language)
+            _expect(language, str, "a string key", where)
+            if entry is None:
+                raise _SchemaError(_required_message(where))
+            if isinstance(entry, str):
+                continue
+            if isinstance(entry, dict) and "kind" in entry:
+                _KIND.check(entry, where)
+                continue
+            raise _SchemaError(
+                f"{where} must be an Executor name or a kind section {{kind: <name>, ...}}, not {_describe(entry)} "
+                f"(an executor section without {_join(path, 'kind')} binds one executor per language)"
+            )
+
+
+# The two forms of the executor section (_executor_form).
+_SINGLE = "single"
+_PER_LANGUAGE = "per-language"
+
+
+def _executor_form(value: Any) -> str | None:
+    """Return the form of an executor section: _SINGLE, _PER_LANGUAGE, or None when it is no mapping or is empty.
+
+    A mapping with `kind` is the single form; a non-empty mapping without
+    it is the per-language form.
+    """
+    if not isinstance(value, dict) or not value:
+        return None
+    return _SINGLE if "kind" in value else _PER_LANGUAGE
+
+
+def executor_languages(data: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return the languages a resolved recipe binds an Executor for, sorted; () for the single form.
+
+    The recipe's Executor bindings follow this order in the per-language
+    form, one per language.
+    """
+    section = data.get("executor")
+    return tuple(sorted(section)) if _executor_form(section) == _PER_LANGUAGE else ()
+
+
 def _check_free(value: Any, path: str) -> None:
     """Check a free-form config value: plain YAML data with string keys and no null anywhere.
 
@@ -265,7 +336,7 @@ def _check_free(value: Any, path: str) -> None:
         raise _SchemaError(f"{path} must be a string, finite number, boolean, list, or mapping, not {_describe(value)}")
 
 
-_Spec = _Leaf | _Fields | _OpenMap | _ListOf | _KindSection
+_Spec = _Leaf | _Fields | _OpenMap | _ListOf | _KindSection | _ExecutorSection
 
 
 def _is_int(value: Any) -> bool:
@@ -302,6 +373,7 @@ _AT_LEAST_ONE = _Leaf("an integer of at least 1", lambda value: _is_int(value) a
 _CORRECTIONS = _Leaf(f"an integer of at least 0 or {UNCAPPED!r}", _is_corrections)
 _STRINGS = _ListOf(_STR)
 _KIND = _KindSection()
+_EXECUTOR = _ExecutorSection()
 
 # Every key a run recipe may hold and its type. Inside a fixed mapping every key is optional unless REQUIRED
 # names it, and any other key is unknown. Train recipes are not run recipes; their keys are unknown here.
@@ -327,7 +399,7 @@ SCHEMA = _Fields(
         "context": _STRINGS,
         "toolchain": _OpenMap(_STR),
         "stages": _ListOf(_STR, non_empty=True),
-        "executor": _KIND,
+        "executor": _EXECUTOR,
         "oracle": _KIND,
         "profiler": _KIND,
         "adversary": _KIND,
@@ -362,7 +434,7 @@ REQUIRED: tuple[str, ...] = (
     "bench.split",
     "directions",
     "stages",
-    "executor.kind",
+    "executor.kind",  # in the single form; the per-language form names a kind in each entry instead
 )
 
 # Kind sections in binding order, with the interface each binds.
@@ -730,10 +802,37 @@ def _overlay(merged: Mapping[str, Any], child: Mapping[str, Any]) -> dict[str, A
     section instead of merging with it: the old component's config keys do not
     apply to the new one (the bible's tier-1 compile-only executor, `{kind: none}`,
     in place of a GPU executor with a host). Restating the same kind merges as usual.
+    An executor section that switches between the single and the per-language
+    form replaces the inherited one too, and two per-language sections merge
+    entry by entry (_merge_executors).
     """
     switched = {section for section, _ in _KIND_SECTIONS if _names_other_kind(merged.get(section), child.get(section))}
+    inherited, own = merged.get("executor"), child.get("executor")
+    forms = (_executor_form(inherited), _executor_form(own))
+    if None not in forms and forms[0] != forms[1]:
+        switched.add("executor")
     kept = {key: value for key, value in merged.items() if key not in switched}
-    return _merge(kept, child)
+    result = _merge(kept, child)
+    if forms == (_PER_LANGUAGE, _PER_LANGUAGE):
+        result["executor"] = _merge_executors(inherited, own)
+    return result
+
+
+def _merge_executors(inherited: Mapping[str, Any], child: Mapping[str, Any]) -> dict[str, Any]:
+    """Merge two per-language executor sections: the child's entries win, entry by entry.
+
+    Two mappings for one language merge unless the child names another
+    kind, which replaces the inherited entry (its config keys belong to the
+    old component), so a child mapping without kind adds or changes config
+    keys of the inherited kind section; any other child entry replaces the
+    inherited one.
+    """
+    merged = dict(inherited)
+    for language, entry in child.items():
+        old = merged.get(language)
+        both_kinds = isinstance(old, dict) and isinstance(entry, dict)
+        merged[language] = _merge(old, entry) if both_kinds and not _names_other_kind(old, entry) else entry
+    return merged
 
 
 def _names_other_kind(inherited: Any, value: Any) -> bool:
@@ -762,8 +861,14 @@ def _fresh(value: Any) -> Any:
 
 
 def _check_required(data: Mapping[str, Any]) -> None:
-    """Raise a required-choice problem for the first REQUIRED key the resolved mapping does not state."""
+    """Raise a required-choice problem for the first REQUIRED key the resolved mapping does not state.
+
+    executor.kind is required of the single form only: the per-language form
+    names a kind in each entry, which the schema check already required.
+    """
     for dotted in REQUIRED:
+        if dotted == "executor.kind" and executor_languages(data):
+            continue
         value: Any = data
         for part in dotted.split("."):
             if not isinstance(value, dict) or part not in value:
@@ -797,7 +902,12 @@ def _check_faithful_toolchains(
 
 
 def _bindings(data: Mapping[str, Any]) -> list[Binding]:
-    """Return the components the resolved mapping binds, in the order below; absent sections bind nothing."""
+    """Return the components the resolved mapping binds, in the order below; absent sections bind nothing.
+
+    A per-language executor section binds one Executor per language, in
+    executor_languages order, at executor.<language> for a name and
+    executor.<language>.kind for a kind section.
+    """
     found: list[Binding] = []
 
     def bind(interface: str, name: str, where: str, config: Mapping[str, Any] | None = None) -> None:
@@ -808,7 +918,15 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
     for key in sorted(data.get("toolchain", {})):
         bind("Toolchain", data["toolchain"][key], f"toolchain.{key}")
     for section, interface in _KIND_SECTIONS:
-        if section in data:
+        if section == "executor" and executor_languages(data):
+            for language in executor_languages(data):
+                entry = data[section][language]
+                if isinstance(entry, str):
+                    bind(interface, entry, f"{section}.{language}")
+                else:
+                    config = {key: value for key, value in entry.items() if key != "kind"}
+                    bind(interface, entry["kind"], f"{section}.{language}.kind", config)
+        elif section in data:
             config = {key: value for key, value in data[section].items() if key != "kind"}
             bind(interface, data[section]["kind"], f"{section}.kind", config)
     for index, stage in enumerate(data.get("stages", [])):

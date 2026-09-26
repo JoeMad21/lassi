@@ -37,6 +37,7 @@ from lassi.toolchains._stderr import (
     LinePattern,
     compile_diagnostic,
     cuda_tool_diagnostic,
+    fold_built_column,
     fold_edg_lines,
     parse_stderr,
 )
@@ -179,15 +180,8 @@ def _inline_asm(match: re.Match[str]) -> Diagnostic:
 
 
 # GCC style lines: nvc++ compiles the built files itself, with no regenerated source in between, so a GCC style
-# line on a built file keeps its column as printed; no capture shows one yet. Any other place gets no column.
-def _gcc_column(
-    diagnostic: Diagnostic, lines: list[str], index: int, files: Mapping[str, str], patterns: Sequence[LinePattern]
-) -> tuple[Diagnostic, int]:
-    """Keep GCC's column only when the named file is a key of `files`, else set it to None; consume no line."""
-    if diagnostic.file in files:
-        return diagnostic, index
-    return dataclasses.replace(diagnostic, column=None), index
-
+# line on a built file keeps its column as printed (fold_built_column); no capture shows one yet. Any other place
+# gets no column.
 
 # Tried in this order on each line; the linker pattern is last because it is the loosest. The driver, nvlink, and
 # inline asm patterns come before the GCC style one (see each).
@@ -197,7 +191,7 @@ _PATTERNS = (
     LinePattern(_DRIVER, _driver),
     LinePattern(_NVLINK, cuda_tool_diagnostic),
     LinePattern(_INLINE_ASM, _inline_asm),
-    dataclasses.replace(GCC, fold=_gcc_column),
+    dataclasses.replace(GCC, fold=fold_built_column),
     COLLECT2,
     UNDEFINED_REFERENCE,
 )
@@ -208,7 +202,7 @@ def parse_diagnostics(stderr: str, files: Mapping[str, str] = NO_FILES) -> list[
 
     `files` (relative path -> text) are the files built; an EDG diagnostic
     gets its column by aligning the source echo with its line in them, a
-    GCC style diagnostic keeps its column only on one of them (_gcc_column),
+    GCC style diagnostic keeps its column only on one of them (fold_built_column),
     and a linker place, or a backend place with no line, is kept only as one
     of them; an nvlink, driver, or inline asm diagnostic has no place (an
     inline asm place stays in the message). Lines that match no pattern are

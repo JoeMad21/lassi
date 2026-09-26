@@ -6,6 +6,11 @@ lassi.core.registry.DEFAULT_REGISTRY:
 - "none" (none.NoneExecutor): compile only; it runs nothing.
 - "native" (native.NativeExecutor): runs a CPU artifact.
 
+Each executor names the device its programs run on with device(), one
+non-empty line of printable ASCII with no leading or trailing blank, which
+starts no process (task P4.5): "none (compile only)" for none, and the host
+CPU with its model for native.
+
 Every executor that runs generated code runs it only through
 lassi.executors.sandbox (Agent Rule 6), whose names are re-exported here:
 Sandbox, SandboxSpec, SandboxResult, SandboxUnavailableError,

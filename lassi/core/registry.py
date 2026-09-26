@@ -18,9 +18,10 @@ kind section is built as `factory(**binding.config)`; an LLM backend as
 `factory(model_id)`, with keyword settings left at their defaults unless the
 caller passes them. A stage is built as `factory(context=<RunContext>)`, one
 stage object per trial (lassi.core.stages). A toolchain that declares a pin
-(PIN and PIN_BIN) is built as `factory(executable=<pinned path>,
-runner=SandboxedCompileRunner(<clean environment>, ...))`, and one without
-as `factory()` (lassi.core.runner). A ScoreProfile that declares
+(PIN, with PIN_BIN for a compiler under the toolchains root, or without it
+for a host compiler named by the pin's EXECUTABLE) is built as
+`factory(executable=<pinned path>, runner=SandboxedCompileRunner(<clean
+environment>, ...))`, and one without as `factory()` (lassi.core.runner). A ScoreProfile that declares
 `reads_bench_sources` is built as `factory(bench_root=<suite sources>)`, and
 one without as `factory()` (lassi.scoring.profiles.build_profile).
 """

@@ -2245,17 +2245,22 @@ def test_each_trial_records_the_pins_of_the_toolchain_that_builds_its_target(
 
 
 def test_every_default_toolchain_declares_a_pin_the_runner_can_read() -> None:
-    # A Toolchain registered without PIN would compile with whatever compiler PATH finds (Agent Rule 10).
+    # A Toolchain registered without PIN would compile with whatever compiler PATH finds (Agent Rule 10). A class
+    # with PIN_BIN finds its compiler under the pin's install prefix; one without PIN_BIN (gcc-native, task P4.5)
+    # uses a host compiler the pin names by an absolute EXECUTABLE, with no install prefix.
     names = DEFAULT_REGISTRY.names("Toolchain")
     assert names
     for name in names:
         factory = DEFAULT_REGISTRY.get("Toolchain", name).factory
-        assert isinstance(getattr(factory, "PIN", None), str) and isinstance(getattr(factory, "PIN_BIN", None), str), (
-            name
-        )
+        assert isinstance(getattr(factory, "PIN", None), str), name
         pin = read_pin(factory.PIN)
-        assert pin["VERSION"] and pin["PREFIX_NAME"], name
-        factory.PIN_BIN.format_map(pin)
+        assert pin["VERSION"], name
+        pin_bin = getattr(factory, "PIN_BIN", None)
+        if pin_bin is None:
+            assert pin["EXECUTABLE"].startswith("/") and "PREFIX_NAME" not in pin, name
+            continue
+        assert isinstance(pin_bin, str) and pin["PREFIX_NAME"], name
+        pin_bin.format_map(pin)
 
 
 # ---------------------------------------------------------------------------
