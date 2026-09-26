@@ -22,7 +22,7 @@ components:
 scalar: correct
 
 # Note texts, plain ASCII. The profile gives within_10pct and correct_paper as they stand, and compile_only,
-# not_aligned, and baseline as the note of correct (and of first_try) when correct is None. baseline also notes
+# not_aligned, baseline, and gap as the note of correct (and of first_try) when correct is None. baseline also notes
 # compiled, compiled_first_try, and the similarity values of a trial that ended at the baseline, with the end
 # reason code appended; no_attempt notes the similarity values of any other trial with no attempt. Each similarity
 # note gets the interpreter that computed the value.
@@ -30,8 +30,11 @@ notes:
   within_10pct: "not measured: no timing profiler exists yet, and the proxy checks outputs, never runtime"
   correct_paper: "not computed: the paper's criterion is a manual inspection of stdout against the reference"
   compile_only: "compile-stage reproduction: no program ran, so correct output was not checked"
-  not_aligned: "not computed: the output that stands came from a clean run that the oracle did not align"
+  not_aligned: "not computed: the output that stands came from a clean run (exit status 0, no hang, no undefined
+    behavior) that the oracle did not align"
   baseline: "not computed: the trial ended at the baseline, before any model call"
+  gap: "not computed: the trial ended at sim-gap, so the output that stands came from a run that stopped at a
+    simulator gap, which is not a model error"
   no_attempt: "not computed: the trial holds no attempt to compare"
   sim_t: "faithful Sim-T: Python tokenize tokens, difflib ratio with autojunk on"
   sim_t_c: "C-aware Sim-T: 2M/T over C tokens, difflib with autojunk off"

@@ -118,11 +118,19 @@ host), resolve inside it (Agent Rule 7). The tree holds:
 - run.md: the page a person reads (Readability Standards, Run row). Its
   summary shows the manifest's provenance, with an unknown value (null) as
   "-" as trial.md shows it, since provenance is not a measurement; with
-  executors per language, one Device row per language. With
+  executors per language, one Device row per language. When a direction's
+  target language, or its source language when the baseline runs the
+  source reference too, runs on an executor that declares `simulator`
+  (lassi.core.capabilities SIMULATOR), its Trials section opens with a
+  note naming those languages: their run wall times are simulator wall
+  time, not performance, and the wall_s column is each trial's pipeline
+  wall time (task P4.6). With
   `metrics` it ends in a Metrics section
   (lassi.scoring.run_scoring.metrics_section);
 - one directory per trial (one level per trial_id segment) with trial.json,
-  trial.md, and attempt<NN>/build, each attempt's fresh build directory
+  trial.md (each run's wall_s row labeled as simulator wall time when the
+  trial's target-language executor declares `simulator`), and
+  attempt<NN>/build, each attempt's fresh build directory
   (the run directory is the stages' build root, so a rerun of the recipe
   never meets an earlier run's builds);
 - texts/, the text store of prompts and replies; parquet/, the mirror, which
@@ -187,7 +195,7 @@ from typing import Any
 
 from lassi.bench import Direction, Suite, load_suite, sources_dir
 from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
-from lassi.core.capabilities import UNLOAD_BEFORE_RUN, declares, unload_before_run
+from lassi.core.capabilities import SIMULATOR, UNLOAD_BEFORE_RUN, declares, unload_before_run
 from lassi.core.fragments import fragment_key, pack_language
 from lassi.core.interfaces import Executor, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
@@ -1556,15 +1564,17 @@ def _run_trials(run: _Run, manifest: Mapping[str, Any]) -> list[Trial]:
     Each trial carries the provenance the first-written `manifest` gives its
     direction's target language (_trial_provenance). The recipe's `score`
     profile, when it binds one, scores each trial before it is written
-    (_scored).
+    (_scored). Its trial.md labels its run wall times as simulator wall time
+    when its target language's executor declares SIMULATOR (task P4.6).
     """
     trials: list[Trial] = []
     for direction in run.settings.directions:
         provenance = _trial_provenance(manifest, direction.target)
+        simulator = declares(run.executors.for_language(direction.target), SIMULATOR)
         for item in run.bench.items:
             for number in range(1, run.settings.trials + 1):
                 trial = _scored(run, _run_trial(run, provenance, direction, item, number))
-                write_trial(trial, run.run_dir, run.store)
+                write_trial(trial, run.run_dir, run.store, simulator=simulator)
                 trials.append(trial)
                 final = trial.final
                 ended = "" if final.end_reason is None else f"  end {final.end_reason.code}"
@@ -1824,6 +1834,43 @@ def _trial_blocks(trials: Sequence[Trial]) -> list[str]:
     return blocks or ["No trials.\n"]
 
 
+def _simulator_note(run: _Run, trials: Sequence[Trial]) -> list[str]:
+    """Return the Trials section's note on simulator wall times, or nothing (task P4.6; Agent Rule 2).
+
+    The note is written when the run has trials and _simulated_languages
+    names any language; it names them. Otherwise run.md is as before.
+    """
+    languages = _simulated_languages(run)
+    if not trials or not languages:
+        return []
+    return [
+        f"The {', '.join(languages)} programs of this run ran on a simulator executor: their run wall times are "
+        "simulator wall time, not performance, and trial.md labels each one it shows. The wall_s column below is "
+        "each trial's pipeline wall time, which includes those runs, so it is not performance either.\n"
+    ]
+
+
+def _simulated_languages(run: _Run) -> list[str]:
+    """Return, sorted, each language whose programs the run's trials run on an executor that declares SIMULATOR.
+
+    A direction's target language counts when its executor declares it, and
+    so does its source language when a listed stage builds the source
+    reference under a fix that is on (`source_build_fix`, baseline under
+    baseline_both), since that reference then runs on the source language's
+    executor and its run time is part of the trial's pipeline wall time.
+    """
+    stages = [run.registry.get("Stage", name).factory for name in run.recipe.data["stages"]]
+    fixes = [getattr(stage, "source_build_fix", None) for stage in stages]
+    sources = any(fix is not None and run.recipe.data["fixes"].get(fix, True) is not False for fix in fixes)
+    found: set[str] = set()
+    for direction in run.settings.directions:
+        languages = [direction.target]
+        if sources and direction.source != direction.target:
+            languages.append(direction.source)
+        found.update(language for language in languages if declares(run.executors.for_language(language), SIMULATOR))
+    return sorted(found)
+
+
 def _executor_rows(provenance: Mapping[str, Any]) -> list[tuple[str, str]]:
     """Return run.md's executor rows: Executor and Device, or, per language, the executors and one Device row each."""
     if "devices" not in provenance:
@@ -1838,7 +1885,8 @@ def _run_md(
 ) -> str:
     """Return run.md: the run summary, the resolved recipe, the toolchain pins, and one trials table per arm.
 
-    With `metrics` (the recipe names metrics), a Metrics section follows
+    The Trials section opens with _simulator_note when it applies. With
+    `metrics` (the recipe names metrics), a Metrics section follows
     the trials (lassi.scoring.run_scoring.metrics_section). It is
     deterministic for given records, plain ASCII (non-ASCII becomes
     backslash escapes) with LF newlines, and names no absolute run path, so
@@ -1859,7 +1907,7 @@ def _run_md(
     blocks += ["## Resolved recipe\n", fenced(resolved_yaml(run.recipe), "yaml")]
     pin_header = ("Toolchain", "Languages", "Pin", "Version", "Install prefix")
     blocks += ["## Toolchain pins\n", _md_table(pin_header, _pin_rows(run.toolchains))]
-    blocks += ["## Trials\n", *_trial_blocks(trials)]
+    blocks += ["## Trials\n", *_simulator_note(run, trials), *_trial_blocks(trials)]
     if metrics is not None:
         blocks.append(metrics_section(metrics, run.scoring.score))
     return "\n".join(blocks).encode("ascii", "backslashreplace").decode("ascii")

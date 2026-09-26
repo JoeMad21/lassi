@@ -29,9 +29,15 @@ The runner checks either kind before any model is asked.
   store, and the RunResult flags as bools); the source reference's run is
   never recorded. A cut
   output does not end the trial. A reference that does not build ends the
-  trial with final.end_reason `baseline-compile`, and a run that exits
-  nonzero or hangs with `baseline-run`; the runner then runs no later stage,
-  so no model is asked. When the recipe's Oracle compares output files
+  trial with final.end_reason `baseline-compile`. A run is read in this
+  order (task P4.6; _reference_run_end): a simulator gap
+  (RunResult.sim_gap) ends it with `sim-gap`, the message naming the gap's
+  class, whatever the exit status; then a hang, undefined behavior
+  (RunResult.sim_ub, even after exit status 0), or an exit status other
+  than 0 ends it with `baseline-run`. The baseline does not read a
+  reference run's diagnostics, so a kernel JIT error there counts only
+  through the exit status, and a reference run that hangs gets no hang
+  diagnostic. The runner then runs no later stage, so no model is asked. When the recipe's Oracle compares output files
   (capability aligns_output_files, output_file_oracle), the target's output
   files are also kept in the binary store (RunInfo.outputs), a reference
   run whose output files that Oracle cannot compare against (an unreadable
@@ -92,6 +98,30 @@ The runner checks either kind before any model is asked.
   trial's RunContext (RunContext.artifacts), in memory and not in the
   record, so an attempt cannot be run again from the record alone.
 
+  Simulator readings (task P4.6; RunResult's findings, never the
+  executor's name). The attempt also gains the executor's diagnostics of
+  the run (RunResult.diagnostics) and records RunResult.sim_ub in
+  Attempt.run, then reads the run in this order (run_stage and
+  RunLoopStage.__call__): a jit-stage error, then a gap, then undefined
+  behavior, a hang, or the exit status. A jit-stage error among those
+  diagnostics is a kernel JIT failure, whatever else the run reported: the
+  attempt, run recorded, drops to S1 with no run-error, and
+  compile_loop asks for its correction as for a compile error (Request
+  stage compile_loop, the attempt's parsed diagnostics in the prompt,
+  under the same count and cap). Undefined behavior (sim_ub True) is a
+  failed run, S4 even after exit status 0, fed back like any other. A
+  simulator gap (sim_gap) in a run with no jit-stage error leaves the
+  attempt at S4 with no run-error and ends the trial with `sim-gap`, the
+  message naming the gap's class, with no correction, whatever the exit
+  status and even when the run also reported undefined behavior.
+  The run-error message and the error text name the undefined
+  behavior (UB_FINDING), and for a run that hung on an executor that
+  declares `simulator` (lassi.core.capabilities SIMULATOR) they carry the
+  Harness Contract's hang diagnostic (HANG_DIAGNOSTIC), a likely
+  circular-buffer or semaphore deadlock (run_findings). That text is the
+  ttsim hint (circular buffers and semaphores are tt-metal constructs);
+  any executor that declares `simulator` gets it.
+
 A context stage names the Trial.context field it fills in `fills_context`,
 and generate names the fields its fragment prompt joins, when a pack serves
 the target, in `joins_context`; the runner checks that an earlier stage
@@ -104,7 +134,8 @@ the stage that sends it keeps each message it sends in the text store
 before sending, system messages included, and appends a Request with those
 references, the attempt its reply became (None for a context request), and
 the reply as kept. A correction is recorded under the loop stage that asked
-for it: compile_loop for a compile error, run_loop for a failed run. An
+for it: compile_loop for a compile error (a kernel JIT failure included),
+run_loop for a failed run. An
 attempt's own `invalid-text` warning stays on the attempt; Trial.context
 carries no diagnostics, so a context reply that held a lone surrogate gives
 its request one parse-stage `invalid-text` warning.
@@ -157,13 +188,16 @@ and reward reads (Design Principle 2):
   error is `missing-file`, an expected file with no block. That error is
   the build error of the Harness Contract: compile_loop feeds it back to
   the model in the correction prompt without building the incomplete
-  files, so the attempt stays S1.
+  files, so the attempt stays S1. A built attempt whose run reported a
+  kernel JIT error (a jit-stage error in RunResult.diagnostics) is S1 too.
 - S2, verifies, and S3, lowers: the MLIR verifier and the lowering passes.
   Source-level translation has neither step, so these stages never record
   S2 or S3.
-- S4, compiles: the toolchain built the files into an artifact.
+- S4, compiles: the toolchain built the files into an artifact, and no
+  run of it reported a kernel JIT error.
 - S5, runs clean: the artifact ran with no crash, undefined behavior, or
-  hang; the run loop records it.
+  hang (exit status 0, no hang, sim_ub not True, no simulator gap;
+  run_stage); the run loop records it.
 
 Output agreement with the oracle is never a stage: it is Attempt.alignment
 and Final.alignment, which the reward weighs separately. Only run_loop runs
@@ -184,7 +218,7 @@ from typing import cast
 
 from lassi.bench import Direction, Suite
 from lassi.core import fragments as fragment_text
-from lassi.core.capabilities import ALIGNS_OUTPUT_FILES, OutputFileOracle, declares, unload_before_run
+from lassi.core.capabilities import ALIGNS_OUTPUT_FILES, SIMULATOR, OutputFileOracle, declares, unload_before_run
 from lassi.core.files import parse_file_blocks, render_file_blocks
 from lassi.core.interfaces import BuildResult, Executor, Limits, LLMBackend, Message, RunResult, Sampling, Toolchain
 from lassi.core.recipe import Recipe
@@ -223,6 +257,21 @@ BASELINE_RUN = "baseline-run"
 BASELINE_DISAGREE = "baseline-disagree"
 CORRECTION_CAP = "correction-cap"
 UPSTREAM_CRASH = "upstream-crash"
+SIM_GAP = "sim-gap"
+
+# The Diagnostic stage of kernel JIT messages, which an executor parses from a run (RunResult.diagnostics). A jit-stage
+# error means the program's kernels did not compile, so the attempt reached no more than S1 (see the module docstring).
+JIT = "jit"
+# What the stages say about a run's simulator findings (task P4.6), in its run-stage error and its correction prompt:
+# undefined behavior (RunResult.sim_ub), and the Harness Contract's hang diagnostic for an attempt run that hung on an
+# executor that declares SIMULATOR (lassi.core.capabilities). HANG_DIAGNOSTIC is the ttsim hint: circular buffers and
+# semaphores are tt-metal constructs. The stages give it to any executor that declares SIMULATOR, so a simulator of
+# another device gets the same text; a reference run's hang message does not carry it (_reference_run_end).
+UB_FINDING = "the simulator reported undefined behavior"
+HANG_DIAGNOSTIC = (
+    "a hang on a simulator most likely means a deadlock: a circular buffer or a semaphore that a core waits on and "
+    "that is never filled or signalled"
+)
 
 # The capability of an executor that runs programs; baseline runs a reference only on such an executor.
 RUNS_CODE = "runs_code"
@@ -464,19 +513,21 @@ def reference_limits(context: RunContext) -> Limits:
 
 
 def _run_info(context: RunContext, run: RunResult, keep_outputs: bool = False) -> RunInfo:
-    """Return the RunInfo of a run that happened: exit code, hang flag, wall time, stdout in the store, run flags.
+    """Return the RunInfo of a run that happened: exit code, hang flag, UB, wall time, stdout in the store, run flags.
 
     Each RunResult flag (RUN_FLAGS) is copied as a bool, so a run whose
-    output was kept whole records False, never None. With `keep_outputs`,
-    every output file's bytes go into the binary store beside the text store
-    and RunInfo.outputs maps each file to its sha256; otherwise outputs
-    stays None (not recorded).
+    output was kept whole records False, never None. sim_ub is copied as
+    the executor reported it: True, False, or None when it did not check.
+    With `keep_outputs`, every output file's bytes go into the binary store
+    beside the text store and RunInfo.outputs maps each file to its sha256;
+    otherwise outputs stays None (not recorded).
     """
     flags = {flag: bool(getattr(run, flag)) for flag in RUN_FLAGS}
     stdout_ref = context.store.put(run.stdout)
     outputs = _kept_outputs(context, run) if keep_outputs else None
     return RunInfo(
-        exit_code=run.exit_code, hang=run.hang, wall_s=run.wall_s, stdout_ref=stdout_ref, outputs=outputs, **flags
+        exit_code=run.exit_code, hang=run.hang, sim_ub=run.sim_ub, wall_s=run.wall_s, stdout_ref=stdout_ref,
+        outputs=outputs, **flags,
     )
 
 
@@ -507,6 +558,34 @@ def _ended(trial: Trial, code: str, message: str) -> Trial:
     """Return `trial` with final.end_reason set to `code` and `message`; the runner then runs no later stage."""
     reason = EndReason(code=code, message=message)
     return dataclasses.replace(trial, final=dataclasses.replace(trial.final, end_reason=reason))
+
+
+def _reference_run_end(run: RunResult, language: str) -> tuple[str, str] | None:
+    """Return the end code and message of a reference run that ends the trial at the baseline, or None.
+
+    Checked in this order (task P4.6): a simulator gap (RunResult.sim_gap)
+    ends it at SIM_GAP, the message naming the gap's class, whatever the
+    exit status; a hang ends it at BASELINE_RUN; so does undefined behavior
+    (RunResult.sim_ub True), even after exit status 0, the message naming
+    it; and so does an exit status other than 0, or none. A reference's
+    diagnostics (RunResult.diagnostics, kernel JIT errors included) are not
+    read here, so a JIT failure counts only through the exit status, and a
+    hang gets the message it got before task P4.6, with no hang diagnostic.
+    """
+    if run.sim_gap is not None:
+        message = (
+            f"the {language} reference run stopped at a simulator gap, {run.sim_gap}: the simulator cannot run it, "
+            "which is not a model error, so no model is asked"
+        )
+        return SIM_GAP, message
+    if run.hang:
+        return BASELINE_RUN, f"the {language} reference run hung past its wall limit of {REFERENCE_WALL_S} s"
+    status = "no exit status" if run.exit_code is None else f"exit status {run.exit_code}"
+    if run.sim_ub is True:
+        return BASELINE_RUN, f"{UB_FINDING} in the {language} reference run, which ended with {status}"
+    if run.exit_code != 0:
+        return BASELINE_RUN, f"the {language} reference run ended with {status}"
+    return None
 
 
 def _toolchain(context: RunContext, language: str) -> Toolchain:
@@ -775,15 +854,16 @@ class BaselineStage:
         """Build the item's reference in `language` and run it when that language's executor runs programs.
 
         Returns the trial and the RunResult (None when nothing ran). A build
-        with no artifact ends the trial with `baseline-compile`, and a run
-        that exits nonzero, ends with no exit status, or hangs ends it with
-        `baseline-run`, as do output files the recipe's output-file Oracle
-        cannot compare against (reference_problem names the file); that check
-        is skipped for a run whose workdir came back incomplete, since a cut
-        output alone ends nothing. The target's run is kept in
-        Trial.reference_run (_run_info, with its output files in the binary
-        store when that Oracle is bound), a failed one included; the source
-        reference's files are read but not stored.
+        with no artifact ends the trial with `baseline-compile`; a run the
+        reading of _reference_run_end ends (a simulator gap at `sim-gap`; a
+        hang, undefined behavior, or an exit status other than 0 at
+        `baseline-run`) ends it there, as do output files the recipe's
+        output-file Oracle cannot compare against (reference_problem names
+        the file, at `baseline-run`); that check is skipped for a run whose
+        workdir came back incomplete, since a cut output alone ends nothing.
+        The target's run is kept in Trial.reference_run (_run_info, with its
+        output files in the binary store when that Oracle is bound), a failed
+        one included; the source reference's files are read but not stored.
         """
         context = self.context
         files = self._files(language)
@@ -801,12 +881,9 @@ class BaselineStage:
         info = _run_info(context, run, keep_outputs=target and self.files_oracle is not None)
         if target:
             trial = dataclasses.replace(trial, reference_run=info)
-        if run.hang:
-            message = f"the {language} reference run hung past its wall limit of {REFERENCE_WALL_S} s"
-            return _ended(trial, BASELINE_RUN, message), run
-        if run.exit_code != 0:
-            status = "no exit status" if run.exit_code is None else f"exit status {run.exit_code}"
-            return _ended(trial, BASELINE_RUN, f"the {language} reference run ended with {status}"), run
+        end = _reference_run_end(run, language)
+        if end is not None:
+            return _ended(trial, *end), run
         if self.files_oracle is not None and not run.workdir_incomplete:
             problem = self.files_oracle.reference_problem(run.output_files, side=f"{language} reference")
             if problem is not None:
@@ -1193,7 +1270,10 @@ class RunLoopStage:
         runs (Agent Rule 6). Otherwise, while the last attempt
         is S4 and the trial has not ended: past the execution gate (fix off)
         the trial ends unexecuted (_past_gate); else the attempt runs
-        (_run_last). A clean run ends the loop. A failed run with the cap
+        (_run_last). A clean run ends the loop. A kernel JIT failure leaves
+        the attempt at S1, and compile_loop corrects it as a compile error,
+        under the same cap. A simulator gap ends the trial with `sim-gap`
+        (_gap_message), with no correction. A failed run with the cap
         reached ends the trial with `correction-cap`; below it, the
         execute-error correction is appended and compile_loop builds and
         corrects it.
@@ -1209,17 +1289,24 @@ class RunLoopStage:
                 "model-generated code only in the sandbox (Agent Rule 6)"
             )
         cap = context.max_corrections
+        simulator = declares(context.executor, SIMULATOR)
         while trial.final.end_reason is None and trial.attempts[-1].stage_reached == COMPILED:
             index = trial.attempts[-1].index
             if not fix_on(context, "execution_gate") and index > EXECUTION_GATE_CORRECTIONS:
                 return _past_gate(trial)
             trial, run, limits = self._run_last(trial)
-            if trial.attempts[-1].stage_reached == RAN_CLEAN:
+            reached = trial.attempts[-1].stage_reached
+            if reached == RAN_CLEAN:
                 break
+            if reached == PARSED:
+                trial = compile_loop(trial)
+                continue
+            if run.sim_gap is not None:
+                return _ended(trial, SIM_GAP, _gap_message(index, run.sim_gap))
             if cap is not None and index >= cap:
                 message = f"a run error remained after {cap} correction(s), the cap loop.max_corrections sets"
                 return _ended(trial, CORRECTION_CAP, message)
-            errors = run_error_text(run, limits, context.fragments)
+            errors = run_error_text(run, limits, context.fragments, simulator=simulator)
             trial = compile_loop(_corrected(context, trial, self.name, target_files(context), errors, run_error=True))
         return trial
 
@@ -1240,11 +1327,13 @@ class RunLoopStage:
 
         A backend that declares `unload_before_run` is asked to unload first.
         The attempt keeps the run in Attempt.run (_run_info: stdout in the
-        text store, each RunResult flag as a bool, and, when the recipe's
-        Oracle compares output files, every output file in the binary store
-        by hash), gains one warning per
-        RunResult flag that is set (RUN_FLAGS), and is S5 after a
-        clean run; after a failed one it stays S4 with a `run-error`.
+        text store, sim_ub as reported, each RunResult flag as a bool, and,
+        when the recipe's Oracle compares output files, every output file in
+        the binary store by hash), gains the executor's diagnostics of the
+        run (RunResult.diagnostics) and one warning per RunResult flag that
+        is set (RUN_FLAGS), and reaches the stage run_stage gives. A failed
+        run that is neither a JIT failure (S1) nor a simulator gap stays S4
+        with a `run-error` whose message is _run_status's.
         """
         context = self.context
         attempt = trial.attempts[-1]
@@ -1259,14 +1348,12 @@ class RunLoopStage:
         unload_before_run(context.backend)
         run = context.executor.run(artifact, run_args, limits)
         info = _run_info(context, run, keep_outputs=self.keeps_outputs)
-        diagnostics = [*attempt.diagnostics, *_run_flag_warnings(run)]
-        clean = run.exit_code == 0 and not run.hang
-        if not clean:
-            status = _run_status(run, limits)
+        diagnostics = [*attempt.diagnostics, *run.diagnostics, *_run_flag_warnings(run)]
+        reached = run_stage(run)
+        if reached == COMPILED and run.sim_gap is None:
+            status = _run_status(run, limits, simulator=declares(context.executor, SIMULATOR))
             diagnostics.append(Diagnostic(stage="run", severity="error", code=RUN_ERROR, message=status))
-        ran = dataclasses.replace(
-            attempt, run=info, diagnostics=diagnostics, stage_reached=RAN_CLEAN if clean else COMPILED
-        )
+        ran = dataclasses.replace(attempt, run=info, diagnostics=diagnostics, stage_reached=reached)
         return dataclasses.replace(trial, attempts=[*trial.attempts[:-1], ran]), run, limits
 
 
@@ -1290,7 +1377,35 @@ def attempt_limits(context: RunContext, trial: Trial) -> Limits:
     return Limits(wall_s=wall_s, memory_mb=round(float(sandbox["mem_gb"]) * 1024), cpus=RUN_CPUS)
 
 
-def run_error_text(run: RunResult, limits: Limits, fragments: Mapping[str, str]) -> str:
+def run_stage(run: RunResult) -> str:
+    """Return the stage an attempt reaches with the run `run` (task P4.6).
+
+    S1 (PARSED) when the run's diagnostics hold a jit-stage error: the
+    kernels did not compile, and S4 needs host and kernel JIT. Otherwise S5
+    (RAN_CLEAN) after a clean run, exit status 0 with no hang, no undefined
+    behavior (sim_ub True), and no simulator gap, and S4 (COMPILED) after
+    any other run.
+    """
+    if any(item.stage == JIT and item.severity == "error" for item in run.diagnostics):
+        return PARSED
+    clean = run.exit_code == 0 and not run.hang and run.sim_ub is not True and run.sim_gap is None
+    return RAN_CLEAN if clean else COMPILED
+
+
+def run_findings(run: RunResult, simulator: bool) -> list[str]:
+    """Return what the stages say about a failed run's simulator findings, in order; [] when there is none.
+
+    UB_FINDING when the run reported undefined behavior (sim_ub True), and
+    HANG_DIAGNOSTIC when it hung on an executor that declares SIMULATOR
+    (`simulator`), the Harness Contract's hang diagnostic.
+    """
+    findings = [UB_FINDING] if run.sim_ub is True else []
+    if run.hang and simulator:
+        findings.append(HANG_DIAGNOSTIC)
+    return findings
+
+
+def run_error_text(run: RunResult, limits: Limits, fragments: Mapping[str, str], *, simulator: bool = False) -> str:
     """Return the error text of the execute-error prompt for the failed run `run`.
 
     With a fragment set (`fragments` not empty) it is upstream's report of
@@ -1300,14 +1415,20 @@ def run_error_text(run: RunResult, limits: Limits, fragments: Mapping[str, str])
     wrote any stderr, RUN_REPORT_STDERR and the stderr. A hang has no
     upstream counterpart (upstream waits for the program without a limit);
     its report is built the same way from the status the executor gives.
+    Upstream has no simulator either, so the run's findings (run_findings,
+    with `simulator` saying whether the executor declares SIMULATOR)
+    follow the report after one line feed, joined by "; ", when there
+    are any; a run with none gets upstream's report alone. With
+    fixes.prompt_newlines off, _corrected removes that line feed as it
+    removes every other, so the findings then follow the report directly.
     With a template set it is this project's wording [DESIGN]: how the run
-    ended, then the stderr when there is any. Either way the stderr is whole
-    (the executor caps it) and read as text mode reads it, as upstream reads
-    the program's output.
+    ended and its findings (_run_status), then the stderr when there is any.
+    Either way the stderr is whole (the executor caps it) and read as text
+    mode reads it, as upstream reads the program's output.
     """
     stderr = fragment_text.as_text_mode(run.stderr)
     if not fragments:
-        status = _run_status(run, limits)
+        status = _run_status(run, limits, simulator=simulator)
         return f"{status}; its standard error follows:\n{stderr}" if stderr else status
     code = popen_return_code(run.exit_code)
     report = fragments[RUN_REPORT_EXIT] + str(code) + " "
@@ -1315,7 +1436,8 @@ def run_error_text(run: RunResult, limits: Limits, fragments: Mapping[str, str])
         report += fragments[RUN_REPORT_SEGFAULT]
     if stderr:
         report += fragments[RUN_REPORT_STDERR] + stderr
-    return report
+    findings = run_findings(run, simulator)
+    return f"{report}\n{'; '.join(findings)}" if findings else report
 
 
 def popen_return_code(exit_code: int | None) -> int | None:
@@ -1331,13 +1453,28 @@ def popen_return_code(exit_code: int | None) -> int | None:
     return exit_code
 
 
-def _run_status(run: RunResult, limits: Limits) -> str:
-    """Return one sentence saying how a failed run ended: stopped at its wall limit, no exit status, or its status."""
+def _run_status(run: RunResult, limits: Limits, *, simulator: bool = False) -> str:
+    """Return one sentence saying how a failed run ended, then its findings (run_findings), each after "; ".
+
+    How it ended: stopped at its wall limit, no exit status, or its exit
+    status; a run with no finding gets that clause alone, as before task
+    P4.6.
+    """
     if run.hang:
-        return f"the program was stopped at its wall limit of {limits.wall_s:g} s"
-    if run.exit_code is None:
-        return "the program ended with no exit status"
-    return f"the program exited with status {run.exit_code}"
+        status = f"the program was stopped at its wall limit of {limits.wall_s:g} s"
+    elif run.exit_code is None:
+        status = "the program ended with no exit status"
+    else:
+        status = f"the program exited with status {run.exit_code}"
+    return "; ".join([status, *run_findings(run, simulator)])
+
+
+def _gap_message(index: int, gap: str) -> str:
+    """Return the end reason message of a trial whose attempt `index` stopped at the simulator gap `gap`."""
+    return (
+        f"the run of attempt {index} stopped at a simulator gap, {gap}: the simulator cannot run the program, which "
+        "is not a model error, so the trial stops with no correction"
+    )
 
 
 def _run_flag_warnings(run: RunResult) -> list[Diagnostic]:

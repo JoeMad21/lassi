@@ -16,6 +16,14 @@ not. Their outputs row shows the count of recorded output files
 (RunInfo.outputs), PLACEHOLDER when not recorded, and a table after it lists
 each file with its sha256 in the binary store.
 
+Simulator wall times (task P4.6): rendered with `simulator` (the trial's
+target-language executor declares the simulator capability, which the
+runner passes), the wall_s row of the Reference run table and of each
+attempt's Run table is named SIMULATOR_WALL_S, "wall_s (simulator wall
+time, not performance)", and still shows the value. The summary's "Wall
+time (s)" row is the trial's pipeline time (Final.wall_s) and is not
+labeled. Without it the page is as before.
+
 Per-output statistics (task P4.4): a "## Reference agreement" section after
 the reference run shows Trial.reference_agreement when it was measured, and
 an attempt whose Alignment holds statistics shows them under "#### Per
@@ -69,6 +77,9 @@ if TYPE_CHECKING:
     from lassi.core.store import TextStore
 
 PLACEHOLDER = "PLACEHOLDER"
+# The name of a run's wall_s row when the trial's runs ran on an executor that declares the simulator capability
+# (task P4.6): a simulator's wall time is never performance (Agent Rule 2).
+SIMULATOR_WALL_S = "wall_s (simulator wall time, not performance)"
 
 
 # ---------------------------------------------------------------------------
@@ -202,9 +213,17 @@ def _pins_blocks(trial: Trial) -> list[str]:
     return ["## Toolchain pins\n", _table(("Toolchain", "Pin"), rows)]
 
 
-def _reference_run_blocks(reference_run: RunInfo) -> list[str]:
+def _run_rows(run: RunInfo, simulator: bool) -> list[tuple[str, str]]:
+    """Return a run's table rows (_field_rows); with `simulator`, the wall_s row's name is SIMULATOR_WALL_S."""
+    rows = _field_rows(run)
+    if not simulator:
+        return rows
+    return [(SIMULATOR_WALL_S if name == "wall_s" else name, value) for name, value in rows]
+
+
+def _reference_run_blocks(reference_run: RunInfo, simulator: bool = False) -> list[str]:
     """Return the table of the target reference's baseline run; a value not measured reads PLACEHOLDER."""
-    table = _table(("Field", "Value"), _field_rows(reference_run))
+    table = _table(("Field", "Value"), _run_rows(reference_run, simulator))
     return ["## Reference run\n", table, *_output_file_blocks(reference_run)]
 
 
@@ -326,8 +345,8 @@ def _diagnostic_blocks(diagnostics: Sequence[Diagnostic], level: str = "###") ->
     return [heading, _table(header, rows)]
 
 
-def _measurement_blocks(attempt: Attempt) -> list[str]:
-    """Return the Run, Alignment, Profile, Guards, and Score breakdown tables."""
+def _measurement_blocks(attempt: Attempt, simulator: bool = False) -> list[str]:
+    """Return the Run, Alignment, Profile, Guards, and Score breakdown tables; `simulator` labels the run's wall_s."""
     alignment, score = attempt.alignment, attempt.score
     per_input = ", ".join(fmt(value) for value in alignment.per_input) or PLACEHOLDER
     alignment_rows = [("per_input", per_input), ("mean", fmt(alignment.mean))]
@@ -337,7 +356,7 @@ def _measurement_blocks(attempt: Attempt) -> list[str]:
     per_output = [] if alignment.outputs is None else ["#### Per output\n", *_stats_blocks(alignment.outputs)]
     return [
         "### Run\n",
-        _table(fields, _field_rows(attempt.run)),
+        _table(fields, _run_rows(attempt.run, simulator)),
         *_output_file_blocks(attempt.run),
         "### Alignment\n",
         _table(fields, alignment_rows),
@@ -351,14 +370,14 @@ def _measurement_blocks(attempt: Attempt) -> list[str]:
     ]
 
 
-def _attempt_blocks(attempt: Attempt, store: TextStore) -> list[str]:
-    """Return the whole section of one attempt."""
+def _attempt_blocks(attempt: Attempt, store: TextStore, simulator: bool = False) -> list[str]:
+    """Return the whole section of one attempt; `simulator` labels its run's wall_s."""
     blocks = [f"## Attempt {attempt.index}\n", f"Stage reached: {attempt.stage_reached}\n"]
     blocks += _prompt_blocks(attempt, store)
     blocks += _code_blocks(attempt.files)
     blocks += _diff_blocks(attempt)
     blocks += _diagnostic_blocks(attempt.diagnostics)
-    blocks += _measurement_blocks(attempt)
+    blocks += _measurement_blocks(attempt, simulator)
     return blocks
 
 
@@ -366,17 +385,20 @@ def _attempt_blocks(attempt: Attempt, store: TextStore) -> list[str]:
 # The page
 
 
-def render_trial_md(trial: Trial, store: TextStore) -> str:
+def render_trial_md(trial: Trial, store: TextStore, *, simulator: bool = False) -> str:
     """Return trial.md for `trial`, resolving prompt and request message texts through `store`.
 
-    The result is deterministic, plain ASCII (non-ASCII characters become
-    backslash escapes), uses LF newlines, and ends with exactly one newline.
+    `simulator` says that the trial's runs ran on an executor that declares
+    the simulator capability; each run's wall_s row is then labeled (see
+    the module docstring). The result is deterministic, plain ASCII
+    (non-ASCII characters become backslash escapes), uses LF newlines, and
+    ends with exactly one newline.
     """
     blocks = _summary_blocks(trial) + _provenance_blocks(trial.provenance)
-    blocks += _pins_blocks(trial) + _reference_run_blocks(trial.reference_run) + _agreement_blocks(trial)
+    blocks += _pins_blocks(trial) + _reference_run_blocks(trial.reference_run, simulator) + _agreement_blocks(trial)
     blocks += _baseline_note_blocks(trial) + _context_blocks(trial.context)
     blocks += _requests_blocks(trial, store)
     for attempt in trial.attempts:
-        blocks += _attempt_blocks(attempt, store)
+        blocks += _attempt_blocks(attempt, store, simulator)
     page = "\n".join(blocks)
     return page.encode("ascii", "backslashreplace").decode("ascii")

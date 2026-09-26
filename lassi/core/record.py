@@ -45,7 +45,11 @@ RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # fixes.execution_gate off, a compiling attempt came past upstream's execution gate when no earlier attempt had run,
 # where upstream's notebook raises (it reads run output that was never set). baseline-disagree ends a trial before
 # any model call too: the pair's two references disagree past the tolerance the suite manifest declares for the item.
-END_REASONS = ("baseline-compile", "baseline-run", "baseline-disagree", "correction-cap", "upstream-crash")
+# sim-gap (task P4.6) means a run stopped at a simulator gap (RunResult.sim_gap), a program the simulator cannot run:
+# a reference run's gap ends the trial before any model call, and an attempt run's gap ends it right after that
+# attempt, unless the same run reported a kernel JIT error, which is corrected first (lassi.core.stages run_stage).
+# Every code is spelled with hyphens; RunResult.sim_gap is a field, not a code.
+END_REASONS = ("baseline-compile", "baseline-run", "baseline-disagree", "correction-cap", "upstream-crash", "sim-gap")
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -247,6 +251,11 @@ class RunInfo:
     stage that records a run records each flag as a bool, so a run whose
     output was kept whole reads False; None means not recorded, as for a run
     that did not happen or a trial.json written before the flags existed.
+
+    `sim_ub` copies RunResult.sim_ub (task P4.6): True when the simulator
+    reported undefined behavior, False when the executor checked and found
+    none, and None when not recorded (an executor that reports no finding,
+    a run that did not happen, or an older trial.json).
 
     `outputs` maps each output file the run wrote (its relative POSIX path,
     as RunResult.output_files names it) to the sha256 of its bytes in the

@@ -201,11 +201,14 @@ def trial_dir(run_root: Path, trial_id: str) -> Path:
     return Path(run_root).joinpath(*trial_id.split("/"))
 
 
-def write_trial(trial: Trial, run_root: Path, store: TextStore) -> Path:
+def write_trial(trial: Trial, run_root: Path, store: TextStore, *, simulator: bool = False) -> Path:
     """Write trial.json and trial.md for `trial` under `run_root` and return the trial directory.
 
     In trial.json each attempt's response_text is replaced by the reference of
     the text in `store`; everything else is the record as to_dict gives it.
+    trial.md is render_trial_md's, with `simulator` (the trial's runs ran on
+    an executor that declares the simulator capability) labeling each run's
+    wall time; trial.json does not depend on it.
     Both files are built before either is written, and each is replaced
     through a temporary file, so an error while building them (such as
     TextNotFoundError for a prompt missing from `store`) leaves the directory
@@ -214,7 +217,7 @@ def write_trial(trial: Trial, run_root: Path, store: TextStore) -> Path:
     """
     out = trial_dir(run_root, trial.trial_id)
     _check_same_trial(out / TRIAL_JSON, trial.trial_id)
-    md_text = render_trial_md(trial, store)
+    md_text = render_trial_md(trial, store, simulator=simulator)
     data = to_dict(trial)
     for attempt_data, attempt in zip(data["attempts"], trial.attempts, strict=True):
         attempt_data["response_text"] = to_dict(store.put(attempt.response_text))

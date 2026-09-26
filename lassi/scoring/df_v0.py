@@ -31,8 +31,25 @@ Readings of the Result Record (task P2.6):
   component, which is also its scalar and final.score, is R_final minus
   correction_penalty x final.corrections, where R_final is the R of the
   last attempt, a guard violation or a stale-output attempt included: each
-  attempt is scored by its own record. A trial with no attempts has both
-  None.
+  attempt is scored by its own record (a sim-gap attempt's R is None,
+  below). A trial with no attempts has both None.
+
+The reading of a sim-gap attempt (task P4.6): the gap attempt is the last
+attempt of a trial whose final.end_reason is sim-gap (ended_at_gap), the
+attempt whose run stopped at a simulator gap. A gap is not a model error,
+and the simulator could not complete the run, so the run holds no evidence
+either way: its R is None (not computed), neither a failed S4 run nor a
+clean one, even when its run also reported undefined behavior (the gap
+reading wins, as run_loop ends such a trial at sim-gap). Its components are
+those of its own record, as for any attempt, and a guard violation recorded
+on it (Attempt.guards; df-v0 reads the recorded guards, not the run) still
+sets R = guard_violation. Every earlier attempt is scored by its own record.
+single_turn is attempt 0's R, and multi_turn, the scalar, and final.score
+are None when R_final is; a trial Score component left None this way
+carries a note (GAP_NOTES). A trial that ended at sim-gap with no attempt
+has no score, as any trial with no attempts. A kernel JIT failure (S1) and
+a run with undefined behavior (S4 with a run-error) need no reading of
+their own: each scores by its stage.
 """
 
 from __future__ import annotations
@@ -71,6 +88,16 @@ ALIGNMENT_MISSING = "alignment_missing"
 # Component names of the trial's Score.
 SINGLE_TURN = "single_turn"
 MULTI_TURN = "multi_turn"
+# The end reason of a trial stopped by a simulator gap (lassi.core.record END_REASONS; task P4.6). The last attempt of
+# such a trial is its gap attempt, the one whose run stopped at the gap.
+SIM_GAP_END = "sim-gap"
+# The notes on the trial Score's components that the gap attempt leaves null.
+GAP_NOTES = {
+    SINGLE_TURN: "not computed: attempt 0 is the sim-gap attempt, whose run stopped at a simulator gap, not a model "
+    "error, so its R is not computed",
+    MULTI_TURN: "not computed: the last attempt is the sim-gap attempt, whose run stopped at a simulator gap, not a "
+    "model error, so R_final is not computed",
+}
 
 
 @dataclass(frozen=True)
@@ -151,6 +178,12 @@ def guard_state(guards: Guards) -> float | None:
     return None
 
 
+def ended_at_gap(trial: Trial) -> bool:
+    """Return True when `trial` ended at sim-gap after an attempt: its last attempt is the gap attempt."""
+    end = trial.final.end_reason
+    return bool(trial.attempts) and end is not None and end.code == SIM_GAP_END
+
+
 @register("ScoreProfile", "df-v0")
 class DfV0Profile:
     """The df-v0 ScoreProfile: R per attempt, and the trial's single-turn and multi-turn values.
@@ -171,7 +204,12 @@ class DfV0Profile:
         self.weights = load_weights(self.weights_path)
 
     def score_attempt(self, attempt: Attempt) -> Score:
-        """Return one attempt's Score: its components and, as the scalar, its R."""
+        """Return one attempt's Score from its record alone: its components and, as the scalar, its R.
+
+        It reads the attempt without its trial, so it does not apply the
+        sim-gap reading, which needs the trial's end reason: score_attempts
+        does, and a caller scoring the attempts of a trial uses it.
+        """
         weights = self.weights
         stage = attempt.stage_reached
         count = warning_count(attempt)
@@ -193,8 +231,19 @@ class DfV0Profile:
         return Score(components=components, scalar=r)
 
     def score_attempts(self, trial: Trial) -> list[Score]:
-        """Return one Score per attempt of `trial`, in attempt order."""
-        return [self.score_attempt(attempt) for attempt in trial.attempts]
+        """Return one Score per attempt of `trial`, in attempt order.
+
+        Each attempt is scored by its own record (score_attempt), except
+        the gap attempt of a trial that ended at sim-gap (ended_at_gap): it
+        keeps its components, but its R, the scalar, is None (not computed),
+        undefined behavior in its run included, unless a guard violation is
+        recorded on it (component guard 1.0), which still sets
+        R = guard_violation.
+        """
+        scores = [self.score_attempt(attempt) for attempt in trial.attempts]
+        if scores and ended_at_gap(trial) and scores[-1].components[GUARD] != 1.0:
+            scores[-1] = Score(components=scores[-1].components, scalar=None)
+        return scores
 
     def score(self, trial: Trial) -> Score:
         """Return the trial's Score: single_turn and multi_turn, with multi_turn as the scalar."""
@@ -216,8 +265,16 @@ class DfV0Profile:
         return dataclasses.replace(trial, attempts=attempts, final=final)
 
     def _trial_score(self, trial: Trial, scores: Sequence[Score]) -> Score:
-        """Return the trial's Score from its attempts' Scores; every value is None when there is no attempt."""
+        """Return the trial's Score from its attempts' Scores; every value is None when there is no attempt.
+
+        single_turn is attempt 0's R and multi_turn is R_final minus the
+        correction penalty, each None when the R it reads is None (the gap
+        attempt's), with that component's GAP_NOTES note.
+        """
         if not scores:
             return Score(components={SINGLE_TURN: None, MULTI_TURN: None}, scalar=None)
-        multi = scores[-1].scalar - self.weights.correction_penalty * trial.final.corrections
-        return Score(components={SINGLE_TURN: scores[0].scalar, MULTI_TURN: multi}, scalar=multi)
+        last = scores[-1].scalar
+        multi = None if last is None else last - self.weights.correction_penalty * trial.final.corrections
+        components = {SINGLE_TURN: scores[0].scalar, MULTI_TURN: multi}
+        notes = {name: GAP_NOTES[name] for name, value in components.items() if value is None}
+        return Score(components=components, scalar=multi, notes=notes)

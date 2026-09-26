@@ -30,6 +30,13 @@ SCORES_ATTEMPTS = "scores_attempts"
 # (lassi.scoring.profiles.build_profile), so a scoring pass looks for a bench root only when a profile declares it.
 READS_BENCH_SOURCES = "reads_bench_sources"
 
+# The capability of an Executor that runs programs on a simulator (task P4.6). The stages and pages read it, never the
+# executor's name: trial.md and run.md label the wall times of its runs as simulator wall time, not performance
+# (Agent Rule 2), and run_loop adds the Harness Contract's hang diagnostic, whose text is the ttsim hint, to an attempt
+# run of it that hung (lassi.core.stages HANG_DIAGNOSTIC). Its findings (undefined behavior, a gap, jit-stage
+# diagnostics) come in RunResult's fields.
+SIMULATOR = "simulator"
+
 # The capability of an Oracle that compares a run's output files (RunResult.output_files, one lassi_io array per
 # file) instead of its stdout; it provides the OutputFileOracle methods below. For such an Oracle the oracle stage
 # aligns output files, and baseline and run_loop keep each run's output files in the binary store

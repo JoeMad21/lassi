@@ -84,7 +84,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.3 | DONE | lassi_io harness and its binary file format | - | lassi_io format, Python side, C header; remote tests 7 passed (rx 20260925-165726, exploratory snapshot of the staged code); bible rev 215 |
 | P4.4 | DONE | binary_io oracle over output files | P4.3 | binary_io oracle, item tolerances, binary store, output_stats; bible rev 222 |
 | P4.5 | DONE | Native C++ toolchain and executors per language | - | gcc-native, executors per language, device() (94368a4); GCC fixtures from clean rx 20260925-195420; bible rev 226 |
-| P4.6 | READY | Record readings for simulator runs | - |  |
+| P4.6 | DONE | Record readings for simulator runs | - | simulator readings: sim-gap, UB, jit at S1, hang hint, wall-time labels, df-v0 and lassi profile readings; bible rev 229 |
 | P4.7 | DONE | Graphics setting, preset, and banner | - | graphics setting, preset, banner; bible rev 211 |
 | P4.8 | READY | Progress hook and live inference table | P4.7 |  |
 | P4.9 | READY | Spike: ttsim runtime facts, unpack_to_dest, and Watcher | P4.2 |  |

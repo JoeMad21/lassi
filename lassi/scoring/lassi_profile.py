@@ -19,16 +19,22 @@ nothing stands in for it.
 Components of a trial (task P2.7), each a float, or None with a note:
 
 - correct: 1.0 when the output that stands (lassi.core.record
-  standing_attempt) came from a clean run, exit status 0 and hang False,
-  that the oracle aligned at 1.0. 0.0 when that run was not clean, when the
-  oracle gave less than 1.0, or when no output stands. None in three cases,
-  each with its note: a trial with no attempt that ended at the baseline
-  (BASELINE_ENDS: baseline-compile, baseline-run, or baseline-disagree; the
-  model was never asked); a compile-only trial (the target reference
-  was not run and no attempt ran), labeled a compile-stage reproduction;
-  and a clean standing run the oracle never aligned (no reference stdout,
-  a truncated one, or, under binary_io, a target reference run whose
-  workdir came back incomplete). The scalar is correct.
+  standing_attempt) came from a clean run (clean_run: exit status 0, hang
+  False, and no undefined behavior, RunInfo.sim_ub not True) of an attempt
+  that reached S4 or S5 (a kernel JIT failure leaves it at S1, never clean)
+  that the oracle aligned at 1.0. 0.0 when that run was not clean, when the oracle
+  gave less than 1.0, or when no output stands. None in four cases, each
+  with its note: a trial with no attempt that ended at the baseline
+  (BASELINE_ENDS: baseline-compile, baseline-run, baseline-disagree, or
+  sim-gap; the model was never asked); a trial with attempts that ended at
+  sim-gap (the gap note, task P4.6: the output that stands came from the
+  run that stopped at the gap, which is not a model error, whatever its
+  exit status or undefined behavior); a compile-only trial (the target
+  reference was not run and no attempt ran), labeled a compile-stage
+  reproduction; and a clean standing run the oracle never aligned (no
+  reference stdout, a truncated one, or, under binary_io, a target
+  reference run whose workdir came back incomplete). The scalar is
+  correct.
 - correct_paper: the paper's criterion, a manual inspection of stdout.
   Never computed: always None.
 - within_10pct: None while no timing profiler exists, even when an attempt
@@ -84,14 +90,18 @@ COMPONENTS = frozenset(
      COMPILED_FIRST_TRY}
 )
 # The note texts the profile file holds, in file order.
-COMPILE_ONLY, NOT_ALIGNED, BASELINE, NO_ATTEMPT = "compile_only", "not_aligned", "baseline", "no_attempt"
-NOTE_KEYS = (WITHIN_10PCT, CORRECT_PAPER, COMPILE_ONLY, NOT_ALIGNED, BASELINE, NO_ATTEMPT, *SIMILARITY)
+COMPILE_ONLY, NOT_ALIGNED, BASELINE, GAP, NO_ATTEMPT = "compile_only", "not_aligned", "baseline", "gap", "no_attempt"
+NOTE_KEYS = (WITHIN_10PCT, CORRECT_PAPER, COMPILE_ONLY, NOT_ALIGNED, BASELINE, GAP, NO_ATTEMPT, *SIMILARITY)
 FILE_KEYS = ("components", "scalar", "notes")
 
-# Record codes the components read. BASELINE_ENDS holds every end reason that ends a trial at the baseline, before
-# any model call (lassi.core.record END_REASONS).
-BASELINE_ENDS = frozenset({"baseline-compile", "baseline-run", "baseline-disagree"})
+# Record codes the components read. BASELINE_ENDS holds every end reason that can end a trial at the baseline, before
+# any model call (lassi.core.record END_REASONS); sim-gap does when a reference run stops at a simulator gap (task
+# P4.6), and baseline_end reads a code as a baseline end only for a trial that holds no attempt.
+BASELINE_ENDS = frozenset({"baseline-compile", "baseline-run", "baseline-disagree", "sim-gap"})
 CAP_END = "correction-cap"
+# The end reason of a trial stopped by a simulator gap (task P4.6). With attempts, its last attempt's run stopped at the
+# gap, and that attempt's output is the one that stands.
+GAP_END = "sim-gap"
 FENCE_QUIRK_CODE = "fence-quirk"
 COMPILED_STAGES = frozenset({"S4", "S5"})
 
@@ -162,16 +172,30 @@ def baseline_end(trial: Trial) -> str | None:
     return None
 
 
+def clean_run(run: RunInfo) -> bool:
+    """Return True for a clean run: exit status 0, hang False, and no undefined behavior (sim_ub not True).
+
+    A run that stopped at a simulator gap has no field of its own in
+    RunInfo. A gap with no kernel JIT error ends the trial at sim-gap,
+    which correct_value reads from the end reason (GAP_END); a run with a
+    kernel JIT error leaves its attempt at S1, which correct_value never
+    reads as clean, whatever the run's exit status.
+    """
+    return run.exit_code == 0 and run.hang is False and run.sim_ub is not True
+
+
 def correct_value(trial: Trial, notes: Mapping[str, str]) -> tuple[float | None, str | None]:
     """Return the component correct and, when it is None, the note saying why (see the module docstring)."""
     end = baseline_end(trial)
     if end is not None:
         return None, f"{notes[BASELINE]} ({end})"
+    reason = trial.final.end_reason
+    if reason is not None and reason.code == GAP_END:
+        return None, notes[GAP]
     standing = standing_attempt(trial)
     if standing is None:
         return (0.0, None) if _ran(trial.reference_run) else (None, notes[COMPILE_ONLY])
-    run = standing.run
-    if run.exit_code != 0 or run.hang is not False:
+    if standing.stage_reached not in COMPILED_STAGES or not clean_run(standing.run):
         return 0.0, None
     if standing.alignment.mean is None:
         return None, notes[NOT_ALIGNED]

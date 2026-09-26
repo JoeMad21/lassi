@@ -192,11 +192,12 @@ def test_lassi_does_not_import_projects() -> None:
 def test_run_result_carries_the_output_truncation_flags(interfaces: ModuleType) -> None:
     # P0.16 R4 and R5: an executor reports whether the sandbox cut stdout or stderr at its cap, and whether it
     # returned only part of the workdir. The flags default to False, so an executor that runs nothing builds its
-    # RunResult as before.
+    # RunResult as before. P4.6 appends the simulator's findings (sim_ub, sim_gap, diagnostics), which default to no
+    # finding (tests/core/test_sim_readings.py).
     names = [f.name for f in dataclasses.fields(interfaces.RunResult)]
     assert names == [
         "exit_code", "hang", "stdout", "stderr", "output_files", "wall_s", "stdout_truncated", "stderr_truncated",
-        "workdir_incomplete",
+        "workdir_incomplete", "sim_ub", "sim_gap", "diagnostics",
     ]
     result = interfaces.RunResult(exit_code=0, hang=False, stdout="", stderr="")
     assert (result.stdout_truncated, result.stderr_truncated, result.workdir_incomplete) == (False, False, False)
