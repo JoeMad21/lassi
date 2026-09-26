@@ -12,7 +12,19 @@ end reason shows as `<code>: <message>`, or "none" for a trial that ended
 normally. The Reference run table and each attempt's Run table have one row
 per RunInfo field, the run flags (stdout_truncated, stderr_truncated,
 workdir_incomplete) included: true or false when recorded, PLACEHOLDER when
-not.
+not. Their outputs row shows the count of recorded output files
+(RunInfo.outputs), PLACEHOLDER when not recorded, and a table after it lists
+each file with its sha256 in the binary store.
+
+Per-output statistics (task P4.4): a "## Reference agreement" section after
+the reference run shows Trial.reference_agreement when it was measured, and
+an attempt whose Alignment holds statistics shows them under "#### Per
+output" after its Alignment table. Each is a table with one row per output:
+its name, pcc, max_abs, max_ulp, and passed, formatted as the page formats
+values, with "-" for a statistic that was not computed or does not apply,
+and its note ("-" when none). A trial without them shows neither. A
+"## Baseline diagnostics" section after them shows Trial.baseline_diagnostics
+as a diagnostics table when the baseline noted anything.
 
 The page is a list of blocks (headings, lines, tables, fenced code), each
 ending with one newline and separated by one blank line. Fenced text goes
@@ -45,6 +57,7 @@ from lassi.core.record import (
     Context,
     Diagnostic,
     EndReason,
+    OutputStats,
     Provenance,
     Request,
     RunInfo,
@@ -109,8 +122,41 @@ def fmt_end_reason(reason: EndReason | None) -> str:
 
 
 def _field_rows(record: object) -> list[tuple[str, str]]:
-    """Return one (field name, formatted value) row per field of a record, in field order."""
-    return [(spec.name, fmt(getattr(record, spec.name))) for spec in dataclasses.fields(record)]
+    """Return one (field name, formatted value) row per field of a record, in field order.
+
+    A mapping of output files (RunInfo.outputs) shows as its file count; the
+    files themselves are listed by _output_file_blocks.
+    """
+    rows = []
+    for spec in dataclasses.fields(record):
+        value = getattr(record, spec.name)
+        rows.append((spec.name, f"{len(value)} file(s)" if isinstance(value, dict) else fmt(value)))
+    return rows
+
+
+def _output_file_blocks(run: RunInfo) -> list[str]:
+    """Return the table of a run's recorded output files (file, sha256 in the binary store); none when it has none."""
+    if not run.outputs:
+        return []
+    rows = [(f"`{file}`", f"`{run.outputs[file]}`") for file in sorted(run.outputs)]
+    return [_table(("Output file", "sha256"), rows)]
+
+
+def _stat(value: object) -> str:
+    """Format one output statistic: '-' when it was not computed or does not apply (None), else fmt."""
+    return "-" if value is None else fmt(value)
+
+
+def _stats_blocks(stats: Sequence[OutputStats]) -> list[str]:
+    """Return the table of per-output statistics: name, pcc, max_abs, max_ulp, passed, and the note."""
+    if not stats:
+        return ["None.\n"]
+    header = ("Output", "pcc", "max_abs", "max_ulp", "passed", "Note")
+    rows = [
+        (entry.name, _stat(entry.pcc), _stat(entry.max_abs), _stat(entry.max_ulp), fmt(entry.passed), entry.note or "-")
+        for entry in stats
+    ]
+    return [_table(header, rows)]
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +204,23 @@ def _pins_blocks(trial: Trial) -> list[str]:
 
 def _reference_run_blocks(reference_run: RunInfo) -> list[str]:
     """Return the table of the target reference's baseline run; a value not measured reads PLACEHOLDER."""
-    return ["## Reference run\n", _table(("Field", "Value"), _field_rows(reference_run))]
+    table = _table(("Field", "Value"), _field_rows(reference_run))
+    return ["## Reference run\n", table, *_output_file_blocks(reference_run)]
+
+
+def _agreement_blocks(trial: Trial) -> list[str]:
+    """Return the references' agreement per output (Trial.reference_agreement); nothing when it was not measured."""
+    if trial.reference_agreement is None:
+        return []
+    lead = "The source reference's outputs against the target reference's, judged against the item's tolerance.\n"
+    return ["## Reference agreement\n", lead, *_stats_blocks(trial.reference_agreement)]
+
+
+def _baseline_note_blocks(trial: Trial) -> list[str]:
+    """Return the baseline's notes (Trial.baseline_diagnostics) under their own heading; nothing when there are none."""
+    if not trial.baseline_diagnostics:
+        return []
+    return ["## Baseline diagnostics\n", *_diagnostic_blocks(trial.baseline_diagnostics, "##")[1:]]
 
 
 def _context_blocks(context: Context) -> list[str]:
@@ -272,11 +334,14 @@ def _measurement_blocks(attempt: Attempt) -> list[str]:
     score_rows = [(name, fmt(score.components[name])) for name in sorted(score.components)]
     score_rows.append(("scalar", fmt(score.scalar)))
     fields = ("Field", "Value")
+    per_output = [] if alignment.outputs is None else ["#### Per output\n", *_stats_blocks(alignment.outputs)]
     return [
         "### Run\n",
         _table(fields, _field_rows(attempt.run)),
+        *_output_file_blocks(attempt.run),
         "### Alignment\n",
         _table(fields, alignment_rows),
+        *per_output,
         "### Profile\n",
         _table(fields, _field_rows(attempt.profile)),
         "### Guards\n",
@@ -308,7 +373,8 @@ def render_trial_md(trial: Trial, store: TextStore) -> str:
     backslash escapes), uses LF newlines, and ends with exactly one newline.
     """
     blocks = _summary_blocks(trial) + _provenance_blocks(trial.provenance)
-    blocks += _pins_blocks(trial) + _reference_run_blocks(trial.reference_run) + _context_blocks(trial.context)
+    blocks += _pins_blocks(trial) + _reference_run_blocks(trial.reference_run) + _agreement_blocks(trial)
+    blocks += _baseline_note_blocks(trial) + _context_blocks(trial.context)
     blocks += _requests_blocks(trial, store)
     for attempt in trial.attempts:
         blocks += _attempt_blocks(attempt, store)

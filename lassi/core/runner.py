@@ -34,8 +34,13 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    item with more than one source file under a fragment set, or more than
    one target file with fixes.fence_tag off, since each reads one file; and
    an oracle section that no listed stage uses (none names Oracle in
-   `requires`) or that its Oracle refuses (factory(**config) raises
-   ValueError, as for an unset oracle.passfail); a backend that declares
+   `requires`), whose Oracle declares none of the capabilities a listed
+   stage accepts (`oracle_capabilities`), or that its Oracle refuses
+   (factory(**config) raises ValueError, as for an unset oracle.passfail or
+   oracle.threshold); an Oracle that reads the references' agreement
+   (`agreement_setting`, binary_io's threshold from_baseline) while
+   fixes.baseline_both is off, no listed stage builds the references, or an
+   item of the run declares no tolerance in its suite manifest; a backend that declares
    `unload_before_run` but has no unload(), or `needs_reference` but has no
    with_reference() (or, with fixes.fence_tag off, no with_untagged_fence());
    a `score` profile or, when the recipe names metrics, any registered
@@ -393,7 +398,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         raise RunError(f"the run directory {run_dir} already exists; choose another run id")
     bench = _bench(recipe, settings, options)
     _check_plan(recipe, registry, settings, bench)
-    _check_oracle(recipe, registry)
+    _check_oracle(recipe, registry, bench)
     scoring = _scoring(recipe, registry, bench)
     backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id)
     _check_backend(recipe, settings, backend)
@@ -986,29 +991,70 @@ def _check_one_file(
         )
 
 
-def _check_oracle(recipe: Recipe, registry: Registry) -> None:
-    """Refuse an oracle section that no listed stage uses, or one its Oracle cannot be built from.
+def _check_oracle(recipe: Recipe, registry: Registry, bench: _Bench) -> None:
+    """Refuse an oracle section no listed stage uses or accepts, one its Oracle refuses, or one the run cannot serve.
 
     A listed stage uses an Oracle when its registry entry names Oracle in
     `requires` (the load already refuses such a stage when no oracle is
-    bound). Each bound Oracle is built once as factory(**config) and
-    dropped, so a choice its section leaves unset, such as oracle.passfail,
-    fails here, before any directory is created, and not when the first
-    trial builds its stages.
+    bound). A stage class that names `oracle_capabilities` (the oracle stage)
+    needs its Oracle to declare one of them. Each bound Oracle is built once
+    as factory(**config) and dropped, so a choice its section leaves unset,
+    such as oracle.passfail or oracle.threshold, fails here, before any
+    directory is created, and not when the first trial builds its stages.
+    An Oracle whose `agreement_setting` is set (binary_io's threshold
+    from_baseline) is checked by _check_agreement.
     """
     bindings = [binding for binding in recipe.bindings if binding.interface == "Oracle"]
     if not bindings:
         return
-    if not any("Oracle" in registry.get("Stage", name).requires for name in recipe.data["stages"]):
+    stages = [registry.get("Stage", name) for name in recipe.data["stages"]]
+    if not any("Oracle" in entry.requires for entry in stages):
         raise RunError(
             f"{recipe.path}: sets oracle, but no listed stage uses an Oracle; "
             "list the oracle stage or remove the section"
         )
     for binding in bindings:
+        entry = registry.get("Oracle", binding.name)
+        for stage in stages:
+            accepted = tuple(getattr(stage.factory, "oracle_capabilities", ()))
+            if accepted and not set(accepted) & entry.capabilities:
+                declared = ", ".join(sorted(entry.capabilities)) or "nothing"
+                raise RunError(
+                    f"{recipe.path}: {binding.where}: stage {stage.name!r} needs an Oracle that declares one of "
+                    f"{', '.join(accepted)}, but Oracle {binding.name!r} declares: {declared}"
+                )
         try:
-            registry.get("Oracle", binding.name).factory(**binding.config)
+            oracle = entry.factory(**binding.config)
         except ValueError as error:
             raise RunError(f"{recipe.path}: {binding.where}: {error}") from error
+        setting = getattr(oracle, "agreement_setting", None)
+        if setting is not None:
+            _check_agreement(recipe, stages, bench, setting)
+
+
+def _check_agreement(recipe: Recipe, stages: Sequence[Any], bench: _Bench, setting: str) -> None:
+    """Refuse an oracle `setting` that reads the references' agreement when the run could never measure it.
+
+    The baseline stage measures the source reference's agreement with the
+    target reference only with fixes.baseline_both on and only for an item
+    whose suite manifest declares a tolerance, so the fix must be on, a
+    listed stage must build the references (`builds_references`), and every
+    item the run covers must declare a tolerance.
+    """
+    reads = f"{recipe.path}: {setting} reads the references' agreement"
+    if recipe.data.get("fixes", {}).get("baseline_both", True) is False:
+        raise RunError(
+            f"{reads}, which the baseline measures only with fixes.baseline_both on (faithful: true turns it off); "
+            "turn fixes.baseline_both on, or set a number"
+        )
+    if not any("builds_references" in stage.capabilities for stage in stages):
+        raise RunError(f"{reads}, but no listed stage builds the reference programs; list the baseline stage")
+    missing = [item for item in bench.items if bench.suite.items[item].tolerance is None]
+    if missing:
+        raise RunError(
+            f"{reads}, which the baseline measures only for an item whose suite manifest declares a tolerance; "
+            f"{bench.suite.name} item(s) {', '.join(missing)} declare none"
+        )
 
 
 # ---------------------------------------------------------------------------

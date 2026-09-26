@@ -1,7 +1,9 @@
-"""The text store and the per-trial files under a run tree.
+"""The text store, the binary store, and the per-trial files under a run tree.
 
 Large texts (prompts, responses, stdout) are stored once by their sha256 and
-referenced from records by TextRef (bible Result Record, Storage). Each trial
+referenced from records by TextRef (bible Result Record, Storage); run
+output files are stored once by their sha256 in the binary store beside it
+(BlobStore) and referenced from RunInfo.outputs by hash. Each trial
 directory under the run tree holds `trial.json`, the record with every
 response text replaced by its reference, and `trial.md`, the human-readable
 view (bible Readability Standards, Trial row). Files are written with LF
@@ -94,6 +96,69 @@ class TextStore:
     def _path(self, sha: str) -> Path:
         """Return the file that holds the text with this hash."""
         return self.root / _text_path(sha)
+
+
+class BlobStore:
+    """Bytes stored once by hash at `<root>/blobs/<sha[:2]>/<sha>`, beside the text store's `<root>/texts/`.
+
+    The binary store keeps the output files of runs (RunInfo.outputs, bible
+    Result Record, Storage). Stages use BlobStore(<the text store's root>),
+    so a run's blobs sit at `<run>/blobs/`.
+    """
+
+    def __init__(self, root: Path) -> None:
+        """Use `root` as the store directory; `blobs/` under it is created on the first put."""
+        self.root = Path(root)
+
+    def put(self, data: bytes) -> str:
+        """Store `data` unless it is already stored, and return its sha256 hex digest.
+
+        Concurrent puts of one blob all succeed, as for TextStore.put.
+        """
+        raw = bytes(data)
+        sha = hashlib.sha256(raw).hexdigest()
+        target = self.root / _blob_path(sha)
+        if not target.exists():
+            try:
+                _write_atomic(target, raw)
+            except OSError:
+                if not target.is_file():
+                    raise
+        return sha
+
+    def get(self, sha: str) -> bytes:
+        """Return the bytes stored for a sha256 hex string.
+
+        Raises KeyError when none are stored, and ValueError for a malformed
+        hash or when the stored bytes no longer match the hash.
+        """
+        return self.path(sha).read_bytes()
+
+    def path(self, sha: str) -> Path:
+        """Return the file that holds the blob `sha`, after checking its bytes against the hash.
+
+        Raises KeyError when no file is stored, and ValueError for a
+        malformed hash or bytes that no longer match it.
+        """
+        if not isinstance(sha, str) or not _SHA256.fullmatch(sha):
+            raise ValueError(f"not a sha256 hex string: {sha!r}")
+        path = self.root / _blob_path(sha)
+        if not path.is_file():
+            raise KeyError(sha)
+        if hashlib.sha256(path.read_bytes()).hexdigest() != sha:
+            raise ValueError(f"stored blob {sha} does not match its hash")
+        return path
+
+    def __contains__(self, sha: object) -> bool:
+        """Return True when a file is stored for a sha256 hex string; a malformed hash is never contained."""
+        if not isinstance(sha, str) or not _SHA256.fullmatch(sha):
+            return False
+        return (self.root / _blob_path(sha)).is_file()
+
+
+def _blob_path(sha: str) -> str:
+    """Return the store path of the blob with this hash: `blobs/<sha[:2]>/<sha>`."""
+    return f"blobs/{sha[:2]}/{sha}"
 
 
 def _text_path(sha: str) -> str:

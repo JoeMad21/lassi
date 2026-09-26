@@ -18,7 +18,13 @@ Optional keys (P1.2), left out where a manifest does not need them:
   prints PASS or FAIL;
 - per item, `support: {<name>: <path>}`, harness files: the file at `path`
   in the pinned sources goes into every build directory of the item as
-  `name`, beside the model's files (Suite.support_files reads them).
+  `name`, beside the model's files (Suite.support_files reads them);
+- per item, `tolerance: {metric: <pcc | max_abs | ulp>, threshold: <number>}`
+  (P4.4), the tolerance the item's two references must meet under an oracle
+  that compares output files (lassi.core.tolerance; exact match is
+  `{metric: max_abs, threshold: 0}`). load_suite refuses another metric, a
+  missing or unknown key, or a threshold lassi.core.tolerance refuses, with
+  a ValueError naming `tolerance`.
 """
 
 from __future__ import annotations
@@ -31,6 +37,7 @@ from typing import Any, Mapping
 import yaml
 
 from lassi.core.record import BenchItem
+from lassi.core.tolerance import Tolerance
 
 SPLITS = ("train", "eval")
 PURPOSES = ("train", "eval")
@@ -72,11 +79,13 @@ class LanguageSources:
 
 @dataclass(frozen=True)
 class SuiteItem:
-    """One bench item: its name, split, sources per language, run arguments, PASS/FAIL languages, and support files.
+    """One bench item: its name, split, sources per language, run arguments, and its optional keys.
 
     `run_args` are the program's command-line arguments, `passfail` the
-    languages whose program prints PASS or FAIL, and `support` maps a file
-    name in the build directory to its path in the pinned sources.
+    languages whose program prints PASS or FAIL, `support` maps a file name
+    in the build directory to its path in the pinned sources, and
+    `tolerance` is the tolerance its two references must meet (None when the
+    manifest declares none).
     """
 
     name: str
@@ -85,6 +94,7 @@ class SuiteItem:
     run_args: tuple[str, ...] = ()
     passfail: frozenset[str] = frozenset()
     support: Mapping[str, str] = field(default_factory=dict)
+    tolerance: Tolerance | None = None
 
 
 @dataclass(frozen=True)
@@ -173,7 +183,7 @@ def _item(name: Any, spec: Any, where: str) -> SuiteItem:
     """Check one item entry and return it."""
     if not isinstance(name, str) or not _NAME.fullmatch(name):
         raise ValueError(f"{where}: item name must match {_NAME.pattern}")
-    _keys(spec, {"split", "languages"}, where, optional={"run_args", "passfail", "support"})
+    _keys(spec, {"split", "languages"}, where, optional={"run_args", "passfail", "support", "tolerance"})
     if spec["split"] not in SPLITS:
         raise ValueError(f"{where}.split must be one of {', '.join(SPLITS)}, got {spec['split']!r}")
     if not isinstance(spec["languages"], dict) or not spec["languages"]:
@@ -202,7 +212,17 @@ def _item(name: Any, spec: Any, where: str) -> SuiteItem:
         run_args=tuple(run_args),
         passfail=frozenset(passfail),
         support=dict(support),
+        tolerance=_tolerance(spec["tolerance"], f"{where}.tolerance") if "tolerance" in spec else None,
     )
+
+
+def _tolerance(value: Any, where: str) -> Tolerance:
+    """Check an item's tolerance: exactly the keys metric and threshold, a known metric, and a valid threshold."""
+    _keys(value, {"metric", "threshold"}, where)
+    try:
+        return Tolerance(metric=value["metric"], threshold=value["threshold"])
+    except ValueError as error:
+        raise ValueError(f"{where}: {error}") from None
 
 
 def _language(value: Any, where: str) -> LanguageSources:

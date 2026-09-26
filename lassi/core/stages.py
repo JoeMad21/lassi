@@ -30,7 +30,18 @@ The runner checks either kind before any model is asked.
   output does not end the trial. A reference that does not build ends the
   trial with final.end_reason `baseline-compile`, and a run that exits
   nonzero or hangs with `baseline-run`; the runner then runs no later stage,
-  so no model is asked.
+  so no model is asked. When the recipe's Oracle compares output files
+  (capability aligns_output_files, output_file_oracle), the target's output
+  files are also kept in the binary store (RunInfo.outputs), a reference
+  run whose output files that Oracle cannot compare against (an unreadable
+  file, two files holding one array name, or none) ends the trial with
+  `baseline-run` (unless its workdir came back incomplete), and, when both
+  references ran and the item declares a tolerance, the source reference's
+  agreement with the target reference is recorded in
+  Trial.reference_agreement; an output outside that tolerance ends the trial
+  with `baseline-disagree`. When the agreement would be measured but either
+  reference run's workdir came back incomplete, no agreement is recorded and
+  Trial.baseline_diagnostics gains a `reference-workdir-incomplete` warning.
 - summarize_context sends [system, user]: the general system prompt, then
   the summary request followed by the target language's context pack. The
   reply fills Trial.context.knowledge_summary.
@@ -57,7 +68,9 @@ The runner checks either kind before any model is asked.
   programs (capability `runs_code`), runs each compiling attempt from its
   build directory with the item's run arguments and attempt_limits. The run
   is kept in Attempt.run (exit code, hang flag, wall time, stdout in the text
-  store, and the RunResult flags as bools, a failed run's included); a clean
+  store, the RunResult flags as bools, and, when the recipe's Oracle compares
+  output files, every output file in the binary store by hash; a failed
+  run's included); a clean
   run (exit status 0, no hang) is S5, and a failed one stays S4 with a
   run-stage `run-error` Diagnostic. A failed run is fed back
   with the execute-error prompt, whose error text (run_error_text) is, under
@@ -166,10 +179,11 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 from lassi.bench import Direction, Suite
 from lassi.core import fragments as fragment_text
-from lassi.core.capabilities import declares, unload_before_run
+from lassi.core.capabilities import ALIGNS_OUTPUT_FILES, OutputFileOracle, declares, unload_before_run
 from lassi.core.files import parse_file_blocks, render_file_blocks
 from lassi.core.interfaces import BuildResult, Executor, Limits, LLMBackend, Message, RunResult, Sampling, Toolchain
 from lassi.core.recipe import Recipe
@@ -185,8 +199,8 @@ from lassi.core.record import (
     standing_attempt,
     unified_diff,
 )
-from lassi.core.registry import register
-from lassi.core.store import TextStore
+from lassi.core.registry import DEFAULT_REGISTRY, register
+from lassi.core.store import BlobStore, TextStore
 from lassi.executors.workdir import build_dir, fresh_build_dir
 from lassi.prompts import render
 
@@ -205,6 +219,7 @@ MISSING_FILE = "missing-file"
 # The end codes these stages set in final.end_reason (lassi.core.record END_REASONS).
 BASELINE_COMPILE = "baseline-compile"
 BASELINE_RUN = "baseline-run"
+BASELINE_DISAGREE = "baseline-disagree"
 CORRECTION_CAP = "correction-cap"
 UPSTREAM_CRASH = "upstream-crash"
 
@@ -242,6 +257,11 @@ RUN_WALL_FLOOR_S = 30.0
 # The CPU count of an attempt run [DESIGN]: the reference run's, so a translation runs with the threads its
 # reference had (an executor sets OMP_NUM_THREADS to Limits.cpus).
 RUN_CPUS = REFERENCE_CPUS
+
+# The run-stage warning code of a reference run whose workdir came back incomplete (RunResult.workdir_incomplete)
+# under an Oracle that compares output files: the baseline notes it in Trial.baseline_diagnostics when it skips
+# the references' agreement, and the oracle stage puts it on each attempt it does not align against a cut target.
+REFERENCE_WORKDIR_INCOMPLETE = "reference-workdir-incomplete"
 
 # The run-stage Diagnostic codes run_loop sets: a failed run (error) and stale output (warning).
 RUN_ERROR = "run-error"
@@ -421,15 +441,44 @@ def reference_limits(context: RunContext) -> Limits:
     return Limits(wall_s=REFERENCE_WALL_S, memory_mb=memory_mb, cpus=REFERENCE_CPUS)
 
 
-def _run_info(context: RunContext, run: RunResult) -> RunInfo:
+def _run_info(context: RunContext, run: RunResult, keep_outputs: bool = False) -> RunInfo:
     """Return the RunInfo of a run that happened: exit code, hang flag, wall time, stdout in the store, run flags.
 
     Each RunResult flag (RUN_FLAGS) is copied as a bool, so a run whose
-    output was kept whole records False, never None.
+    output was kept whole records False, never None. With `keep_outputs`,
+    every output file's bytes go into the binary store beside the text store
+    and RunInfo.outputs maps each file to its sha256; otherwise outputs
+    stays None (not recorded).
     """
     flags = {flag: bool(getattr(run, flag)) for flag in RUN_FLAGS}
     stdout_ref = context.store.put(run.stdout)
-    return RunInfo(exit_code=run.exit_code, hang=run.hang, wall_s=run.wall_s, stdout_ref=stdout_ref, **flags)
+    outputs = _kept_outputs(context, run) if keep_outputs else None
+    return RunInfo(
+        exit_code=run.exit_code, hang=run.hang, wall_s=run.wall_s, stdout_ref=stdout_ref, outputs=outputs, **flags
+    )
+
+
+def _kept_outputs(context: RunContext, run: RunResult) -> dict[str, str]:
+    """Store every output file of `run` in BlobStore(<the text store's root>) and return file -> sha256, sorted."""
+    blobs = BlobStore(context.store.root)
+    return {file: blobs.put(Path(run.output_files[file]).read_bytes()) for file in sorted(run.output_files)}
+
+
+def output_file_oracle(context: RunContext) -> OutputFileOracle | None:
+    """Return the recipe's Oracle, built from its section, when it declares ALIGNS_OUTPUT_FILES; else None.
+
+    The class is looked up by the binding's name in the default registry,
+    as the oracle stage looks it up, since a RunContext carries no registry;
+    the runner checks the binding against its own registry when the recipe
+    loads. baseline and run_loop keep run output files only when this
+    returns an oracle.
+    """
+    for binding in context.recipe.bindings:
+        if binding.interface == "Oracle":
+            entry = DEFAULT_REGISTRY.get("Oracle", binding.name)
+            if ALIGNS_OUTPUT_FILES in entry.capabilities:
+                return cast(OutputFileOracle, entry.factory(**binding.config))
+    return None
 
 
 def _ended(trial: Trial, code: str, message: str) -> Trial:
@@ -630,6 +679,18 @@ class BaselineStage:
     for the source language while that fix is on. The capability
     `builds_references` makes the runner refuse the stage when a stage that
     asks the model is listed before it.
+
+    When the recipe's Oracle compares output files (output_file_oracle), each
+    reference run's output files must be ones it can compare against
+    (reference_problem) unless the run's workdir came back incomplete, the
+    target's are kept in the binary store (Trial.reference_run.outputs), and,
+    when both references ran and the item declares a tolerance (suite
+    manifest), the source reference's agreement with the target reference is
+    recorded in Trial.reference_agreement, judged against that tolerance.
+    When the agreement would be measured (those same conditions) but either
+    reference run's workdir came back incomplete, no agreement is recorded
+    and Trial.baseline_diagnostics gains one run-stage warning, code
+    REFERENCE_WORKDIR_INCOMPLETE, naming the run.
     """
 
     name = "baseline"
@@ -640,8 +701,9 @@ class BaselineStage:
     source_build_fix = "baseline_both"
 
     def __init__(self, *, context: RunContext) -> None:
-        """Keep the trial's run context."""
+        """Keep the trial's run context and the recipe's Oracle when it compares output files."""
         self.context = context
+        self.files_oracle = output_file_oracle(context)
 
     def __call__(self, trial: Trial) -> Trial:
         """Return `trial` with the target reference's run kept, or ended with a baseline end reason.
@@ -649,17 +711,21 @@ class BaselineStage:
         The target reference is built, and run when the executor runs
         programs; with the baseline_both fix on, the source reference follows
         (unless the direction's two languages are one). The first failure
-        sets final.end_reason and stops the stage.
+        sets final.end_reason and stops the stage. Then the references'
+        agreement is measured when it applies (_agreement).
         """
         direction = self.context.direction
         languages = [direction.target]
         if fix_on(self.context, "baseline_both") and direction.source != direction.target:
             languages.append(direction.source)
+        runs: dict[str, RunResult] = {}
         for language in languages:
-            trial = self._reference(trial, language)
+            trial, run = self._reference(trial, language)
             if trial.final.end_reason is not None:
-                break
-        return trial
+                return trial
+            if run is not None:
+                runs[language] = run
+        return self._agreement(trial, runs)
 
     def describe(self) -> str:
         """Return a one-line description of the stage."""
@@ -668,15 +734,24 @@ class BaselineStage:
         which = f"the {direction.target} and {direction.source}" if both else f"only the {direction.target}"
         runs = RUNS_CODE in getattr(self.context.executor, "capabilities", ())
         action = "build and run" if runs else "build"
-        return f"baseline: {action} {which} reference program(s) before any model call"
+        text = f"baseline: {action} {which} reference program(s) before any model call"
+        if runs and self.files_oracle is not None:
+            text += ", keeping their output files for the oracle"
+        return text
 
-    def _reference(self, trial: Trial, language: str) -> Trial:
+    def _reference(self, trial: Trial, language: str) -> tuple[Trial, RunResult | None]:
         """Build the item's reference in `language` and run it when the executor runs programs.
 
-        A build with no artifact ends the trial with `baseline-compile`, and
-        a run that exits nonzero, ends with no exit status, or hangs ends it
-        with `baseline-run`. The target's run is kept in Trial.reference_run
-        (_run_info), a failed one included; a cut output alone ends nothing.
+        Returns the trial and the RunResult (None when nothing ran). A build
+        with no artifact ends the trial with `baseline-compile`, and a run
+        that exits nonzero, ends with no exit status, or hangs ends it with
+        `baseline-run`, as do output files the recipe's output-file Oracle
+        cannot compare against (reference_problem names the file); that check
+        is skipped for a run whose workdir came back incomplete, since a cut
+        output alone ends nothing. The target's run is kept in
+        Trial.reference_run (_run_info, with its output files in the binary
+        store when that Oracle is bound), a failed one included; the source
+        reference's files are read but not stored.
         """
         context = self.context
         files = self._files(language)
@@ -684,21 +759,67 @@ class BaselineStage:
         workdir = _baseline_dir(context.build_root, trial.trial_id, language)
         result = _harness_build(context, toolchain, files, workdir)
         if result.artifact is None:
-            return _ended(trial, BASELINE_COMPILE, self._build_message(language, files, toolchain, result))
+            return _ended(trial, BASELINE_COMPILE, self._build_message(language, files, toolchain, result)), None
         if RUNS_CODE not in getattr(context.executor, "capabilities", ()):
-            return trial
+            return trial, None
         item = context.suite.item(context.item, purpose=PURPOSE)
         run = context.executor.run(result.artifact, list(item.run_args), reference_limits(context))
-        info = _run_info(context, run)
-        if language == context.direction.target:
+        target = language == context.direction.target
+        info = _run_info(context, run, keep_outputs=target and self.files_oracle is not None)
+        if target:
             trial = dataclasses.replace(trial, reference_run=info)
         if run.hang:
             message = f"the {language} reference run hung past its wall limit of {REFERENCE_WALL_S} s"
-            return _ended(trial, BASELINE_RUN, message)
+            return _ended(trial, BASELINE_RUN, message), run
         if run.exit_code != 0:
             status = "no exit status" if run.exit_code is None else f"exit status {run.exit_code}"
-            return _ended(trial, BASELINE_RUN, f"the {language} reference run ended with {status}")
-        return trial
+            return _ended(trial, BASELINE_RUN, f"the {language} reference run ended with {status}"), run
+        if self.files_oracle is not None and not run.workdir_incomplete:
+            problem = self.files_oracle.reference_problem(run.output_files, side=f"{language} reference")
+            if problem is not None:
+                return _ended(trial, BASELINE_RUN, problem), run
+        return trial, run
+
+    def _agreement(self, trial: Trial, runs: Mapping[str, RunResult]) -> Trial:
+        """Record the source reference's agreement with the target reference, and end the trial when it misses.
+
+        It applies when the recipe's Oracle compares output files, both
+        references ran, and the item declares a tolerance; otherwise the
+        trial comes back unchanged. When either run's workdir came back
+        incomplete, its output files may be cut, so no agreement is recorded
+        and Trial.baseline_diagnostics gains one REFERENCE_WORKDIR_INCOMPLETE
+        warning naming the run(s). Otherwise Trial.reference_agreement holds
+        one OutputStats per output, judged against the item's tolerance under
+        its own metric, and an output that fails ends the trial with
+        `baseline-disagree`, before any model call.
+        """
+        context, oracle = self.context, self.files_oracle
+        direction = context.direction
+        tolerance = context.suite.item(context.item, purpose=PURPOSE).tolerance
+        if oracle is None or tolerance is None or direction.source not in runs or direction.target not in runs:
+            return trial
+        cut = [language for language in (direction.target, direction.source) if runs[language].workdir_incomplete]
+        if cut:
+            names = " and ".join(f"the {language} reference" for language in cut)
+            message = (
+                f"{names} run's workdir came back incomplete, so its output files may be cut and the references' "
+                "agreement was not measured"
+            )
+            note = Diagnostic(stage="run", severity="warning", code=REFERENCE_WORKDIR_INCOMPLETE, message=message)
+            return dataclasses.replace(trial, baseline_diagnostics=[*trial.baseline_diagnostics, note])
+        sides = (f"{direction.target} reference", f"{direction.source} reference")
+        target, source = runs[direction.target].output_files, runs[direction.source].output_files
+        stats = oracle.with_tolerance(tolerance).compare(target, source, sides=sides)
+        trial = dataclasses.replace(trial, reference_agreement=stats)
+        missed = [entry.name for entry in stats if not entry.passed]
+        if not missed:
+            return trial
+        bound = "at least" if tolerance.metric == "pcc" else "at most"
+        message = (
+            f"the {direction.target} and {direction.source} references disagree past the item's tolerance, "
+            f"{tolerance.metric} {bound} {tolerance.threshold!r}, on output(s) {', '.join(missed)}"
+        )
+        return _ended(trial, BASELINE_DISAGREE, message)
 
     def _files(self, language: str) -> dict[str, str]:
         """Return the item's reference program in `language` (file name -> text), as the manifest pins it."""
@@ -1026,8 +1147,9 @@ class RunLoopStage:
     runs_model_code = True
 
     def __init__(self, *, context: RunContext) -> None:
-        """Keep the trial's run context."""
+        """Keep the trial's run context, and whether the recipe's Oracle compares output files."""
         self.context = context
+        self.keeps_outputs = output_file_oracle(context) is not None
 
     def __call__(self, trial: Trial) -> Trial:
         """Return `trial` with its compiling attempts run and any corrections appended.
@@ -1085,7 +1207,9 @@ class RunLoopStage:
 
         A backend that declares `unload_before_run` is asked to unload first.
         The attempt keeps the run in Attempt.run (_run_info: stdout in the
-        text store, each RunResult flag as a bool), gains one warning per
+        text store, each RunResult flag as a bool, and, when the recipe's
+        Oracle compares output files, every output file in the binary store
+        by hash), gains one warning per
         RunResult flag that is set (RUN_FLAGS), and is S5 after a
         clean run; after a failed one it stays S4 with a `run-error`.
         """
@@ -1101,7 +1225,7 @@ class RunLoopStage:
         run_args = list(context.suite.item(context.item, purpose=PURPOSE).run_args)
         unload_before_run(context.backend)
         run = context.executor.run(artifact, run_args, limits)
-        info = _run_info(context, run)
+        info = _run_info(context, run, keep_outputs=self.keeps_outputs)
         diagnostics = [*attempt.diagnostics, *_run_flag_warnings(run)]
         clean = run.exit_code == 0 and not run.hang
         if not clean:

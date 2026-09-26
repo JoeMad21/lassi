@@ -17,6 +17,8 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - In an attended session, when the master copy of the bible is unreachable, tell the owner and wait for it to be restored before editing the bible (owner, 2026-09-25). An unattended session follows AGENTS.md, Authority, and appends the edit to plans/BIBLE-SYNC.md.
 - Audit the bible text before the master edit (from P4.3 on): apply it to the mirror with a provisional header revision, audit the staged diff, and only then send one clean edit to the master and set the real revision. Editing the master first cost P4.1 and P4.7 extra master revisions for every wording fix.
 - Keep each task's bible text in one scratch script that prints the master payload and applies the mirror, so both copies use the same strings.
+- Test a threshold's boundary values exactly, never with approx: P4.4's pcc tests used approx and missed that two identical arrays could score 0.9999999999999998 and fail a pcc threshold of 1 (commit audit).
+- Before the audit, tick off every bible section the task's acceptance names; P4.4 missed its Harness Contract edit, and scoped rules (which runs, which settings) were written wider than the code (commit audit).
 
 ## Agents and briefs
 

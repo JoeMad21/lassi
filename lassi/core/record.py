@@ -41,8 +41,9 @@ RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # before any model call (a reference program did not build, or its run exited nonzero or hung); correction-cap
 # means an error remained when loop.max_corrections stopped the correction loop; upstream-crash means that, with
 # fixes.execution_gate off, a compiling attempt came past upstream's execution gate when no earlier attempt had run,
-# where upstream's notebook raises (it reads run output that was never set).
-END_REASONS = ("baseline-compile", "baseline-run", "correction-cap", "upstream-crash")
+# where upstream's notebook raises (it reads run output that was never set). baseline-disagree ends a trial before
+# any model call too: the pair's two references disagree past the tolerance the suite manifest declares for the item.
+END_REASONS = ("baseline-compile", "baseline-run", "baseline-disagree", "correction-cap", "upstream-crash")
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -100,6 +101,15 @@ def _check_unit(owner: str, name: str, value: float | None) -> None:
     """Require a float value, when set, to lie in [0, 1]."""
     if value is not None and not 0.0 <= value <= 1.0:
         _fail(owner, name, value, "must be in [0, 1]")
+
+
+def _check_relative_path(owner: str, name: str, path: str) -> None:
+    """Require a relative POSIX path with no drive, backslash, control character, or empty or '..' segment."""
+    if "\\" in path or _DRIVE.match(path) or _CONTROL.search(path):
+        _fail(owner, name, path, "must be a POSIX path with no drive, backslash, or control character")
+    segments = path.split("/")
+    if "" in segments or ".." in segments:
+        _fail(owner, name, path, "must be a relative path with no empty or '..' segment")
 
 
 # ---------------------------------------------------------------------------
@@ -203,12 +213,7 @@ class TextRef:
         """Check the hash and that the path is a relative POSIX path inside the store."""
         _check_fields(self)
         _check_sha256("TextRef", "sha256", self.sha256)
-        path = self.path
-        if "\\" in path or _DRIVE.match(path) or _CONTROL.search(path):
-            _fail("TextRef", "path", path, "must be a POSIX path with no drive, backslash, or control character")
-        segments = path.split("/")
-        if "" in segments or ".." in segments:
-            _fail("TextRef", "path", path, "must be a relative path with no empty or '..' segment")
+        _check_relative_path("TextRef", "path", self.path)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -240,6 +245,14 @@ class RunInfo:
     stage that records a run records each flag as a bool, so a run whose
     output was kept whole reads False; None means not recorded, as for a run
     that did not happen or a trial.json written before the flags existed.
+
+    `outputs` maps each output file the run wrote (its relative POSIX path,
+    as RunResult.output_files names it) to the sha256 of its bytes in the
+    binary store (lassi.core.store.BlobStore). A stage records it only when
+    the recipe's Oracle compares output files (capability
+    aligns_output_files); {} means the run wrote no file, and None means not
+    recorded, as under any other oracle or in a trial.json written before
+    the field existed.
     """
 
     exit_code: int | None = None
@@ -251,18 +264,63 @@ class RunInfo:
     stdout_truncated: bool | None = None
     stderr_truncated: bool | None = None
     workdir_incomplete: bool | None = None
+    outputs: dict[str, str] | None = None
 
     def __post_init__(self) -> None:
-        """Check the field types; the wall time must be finite."""
+        """Check the field types, and each output's relative path and sha256; the wall time must be finite."""
         _check_fields(self)
+        for path, digest in (self.outputs or {}).items():
+            _check_relative_path("RunInfo", "outputs", path)
+            _check_sha256("RunInfo", "outputs", digest)
+
+
+@dataclass(frozen=True, kw_only=True)
+class OutputStats:
+    """One output array compared with the reference's array of the same name (bible Oracles, binary_io row).
+
+    `name` is the array's name in its lassi_io header (or, for a file that
+    could not be read, the file's relative path). pcc, max_abs, and max_ulp
+    are the statistics lassi.oracles.binary_io computes; each is None when
+    it was not computed (a missing or extra output, a dtype or shape
+    mismatch, an unreadable file) or does not apply (max_ulp of an integer
+    output). `passed` says whether the output met its threshold, and `note`
+    says why it did not, or is None. Every field is required, so a missing
+    statistic is never read as not computed.
+    """
+
+    name: str
+    pcc: float | None
+    max_abs: float | None
+    max_ulp: int | None
+    passed: bool
+    note: str | None
+
+    def __post_init__(self) -> None:
+        """Check the field types, the name, pcc in [-1, 1], and max_abs and max_ulp at least 0."""
+        _check_fields(self)
+        _check_non_empty("OutputStats", "name", self.name)
+        if self.pcc is not None and not -1.0 <= self.pcc <= 1.0:
+            _fail("OutputStats", "pcc", self.pcc, "must be in [-1, 1]")
+        if self.max_abs is not None and self.max_abs < 0:
+            _fail("OutputStats", "max_abs", self.max_abs, "must be >= 0")
+        if self.max_ulp is not None:
+            _check_non_negative("OutputStats", "max_ulp", self.max_ulp)
+        if self.note is not None:
+            _check_non_empty("OutputStats", "note", self.note)
 
 
 @dataclass(frozen=True, kw_only=True)
 class Alignment:
-    """Oracle alignment per input and its mean, each in [0, 1]."""
+    """Oracle alignment per input and its mean, each in [0, 1], and the oracle's statistics per output.
+
+    `outputs` holds one OutputStats per output from an oracle that compares
+    output files (binary_io), and None from any other oracle (stdout_mask)
+    or in a trial.json written before the field existed.
+    """
 
     per_input: list[float] = field(default_factory=list)
     mean: float | None = None
+    outputs: list[OutputStats] | None = None
 
     def __post_init__(self) -> None:
         """Check the field types and that every value lies in [0, 1]."""
@@ -524,10 +582,22 @@ class Trial:
     `reference_run` is the target reference's run from the baseline stage
     (exit status, hang flag, wall time, stdout by reference, and the run
     flags); it stays all None when the reference was not run, as under a
-    compile-only executor. `requests` holds every model call in the order
-    sent (Request); None means not recorded, as in a trial.json written
-    before requests were, and the runner starts every trial with an empty
-    list, so a trial that asked no model records [].
+    compile-only executor. `reference_agreement` is the source reference's
+    agreement with the target reference, one OutputStats per output, judged
+    against the tolerance the suite manifest declares for the item; the
+    baseline measures it with fixes.baseline_both on when the recipe's
+    Oracle compares output files, and None means not measured.
+    `baseline_diagnostics` holds what the baseline noted that no attempt
+    carries: a reference-workdir-incomplete warning when the baseline would
+    have measured the agreement (an Oracle that compares output files,
+    fixes.baseline_both on, both references ran, and the item declares a
+    tolerance) but a reference run's workdir came back incomplete; [] when
+    it noted nothing, as in a trial.json written before the field existed.
+    `requests`
+    holds every model call in the order sent (Request); None means not
+    recorded, as in a trial.json written before requests were, and the
+    runner starts every trial with an empty list, so a trial that asked no
+    model records [].
     """
 
     trial_id: str
@@ -537,6 +607,8 @@ class Trial:
     bench_item: BenchItem
     model: ModelInfo
     reference_run: RunInfo = field(default_factory=RunInfo)
+    reference_agreement: list[OutputStats] | None = None
+    baseline_diagnostics: list[Diagnostic] = field(default_factory=list)
     context: Context = field(default_factory=Context)
     requests: list[Request] | None = None
     attempts: list[Attempt] = field(default_factory=list)

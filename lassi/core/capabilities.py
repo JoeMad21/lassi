@@ -7,7 +7,13 @@ declarations at load time, before any backend is constructed.
 
 from __future__ import annotations
 
-from typing import Iterable, Protocol, cast, runtime_checkable
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import TYPE_CHECKING, Iterable, Protocol, cast, runtime_checkable
+
+if TYPE_CHECKING:
+    from lassi.core.record import Alignment, OutputStats
+    from lassi.core.tolerance import Tolerance
 
 # The capability of an LLM backend whose model is unloaded before generated code runs, as upstream's notebook does
 # for Ollama (bible Source Papers, LASSI quirk table, Ollama row). A backend that declares it provides unload();
@@ -23,6 +29,12 @@ SCORES_ATTEMPTS = "scores_attempts"
 # built as factory(bench_root=<root of those sources>) and every other profile as factory()
 # (lassi.scoring.profiles.build_profile), so a scoring pass looks for a bench root only when a profile declares it.
 READS_BENCH_SOURCES = "reads_bench_sources"
+
+# The capability of an Oracle that compares a run's output files (RunResult.output_files, one lassi_io array per
+# file) instead of its stdout; it provides the OutputFileOracle methods below. For such an Oracle the oracle stage
+# aligns output files, and baseline and run_loop keep each run's output files in the binary store
+# (lassi.core.store.BlobStore, RunInfo.outputs); for any other Oracle they keep none.
+ALIGNS_OUTPUT_FILES = "aligns_output_files"
 
 
 @runtime_checkable
@@ -58,3 +70,55 @@ def unload_before_run(backend: object) -> None:
     """
     if declares(backend, UNLOAD_BEFORE_RUN):
         cast(Unloads, backend).unload()
+
+
+class OutputFileOracle(Protocol):
+    """An Oracle that declares ALIGNS_OUTPUT_FILES: what the stages read from it (lassi.oracles.binary_io).
+
+    Output files are given as RunResult.output_files holds them: each
+    file's relative path -> the path of its bytes. `sides` names the two
+    runs of a comparison in the notes, (reference, candidate) by default.
+    """
+
+    name: str
+
+    @property
+    def agreement_setting(self) -> str | None:
+        """Return the recipe setting that makes this oracle read the references' agreement, or None when none does."""
+        ...
+
+    def describe(self) -> str:
+        """Return a one-line description of what each output must meet."""
+        ...
+
+    def compare(
+        self,
+        reference_files: Mapping[str, Path],
+        candidate_files: Mapping[str, Path],
+        *,
+        sides: tuple[str, str] = ...,
+    ) -> list[OutputStats]:
+        """Return one OutputStats per output found on either side."""
+        ...
+
+    def alignment(
+        self,
+        reference_files: Mapping[str, Path],
+        candidate_files: Mapping[str, Path],
+        *,
+        sides: tuple[str, str] = ...,
+    ) -> Alignment:
+        """Return the candidate's Alignment against the reference, its per-output statistics included."""
+        ...
+
+    def reference_problem(self, files: Mapping[str, Path], side: str = ...) -> str | None:
+        """Return why a reference run's output files cannot be compared against, or None when they can."""
+        ...
+
+    def with_baseline(self, agreement: Sequence[OutputStats] | None) -> OutputFileOracle:
+        """Return a copy whose thresholds come from the references' recorded agreement."""
+        ...
+
+    def with_tolerance(self, tolerance: Tolerance) -> OutputFileOracle:
+        """Return a copy that judges every output against `tolerance` (its metric and threshold)."""
+        ...

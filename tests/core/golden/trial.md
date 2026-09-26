@@ -53,6 +53,7 @@
 | stdout_truncated | PLACEHOLDER |
 | stderr_truncated | PLACEHOLDER |
 | workdir_incomplete | PLACEHOLDER |
+| outputs | PLACEHOLDER |
 
 ## Context
 
@@ -181,6 +182,7 @@ None (initial attempt).
 | stdout_truncated | PLACEHOLDER |
 | stderr_truncated | PLACEHOLDER |
 | workdir_incomplete | PLACEHOLDER |
+| outputs | PLACEHOLDER |
 
 ### Alignment
 
@@ -292,6 +294,7 @@ None.
 | stdout_truncated | false |
 | stderr_truncated | false |
 | workdir_incomplete | false |
+| outputs | PLACEHOLDER |
 
 ### Alignment
 

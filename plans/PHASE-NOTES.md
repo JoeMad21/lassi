@@ -107,6 +107,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - ttsim needs `TT_METAL_SIMULATOR`, the SoC descriptor beside the library, slow dispatch, and single chip (bible, Execution Backends). Never open silicon; the gate refuses device commands.
 - Check every reference kernel against the Wormhole `unpack_to_dest` issue before it enters a suite.
 - Plan plans/p4-ttsim.md maps every item above to a task, and takes PHASE-NOTES P2's device in native runs (P4.5). OQ-025 (Tier A splits) is answered: every item stays `unassigned`, refused to training, until P7. P4.15 carries the P2 review questions (OQ-024).
+- The lassi-df recipe block (P4.4 audit advisory, 2026-09-25): the bible's Project Recipes block for projects/lassi-df/recipe.yaml sets `oracle: {kind: binary_io, metric: pcc, threshold: from_baseline}`, but none of its listed stages builds the reference programs, so the runner's from_baseline refusal (lassi/core/runner.py, _check_agreement: no listed stage builds the references) would stop it as written. Revisit the block when those stages exist: list a stage that builds the references with fixes.baseline_both on, declare each item's tolerance, or set a numeric threshold.
 
 ## P5 IR Levels
 

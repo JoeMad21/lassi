@@ -23,10 +23,12 @@ Components of a trial (task P2.7), each a float, or None with a note:
   that the oracle aligned at 1.0. 0.0 when that run was not clean, when the
   oracle gave less than 1.0, or when no output stands. None in three cases,
   each with its note: a trial with no attempt that ended at the baseline
-  (the model was never asked); a compile-only trial (the target reference
+  (BASELINE_ENDS: baseline-compile, baseline-run, or baseline-disagree; the
+  model was never asked); a compile-only trial (the target reference
   was not run and no attempt ran), labeled a compile-stage reproduction;
   and a clean standing run the oracle never aligned (no reference stdout,
-  or a truncated one). The scalar is correct.
+  a truncated one, or, under binary_io, a target reference run whose
+  workdir came back incomplete). The scalar is correct.
 - correct_paper: the paper's criterion, a manual inspection of stdout.
   Never computed: always None.
 - within_10pct: None while no timing profiler exists, even when an attempt
@@ -86,8 +88,9 @@ COMPILE_ONLY, NOT_ALIGNED, BASELINE, NO_ATTEMPT = "compile_only", "not_aligned",
 NOTE_KEYS = (WITHIN_10PCT, CORRECT_PAPER, COMPILE_ONLY, NOT_ALIGNED, BASELINE, NO_ATTEMPT, *SIMILARITY)
 FILE_KEYS = ("components", "scalar", "notes")
 
-# Record codes the components read.
-BASELINE_ENDS = frozenset({"baseline-compile", "baseline-run"})
+# Record codes the components read. BASELINE_ENDS holds every end reason that ends a trial at the baseline, before
+# any model call (lassi.core.record END_REASONS).
+BASELINE_ENDS = frozenset({"baseline-compile", "baseline-run", "baseline-disagree"})
 CAP_END = "correction-cap"
 FENCE_QUIRK_CODE = "fence-quirk"
 COMPILED_STAGES = frozenset({"S4", "S5"})
