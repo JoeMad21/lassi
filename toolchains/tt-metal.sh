@@ -361,8 +361,7 @@ check_sfpi_source() {
 
 # check_sfpi: refuse unless the sfpi compiler the configure placed reports the pinned version, read as
 # tt-metal's CMake reads it; when the configure kept its download, check that file's sha256 too. Its first
-# --version line then holds ":$SFPI_VERSION" (tt_metal/hw/CMakeLists.txt:113-124), a candidate EXPECT_VERSION
-# for P4.10 if the kernel compiler is the executable its toolchain checks.
+# --version line then holds ":$SFPI_VERSION" (tt_metal/hw/CMakeLists.txt:113-124).
 check_sfpi() {
   local gpp="$prefix/runtime/sfpi/compiler/bin/riscv-tt-elf-g++" out archive=""
   if ! out="$("$gpp" --version 2>&1)"; then

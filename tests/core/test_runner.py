@@ -2245,22 +2245,39 @@ def test_each_trial_records_the_pins_of_the_toolchain_that_builds_its_target(
 
 
 def test_every_default_toolchain_declares_a_pin_the_runner_can_read() -> None:
-    # A Toolchain registered without PIN would compile with whatever compiler PATH finds (Agent Rule 10). A class
-    # with PIN_BIN finds its compiler under the pin's install prefix; one without PIN_BIN (gcc-native, task P4.5)
-    # uses a host compiler the pin names by an absolute EXECUTABLE, with no install prefix.
+    # A Toolchain registered without PIN would compile with whatever compiler PATH finds (Agent Rule 10). Three
+    # shapes, each of which the default registry holds:
+    # - installed: PIN_BIN names the compiler under the pin's install prefix, PREFIX_NAME (nvcc-sm80, nvcpp-*);
+    # - host: no PIN_BIN, and the pin names a host compiler by an absolute EXECUTABLE, with no install prefix
+    #   (gcc-native, task P4.5);
+    # - host against a tree: no PIN_BIN, an absolute EXECUTABLE, and check_tree, so the runner checks the pin's
+    #   installed tree, PREFIX_NAME, and passes it as tree= (ttmetal-host, task P4.10).
     names = DEFAULT_REGISTRY.names("Toolchain")
     assert names
+    shapes: set[str] = set()
     for name in names:
         factory = DEFAULT_REGISTRY.get("Toolchain", name).factory
         assert isinstance(getattr(factory, "PIN", None), str), name
         pin = read_pin(factory.PIN)
         assert pin["VERSION"], name
         pin_bin = getattr(factory, "PIN_BIN", None)
-        if pin_bin is None:
-            assert pin["EXECUTABLE"].startswith("/") and "PREFIX_NAME" not in pin, name
+        check_tree = getattr(factory, "check_tree", None)
+        if pin_bin is not None:
+            assert check_tree is None, f"{name}: the runner reads check_tree only on a class without PIN_BIN"
+            assert isinstance(pin_bin, str) and pin["PREFIX_NAME"], name
+            pin_bin.format_map(pin)
+            shapes.add("installed")
             continue
-        assert isinstance(pin_bin, str) and pin["PREFIX_NAME"], name
-        pin_bin.format_map(pin)
+        assert pin["EXECUTABLE"].startswith("/"), name
+        if check_tree is None:
+            assert "PREFIX_NAME" not in pin, f"{name}: a host pin without a tree names no install prefix"
+            shapes.add("host")
+            continue
+        assert callable(check_tree), name
+        assert pin["PREFIX_NAME"] == f"{pin['NAME']}@{pin['VERSION']}", f"{name}: the tree is the pin's install"
+        assert "tree" in inspect.signature(factory).parameters, f"{name}: the runner passes the tree as tree="
+        shapes.add("tree")
+    assert shapes == {"installed", "host", "tree"}
 
 
 # ---------------------------------------------------------------------------

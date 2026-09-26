@@ -2,8 +2,9 @@
 
 lassi.toolchains re-exports CommandResult, CommandRunner, subprocess_runner,
 capped_runner, CappedRunner, EnvRunner, and STDERR_ATTACHMENT from here. The
-adapters in lassi.toolchains.nvcc, lassi.toolchains.nvcpp, and
-lassi.toolchains.gcc subclass CompilerToolchain, which holds build().
+adapters in lassi.toolchains.nvcc, lassi.toolchains.nvcpp,
+lassi.toolchains.gcc, and lassi.toolchains.ttmetal_build subclass
+CompilerToolchain, which holds build().
 
 Every runner drains stdout and stderr on one thread per pipe while the
 command runs, so the command never blocks on a full pipe (threads rather than
@@ -343,7 +344,8 @@ class CompilerToolchain:
     """A Toolchain that compiles its source files with one command (bible Component Interfaces, Toolchain).
 
     Subclasses set the class attributes `name`, `capabilities`, and
-    `SOURCE_SUFFIXES`, and implement command() and parse(). The raw stderr is
+    `SOURCE_SUFFIXES`, and implement command() and parse(); one may narrow
+    the sources with _sources(). The raw stderr is
     kept as the attachment STDERR_ATTACHMENT in the workdir and appears
     nowhere else in the BuildResult.
     """
@@ -382,8 +384,9 @@ class CompilerToolchain:
         a directory, or a path under the reserved names OUTPUT and
         STDERR_ATTACHMENT) gives "bad-path" errors, and nothing is written or
         run. Files are written as exact UTF-8 bytes. The sources are the
-        files whose suffix is in SOURCE_SUFFIXES, in sorted order; with none,
-        the result is one "no-sources" error and nothing runs. Otherwise a
+        files _sources() selects, by default those whose suffix is in
+        SOURCE_SUFFIXES, in sorted order; with none, the result is one
+        "no-sources" error and nothing runs. Otherwise a
         stale workdir/OUTPUT is removed, the raw stderr goes to
         STDERR_ATTACHMENT, and the artifact is workdir/OUTPUT when the status
         is 0 and the compiler wrote it. A failed build always has an error:
@@ -404,7 +407,7 @@ class CompilerToolchain:
             target = workdir / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
-        sources = sorted(path for path in files if PurePosixPath(path).suffix in self.SOURCE_SUFFIXES)
+        sources = self._sources(files)
         if not sources:
             return BuildResult(artifact=None, diagnostics=[self._no_sources()], stderr_ref="")
         output = workdir / OUTPUT
@@ -418,6 +421,14 @@ class CompilerToolchain:
         if failure is not None:
             diagnostics.append(failure)
         return BuildResult(artifact=artifact, diagnostics=diagnostics, stderr_ref=STDERR_ATTACHMENT)
+
+    def _sources(self, files: Mapping[str, str]) -> list[str]:
+        """Return the paths of `files` the compiler builds, in sorted order: those whose suffix is in SOURCE_SUFFIXES.
+
+        A subclass may select fewer (lassi.toolchains.ttmetal_build leaves
+        kernel sources out); harness files are never sources.
+        """
+        return sorted(path for path in files if PurePosixPath(path).suffix in self.SOURCE_SUFFIXES)
 
     def _unwritable(self, files: Mapping[str, str], harness: Mapping[str, str]) -> list[Diagnostic]:
         """Return a "bad-path" error for each path the workdir cannot hold, in sorted order.

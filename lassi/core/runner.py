@@ -142,12 +142,18 @@ PIN_BIN is built as factory(executable=<toolchains root>/<PREFIX_NAME>/
 <PIN_BIN>, runner=SandboxedCompileRunner(...)); one that declares PIN and no
 PIN_BIN uses a host compiler the project does not install, and its
 executable is the pin's EXECUTABLE, an absolute path taken as given
-(_host_executable; toolchains/gcc.pin). The toolchains root is
-the toolchains_root option, else $LASSI_TOOLCHAINS, resolved once (links and
+(_host_executable; toolchains/gcc.pin). Such a class that also defines
+check_tree builds against the pin's installed tree, <resolved toolchains
+root>/<PREFIX_NAME>, which must be a directory that resolves inside the
+root and which check_tree(tree, pin) must accept (its ValueError becomes a
+RunError); it is built as factory(executable=..., runner=..., tree=<that
+tree>) (_checked_tree; toolchains/tt-metal.pin). The toolchains root is the
+toolchains_root option, else $LASSI_TOOLCHAINS, resolved once (links and
 `..` segments followed), and the pin is read from toolchains/<PIN>.pin. The
-executable, each linked prefix, and the sandbox's read-only toolchains root
-all come from that resolved root, which is what a compile sees, and an
-executable or prefix that resolves outside it is refused. The compile
+executable, the tree, each linked prefix, and the sandbox's read-only
+toolchains root all come from that resolved root, which is what a compile
+sees, and an executable, tree, or prefix that resolves outside it is
+refused. The compile
 environment is the parent's PATH, LANG=C and LC_ALL=C (ASCII diagnostics),
 and each variable the pin names (NVHPC_CUDA_HOME for toolchains/nvhpc.pin);
 nothing else, so a variable such as NVCC_PREPEND_FLAGS never reaches a
@@ -187,7 +193,7 @@ import re
 import shutil
 import tempfile
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1222,7 +1228,8 @@ def build_toolchain(
     toolchains root `root` (None means none is set, which is refused), or,
     without PIN_BIN, the pin's EXECUTABLE (a host compiler, which must be
     an absolute path to an existing file; the root is still required, since
-    the compile sandbox exposes it), a
+    the compile sandbox exposes it; with check_tree, also the installed tree
+    it builds against, checked before any process starts), a
     clean compile environment, and the linked prefixes its pin names, run
     through SandboxedCompileRunner (see the module docstring), after its
     `--version` output was checked against the pin's EXPECT_VERSION through
@@ -1231,7 +1238,8 @@ def build_toolchain(
     run passes its runs root): every compile hides it, apart from its own
     build dir, and the compile layout is checked against a build dir under
     it first. Raises RunError, saying what to install or set, when the pin
-    file, the root, the executable (or it resolves outside the root), a
+    file, the root, the executable (or it resolves outside the root), the
+    installed tree (or check_tree refuses it), a
     linked prefix, TMPDIR (unset, or outside $LASSI_SCRATCH), or every
     hidden root is missing, when a hidden root is not absolute, when the
     sandbox refuses the compile layout, or when the compiler is not the
@@ -1252,27 +1260,31 @@ def _pinned_toolchain(name: str, factory: type, root: Path | None, build_root: P
     A class with PIN_BIN finds its compiler under the toolchains root
     (_pinned_executable); a class with PIN and no PIN_BIN uses a host
     compiler the project does not install, the pin's EXECUTABLE
-    (_host_executable). Every refusal is a RunError that says what is
-    missing, raised before any process starts: the pin file, the root, the
-    executable, TMPDIR (unset, or outside $LASSI_SCRATCH), a hidden root, a
-    linked prefix, or a compile layout the sandbox refuses. Then
+    (_host_executable), and one that also defines check_tree builds
+    against the pin's installed tree (_checked_tree). Every refusal is a
+    RunError that says what is missing, raised before any process starts:
+    the pin file, the root, the executable, the tree (or check_tree refuses
+    it), TMPDIR (unset, or outside $LASSI_SCRATCH), a hidden root, a linked
+    prefix, or a compile layout the sandbox refuses. Then
     `<executable> --version` must print the pin's EXPECT_VERSION in the
     compile sandbox.
     """
     pin_name = factory.PIN
     host = getattr(factory, "PIN_BIN", None) is None
-    pin = _pin(pin_name, ("VERSION",) if host else ("VERSION", "PREFIX_NAME"))
+    check_tree = getattr(factory, "check_tree", None) if host else None
+    pin = _pin(pin_name, ("VERSION",) if host and check_tree is None else ("VERSION", "PREFIX_NAME"))
     if host:
         resolved, executable = _host_executable(name, pin_name, pin, root)
     else:
         resolved, executable = _pinned_executable(name, factory, pin, root)
+    keywords = {} if check_tree is None else {"tree": _checked_tree(name, pin_name, pin, resolved, check_tree)}
     tmpdir = _checked_tmpdir()
     hidden_roots = _compile_hidden_roots(build_root)
     environment = _compile_environment()
     pins = {pin_name: pin, **_linked_pins(name, pin_name, pin, resolved, environment)}
     runner = _compile_runner(name, environment, resolved, hidden_roots, build_root)
     version, status = _checked_version(name, executable, runner, Path(tmpdir), pin_name, pin)
-    toolchain = factory(executable=str(executable), runner=runner)
+    toolchain = factory(executable=str(executable), runner=runner, **keywords)
     return BuiltToolchain(name, (), toolchain, str(executable), environment, pins, version, status)
 
 
@@ -1313,6 +1325,30 @@ def _host_executable(name: str, pin_name: str, pin: Mapping[str, str], root: Pat
             "does not exist on this host; install the package it names, or run on the build host"
         )
     return root.resolve(), executable
+
+
+def _checked_tree(
+    name: str, pin_name: str, pin: Mapping[str, str], root: Path, check_tree: Callable[[Path, Mapping[str, str]], None]
+) -> Path:
+    """Return the installed tree a host compiler builds against, <root>/<PREFIX_NAME>, once check_tree accepts it.
+
+    `root` is the resolved toolchains root. The tree must be a directory
+    that resolves inside it, since a compile sees only that root, and
+    `check_tree(tree, pin)`, the toolchain class's own check of its install
+    (lassi.toolchains.ttmetal_build), must raise no ValueError. Every
+    refusal is a RunError, raised before any process starts.
+    """
+    tree = root / pin["PREFIX_NAME"]
+    if not tree.is_dir() or not _within(tree.resolve(), root):
+        raise RunError(
+            f"toolchain {name!r} builds against the installed {pin_name} tree {tree}, which is not a directory "
+            f"inside the toolchains root; install it on the build host with toolchains/{pin_name}.sh"
+        )
+    try:
+        check_tree(tree, pin)
+    except (OSError, ValueError) as error:
+        raise RunError(f"toolchain {name!r}: {error}") from error
+    return tree
 
 
 def _pinned_executable(name: str, factory: type, pin: Mapping[str, str], root: Path | None) -> tuple[Path, Path]:

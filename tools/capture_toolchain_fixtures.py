@@ -6,7 +6,8 @@ Usage (on the build host, through tools/rx.py):
 
 A fixture set is a directory holding scenarios.json and sources/: the
 default set is tests/toolchains/fixtures, and --fixtures DIR names another
-(tests/toolchains/fixtures/gcc holds the gcc-native set, task P4.5). Its
+(tests/toolchains/fixtures/gcc holds the gcc-native set, task P4.5, and
+tests/toolchains/fixtures/ttmetal the ttmetal-host set, task P4.10). Its
 scenarios.json names each scenario: its toolchain (a registry name), an
 optional override of the preset's ARCH ("arch") or GPU ("gpu") class
 attribute, and a one-line description. The files a scenario compiles are
@@ -16,7 +17,8 @@ fixtures; the tool only compiles them and never runs a built program.
 Each toolchain is built exactly as the stage runner builds it, with
 lassi.core.runner.build_toolchain: the pinned executable under
 $LASSI_TOOLCHAINS (or, for a host pin such as toolchains/gcc.pin, the pin's
-EXECUTABLE), checked by its --version against the pin's expected
+EXECUTABLE; for ttmetal-host also the installed tree, checked before any
+process starts), checked by its --version against the pin's expected
 version, the clean compile environment (PATH, LANG=C, LC_ALL=C, and linked
 prefixes such as NVHPC_CUDA_HOME; no HOME), and the sandboxed compile runner
 (lassi.executors.sandbox.SandboxedCompileRunner, P0.20), which gives each

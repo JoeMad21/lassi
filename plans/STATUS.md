@@ -87,8 +87,8 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.6 | DONE | Record readings for simulator runs | - | simulator readings: sim-gap, UB, jit at S1, hang hint, wall-time labels, df-v0 and lassi profile readings; bible rev 229 |
 | P4.7 | DONE | Graphics setting, preset, and banner | - | graphics setting, preset, banner; bible rev 211 |
 | P4.8 | READY | Progress hook and live inference table | P4.7 |  |
-| P4.9 | READY | Spike: ttsim runtime facts, unpack_to_dest, and Watcher | P4.2 |  |
-| P4.10 | READY | tt-metal host toolchain | P4.2,P4.5 | also compare lassi-cpm-sources.txt with results/p4-tt-install before using a rebuilt tree (PHASE-NOTES P4) |
+| P4.9 | READY | Spike: ttsim runtime facts, unpack_to_dest, and Watcher | P4.2 | batch 755c739 running as rx job 20260926-140947-p49-ttsim-runtime-6f4c |
+| P4.10 | ACTIVE | tt-metal host toolchain | P4.2,P4.5 | toolchain, pin, and remote tests in (commit A); fixture capture pending |
 | P4.11 | READY | ttsim executor and the smoke driver | P4.6,P4.9,P4.10 |  |
 | P4.12 | READY | CPU -> TT guard | P4.6,P4.10 |  |
 | P4.13 | READY | Tier A suite tt-pairs-v0 | P4.4,P4.5,P4.11,P4.12 |  |
