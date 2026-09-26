@@ -6,6 +6,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 
 - Minimize activity on alpha01 (owner, 2026-09-25). Work on the local copy until a step needs Linux, a compiler, the simulator, or a device. Batch remote tests into one `rx run` per task where possible, and never poll the host more often than the work needs.
 - Record inefficiencies and hang-ups here as they happen (owner, 2026-09-25).
+- The owner cannot monitor on 2026-09-26: work unattended, push each commit, and take the recommendation of every owner-queue item the owner does not answer personally, recording it on the item as the owner's standing direction and marking it for review later (owner, 2026-09-26).
 
 ## Audits and the bible
 
@@ -19,6 +20,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - Keep each task's bible text in one scratch script that prints the master payload and applies the mirror, so both copies use the same strings.
 - Test a threshold's boundary values exactly, never with approx: P4.4's pcc tests used approx and missed that two identical arrays could score 0.9999999999999998 and fail a pcc threshold of 1 (commit audit).
 - Before the audit, tick off every bible section the task's acceptance names; P4.4 missed its Harness Contract edit, and scoped rules (which runs, which settings) were written wider than the code (commit audit).
+- When a task changes what a shared term means (P4.6 made a clean run also need no UB and no simulator gap), grep every reader of that term before the audit: the lassi profile still read exit 0 and no hang as clean, and four audit lenses found it.
 
 ## Agents and briefs
 
@@ -51,4 +53,8 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - `rx pull --path` reaches only lassi-gate/runs, lassi-runs, and lassi-wt; a file under the toolchains root (an install record, a fetched-sources list) is read with one `rx exec cat` and quoted in the task's summary.md.
 - The P4.2 job, building only the needed targets (676 Ninja steps) at 32 jobs, took 3 minutes 44 seconds in all: fetch, configure, build, checks, and the ttsim install (results/p4-tt-install). Name only the targets a task needs; match the `rx job wait --interval` to the expected length (300 seconds for a long job, the default for a build of this size) so a short job is not left waiting on a poll.
 - A results/<name>/ folder holds what `rx pull --into` wrote plus summary.md (AGENTS.md, Results). Evidence read by `rx exec` goes inside summary.md with the exec id, not in extra files; P4.2 wrote two extra files and had to fold them back.
+- Count each grep section's worst case before a read-only `rx exec`: two P4.9 probes printed 173 and 123 lines, over the 120-line practice.
+- Dry-run a remote batch locally first, with stand-ins in a local Linux user namespace (a fake scratch root bind-mounted at /mnt/nvme10/joseph_ufl). It found four P4.9 script bugs with no host activity: the helper's import path, the stdout budget, the adaptive limits after a fallback, and a tool looked up by name after the wrapper narrowed PATH.
+- Audit a remote batch for shared-host safety before its first launch: the P4.9 review found a network fallback that would have re-enabled the host network and a locale that would have put non-ASCII quotes in the evidence, both before any host activity.
+- A 1-byte core limit, the only one that stops alpha01's piped systemd-coredump (plans/spikes/p0-sandbox-hardening.md), needs `prlimit --core=1`; bash's `ulimit -c 1` sets 1024 bytes, and a local check with `ulimit -c` hides it. Check with getrlimit(RLIMIT_CORE) == (1, 1). The P4.9 batch audit caught this before any host activity.
 - A clean-commit remote run needs a clean checkout. When the main tree holds other staged work, commit the task, then run rx from the detached clean worktree C:/dev/lassi-clean checked out at that commit, as the P1 and P2 evidence runs did.

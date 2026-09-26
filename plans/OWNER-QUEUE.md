@@ -296,3 +296,15 @@ Recommendation: (a). Tagged artifacts with upstream CI evidence on Wormhole meet
 Answer:
 Owner's choice (asked in the working session, 2026-09-24; recorded by the agent): option (a), the Feb 2026 nightly.
 Applied: 2026-09-24. The joint pin is in the bible's Toolchain Pins and ttsim Facts with a Decision Log entry; P4.2 installs it under $LASSI_TOOLCHAINS.
+
+## OQ-027 -Werror For TT Host Programs
+State: OPEN
+Kind: decision
+Blocks: none; option (b) applied under the owner's 2026-09-26 direction (P4.10 builds TT host programs without -Werror)
+Evidence: rx 20260925-223402-exec-32ce (the pinned gate example's compile line in build_Release/build.ninja, read by P4.10's test-writer); bible Reward Function (df-v0's W counts compile-stage warnings at S4 or S5); toolchains/gcc.pin (gcc-native builds with -O3 -fopenmp and no -Werror)
+Question: The pinned tt-metal examples compile with -Wall -Werror -Wunused-parameter. P4.10's ttmetal-host toolchain takes that compile line from the pinned build so references build exactly as upstream built them. With -Werror, any warning in model-written TT host code is a build error: the attempt stays at S1 and is corrected as a compile error, and df-v0's warning term W never applies to TT host code. Should TT host programs build with -Werror?
+Options: (a) Keep -Werror for every TT host build: the flags match the pinned examples exactly; a candidate's warning fails its build, so warnings cost a correction instead of a W penalty, unlike gcc-native. (b) Drop -Werror for TT host builds and keep -Wall, -Wunused-parameter, and the rest of the pinned line: the references still build (they build clean with it); a candidate's warning stays a warning and counts in W at S4 or S5, as for gcc-native; the flags differ from the pinned examples by that one word, recorded in toolchains/tt-metal.pin and the Decision Log.
+Recommendation: (b). It keeps one reading of warnings across toolchains (a warning is penalized in W, an error is corrected), and the references are unaffected.
+Answer:
+Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Applied here: option (b).
+Review later: yes. The owner has not answered this item personally.
