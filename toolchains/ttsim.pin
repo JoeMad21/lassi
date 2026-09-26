@@ -1,0 +1,22 @@
+# ttsim pin (task P4.2; bible Toolchain Pins, joint pin; Execution Backends, ttsim row; plans/spikes/p4-tt-pins.md).
+# Shell-sourced by toolchains/ttsim.sh, which installs under $LASSI_TOOLCHAINS/$PREFIX_NAME.
+NAME=ttsim
+# The ttsim-version default of .github/workflows/ttsim.yaml at the pinned tt-metal commit, the release that
+# commit's own CI ran on Wormhole; tag v1.3.4 is ttsim commit 2174bdb9dce5acbd775fad3fbfb96710ffe1bd87.
+VERSION=v1.3.4
+PREFIX_NAME=ttsim@v1.3.4
+URL=https://github.com/tenstorrent/ttsim/releases/download/v1.3.4/libttsim_wh.so
+LIBRARY=libttsim_wh.so
+SIZE=162016
+SHA256=7b10aa05a5297c4a28f274e39526bfe6c69373661d1b4d4e47c4257e44b79507  # GitHub's asset digest, re-hashed in the spike
+# The soc descriptor beside the library, named as that CI job names it: it copies wormhole_b0_80_arch.yaml to
+# soc_descriptor.yaml there, and UMD at the pin reads soc_descriptor.yaml from the directory of a simulator path
+# ending in .so (device/simulation/simulation_chip.cpp). The job also renames the library libttsim.so; any .so
+# name works, so the release name stays, as the bible's ttsim row writes it.
+SOC_DESCRIPTOR=soc_descriptor.yaml
+# Copied from the pinned tt-metal tree: the PREFIX_NAME of toolchains/tt-metal.pin and the path in that tree.
+TT_METAL_FROM=tt-metal@5280a9cf
+SOC_DESCRIPTOR_FROM=tt_metal/soc_descriptors/wormhole_b0_80_arch.yaml
+SOC_DESCRIPTOR_SHA256=24fd3dfae80435a7d9113e255d6d6af9cdf83f6ae3b1c385e1d48a24795ccf49  # 3125 bytes, git blob ff4e5576b1b5eab137c4ae25996f6bedd2c9ad24
+# PROJECTED, not measured: the two files and the record, under 200 KiB; the bound in KiB for the space check.
+INSTALL_KIB=200

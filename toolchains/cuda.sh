@@ -93,7 +93,7 @@ check_space() {
 
 # fetch <url> <sha256> <file>: keep <file> when it already has the sha256; otherwise download it to a new
 # temporary name next to it, check the sha256, and rename it into place. A file that exists with another
-# sha256 is refused and left as it is, since this run did not create it.
+# sha256 is refused and left as it is, since this run did not create it. curl -q, first, reads no curlrc.
 fetch() {
   local url="$1" sum="$2" file="$3" part
   if [ -e "$file" ]; then
@@ -105,7 +105,7 @@ fetch() {
     return 1
   fi
   part="$(mktemp "$file.part.XXXXXX")"
-  if ! curl -fsSL --retry 3 -o "$part" "$url"; then
+  if ! curl -q -fsSL --retry 3 -o "$part" "$url"; then
     rm -f "$part"
     echo "cuda: cannot download $url" >&2
     return 1

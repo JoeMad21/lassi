@@ -1,0 +1,47 @@
+# tt-metal pin (task P4.2; bible Toolchain Pins, joint pin; plans/spikes/p4-tt-pins.md). Shell-sourced by
+# toolchains/tt-metal.sh, which fetches COMMIT and its submodules by sha at depth 1 and builds the tree in place
+# at $LASSI_TOOLCHAINS/$PREFIX_NAME, an install once it holds lassi-install.txt. The runtime finds the tree
+# through TT_METAL_RUNTIME_ROOT (tt_metal/llrt/rtoptions.cpp; otherwise /usr/libexec/tt-metalium).
+NAME=tt-metal
+# The TT_METAL_VERSION of tt-mlir 0.9.0.dev20260221's third_party/CMakeLists.txt (2026-02-17).
+COMMIT=5280a9cfb00998fd49667a29523d03aee905c129
+# PREFIX_NAME is <NAME>@<VERSION> (lassi/toolchains/pins.py); the script checks COMMIT.
+VERSION=5280a9cf
+PREFIX_NAME=tt-metal@5280a9cf
+URL=https://github.com/tenstorrent/tt-metal.git
+# The gitlinks at COMMIT, <path>:<commit>, exactly; none nests submodules.
+SUBMODULES="tt_metal/third_party/tt_llk:f990966829c2831bf2a58d8ce31779acbb476139 tt_metal/third_party/umd:0450f1be3a21cbf17adb97517038586a6a3af4c0 tt_metal/third_party/tracy:0aaefbb689b4c60694edc905545fc4709fd13f6a models/demos/t3000/llama2_70b/reference/llama:29125b7ad8b5513eeaa4417ed92892bf39c8bd74"
+# Configure downloads, each checked by tt-metal's CMake: sfpi (tt_metal/sfpi-version, FetchContent URL_HASH)
+# into runtime/sfpi, and CPM.cmake (EXPECTED_HASH). CPM packages are recorded in lassi-cpm-sources.txt.
+SFPI_VERSION=7.25.0
+SFPI_FILENAME=sfpi_7.25.0_x86_64_debian.txz
+SFPI_URL=https://github.com/tenstorrent/sfpi/releases/download/7.25.0/sfpi_7.25.0_x86_64_debian.txz
+SFPI_SHA256=6a8883c448df537d9661e239e67721b1ba2a4d0e8ea7a573070d2f6c6d015093  # 88805716 bytes
+CPM_URL=https://github.com/cpm-cmake/CPM.cmake/releases/download/v0.40.2/CPM.cmake
+CPM_SHA256=c8cdc32c03816538ce22781ed72964dc864b2a34a310d3b7104812a5ca2d835d  # 41017 bytes
+# The configuration of the pin's ttsim CI build, but for what is built (owner, 2026-09-25: least CPU on
+# alpha01): bindings, tests, and ccache off. tt-metal.sh says why the example binaries keep CI's flags.
+TOOLCHAIN_FILE=cmake/x86_64-linux-clang-20-libstdcpp-toolchain.cmake
+CMAKE_FLAGS="-G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TRACY=OFF -DENABLE_DISTRIBUTED=OFF -DWITH_PYTHON_BINDINGS=OFF -DBUILD_PROGRAMMING_EXAMPLES=ON -DTT_METAL_BUILD_TESTS=OFF -DTTNN_BUILD_TESTS=OFF -DTT_UNITY_BUILDS=ON -DTT_ENABLE_LIGHT_METAL_TRACE=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF -DENABLE_FAKE_KERNELS_TARGET=OFF -DENABLE_CCACHE=FALSE -DTT_USE_SYSTEM_SFPI=OFF"
+# Built instead of all or install: tt_metal (tt_metal/CMakeLists.txt:3), hw_toolchain (tt_metal/hw/
+# CMakeLists.txt:483), and metal_example_<name> for EXAMPLES. TT-NN is configured but not built.
+TARGETS="tt_metal hw_toolchain"
+BUILD_DIR=build_Release
+# Built in $BUILD_DIR/programming_examples, never run here: the gate's example, Tier A, CI's others.
+EXAMPLES="add_2_integers_in_riscv loopback eltwise_binary eltwise_sfpu matmul_single_core matmul_multi_core add_2_integers_in_compute hello_world_compute_kernel hello_world_datamovement_kernel matmul_multicore_reuse"
+# Host tools the spike found on alpha01; the script refuses others. The toolchain file takes clang-20 and
+# ld.mold, else ld.lld-20, from PATH.
+CMAKE=/usr/local/bin/cmake
+CMAKE_EXPECT="cmake version 3.31.6"
+NINJA=/usr/bin/ninja
+NINJA_EXPECT=1.10.1
+CLANG_C=clang-20
+CLANG_CXX=clang++-20
+CLANG_EXPECT="clang version 20.1.8"
+LINKER=ld.lld-20
+LINKER_EXPECT="LLD 20.1.8"
+# No EXPECT_VERSION: P4.10 sets it with the executable its toolchain checks (see tt-metal.sh, check_sfpi).
+# PROJECTED, not measured: about 3.5 GiB (2.5 to 5); the space check plans for the spike's 8 GiB bound.
+INSTALL_KIB=8388608
+# TurboQuant's checkout: read only, never built in or written to (plans/p4-ttsim.md).
+FOREIGN_CHECKOUT=/mnt/nvme10/joseph_ufl/tt-metal
