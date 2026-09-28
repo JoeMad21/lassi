@@ -1,0 +1,24 @@
+LASSI run p48-synthetic-run  trial 2 of 5  elapsed 1:02:05
+arm synthetic-arm-7b  item layout (omp-cuda)
+device SYNTHETIC device of the live table tests
++---------------+--------------------------------+-------------------------------------------------+
+| Step          | Status                         | Code                                            |
++---------------+--------------------------------+-------------------------------------------------+
+| source        | the starter code               | main.cpp, from line 10                          |
+|               |                                | #pragma omp target teams distribute parallel f~ |
+|               |                                |   for (int i = 0; i < N; ++i) {                 |
+|               |                                |     b[i] = 2.0f * a[i];                         |
+|               |                                |   }                                             |
+|               |                                |   float sum = 0.0f;                             |
+|               |                                |   for (int i = 0; i < N; ++i) {                 |
+|               |                                |     sum += b[i];                                |
+|               |                                |   }                                             |
+|               |                                |   if (sum < 0.0f) {                             |
+|               |                                |     std::puts("FAIL");                          |
+|               |                                |     return 1;                                   |
+|               |                                |   }                                             |
++---------------+--------------------------------+-------------------------------------------------+
+| final product | no stage; 0 corrections; end   |                                                 |
+|               | baseline-run: the cuda         |                                                 |
+|               | reference exited with 1        |                                                 |
++---------------+--------------------------------+-------------------------------------------------+

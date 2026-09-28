@@ -91,6 +91,15 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    metric tables (lassi.scoring.run_scoring.compute_metrics);
 7. writes the run tree and prints one line per trial and the run directory.
 
+With RunOptions.observer set, the run also sends progress events
+(lassi.core.progress, task P4.8) to that observer, wrapped in a
+GuardedObserver shared by every trial: trial-start (the run id, the
+trial's place in the run and the run's trial count, and the item's source
+files), stage-start before each stage, and trial-end after the trial is
+scored and written, just before its line is printed; the stages send the
+rest through RunContext.observer. An observer that raises is dropped for
+the rest of the run, and no record, file, or exit status depends on one.
+
 The run tree is <runs root>/runs/<run_id>, where the runs root is the
 runs_root option, else $LASSI_RUNS_ROOT, else the recipe's runs_root. The
 runs root and the run directory must be absolute, resolve outside the
@@ -205,6 +214,7 @@ from lassi.core.capabilities import SIMULATOR, UNLOAD_BEFORE_RUN, declares, unlo
 from lassi.core.fragments import fragment_key, pack_language
 from lassi.core.interfaces import Executor, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
+from lassi.core.progress import STAGE_START, TRIAL_END, TRIAL_START, GuardedObserver, Observer, ProgressEvent, notify
 from lassi.core.recipe import (
     UNCAPPED,
     Recipe,
@@ -300,6 +310,8 @@ class RunOptions:
     - registry: the components a recipe may bind; None means DEFAULT_REGISTRY.
     - roots: the directories searched for a recipe named in `extends`; None
       means lassi.core.recipe.default_roots().
+    - observer: gets the run's progress events (lassi.core.progress); None
+      means none are sent. Nothing the run writes or returns depends on it.
     """
 
     runs_root: Path | None = None
@@ -308,6 +320,7 @@ class RunOptions:
     toolchains_root: Path | None = None
     registry: Registry | None = None
     roots: Sequence[Path] | None = None
+    observer: Observer | None = None
 
 
 # The options run_recipe uses when none are given: every field falls back as RunOptions says.
@@ -393,6 +406,7 @@ class _Run:
     `pins` holds every bound toolchain's pin versions and `target_pins` those
     of the toolchain that builds each target language. `scoring` holds the
     built ScoreProfiles of `score` and `metrics` (lassi.scoring.run_scoring).
+    `observer` is RunOptions.observer in a GuardedObserver, or None.
     """
 
     recipe: Recipe
@@ -410,6 +424,7 @@ class _Run:
     commit: str | None
     dirty: bool | None
     scoring: ScoringPlan
+    observer: GuardedObserver | None = None
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -492,6 +507,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         commit=commit,
         dirty=dirty,
         scoring=scoring,
+        observer=None if options.observer is None else GuardedObserver(options.observer),
     )
 
 
@@ -1601,17 +1617,22 @@ def _run_trials(run: _Run, manifest: Mapping[str, Any]) -> list[Trial]:
     direction's target language (_trial_provenance). The recipe's `score`
     profile, when it binds one, scores each trial before it is written
     (_scored). Its trial.md labels its run wall times as simulator wall time
-    when its target language's executor declares SIMULATOR (task P4.6).
+    when its target language's executor declares SIMULATOR (task P4.6). The
+    observer, when the run has one, gets each trial's trial-end event after
+    the trial is written and before its line is printed.
     """
     trials: list[Trial] = []
+    count = len(run.settings.directions) * len(run.bench.items) * run.settings.trials
     for direction in run.settings.directions:
         provenance = _trial_provenance(manifest, direction.target)
         simulator = declares(run.executors.for_language(direction.target), SIMULATOR)
         for item in run.bench.items:
             for number in range(1, run.settings.trials + 1):
-                trial = _scored(run, _run_trial(run, provenance, direction, item, number))
+                place = (len(trials) + 1, count)
+                trial = _scored(run, _run_trial(run, provenance, direction, item, number, place))
                 write_trial(trial, run.run_dir, run.store, simulator=simulator)
                 trials.append(trial)
+                notify(run.observer, TRIAL_END, trial)
                 final = trial.final
                 ended = "" if final.end_reason is None else f"  end {final.end_reason.code}"
                 print(
@@ -1622,7 +1643,9 @@ def _run_trials(run: _Run, manifest: Mapping[str, Any]) -> list[Trial]:
     return trials
 
 
-def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: str, number: int) -> Trial:
+def _run_trial(
+    run: _Run, provenance: Provenance, direction: Direction, item: str, number: int, place: tuple[int, int]
+) -> Trial:
     """Run the recipe's stages on one new trial, each built on a fresh RunContext, and set its final block.
 
     The trial id's first segment is the recipe's project. A backend that
@@ -1633,7 +1656,10 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
     runs. A stage that sets final.end_reason ends the trial: no later stage
     runs, and the final block keeps the end reason. Every trial starts with
     an empty Trial.requests, so its model requests are recorded and a trial
-    that ends before any model call records none ([], never None).
+    that ends before any model call records none ([], never None). The
+    observer gets the trial-start event (_trial_start; `place` is the
+    trial's 1-based place in the run and the run's trial count) before the
+    backend unloads, and a stage-start event before each stage runs.
     """
     settings, suite = run.settings, run.bench.suite
     backend = run.backend
@@ -1652,7 +1678,24 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
         model=model_info(backend, settings.sampling),
         requests=[],
     )
-    context = RunContext(
+    context = _context(run, backend, direction, item)
+    _trial_start(run, trial, direction, item, place)
+    started = time.monotonic()
+    unload_before_run(backend)
+    names = run.recipe.data["stages"]
+    stages = [run.registry.get("Stage", name).factory(context=context) for name in names]
+    for name, stage in zip(names, stages, strict=True):
+        notify(run.observer, STAGE_START, trial, name)
+        trial = stage(trial)
+        if trial.final.end_reason is not None:
+            break
+    return dataclasses.replace(trial, final=_final(trial, time.monotonic() - started))
+
+
+def _context(run: _Run, backend: Any, direction: Direction, item: str) -> RunContext:
+    """Return a fresh RunContext for one trial of `item` in `direction`, with the run's observer."""
+    settings = run.settings
+    return RunContext(
         recipe=run.recipe,
         backend=backend,
         sampling=settings.sampling,
@@ -1660,7 +1703,7 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
         executor=run.executors.for_language(direction.target),
         executors=run.executors.by_language,
         store=run.store,
-        suite=suite,
+        suite=run.bench.suite,
         sources_root=run.bench.root,
         item=item,
         direction=direction,
@@ -1669,15 +1712,31 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
         max_corrections=settings.max_corrections,
         fragments=settings.fragments,
         packs=settings.packs,
+        observer=run.observer,
     )
-    started = time.monotonic()
-    unload_before_run(backend)
-    stages = [run.registry.get("Stage", name).factory(context=context) for name in run.recipe.data["stages"]]
-    for stage in stages:
-        trial = stage(trial)
-        if trial.final.end_reason is not None:
-            break
-    return dataclasses.replace(trial, final=_final(trial, time.monotonic() - started))
+
+
+def _trial_start(run: _Run, trial: Trial, direction: Direction, item: str, place: tuple[int, int]) -> None:
+    """Send the observer the trial-start event: the run id, the trial's place and the run's count, and the source.
+
+    Nothing is read when the run has no observer or it was dropped. The
+    source is the item's files in the direction's source language as
+    Suite.source_files reads them, None when they cannot be read, so the
+    event never stops a run.
+    """
+    observer = run.observer
+    if observer is None or observer.dropped:
+        return
+    try:
+        source = run.bench.suite.source_files(item, direction, run.bench.root, purpose=PURPOSE)
+    except (OSError, ValueError):
+        source = None
+    number, count = place
+    observer(
+        ProgressEvent(
+            kind=TRIAL_START, trial=trial, run_id=run.run_dir.name, number=number, count=count, source=source
+        )
+    )
 
 
 def _scored(run: _Run, trial: Trial) -> Trial:

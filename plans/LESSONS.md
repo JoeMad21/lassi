@@ -22,6 +22,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - Test a threshold's boundary values exactly, never with approx: P4.4's pcc tests used approx and missed that two identical arrays could score 0.9999999999999998 and fail a pcc threshold of 1 (commit audit).
 - Before the audit, tick off every bible section the task's acceptance names; P4.4 missed its Harness Contract edit, and scoped rules (which runs, which settings) were written wider than the code (commit audit).
 - When a task changes what a shared term means (P4.6 made a clean run also need no UB and no simulator gap), grep every reader of that term before the audit: the lassi profile still read exit 0 and no hang as clean, and four audit lenses found it.
+- A fix for one audit finding can change a rule stated elsewhere. P17's planning took four audit rounds: holding a task for the owner's review made "the phase stalls with only BLOCKED tasks" untrue in five files. After each fix, grep the change set for every statement of the rule it touches.
 
 ## Agents and briefs
 
@@ -63,3 +64,4 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - A parser of simulator findings must accept any class word; P4.9's fixed list of three missed ttsim's NonContractualBehavior. Match a pattern against the value itself, not a line with a count in front (P4.9's unpack_to_dest false positive), and take an example's own success line from its source, not a generic pattern.
 - Number owner-queue items only when filing them, and have a bible script that cites one check the heading exists: parallel tasks take numbers (P4.9's draft OQ-035 collided with P4.15's).
 - A clean-commit remote run needs a clean checkout. When the main tree holds other staged work, commit the task, then run rx from the detached clean worktree C:/dev/lassi-clean checked out at that commit, as the P1 and P2 evidence runs did.
+- A new rx slot has none of the generated upstream prompt and context files (only their manifests are tracked, OQ-018), so `lassi run` stops at the first prompt; the 2026-09-28 demo check lost one run to it. Generate them in the slot first with `uv run tools/extract_lassi_assets.py --upstream <a checkout at the pin>` (another slot's third_party/LASSI serves); slot syncs keep ignored files.

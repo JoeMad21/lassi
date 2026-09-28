@@ -55,12 +55,19 @@ class SettingsError(ValueError):
 
 
 class _PresetLoader(yaml.SafeLoader):
-    """A safe YAML loader that keeps each boolean's spelling and refuses a repeated mapping key.
+    """A safe YAML loader that keeps each boolean's spelling, never merges, and refuses a repeated mapping key.
 
-    Keeping the spelling means only `on` and `off` read as a setting; the
-    repeated-key refusal means `graphics: off` then `graphics: on` is an error,
-    never a silent last-wins.
+    Keeping the spelling means only `on` and `off` read as a setting; a merge
+    key (<<) is read as the plain key `<<`, so the preset check refuses it as
+    any other key; the repeated-key refusal means `graphics: off` then
+    `graphics: on` is an error, never a silent last-wins.
     """
+
+    def flatten_mapping(self, node: yaml.MappingNode) -> None:
+        """Retag every merge key (<<) of `node` as a plain string key instead of merging its value."""
+        for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                key_node.tag = "tag:yaml.org,2002:str"
 
     def construct_mapping(self, node: yaml.Node, deep: bool = False) -> dict[object, object]:
         """Construct a mapping as SafeLoader does; raise ConstructorError when any key appears twice."""
@@ -164,8 +171,9 @@ def load_preset(path: Path) -> bool | None:
     value is `on` or `off`, plain or quoted ("on", 'off'); comments are
     allowed. Any other file is a SettingsError naming the file: one that
     cannot be read or is not valid YAML, an empty file, a non-mapping, a
-    mapping with any other key or without `graphics`, a repeated key (never a
-    silent last-wins), or any other value. A preset is never guessed.
+    mapping with any other key (a YAML merge key, <<, included) or without
+    `graphics`, a repeated key (never a silent last-wins), or any other
+    value. A preset is never guessed.
     """
     path = Path(path)
     try:

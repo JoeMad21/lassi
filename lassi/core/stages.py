@@ -140,6 +140,16 @@ attempt's own `invalid-text` warning stays on the attempt; Trial.context
 carries no diagnostics, so a context reply that held a lone surrogate gives
 its request one parse-stage `invalid-text` warning.
 
+Progress events (lassi.core.progress, task P4.8) go to RunContext.observer
+when there is one, and nothing a stage does depends on them: before each
+model call, once its messages are stored, a request-sent event with the
+trial before the request is recorded (_send); an attempt event after
+generate or a correction appends an attempt (with its request recorded),
+after compile_loop builds the last attempt (_build_last), and after
+run_loop runs it (_run_last). Later changes (run_loop's `stale-output`
+warning, an end reason, the oracle stage's alignment) reach the observer
+with the runner's trial-end event.
+
 Upstream quirks are reproduced when their fixes (lassi.core.recipe.FIXES)
 are off, and each stage class names the fixes it reproduces in
 `reproduces`. Every quirk is keyed on its fix (or on loop.max_corrections),
@@ -221,6 +231,7 @@ from lassi.core import fragments as fragment_text
 from lassi.core.capabilities import ALIGNS_OUTPUT_FILES, SIMULATOR, OutputFileOracle, declares, unload_before_run
 from lassi.core.files import parse_file_blocks, render_file_blocks
 from lassi.core.interfaces import BuildResult, Executor, Limits, LLMBackend, Message, RunResult, Sampling, Toolchain
+from lassi.core.progress import ATTEMPT, REQUEST_SENT, Observer, notify
 from lassi.core.recipe import Recipe
 from lassi.core.record import (
     Attempt,
@@ -390,7 +401,10 @@ class RunContext:
     serves. `artifacts` maps the index of each attempt a build turned into a
     program to that program (BuildResult.artifact): compile_loop fills it and
     run_loop runs from it. The runner builds one RunContext per trial, so it
-    never carries an artifact from one trial to the next.
+    never carries an artifact from one trial to the next. `observer` gets the
+    stages' progress events (lassi.core.progress: request-sent and attempt);
+    the runner passes its GuardedObserver, or None when the run has no
+    observer, and no stage reads anything back from it.
     """
 
     recipe: Recipe
@@ -410,6 +424,7 @@ class RunContext:
     packs: Mapping[str, str] = field(default_factory=dict)
     artifacts: dict[int, Path] = field(default_factory=dict)
     executors: Mapping[str, Executor] = field(default_factory=dict)
+    observer: Observer | None = None
 
 
 def executor_for(context: RunContext, language: str) -> Executor:
@@ -719,15 +734,21 @@ def _reply_attempt(
     return _fenced_attempt(index, prompt_ref, reply, expected)
 
 
-def _send(context: RunContext, prompt: str, system: str | None = None) -> tuple[list[RequestMessage], str]:
+def _send(
+    context: RunContext, trial: Trial, stage: str, prompt: str, system: str | None = None
+) -> tuple[list[RequestMessage], str]:
     """Send `prompt` as the user message, after `system` as the system message when given.
 
-    Each message is kept in the text store before anything is sent. Returns
+    Each message is kept in the text store before anything is sent, and
+    then the observer gets a request-sent event with `trial`, the trial
+    before this request is recorded, and `stage`, the stage it is recorded
+    under (lassi.core.progress). Returns
     the messages as a Request records them (role and text reference, in the
     order sent; the user message is last) and the reply text as returned.
     """
     messages = [Message("user", prompt)] if system is None else [Message("system", system), Message("user", prompt)]
     recorded = [RequestMessage(role=message.role, ref=context.store.put(message.content)) for message in messages]
+    notify(context.observer, REQUEST_SENT, trial, stage)
     return recorded, context.backend.complete(messages, context.sampling).text
 
 
@@ -979,9 +1000,11 @@ class GenerateStage:
         system, prompt = self._prompt(trial, expected)
         if not fix_on(context, "prompt_spaces"):
             prompt = fragment_text.collapse_spaces(prompt)
-        messages, reply = _send(context, prompt, system)
+        messages, reply = _send(context, trial, self.name, prompt, system)
         attempt = _reply_attempt(context, 0, messages[-1].ref, reply, expected)
-        return _recorded(context, trial.with_attempt(attempt), self.name, 0, messages, attempt.response_text)
+        trial = _recorded(context, trial.with_attempt(attempt), self.name, 0, messages, attempt.response_text)
+        notify(context.observer, ATTEMPT, trial, self.name)
+        return trial
 
     def _prompt(self, trial: Trial, expected: Sequence[str]) -> tuple[str | None, str]:
         """Return the system prompt (None for a template set) and the user prompt.
@@ -1052,7 +1075,7 @@ class SummarizeContextStage:
         context = self.context
         pack = context.packs[context.direction.target]
         prompt = fragment_text.summary_request(context.fragments, context.direction, pack)
-        messages, reply = _send(context, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
         return _context_reply(context, trial, self.name, "knowledge_summary", messages, reply)
 
     def describe(self) -> str:
@@ -1085,7 +1108,7 @@ class DescribeSourceStage:
         """
         context = self.context
         prompt = fragment_text.description_request(context.fragments, source_as_read(context))
-        messages, reply = _send(context, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
         return _context_reply(context, trial, self.name, "source_description", messages, reply)
 
     def describe(self) -> str:
@@ -1195,6 +1218,7 @@ class CompileLoopStage:
             stage_reached=COMPILED if result.artifact is not None else attempt.stage_reached,
         )
         trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], built])
+        notify(self.context.observer, ATTEMPT, trial, self.name)
         if fix_on(self.context, "parsed_diagnostics"):
             return trial, None
         return trial, _attachment_text(workdir, result.stderr_ref)
@@ -1354,7 +1378,9 @@ class RunLoopStage:
             status = _run_status(run, limits, simulator=declares(context.executor, SIMULATOR))
             diagnostics.append(Diagnostic(stage="run", severity="error", code=RUN_ERROR, message=status))
         ran = dataclasses.replace(attempt, run=info, diagnostics=diagnostics, stage_reached=reached)
-        return dataclasses.replace(trial, attempts=[*trial.attempts[:-1], ran]), run, limits
+        trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], ran])
+        notify(context.observer, ATTEMPT, trial, self.name)
+        return trial, run, limits
 
 
 def attempt_limits(context: RunContext, trial: Trial) -> Limits:
@@ -1525,10 +1551,12 @@ def _corrected(
     system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error)
     if not fix_on(context, "prompt_newlines"):
         prompt = prompt.replace("\n", "")
-    messages, reply = _send(context, prompt, system)
+    messages, reply = _send(context, trial, stage, prompt, system)
     attempt = _reply_attempt(context, previous.index + 1, messages[-1].ref, reply, expected)
     attempt = dataclasses.replace(attempt, diff_from_previous=unified_diff(previous.files, attempt.files))
-    return _recorded(context, trial.with_attempt(attempt), stage, attempt.index, messages, attempt.response_text)
+    trial = _recorded(context, trial.with_attempt(attempt), stage, attempt.index, messages, attempt.response_text)
+    notify(context.observer, ATTEMPT, trial, stage)
+    return trial
 
 
 def _correction_messages(

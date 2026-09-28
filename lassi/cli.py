@@ -7,16 +7,20 @@
 
 Every command first decides terminal graphics (lassi.present.settings,
 choose_graphics: the --graphics option, LASSI_GRAPHICS, off without an
-interactive terminal, the saved preset, the first-run prompt, off). A
---graphics value other than on or off is refused by the argument parser
-(argparse choices), which prints its usage message and exits 2. A bad
-LASSI_GRAPHICS value or a preset error (a preset that load_preset refuses,
-or one whose place cannot be checked) exits 2 with
-`lassi <command>: <message>` on stderr before the command starts, except
-that `lassi settings graphics on|off` takes a preset error as graphics off
-and replaces the preset. With graphics on the command first prints the
-banner (lassi.present.banner) to stderr; with graphics off it prints exactly
-what it printed without them.
+interactive terminal, the saved preset, the prompt, until a preset is
+saved, off). A --graphics value other than on or off is refused by the
+argument parser (argparse choices), which prints its usage message and
+exits 2. A bad LASSI_GRAPHICS value, a preset that load_preset refuses, a
+preset whose place cannot be checked, or, at the prompt, an answer that
+cannot be saved exits 2 with `lassi <command>: <message>` on stderr before
+the command starts, except that `lassi settings graphics on|off` takes a
+preset it cannot read or check as graphics off and replaces the preset. A
+preset place on the root filesystem of a POSIX host is no error here: the
+prompt applies its answer to that command only. With graphics on the
+command first prints the banner (lassi.present.banner) to stderr when
+stderr can take it (_banner), so a stderr whose reader has gone changes no
+exit status; with graphics off it prints exactly what it printed without
+them.
 
 `lassi run` runs the recipe with the stage runner (lassi.core.runner). The
 run tree goes under <runs root>/runs/<run id>; the runs root defaults to
@@ -25,6 +29,18 @@ suite's fetched sources under $LASSI_SCRATCH. The command prints one line per
 trial and the run directory. It exits 0 on success, and 2 with the message
 on stderr when the recipe does not load (RecipeError), the run cannot start
 (RunError), or the sandbox is not available (SandboxUnavailableError).
+With graphics on it also shows the live inference table on stderr
+(lassi.present.live): the runner gets a LiveTable as its progress observer
+(RunOptions.observer), as wide as stderr's terminal and one line less than
+its height (COLUMNS and LINES when they are set to whole numbers above 0;
+_table_size), with the Code column and in-place redraws only when stderr is
+an interactive terminal, and ticking() lets it redraw about once a second
+while the run goes on. With graphics off no observer is passed. The table
+writes no file, and a table that raises is dropped, with one line on stderr
+when stderr can take it, without changing the run or the exit status; when
+its write to stderr fails with OSError (a pipe whose reader has gone),
+stderr is first pointed at the null device (lassi.core.progress.mute_stderr),
+so the process's exit status is still the command's.
 
 `lassi score` scores the run tree at <run dir> with each registered
 ScoreProfile named, in the order given, and writes the review packet under
@@ -40,9 +56,11 @@ argparse, so an unknown one is a refusal like any other.
 `lassi settings graphics on|off` saves the graphics preset and prints where;
 `lassi settings graphics` prints the setting that applies on a terminal and
 its source, never asking. Both exit 0, or 2 with `lassi settings: <message>`
-on stderr for a bad LASSI_GRAPHICS value or a preset error (a preset refused
-on the root filesystem, one whose place cannot be checked, one that cannot
-be saved, or, when showing, one that load_preset refuses). A value other
+on stderr for a bad LASSI_GRAPHICS value or a preset error: with on or off,
+a preset place on the root filesystem of a POSIX host (ROOT_REFUSAL), one
+whose place cannot be checked, or a save that fails; with no value, a
+preset whose place cannot be checked or that load_preset refuses (a place
+on the root filesystem is shown as the source and exits 0). A value other
 than on or off, as in `lassi settings graphics maybe`, is refused by the
 argument parser (argparse choices) with its usage message and exit 2, like
 a bad --graphics value.
@@ -55,14 +73,18 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 from collections.abc import Sequence
+from contextlib import nullcontext
 from pathlib import Path
 
+from lassi.core.progress import mute_stderr
 from lassi.core.recipe import RecipeError
 from lassi.core.runner import RunError, RunOptions, run_recipe
 from lassi.executors import SandboxUnavailableError
 from lassi.present.banner import print_banner
+from lassi.present.live import LiveTable, ticking
 from lassi.present.settings import (
     ROOT_REFUSAL,
     SettingsError,
@@ -119,12 +141,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"lassi {args.command}: {error}", file=sys.stderr)
         return 2
     if on:
-        print_banner(sys.stderr)
+        _banner()
     if args.command == "settings":
         return _settings(args)
     if args.command == "score":
         return _score(args)
-    return _run(args)
+    return _run(args, graphics=on)
+
+
+def _banner() -> None:
+    """Print the banner to stderr when stderr can take it; never raise.
+
+    A missing stderr (None) gets nothing, and one that raises ValueError (a
+    closed stream) is passed over. One that raises OSError (a pipe whose
+    reader has gone) is pointed at the null device (mute_stderr), so the
+    unwritten bytes cannot fail Python's flush of stderr at exit and turn the
+    command's exit status into 120.
+    """
+    stream = sys.stderr
+    if stream is None:
+        return
+    try:
+        print_banner(stream)
+    except OSError:
+        mute_stderr(stream)
+    except ValueError:
+        pass
 
 
 def _decide_graphics(args: argparse.Namespace) -> bool:
@@ -161,15 +203,56 @@ def _isatty(stream: object) -> bool:
         return False
 
 
-def _run(args: argparse.Namespace) -> int:
-    """Run `lassi run` and return its exit status: 0, or 2 with the message on stderr."""
-    options = RunOptions(runs_root=args.runs_root, run_id=args.run_id, bench_root=args.bench_root)
+def _run(args: argparse.Namespace, *, graphics: bool) -> int:
+    """Run `lassi run` and return its exit status: 0, or 2 with the message on stderr.
+
+    With `graphics` on, the runner gets a LiveTable on stderr as its
+    observer, ticked while the run goes on; with it off, no observer.
+    """
+    table = _live_table() if graphics else None
+    options = RunOptions(runs_root=args.runs_root, run_id=args.run_id, bench_root=args.bench_root, observer=table)
     try:
-        run_recipe(args.recipe, options)
+        with nullcontext() if table is None else ticking(table):
+            run_recipe(args.recipe, options)
     except (RecipeError, RunError, SandboxUnavailableError) as error:
         print(f"lassi {args.command}: {error}", file=sys.stderr)
         return 2
     return 0
+
+
+def _live_table() -> LiveTable:
+    """Return the live table for stderr, a terminal only when stderr is one, sized by _table_size.
+
+    Its height is one line less than the terminal's, since the cursor rests on
+    the line below a frame, so the in-place redraw can reach the frame's top.
+    """
+    columns, lines = _table_size(sys.stderr)
+    return LiveTable(sys.stderr, terminal=_isatty(sys.stderr), width=columns, height=max(lines - 1, 1))
+
+
+def _table_size(stream: object) -> tuple[int, int]:
+    """Return the table's (columns, lines).
+
+    Each is COLUMNS or LINES when that is set to a whole number above 0, else
+    the size of the terminal `stream` is on, else what
+    shutil.get_terminal_size() gives (stdout's terminal, else 80 by 24).
+    """
+    try:
+        size = os.get_terminal_size(stream.fileno())  # type: ignore[attr-defined]
+    except (AttributeError, ValueError, OSError):
+        size = shutil.get_terminal_size()
+    if size.columns <= 0 or size.lines <= 0:
+        size = shutil.get_terminal_size()
+    return _positive(os.environ.get("COLUMNS"), size.columns), _positive(os.environ.get("LINES"), size.lines)
+
+
+def _positive(text: str | None, default: int) -> int:
+    """Return `text` as a whole number when it is one above 0, else `default`."""
+    try:
+        value = int(text or "")
+    except ValueError:
+        return default
+    return value if value > 0 else default
 
 
 def _score(args: argparse.Namespace) -> int:
