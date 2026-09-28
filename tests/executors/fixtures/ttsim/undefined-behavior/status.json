@@ -1,0 +1,30 @@
+{
+ "check": "none printed",
+ "commit": "755c739e3d44a5a94c5f942f8f3872cc1fbb5fd3",
+ "device": "ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf; simulator, not silicon",
+ "dirty": false,
+ "ended_at": "2026-09-26T14:10:19-0700",
+ "example": "add_2_integers_in_riscv",
+ "jit_first": "",
+ "limit_s": 120.0,
+ "rc": 1,
+ "rx_run_id": "20260926-140947-p49-ttsim-runtime-6f4c",
+ "seed": "gap-zicsr",
+ "seed_line": "    asm volatile(\".word 0xb0002573\" ::: \"a0\", \"memory\");  // LASSI P4.9 seed: csrrs a0, mcycle, zero",
+ "seeded_copy_compiled": true,
+ "seeded_copy_in_cache": true,
+ "sim_classes": [
+  "UndefinedBehavior"
+ ],
+ "sim_first": "UndefinedBehavior: decode_and_execute_csrrs: Wormhole does not support Zicsr",
+ "sim_lines": [
+  "[4489] ERROR: UndefinedBehavior: decode_and_execute_csrrs: Wormhole does not support Zicsr"
+ ],
+ "snapshot_of": null,
+ "started_at": "2026-09-26T14:10:17-0700",
+ "stopped_reason": "",
+ "timed_out": false,
+ "timing_note": "wall_s, program_s, and sim_rate_line are simulator wall time and the simulator's own rate: exploratory, sizing only, never performance; times inside stdout.txt, stderr.txt, and watcher.log are simulator wall time too",
+ "upstream_lines_removed": 17,
+ "wall_s": 1.44
+}

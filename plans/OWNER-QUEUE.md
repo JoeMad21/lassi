@@ -404,3 +404,27 @@ Recommendation: (a). The cache lives under the scratch root like the other cache
 Answer:
 Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Option (a) needs the owner's own change to the gate, so this item stays OPEN for that.
 Review later: yes. The owner has not answered this item personally.
+
+## OQ-036 How The ttsim Executor Reads Finding Classes
+State: OPEN
+Kind: decision
+Blocks: P4.11 (the executor's finding-class mapping)
+Evidence: plans/spikes/p4-ttsim-runtime.md (Results, Seeded captures; Owner queue); tests/executors/fixtures/ttsim/; results/p4-ttsim-runtime (rx job 20260926-140947-p49-ttsim-runtime-6f4c, clean 755c739); the ttsim README's error classes (read 2026-09-26)
+Question: The bible reads UndefinedBehavior as a failed run fed back to the model and UnimplementedFunctionality and UnsupportedFunctionality as sim-gap. ttsim also printed NonContractualBehavior (an unaligned load), and its README lists UnpredictableValueUsed, UntestedFunctionality, SystemError, ConfigurationError, and AssertionFailure. Separately, fence, fence.i, ecall, and wfi in a kernel give UnsupportedFunctionality, so a model kernel that uses one ends the trial at sim-gap with no correction and no computed df-v0 R. How should the ttsim executor read these classes?
+Options: (a) NonContractualBehavior and UnpredictableValueUsed read as undefined behavior (sim_ub, fed back); UntestedFunctionality, SystemError, ConfigurationError, and AssertionFailure as gaps; an unknown class as a gap whose message names it; UnsupportedFunctionality stays a gap. The model gets feedback on contract violations, simulator faults never count against it, and a model's fence still ends the trial. (b) As (a), but UnsupportedFunctionality raised by an instruction in the model's own kernel reads as undefined behavior, fed back as a failed run. That closes the path by which a model's kernel ends a trial without a score, but needs the executor to tell which kernel ran the instruction (the finding names none), which is new design work in P4.11. (c) Every class other than UndefinedBehavior reads as a gap: simplest, and contract violations never reach the model.
+Recommendation: (a) now, with (b) recorded as a follow-up for P7's reward work, when a trained policy could exploit a gap; (a) is what the class definitions say and needs no kernel attribution.
+Answer:
+Owner's direction (working session, 2026-09-27; recorded by the agent): take the recommendation of every open item not answered personally, apply it, and flag it for review in the next phase. Applied here: option (a), which P4.11 builds; the item closes with that commit.
+Review in the next phase: yes. The owner has not answered this item personally.
+
+## OQ-037 When The ttsim Executor Runs Watcher
+State: OPEN
+Kind: decision
+Blocks: P4.11 (the Watcher dump in the hang diagnostic)
+Evidence: plans/spikes/p4-ttsim-runtime.md (Results, Watcher); results/p4-ttsim-runtime (rx job 20260926-140947-p49-ttsim-runtime-6f4c, clean 755c739)
+Question: The Harness Contract adds a Watcher dump to the hang diagnostic, and Watcher works under ttsim; it must be enabled when the program starts. Should the ttsim executor run every attempt with Watcher, or rerun a hung attempt once with it?
+Options: (a) Every ttsim attempt runs with TT_METAL_WATCHER=1: the dump comes without a second run, but every run pays Watcher's overhead (the gate's example took 2.98 s against 1.39 s of simulator wall time, one run each, exploratory) and carries its debug code in the kernels, so the scored run is not quite the program the bible's settings describe. (b) An attempt that hung is rerun once with Watcher under the same wall limit, and the last dump is appended: scored runs stay uninstrumented, and only hangs pay a second full wall limit (at least 30 s) on the shared host.
+Recommendation: (b). Only hangs pay, scored runs stay as specified, and the seeded hang hung the same way with Watcher; its log is capped (about 12.8 KB per dump).
+Answer:
+Owner's direction (working session, 2026-09-27; recorded by the agent): take the recommendation of every open item not answered personally, apply it, and flag it for review in the next phase. Applied here: option (b), which P4.11 builds; the item closes with that commit.
+Review in the next phase: yes. The owner has not answered this item personally.

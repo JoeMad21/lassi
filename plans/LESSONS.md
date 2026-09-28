@@ -7,6 +7,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - Minimize activity on alpha01 (owner, 2026-09-25). Work on the local copy until a step needs Linux, a compiler, the simulator, or a device. Batch remote tests into one `rx run` per task where possible, and never poll the host more often than the work needs.
 - Record inefficiencies and hang-ups here as they happen (owner, 2026-09-25).
 - The owner cannot monitor on 2026-09-26: work unattended, push each commit, and take the recommendation of every owner-queue item the owner does not answer personally, recording it on the item as the owner's standing direction and marking it for review later (owner, 2026-09-26).
+- The owner cannot answer owner-queue items for a while (owner, 2026-09-27): take the recommendation of every OPEN item the owner has not answered personally, apply it, and flag it for the owner's review in the next phase (plans/PHASE-NOTES.md, P5). An item whose recommendation needs the owner's own action stays OPEN.
 
 ## Audits and the bible
 
@@ -58,4 +59,6 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - Audit a remote batch for shared-host safety before its first launch: the P4.9 review found a network fallback that would have re-enabled the host network and a locale that would have put non-ASCII quotes in the evidence, both before any host activity.
 - A 1-byte core limit, the only one that stops alpha01's piped systemd-coredump (plans/spikes/p0-sandbox-hardening.md), needs `prlimit --core=1`; bash's `ulimit -c 1` sets 1024 bytes, and a local check with `ulimit -c` hides it. Check with getrlimit(RLIMIT_CORE) == (1, 1). The P4.9 batch audit caught this before any host activity.
 - Any wrapper that re-raises a child's fatal signal can undo a 1-byte core limit: strace sets its own RLIMIT_CORE to 0 and re-raises, and 0 does not stop alpha01's piped systemd-coredump. Put a shell that exits normally between such a wrapper and the program (P4.9 recheck, 2026-09-26).
+- A parser of simulator findings must accept any class word; P4.9's fixed list of three missed ttsim's NonContractualBehavior. Match a pattern against the value itself, not a line with a count in front (P4.9's unpack_to_dest false positive), and take an example's own success line from its source, not a generic pattern.
+- Number owner-queue items only when filing them, and have a bible script that cites one check the heading exists: parallel tasks take numbers (P4.9's draft OQ-035 collided with P4.15's).
 - A clean-commit remote run needs a clean checkout. When the main tree holds other staged work, commit the task, then run rx from the detached clean worktree C:/dev/lassi-clean checked out at that commit, as the P1 and P2 evidence runs did.

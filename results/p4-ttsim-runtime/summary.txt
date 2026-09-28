@@ -1,0 +1,53 @@
+== steps; device: ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf; simulator, not silicon
+   wall_s, program_s, and sim_rate_line are simulator wall time and the simulator's own rate: exploratory, sizing only, never performance
+step                             rc check        sim_wall_s rss_MiB tasks cache_KiB/files sim
+clean-add_2_integers_in_riscv     0 none printed       1.39      98   267         2996/70 -
+clean-loopback                    0 passed             1.42     100   269         3100/70 -
+clean-eltwise_binary              0 passed             1.64     114   273        6088/120 -
+clean-eltwise_sfpu                0 passed             1.49     108   296        6260/120 -
+clean-matmul_single_core          0 passed             3.73     104   276        5980/120 -
+clean-matmul_multi_core           0 passed              2.9     104   285        6036/120 -
+probe-add2                        0 none printed        4.7      92   299               - -
+seed-ub-unaligned                 1 none printed       1.44     100   266               - -
+seed-ub-fence                     1 none printed       1.43      98   268               - UnsupportedFunctionality
+seed-ub-fencei                    1 none printed       1.38     100   268               - UnsupportedFunctionality
+seed-gap-zicsr                    1 none printed       1.44     100   263               - UndefinedBehavior
+seed-gap-decode                   1 none printed        1.4     100   282               - UndefinedBehavior
+seed-gap-ecall                    1 none printed       1.44     100   283               - UnsupportedFunctionality
+seed-gap-wfi                      1 none printed       1.43     100   277               - UnsupportedFunctionality
+seed-jit-error                  134 none printed       1.28      98   148               - JIT error
+seed-hang                       T/O none printed      131.0       0   268               - -
+watcher-add2                      0 none printed       2.98     102   282               - -
+watcher-hang                    T/O none printed     131.06       0   265               - -
+sandbox-add2                    134 none printed       0.47       0     -             0/0 -
+sandbox-add2-home               134 none printed       0.47       0     -             0/0 -
+sandbox-add2-threads16            0 none printed       1.75       0     -         2996/70 -
+sandbox-eltwise_binary            0 passed             1.83       0     -        6088/120 -
+sfplm-on-eltwise_sfpu             0 passed             1.54     104   293        6260/120 -
+seed-ub-unaligned-unbuffered      1 none printed       1.39     102   285               - -
+== 24 of 24 steps ran; clean runs exiting 0: clean-add_2_integers_in_riscv clean-loopback clean-eltwise_binary clean-eltwise_sfpu clean-matmul_single_core clean-matmul_multi_core
+   device: ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf; simulator, not silicon; step table and wall times: report/summary.txt (wall_s, program_s, and sim_rate_line are simulator wall time and the simulator's own rate: exploratory, sizing only, never performance)
+== ttsim errors (class: first message) and JIT errors
+seed-ub-fence: UnsupportedFunctionality: decode_and_execute_fence: fence instructions do not enforce memory ordering on Wormhole and should not be used (seeded copy compiled)
+seed-ub-fencei: UnsupportedFunctionality: decode_and_execute_fence_i: fence.i does not flush the instruction cache on babyrisc and should not be used (seeded copy compiled)
+seed-gap-zicsr: UndefinedBehavior: decode_and_execute_csrrs: Wormhole does not support Zicsr (seeded copy compiled)
+seed-gap-decode: UndefinedBehavior: decode_and_execute_unimplemented: could not decode instruction inst=0xffffffff at pc=0x8238 (seeded copy compiled)
+seed-gap-ecall: UnsupportedFunctionality: decode_and_execute_ecall_ebreak: inst=0x73 (seeded copy compiled)
+seed-gap-wfi: UnsupportedFunctionality: decode_and_execute_ecall_ebreak: inst=0x10500073 (seeded copy compiled)
+seed-jit-error: 2026-09-26 14:10:25.552 | critical |          Always | TT_THROW: brisc build failed. Log: In file included from ../kernel_includes.hpp:1, (seeded copy compiled)
+== ttsim's own rate lines (simulated clock rate, not performance): 12 steps; first: ('clean-add_2_integers_in_riscv', '0.4 seconds (12.1 KHz)')
+== unpack_to_dest: 11 runs; enabled in: clean-add_2_integers_in_riscv clean-loopback clean-eltwise_binary clean-eltwise_sfpu clean-matmul_single_core clean-matmul_multi_core sandbox-add2-threads16 sandbox-eltwise_binary sfplm-on-eltwise_sfpu (per-run any_unpack_to_dest_enabled in report/unpack_to_dest-facts.txt; lines in local/)
+== files outside the JIT cache, steps that wrote any (details: report/files-written.txt)
+logs dir: clean-add_2_integers_in_riscv:7 clean-loopback:7 clean-eltwise_binary:7 clean-eltwise_sfpu:7 clean-matmul_single_core:7 clean-matmul_multi_core:7 probe-add2:7 seed-ub-unaligned:7 seed-ub-fence:7 seed-ub-fencei:7 seed-gap-zicsr:7 seed-gap-decode:7 seed-gap-ecall:7 seed-gap-wfi:7 seed-jit-er
+HOME: none
+cwd (a seeded step holds 1 copy): seed-ub-unaligned:1 seed-ub-fence:1 seed-ub-fencei:1 seed-gap-zicsr:1 seed-gap-decode:1 seed-gap-ecall:1 seed-gap-wfi:1 seed-jit-error:1 seed-hang:1 watcher-hang:1 seed-ub-unaligned-unbuffered:1
+private /tmp, /var/tmp, /dev/shm: clean-add_2_integers_in_riscv:1 clean-loopback:1 clean-eltwise_binary:1 clean-eltwise_sfpu:1 clean-matmul_single_core:1 clean-matmul_multi_core:1 probe-add2:1 seed-ub-unaligned:1 seed-ub-fence:1 seed-ub-fencei:1 seed-gap-zicsr:1 seed-gap-decode:1 seed-gap-ecall:1 se
+== sandbox (P0.16 sandbox, toolchains root read-only; sim_program_s is simulator wall time)
+sandbox-add2: rc=134 hang=False killed=False sim_program_s=0.09 incomplete=False unavailable_len=None
+sandbox-add2-home: rc=134 hang=False killed=False sim_program_s=0.09 incomplete=False unavailable_len=None
+sandbox-add2-threads16: rc=0 hang=False killed=False sim_program_s=1.32 incomplete=False unavailable_len=None
+sandbox-eltwise_binary: rc=0 hang=False killed=False sim_program_s=1.42 incomplete=False unavailable_len=None
+allowlist: refused: the sandbox environment may not set 'TT_METAL_RUNTIME_ROOT'; allowed names: LANG, LC_ALL, NVHPC_CUDA_HOME, OMP_NUM_THREADS, PATH, TMPDIR
+== Watcher
+watcher-add2: rc=0 timed_out=False watcher.log 26526 bytes, 222 lines
+watcher-hang: rc=137 timed_out=True watcher.log 1637305 bytes, 12945 lines

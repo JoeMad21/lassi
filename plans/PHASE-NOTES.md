@@ -118,6 +118,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 
 ## P5 IR Levels
 
+- Owner review first (owner directions of 2026-09-26 and 2026-09-27): the owner-queue choices applied without the owner's personal answer go back to the owner at P5's planning, before its first task: OQ-027 to OQ-033 (review later), OQ-036 and OQ-037 (review in the next phase), and the P17 planning items once filed. The P5 plan lists them with what each applied, and any the owner changes becomes a task.
 - Polygeist and tt-mlir each pin an LLVM; never mix pins in one module (bible, Toolchain Pins). Each LLVM build is a big job of several hours; run one at a time.
 - Generated asset trees (from the P1.3 review, moved from P2): lassi/prompts/assets.py names tools/extract_lassi_assets.py in every error and rejects '@' in names, which later pack names use (ttkernel-ods@PIN, csl@PIN, tcl@PIN). Add a generator field to MANIFEST.yaml and allow '@' before a second generator exists.
 - Migrate mlir-corpus-pipeline v0 per the bible's Review Of v0. First spike: compare the alpha01 copy with GitHub commit 3ccd280 (bible question 8).

@@ -1,0 +1,28 @@
+{
+ "check": "none printed",
+ "commit": "755c739e3d44a5a94c5f942f8f3872cc1fbb5fd3",
+ "device": "ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf; simulator, not silicon",
+ "dirty": false,
+ "ended_at": "2026-09-26T14:10:14-0700",
+ "example": "add_2_integers_in_riscv",
+ "jit_first": "",
+ "limit_s": 120.0,
+ "rc": 1,
+ "rx_run_id": "20260926-140947-p49-ttsim-runtime-6f4c",
+ "seed": "ub-unaligned",
+ "seed_line": "    { volatile uint32_t* lassi_seed_p = reinterpret_cast<volatile uint32_t*>(get_arg_val<uint32_t>(3) + 2); uint32_t lassi_seed_v = *lassi_seed_p; (void)lassi_seed_v; }  // LASSI P4.9 seed: a 4-byte load from an address 2 mod 4",
+ "seeded_copy_compiled": true,
+ "seeded_copy_in_cache": true,
+ "sim_classes": [],
+ "sim_first": "",
+ "sim_lines": [
+  "[4500] ERROR: NonContractualBehavior: rv32_mem_rd: unaligned addr=0x16dfe2 size=4"
+ ],
+ "snapshot_of": null,
+ "started_at": "2026-09-26T14:10:12-0700",
+ "stopped_reason": "",
+ "timed_out": false,
+ "timing_note": "wall_s, program_s, and sim_rate_line are simulator wall time and the simulator's own rate: exploratory, sizing only, never performance; times inside stdout.txt, stderr.txt, and watcher.log are simulator wall time too",
+ "upstream_lines_removed": 17,
+ "wall_s": 1.44
+}

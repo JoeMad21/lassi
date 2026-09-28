@@ -1,0 +1,8 @@
+root-fs check: passed; this account changed nothing there since the start (59 unreadable, 0 raced)
+pinned trees: 0 path(s) changed since the start in tt-metal@5280a9cf and ttsim@v1.3.4 (list in local/)
+default cache roots (top entries changed since the start by anyone; the first is the default root under
+the shared HOME, which the JIT would prune without TT_METAL_CACHE set, PHASE-NOTES P4):
+  tt-metal-cache: 0 top entries changed
+  tt-metal-cache: absent
+  tt_umd_listeners: absent
+scratch du -sk: before 101204520, after 101297648 KiB; run directory 92340 KiB; run cap 6291456 KiB

@@ -1,0 +1,148 @@
+strace lines: 79011
+== calls by path class, kind, result
+      18  /bin exec ok
+      16  /bin look failed
+       9  /dev read ok
+     135  /etc look failed
+     136  /etc read ok
+      33  /home look failed
+     277  /lib read ok
+    4810  /mnt look failed
+      83  /proc look ok
+       2  /proc read ok
+      16  /sbin look failed
+      21  /sys read ok
+      16  /usr exec failed
+      17  /usr exec ok
+      43  /usr look failed
+      25  /usr look ok
+     122  private look failed
+     260  private look ok
+     106  private read ok
+     342  private write ok
+      34  relative look failed
+    2947  relative look ok
+    2733  relative read failed
+       4  relative read ok
+     769  run look failed
+     184  run look ok
+       1  run read failed
+     302  run read ok
+      36  run write failed
+     344  run write ok
+    4874  scratch-other look failed
+     100  tt-metal exec ok
+   32119  tt-metal look failed
+    5217  tt-metal look ok
+   20301  tt-metal read failed
+    2612  tt-metal read ok
+       2  tt-metal write failed
+       1  ttsim look ok
+      11  ttsim read ok
+== writes outside the run directory and the private /tmp, /var/tmp, /dev/shm (should be /dev only)
+  /mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/generated  (mkdir failed)
+== reads and lookups outside the pins, the run, and system directories (508)
+    (look ok)
+  -flinker-output=exec  (read failed)
+  -fresolution=/tmp/cc9904lq.res  (read failed)
+  -fresolution=/tmp/ccAWADhk.res  (read failed)
+  -fresolution=/tmp/ccKJliZM.res  (read failed)
+  -fresolution=/tmp/ccQVNDAp.res  (read failed)
+  -fresolution=/tmp/ccRsOpw9.res  (read failed)
+  -fresolution=/tmp/ccZy3fbD.res  (read failed)
+  -fresolution=/tmp/cceu72Re.res  (read failed)
+  -fresolution=/tmp/ccvMPqSW.res  (read failed)
+  .  (look ok)
+  ..  (look ok)
+  ../_ansi.h  (read failed)
+  ../_newlib_version.h  (read failed)
+  ../algorithm  (read failed)
+  ../api/alignment.h  (read failed)
+  ../api/compile_time_args.h  (read failed)
+  ../api/dataflow/dataflow_api.h  (read failed)
+  ../api/debug/assert.h  (read failed)
+  ../api/debug/dprint.h  (read failed)
+  ../api/debug/eth_link_status.h  (read failed)
+  ../api/debug/noc_logging.h  (read failed)
+  ../api/debug/ring_buffer.h  (read failed)
+  ../api/debug/waypoint.h  (read failed)
+  ../api/remote_circular_buffer.h  (read failed)
+  ../api/tensor/page.h  (read failed)
+  ../api/tensor/pages_address_iterator.h  (read failed)
+  ../api/tensor/shard_pages_address_iterator.h  (read failed)
+  ../api/tensor/tensor_accessor.h  (read failed)
+  ../api/tensor/tensor_accessor_args.h  (read failed)
+  ../array  (read failed)
+  ../atomic  (read failed)
+  ../backward/binders.h  (read failed)
+  ../bit  (read failed)
+  ../bits/algorithmfwd.h  (read failed)
+  ../bits/alloc_traits.h  (read failed)
+  ../bits/allocator.h  (read failed)
+  ../bits/atomic_base.h  (read failed)
+  ../bits/atomic_lockfree_defines.h  (read failed)
+  ../bits/atomic_word.h  (read failed)
+  ../bits/basic_string.h  (read failed)
+  ../bits/basic_string.tcc  (read failed)
+  ../bits/c++allocator.h  (read failed)
+  ../bits/c++config.h  (read failed)
+  ../bits/c++locale.h  (read failed)
+  ../bits/char_traits.h  (read failed)
+  ../bits/charconv.h  (read failed)
+  ../bits/concept_check.h  (read failed)
+  ../bits/cpp_type_traits.h  (read failed)
+  ../bits/cpu_defines.h  (read failed)
+  ../bits/cxxabi_forced.h  (read failed)
+  ../bits/cxxabi_init_exception.h  (read failed)
+  ../bits/enable_special_members.h  (read failed)
+  ../bits/error_constants.h  (read failed)
+  ../bits/exception.h  (read failed)
+  ../bits/exception_defines.h  (read failed)
+  ../bits/exception_ptr.h  (read failed)
+  ../bits/functexcept.h  (read failed)
+  ../bits/functional_hash.h  (read failed)
+  ../bits/gthr-default.h  (read failed)
+== /dev entries
+  /dev/urandom  (read ok)
+== /etc files read
+  /etc/ld.so.cache
+  /etc/localtime
+== tt-metal pin, successful reads and lookups by directory (top 25)
+    6562  runtime/sfpi/compiler
+     814  tt_metal/hw/inc
+     196  runtime/hw/lib
+     116  tt_metal/third_party/tt_llk
+      79  tt_metal/hostdevcommon/api
+      26  tt_metal/hw/ckernels
+      26  tt_metal/hw/firmware
+      16  tt_metal/tools/profiler
+      16  runtime/hw/toolchain
+      14  tt_metal/api/tt-metalium
+      11  
+       9  ttnn
+       9  ttnn/cpp
+       9  tt_metal
+       9  tt_metal/api/
+       4  tt_metal/programming_examples/add_2_integers_in_riscv
+       3  runtime/sfpi/include
+       2  tt_metal/core_descriptors/wormhole_b0_80_arch.yaml
+       2  /tt_metal/hw
+       1  build_Release/programming_examples/metal_example_add_2_integers_in_riscv
+       1  build_Release/tt_metal/libtt_metal.so
+       1  build_Release/tt_stl/libtt_stl.so
+       1  build_Release/lib/libtracy.so.0.10.0
+       1  build_Release/lib/libdevice.so
+       1  build_Release/tt_metal/third_party
+== executables started
+      33  /mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/runtime/sfpi/compiler/bin/riscv-tt-elf-g++
+      18  /bin/sh
+      17  /mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/runtime/sfpi/compiler/bin/../lib/gcc/riscv-tt-elf/15.1.0/../../../../riscv-tt-elf/bin/as
+      16  /usr/bin/make
+      16  /mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/runtime/sfpi/compiler/bin/../lib/gcc/../../libexec/gcc/riscv-tt-elf/15.1.0/lto1
+       9  /mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/runtime/sfpi/compiler/bin/../libexec/gcc/riscv-tt-elf/15.1.0/cc1plus
+       8  /mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/runtime/sfpi/compiler/bin/../libexec/gcc/riscv-tt-elf/15.1.0/collect2
+       8  /mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/runtime/sfpi/compiler/bin/../lib/gcc/riscv-tt-elf/15.1.0/../../../../riscv-tt-elf/bin/ld
+       8  /mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/runtime/sfpi/compiler/bin/../libexec/gcc/riscv-tt-elf/15.1.0/lto-wrapper
+       1  /usr/bin/env
+       1  /mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/build_Release/programming_examples/metal_example_add_2_integers_in_riscv
+== network calls (call, family and address, result)

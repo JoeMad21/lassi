@@ -1,0 +1,164 @@
+{
+ "captures": {
+  "hang": {
+   "class": "none (stopped at its wall limit)",
+   "files": {
+    "status.json": {
+     "bytes": 1335,
+     "frames_replaced": 0,
+     "pulled_sha256": "25062631faf7a8fd921b632f9aa82100898fb3c9c7b5245c79051f6d7df0110d",
+     "tracked_sha256": "25062631faf7a8fd921b632f9aa82100898fb3c9c7b5245c79051f6d7df0110d"
+    },
+    "stderr.txt": {
+     "bytes": 0,
+     "frames_replaced": 0,
+     "pulled_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "tracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "stdout.txt": {
+     "bytes": 3873,
+     "frames_replaced": 0,
+     "pulled_sha256": "19b4e5265333c33c5d3aa26723377ced2a1c11880317e45ada42025142672e64",
+     "tracked_sha256": "19b4e5265333c33c5d3aa26723377ced2a1c11880317e45ada42025142672e64"
+    }
+   },
+   "kept_for": "the hang diagnostic without Watcher (P4.6, P4.11)",
+   "step": "seed-hang"
+  },
+  "jit-error": {
+   "class": "none (kernel JIT error; the host aborts)",
+   "files": {
+    "status.json": {
+     "bytes": 1185,
+     "frames_replaced": 0,
+     "pulled_sha256": "f92d998c91b96d4ab2bde8f5e9852d5356b097ff7012e6796fba14295ef80d06",
+     "tracked_sha256": "f92d998c91b96d4ab2bde8f5e9852d5356b097ff7012e6796fba14295ef80d06"
+    },
+    "stderr.txt": {
+     "bytes": 2250,
+     "frames_replaced": 31,
+     "pulled_sha256": "f20896bd4627958d86e0ebfce99e498cd1caf1e6a26505db6685b4c56d4ac0e3",
+     "tracked_sha256": "906a2037906c22f4756a55a0a34d0578cad7e13041b4130205d8a151f8c425df"
+    },
+    "stdout.txt": {
+     "bytes": 6020,
+     "frames_replaced": 15,
+     "pulled_sha256": "9bdf7ae1faa742a2603e74c8788b2caa978396b8fdb7d5c860fa160789cb16a4",
+     "tracked_sha256": "1f2c410a76acfd8435632e835af7175b24e48414d9121a705a6a36f991613204"
+    }
+   },
+   "kept_for": "the jit-stage diagnostic (P4.6)",
+   "step": "seed-jit-error"
+  },
+  "non-contractual-behavior": {
+   "class": "NonContractualBehavior",
+   "files": {
+    "status.json": {
+     "bytes": 1281,
+     "frames_replaced": 0,
+     "pulled_sha256": "82485bb22631b398d46c9763d82814db96c19b2a5ce306cd51cace1ae4a46452",
+     "tracked_sha256": "82485bb22631b398d46c9763d82814db96c19b2a5ce306cd51cace1ae4a46452"
+    },
+    "stderr.txt": {
+     "bytes": 0,
+     "frames_replaced": 0,
+     "pulled_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "tracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "stdout.txt": {
+     "bytes": 3774,
+     "frames_replaced": 0,
+     "pulled_sha256": "47ec54f8ea2272485e03f7d1d74f06289a58bc211a8c8781626ab46aa042517c",
+     "tracked_sha256": "47ec54f8ea2272485e03f7d1d74f06289a58bc211a8c8781626ab46aa042517c"
+    }
+   },
+   "kept_for": "a class the bible does not list yet: a 4-byte load from an address 2 mod 4",
+   "step": "seed-ub-unaligned"
+  },
+  "undefined-behavior": {
+   "class": "UndefinedBehavior",
+   "files": {
+    "status.json": {
+     "bytes": 1266,
+     "frames_replaced": 0,
+     "pulled_sha256": "46697a78506bd8d26c5651f37d721f9edda0add5d74faecc22a4092cc42ab53d",
+     "tracked_sha256": "46697a78506bd8d26c5651f37d721f9edda0add5d74faecc22a4092cc42ab53d"
+    },
+    "stderr.txt": {
+     "bytes": 0,
+     "frames_replaced": 0,
+     "pulled_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "tracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "stdout.txt": {
+     "bytes": 3783,
+     "frames_replaced": 0,
+     "pulled_sha256": "43c6156869b9efa5d9c915c6b7dfbe8395cfb918379d6451891743f92ede1743",
+     "tracked_sha256": "43c6156869b9efa5d9c915c6b7dfbe8395cfb918379d6451891743f92ede1743"
+    }
+   },
+   "kept_for": "UB fed back to the model (P4.6)",
+   "step": "seed-gap-zicsr"
+  },
+  "unsupported-functionality": {
+   "class": "UnsupportedFunctionality",
+   "files": {
+    "status.json": {
+     "bytes": 1378,
+     "frames_replaced": 0,
+     "pulled_sha256": "03fa620404c04a633edeb1cb914e01586530e8958ec301d941a353a7fbc0493e",
+     "tracked_sha256": "03fa620404c04a633edeb1cb914e01586530e8958ec301d941a353a7fbc0493e"
+    },
+    "stderr.txt": {
+     "bytes": 0,
+     "frames_replaced": 0,
+     "pulled_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "tracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "stdout.txt": {
+     "bytes": 3843,
+     "frames_replaced": 0,
+     "pulled_sha256": "fc3edcd1c174ba79e7e93699f582037af78b722986b7102c4e9781efe97c3d62",
+     "tracked_sha256": "fc3edcd1c174ba79e7e93699f582037af78b722986b7102c4e9781efe97c3d62"
+    }
+   },
+   "kept_for": "a simulator gap, sim-gap (P4.6)",
+   "step": "seed-ub-fence"
+  },
+  "watcher-hang": {
+   "class": "none (stopped at its wall limit)",
+   "files": {
+    "status.json": {
+     "bytes": 1129,
+     "frames_replaced": 0,
+     "pulled_sha256": "ad87cab70d4dcee54ff473790509cef2be60cee579851c6a1f31f0d696ee197c",
+     "tracked_sha256": "ad87cab70d4dcee54ff473790509cef2be60cee579851c6a1f31f0d696ee197c"
+    },
+    "stderr.txt": {
+     "bytes": 0,
+     "frames_replaced": 0,
+     "pulled_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "tracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "stdout.txt": {
+     "bytes": 18635,
+     "frames_replaced": 0,
+     "pulled_sha256": "f1c225020f8df3c5505afda94f4e9511ace0412fb3c5bd52bf211f25ed6305af",
+     "tracked_sha256": "f1c225020f8df3c5505afda94f4e9511ace0412fb3c5bd52bf211f25ed6305af"
+    },
+    "watcher.log": {
+     "bytes": 65583,
+     "frames_replaced": 0,
+     "pulled_sha256": "a75e0ef6978259b62b65d32ab8b4c687dd104f431fc5cc1a3f83c42d8c8bba65",
+     "tracked_sha256": "a75e0ef6978259b62b65d32ab8b4c687dd104f431fc5cc1a3f83c42d8c8bba65"
+    }
+   },
+   "kept_for": "the Watcher dump of a hang (P4.11)",
+   "step": "watcher-hang"
+  }
+ },
+ "commit": "755c739e3d44a5a94c5f942f8f3872cc1fbb5fd3",
+ "marker": "[P4.9: upstream-derived line removed]",
+ "rule": "backtrace frame lines (starting with ' --- ') replaced by the marker; all else unchanged",
+ "rx_job": "20260926-140947-p49-ttsim-runtime-6f4c"
+}

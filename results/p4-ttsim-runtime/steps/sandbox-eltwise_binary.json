@@ -1,0 +1,72 @@
+{
+ "allowlist": "refused: the sandbox environment may not set 'TT_METAL_RUNTIME_ROOT'; allowed names: LANG, LC_ALL, NVHPC_CUDA_HOME, OMP_NUM_THREADS, PATH, TMPDIR",
+ "cache_dir": "/mnt/nvme10/joseph_ufl/lassi-runs/p49-ttsim-runtime/20260926-140947-p49-ttsim-runtime-6f4c/raw/sandbox-eltwise_binary/work/cache",
+ "cache_files": 120,
+ "cache_kib": 6088,
+ "check": "passed",
+ "cwd_files": [],
+ "device": "ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf; simulator, not silicon",
+ "ended_at": "2026-09-26T14:14:56-0700",
+ "example": "eltwise_binary",
+ "hidden_roots": [
+  "/mnt/nvme10/joseph_ufl",
+  "/mnt/nvme10/joseph_ufl/lassi-runs"
+ ],
+ "home": [],
+ "jit_first": "",
+ "killed": false,
+ "kind": "sandbox",
+ "limits": {
+  "cpus": 16,
+  "disk_mb": 2048,
+  "memory_mb": 8192,
+  "wall_s": 60.0
+ },
+ "logs": [
+  "1159 generated/inspector/kernels.yaml",
+  "1177 generated/watcher/kernel_elf_paths.txt",
+  "144 generated/inspector/startup.yaml",
+  "1855 generated/inspector/programs_log.yaml",
+  "247 generated/watcher/kernel_names.txt",
+  "317 generated/inspector/mesh_workloads_log.yaml",
+  "480 generated/inspector/mesh_devices_log.yaml"
+ ],
+ "logs_dir": "/mnt/nvme10/joseph_ufl/lassi-runs/p49-ttsim-runtime/20260926-140947-p49-ttsim-runtime-6f4c/raw/sandbox-eltwise_binary/work/logs",
+ "loopback": "down",
+ "name": "sandbox-eltwise_binary",
+ "pcc": null,
+ "private_tmp": [],
+ "program_s": 1.42,
+ "rc": 0,
+ "seed": "-",
+ "seeded_copy_compiled": false,
+ "sim_classes": [],
+ "sim_errors": 0,
+ "sim_first": "",
+ "sim_line_count": 1,
+ "sim_lines": [
+  "[9870] 0.2 seconds (42.1 KHz)"
+ ],
+ "sim_rate_line": "0.2 seconds (42.1 KHz)",
+ "started_at": "2026-09-26T14:14:55-0700",
+ "stderr_truncated": false,
+ "stdout_truncated": false,
+ "tasks_max": 256,
+ "threads": 16,
+ "timed_out": false,
+ "timing_note": "wall_s, program_s, and any sim_rate_line are simulator wall time and the simulator's own rate: exploratory, sizing only, never performance",
+ "toolchains": "/mnt/nvme10/joseph_ufl/toolchains",
+ "unavailable": null,
+ "unpack_to_dest_facts": {
+  "any_unpack_to_dest_enabled": true,
+  "dest_accumulation_lines": 1,
+  "dest_accumulation_lines_enabled": 1,
+  "distinct_descriptor_lines": 3,
+  "unpack_to_dest_lines": 0,
+  "unpack_to_dest_lines_enabled": 0
+ },
+ "wall_s": 1.83,
+ "watcher_log": "",
+ "workdir": "/mnt/nvme10/joseph_ufl/lassi-runs/p49-ttsim-runtime/20260926-140947-p49-ttsim-runtime-6f4c/raw/sandbox-eltwise_binary/work",
+ "workdir_incomplete": false
+}

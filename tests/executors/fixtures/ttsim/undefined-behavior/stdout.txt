@@ -1,0 +1,36 @@
+WARNING: Please set the environment variable TT_METAL_DPRINT_CORES to 0,0 to see the output of the Data Movement kernels.
+WARNING: For example, export TT_METAL_DPRINT_CORES=0,0
+2026-09-26 14:10:17.610 | info     |           Metal | Disabling multi-erisc mode with simulator/mock target device (rtoptions.cpp:305)
+2026-09-26 14:10:17.612 | info     |          Device | Opening user mode device driver (tt_cluster.cpp:222)
+2026-09-26 14:10:17.613 | warning  |             UMD | Chip 0 has inconsistent Tensix harvesting information between harvest mask and number of harvested. Board n150 expects 1 units, but harvest mask indicates 0 units. (cluster_descriptor.cpp:1363)
+2026-09-26 14:10:17.613 | info     |             UMD | Harvesting masks for chip 0 tensix: 0x0 dram: 0x0 eth: 0x0 pcie: 0x0 l2cpu: 0x0 (cluster.cpp:333)
+2026-09-26 14:10:17.619 | info     |             UMD | Creating Simulation device (cluster.cpp:217)
+2026-09-26 14:10:17.621 | info     |             UMD | Starting devices in cluster (cluster.cpp:966)
+2026-09-26 14:10:17.623 | info     | EmulationDriver | PCI vendor_id=0x1e52 device_id=0x401e (tt_sim_tt_device.cpp:76)
+2026-09-26 14:10:17.623 | info     |     Distributed | Using auto discovery to generate mesh graph. (metal_context.cpp:993)
+2026-09-26 14:10:17.623 | info     |     Distributed | Constructing control plane using auto-discovery (no mesh graph descriptor). (metal_context.cpp:960)
+2026-09-26 14:10:17.624 | info     |          Fabric | Topology mapping search starting: target_graph_nodes=1, global_graph_nodes=1, target_degree_histogram={0:1}, global_degree_histogram={0:1} (topology_solver_internal.tpp:883)
+2026-09-26 14:10:17.624 | info     |          Fabric | Mapping validation succeeded: 1 target nodes mapped to 1 global nodes. DFS calls: 0, backtracks: 0. Required constraints satisfied: 1, preferred constraints satisfied: 0/0 (topology_solver_internal.tpp:1400)
+2026-09-26 14:10:17.624 | info     |          Fabric | Topology mapping search starting: target_graph_nodes=1, global_graph_nodes=1, target_degree_histogram={0:1}, global_degree_histogram={0:1} (topology_solver_internal.tpp:883)
+2026-09-26 14:10:17.624 | info     |          Fabric | Mapping validation succeeded: 1 target nodes mapped to 1 global nodes. DFS calls: 0, backtracks: 0. Required constraints satisfied: 1, preferred constraints satisfied: 0/0 (topology_solver_internal.tpp:1400)
+2026-09-26 14:10:17.624 | warning  |          Fabric | Failed to export physical chip mesh coordinate mapping: filesystem error: cannot create directories: Read-only file system [/mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/generated/fabric] (control_plane.cpp:622)
+2026-09-26 14:10:17.624 | warning  |          Fabric | Failed to export ASIC to Fabric node ID mapping: filesystem error: cannot create directories: Read-only file system [/mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/generated/fabric] (control_plane.cpp:631)
+2026-09-26 14:10:17.652 | info     |    BuildKernels | Skipping deleting built cache (build.cpp:123)
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[4489] ERROR: UndefinedBehavior: decode_and_execute_csrrs: Wormhole does not support Zicsr

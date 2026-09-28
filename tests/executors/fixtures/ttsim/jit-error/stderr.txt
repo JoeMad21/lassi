@@ -1,0 +1,47 @@
+terminate called after throwing an instance of 'std::runtime_error'
+[P4.9: upstream-derived line removed]
+info:
+[P4.9: upstream-derived line removed]
+info:
+brisc build failed. Log: In file included from ../kernel_includes.hpp:1,
+                 from /mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf/tt_metal/hw/firmware/src/tt-1xx/brisck.cc:21:
+/mnt/nvme10/joseph_ufl/lassi-runs/p49-ttsim-runtime/20260926-140947-p49-ttsim-runtime-6f4c/raw/seed-jit-error/cwd/tt_metal/programming_examples/add_2_integers_in_riscv/kernels/reader_writer_add_in_riscv.cpp: In function 'void kernel_main()':
+/mnt/nvme10/joseph_ufl/lassi-runs/p49-ttsim-runtime/20260926-140947-p49-ttsim-runtime-6f4c/raw/seed-jit-error/cwd/tt_metal/programming_examples/add_2_integers_in_riscv/kernels/reader_writer_add_in_riscv.cpp:6:5: error: 'lassi_seeded_jit_error' was not declared in this scope
+    6 |     lassi_seeded_jit_error();  // LASSI P4.9 seed: a call to an undeclared function
+      |     ^~~~~~~~~~~~~~~~~~~~~~
+
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+[P4.9: upstream-derived line removed]
+
