@@ -118,7 +118,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 
 ## P5 IR Levels
 
-- Owner review first (owner directions of 2026-09-26 and 2026-09-27): the owner-queue choices applied without the owner's personal answer go back to the owner at P5's planning, before its first task: OQ-027 to OQ-033 (review later), OQ-036 and OQ-037 (review in the next phase), and the P17 planning items once filed. The P5 plan lists them with what each applied, and any the owner changes becomes a task.
+- Owner review first (owner directions of 2026-09-26 and 2026-09-27): the owner-queue choices applied without the owner's personal answer go back to the owner at the next phase's planning, before its first task (P17's under OQ-038, option (a)): OQ-027 to OQ-033 (review later), OQ-036 and OQ-037 (review in the next phase), and OQ-038 and OQ-039, P17's planning items. That plan lists them with what each applied, and any the owner changes becomes a task.
 - Polygeist and tt-mlir each pin an LLVM; never mix pins in one module (bible, Toolchain Pins). Each LLVM build is a big job of several hours; run one at a time.
 - Generated asset trees (from the P1.3 review, moved from P2): lassi/prompts/assets.py names tools/extract_lassi_assets.py in every error and rejects '@' in names, which later pack names use (ttkernel-ods@PIN, csl@PIN, tcl@PIN). Add a generator field to MANIFEST.yaml and allow '@' before a second generator exists.
 - Migrate mlir-corpus-pipeline v0 per the bible's Review Of v0. First spike: compare the alpha01 copy with GitHub commit 3ccd280 (bible question 8).
@@ -131,3 +131,25 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 
 - rustup and dotnet install without root: rustup with CARGO_HOME and RUSTUP_HOME in scratch (the gate sets both), dotnet through dotnet-install.sh with `--install-dir $LASSI_TOOLCHAINS/dotnet@<ver>`.
 - Publish each subset frontend's accepted subset in its docstring and module docs (bible, Frontend Rules).
+
+## P17 Portable Stack
+
+- Owner request (working session, 2026-09-27): plan LASSI on traditional hardware such as GPUs and prepare the stack for regular ML frameworks on other devices. OQ-038 (a) places P17 after P4 and before P5, and OQ-039 (a) sets the frameworks and devices. Both were applied under the owner's 2026-09-27 direction and are flagged for review. OQ-040 (a GPU host) stays OPEN. The draft plan plans/p17-portable.md was written 2026-09-28 at d35b0a4, before P4 finished: re-read it at advance, since P4.8 changes runner.py, stages.py, and cli.py, and P4.11 changes lassi/executors (sandbox.py among them) first.
+- Owner review first: with P17 next after P4, the review the P5 notes schedule for "the next phase's planning" (OQ-027 to OQ-033, OQ-036, OQ-037, OQ-038, and OQ-039) happens at P17's planning, before P17.1. It also takes two choices the draft plan makes: the Trainer Protocol as a thirteenth interface (P17.8; Component Interfaces names twelve, and Agent Rule 3 puts new behavior behind an existing interface), and whether P17.1's AMD probe and P17.6 go ahead under OQ-039 (a) while the bible records OQ-002's answer as "no agent action on AMD for now".
+- Seams that do not exist yet (at d35b0a4):
+  - hf_local, although the bible's Repository Layout names it: lassi/llm/__init__.py:3-11 registers only mock, openai_compat, ollama, and replay.
+  - lassi/profilers/, lassi/train/, and a Trainer Protocol. The Profiler Protocol is at lassi/core/interfaces.py:227-236, and the twelve interface names are at lassi/core/registry.py:37-48.
+  - Profiler binding: the runner refuses the `profiler` key (lassi/core/runner.py:270, _NOT_CARRIED_OUT), although Attempt.profile exists (lassi/core/record.py:344-354, 441).
+  - Recipe HTTP settings: the runner builds a backend from its model id alone (lassi/core/runner.py:465), so openai_compat always uses its default base_url, http://127.0.0.1:8123/v1 (lassi/llm/openai_compat.py:41), the RNGD serving port.
+  - A driver version in provenance: `driver` stays null (lassi/core/runner.py:1789).
+- Registration rule (PHASE-NOTES P0): lassi.llm is imported eagerly so that every backend registers. hf_local's module must therefore import without torch, load the framework only when it is built, and refuse with a message naming the extra when the extra is missing. The same holds for lassi/train and the profilers' vendor libraries.
+- The sandbox hides GPUs today (lassi/executors/sandbox.py at d35b0a4):
+  - The private /dev binds only null, zero, full, random, urandom, and tty (lines 626-640).
+  - /sys/class, /sys/bus, and most of /sys/devices are covered (lines 82-83).
+  - ENVIRONMENT_NAMES (line 348) holds no CUDA_VISIBLE_DEVICES, HIP_VISIBLE_DEVICES, or ROCR_VISIBLE_DEVICES.
+  The gpu executor needs an explicit exposure per executor, never a wider default. What the runtimes need is measured on a GPU host (P17.12), not guessed: until then the table is marked unverified.
+- AMD on alpha01: never open /dev/kfd or a /dev/dri node (OQ-002), even in a probe; a device-exposure test uses a harmless stand-in node. ROCm is /opt/rocm/core-7.12 (Host Facts). Its environment script belongs to another user (/mnt/nvme10/john_ufl/rocm_env.sh): read it and record the variables in toolchains/hipcc.pin, never source it in a pin. ROCm PyTorch reaches GPUs through torch's cuda device type (torch.version.hip set), so the probe checks kind rocm against a HIP build.
+- Caches and downloads (Agent Rule 7): HF_HOME, TORCH_HOME, TRITON_CACHE_DIR, TORCHINDUCTOR_CACHE_DIR, checkpoints, and TRL output directories go under the scratch root or the run directory. The gate's HF_HOME is empty (PHASE-NOTES P3). Runs set HF_HUB_OFFLINE=1, and models are fetched only in a named step at a pinned revision. Measure with `rx doctor` and du before any wheel install, since PyTorch builds are large.
+- Tests use a tiny model built from a config inside the test, never a download, so the fast suite and CI stay offline. Mark CPU training runs slow and anything that needs Linux or the sandbox remote. The workstation is Windows.
+- Data (Agent Rule 5): training fixtures are synthetic and outside every bench suite. Tier A stays unassigned (OQ-025), and lassi-hecbench-10 is eval.
+- Work order and tools: `tools/status.py phase-add` adds a phase row, and WORK_ORDER is at tools/status.py:37. A phase in WORK_ORDER with no STATUS row is skipped, and the phase after it never advances (tools/status.py:167-174). Add the row before or with any WORK_ORDER change. Part (a)'s pull request is the exception OQ-038 records: it opens before the phase is DONE, and the phase stays ACTIVE with only OWNER or BLOCKED tasks (the GPU tasks, and P17.6 while it waits for the owner's review of OQ-039), so P5 advances.

@@ -57,3 +57,22 @@ def test_none_when_everything_waits(tmp_path):
     f = fresh(tmp_path)
     status.main(["--file", str(f), "set", "P0.0", "OWNER"])
     assert status.next_item(status.load(f))["kind"] == "none"
+
+
+def test_phase_add(tmp_path):
+    """phase-add appends a NOT-STARTED row and refuses a repeat, a mismatched branch, a bad id, a bad name, a
+    bad note, or an unknown state, leaving the file unchanged."""
+    f = fresh(tmp_path)
+    assert status.main(["--file", str(f), "phase-add", "P17", "Portable Stack", "p17-portable"]) == 0
+    rows = [r for r in status.load(f).phases.rows if r[0] == "P17 Portable Stack"]
+    assert rows == [["P17 Portable Stack", "p17-portable", "NOT-STARTED", "-"]]
+    before = f.read_bytes()
+    for args in (["P17", "Again", "p17-portable"], ["P18", "X", "p17-x"], ["17", "X", "p17-x"],
+                 ["P18", "A | B", "p18-x"], ["P18", "A\nB", "p18-x"], ["P18", " ", "p18-x"],
+                 ["P18", "X", "p18-x", "--state", "SOON"], ["P18", "X", "p18-x", "--note", "a\nb"]):
+        try:
+            status.main(["--file", str(f), "phase-add", *args])
+        except SystemExit:
+            continue
+        raise AssertionError(f"phase-add {args} accepted")
+    assert f.read_bytes() == before

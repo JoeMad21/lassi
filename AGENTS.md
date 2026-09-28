@@ -87,7 +87,7 @@ For an advance item on phase P<N>:
 
 ## Work Order
 
-P0, P1, P2, P4, P5, then P12 and P11, as in the bible's Build Roadmap. A phase may start when the previous phase in this order is DONE, GATE-OWNER, or stalled (only OWNER or BLOCKED tasks left). P11 beyond design notes needs P5. Phases marked BLOCKED in `plans/STATUS.md` stay blocked until the owner records in the phase Note that the blocker is cleared.
+P0, P1, P2, P4, P17, P5, then P12 and P11, as in the bible's Build Roadmap. P17 opens a pull request for its hardware-free half when gate part (a) passes and then stalls, with only its GPU tasks BLOCKED and any task held for the owner's review OWNER, until a GPU host exists (OQ-038, OQ-040). A phase may start when the previous phase in this order is DONE, GATE-OWNER, or stalled (only OWNER or BLOCKED tasks left). P11 beyond design notes needs P5. Phases marked BLOCKED in `plans/STATUS.md` stay blocked until the owner records in the phase Note that the blocker is cleared.
 
 ## Owner Queue
 

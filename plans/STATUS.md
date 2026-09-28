@@ -1,7 +1,7 @@
 # Status
 
 Single source of phase and task state. Edit only with `uv run tools/status.py`; the tables are parsed.
-Work order while hardware is blocked: P0, P1, P2, P4, P5, P12, P11 (docs/BIBLE.md, Build Roadmap).
+Work order while hardware is blocked: P0, P1, P2, P4, P17, P5, P12, P11 (docs/BIBLE.md, Build Roadmap).
 A phase marked BLOCKED stays blocked until the owner records in its Note that the blocker is cleared.
 
 ## Phases
@@ -25,6 +25,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
 | P16 Adversarial | p16-adversarial | BLOCKED | P4, P8 for training |
+| P17 Portable Stack | p17-portable | NOT-STARTED | owner request 2026-09-27 (working session): GPUs and standard frameworks; after P4, before P5 (OQ-038, option (a)); GPU half blocked: GPU host (OQ-040); draft plan plans/p17-portable.md, re-read at advance |
 
 ## Tasks
 

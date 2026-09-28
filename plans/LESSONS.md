@@ -7,7 +7,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - Minimize activity on alpha01 (owner, 2026-09-25). Work on the local copy until a step needs Linux, a compiler, the simulator, or a device. Batch remote tests into one `rx run` per task where possible, and never poll the host more often than the work needs.
 - Record inefficiencies and hang-ups here as they happen (owner, 2026-09-25).
 - The owner cannot monitor on 2026-09-26: work unattended, push each commit, and take the recommendation of every owner-queue item the owner does not answer personally, recording it on the item as the owner's standing direction and marking it for review later (owner, 2026-09-26).
-- The owner cannot answer owner-queue items for a while (owner, 2026-09-27): take the recommendation of every OPEN item the owner has not answered personally, apply it, and flag it for the owner's review in the next phase (plans/PHASE-NOTES.md, P5). An item whose recommendation needs the owner's own action stays OPEN.
+- The owner cannot answer owner-queue items for a while (owner, 2026-09-27): take the recommendation of every OPEN item the owner has not answered personally, apply it, and flag it for the owner's review in the next phase (plans/PHASE-NOTES.md: P17 under OQ-038, option (a), else P5). An item whose recommendation needs the owner's own action stays OPEN.
 
 ## Audits and the bible
 
@@ -43,6 +43,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 ## Git on the workstation
 
 - Several agents staging at once can leave `.git/index.lock` for a moment; retry once. Commit a task with `git commit -m ... -- <its paths>`, which commits those paths' working-tree content and leaves other staged work alone, and never edit a path another pending commit holds.
+- Python's Path.write_text on the workstation writes CRLF line endings (text mode on Windows). A scratch script that rewrites a tracked file writes bytes, or passes newline="\n"; the P17 audit fixes turned six files CRLF, and git normalized only the staged copies.
 
 ## alpha01
 
