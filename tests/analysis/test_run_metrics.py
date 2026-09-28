@@ -7,17 +7,21 @@ next to a paper value uses the paper's denominator; Acceptance Criteria, the
 compile-only label), Reporting Rules (unmeasured values carry PLACEHOLDER),
 Readability Standards (Run row: per-arm tables), Repository Layout
 (`analysis/`), OQ-018 (no prompt, source, context, or model text in score
-outputs), OQ-021 (published and recounted paper values both carried).
+outputs), OQ-021 (option (c): the recount is the reference value and the
+published value is shown for reference only), OQ-029 part 1 (the
+compile-stage label with baseline-ended trials), OQ-030 (run metric
+populations, pass@k scenarios, Sim-T at two decimals, the B0 criterion).
 
 The contract these tests fix:
 
 - `lassi.analysis.metrics.metric_tables(pairs, paper=None) -> list[MetricTable]`
   takes a sequence of (Trial, Score) pairs, the Score being the lassi
   profile's (task P2.7: components correct, correct_paper, within_10pct,
-  first_try, sim_t, sim_t_c, sim_l, self_corr, cap_hit, fence_quirk,
-  compiled, compiled_first_try, each a float or None, and `notes` keyed by
-  component name). It groups the pairs by the trial_id's arm and direction
-  segments and gives one MetricTable per group. `paper` is a
+  first_try, sim_t, sim_t_c, sim_t_tiktoken, sim_l, self_corr, cap_hit,
+  fence_quirk, compiled, compiled_first_try, each a float or None, and
+  `notes` keyed by component name; sim_t_tiktoken joined in task P4.15).
+  It groups the pairs by the trial_id's arm and direction segments and
+  gives one MetricTable per group. `paper` is a
   lassi.analysis.paper PaperValues; None loads assets/scoring/lassi-paper.yaml.
   It never rescores: every value comes from the Score's components and from
   the trial's fields (attempts[-1].stage_reached, final.corrections,
@@ -35,21 +39,27 @@ The contract these tests fix:
   `denominator`, `wilson_low`, `wilson_high`, `paper_published`,
   `paper_recount`, `paper_cite`, and `note` (plain ASCII str).
 - Populations:
-  - Trial rates over every trial of the arm and direction: compile_rate
-    (compiled == 1.0), run_rate (last attempt S5), correct_rate (correct ==
-    1.0), cap_hit_rate (cap_hit == 1.0), fence_quirk_rate (fence_quirk > 0;
-    the note gives the total quirk count).
+  - Trial rates over the trials of the arm and direction that reached a
+    model call: compile_rate (compiled == 1.0), run_rate (last attempt S5),
+    correct_rate (correct == 1.0), cap_hit_rate (cap_hit == 1.0),
+    fence_quirk_rate (fence_quirk > 0; the note gives the total quirk
+    count). A trial that ended at the baseline (compiled None, the lassi
+    profile's reading) is excluded from all five and counted in each note.
   - Paper-denominator rates over the correct trials: first_try_rate
-    (first_try == 1.0) and sim_t_ge_0.6_rate (sim_t >= 0.6).
+    (first_try == 1.0), sim_t_ge_0.6_rate (sim_t formatted with `.2f`, as
+    the notebooks store it, >= 0.6), and sim_t_tiktoken_ge_0.6_rate (the
+    same over sim_t_tiktoken), each Sim-T row beside the paper's one Sim-T
+    recount (OQ-031, part 1).
   - within_10pct_rate is always None; its note says no timing profiler
     exists and names P10; the Markdown shows PLACEHOLDER for it.
   - pass@1 and pass@3: pass_at_k per scenario (item) over its trials whose
     correct is not None, then the mean over scenarios. numerator is the sum
     of the per-scenario values, denominator the number of scenarios, and the
     Wilson interval is wilson_interval(numerator, denominator): the scenario
-    is the unit pass@k averages over. When any scenario has fewer than k
-    scored trials, the value is None and the note names n and k ("n = 2",
-    "k = 3", spacing free).
+    is the unit pass@k averages over. A scenario with no scored trial is
+    left out and named in the note. When a remaining scenario has fewer
+    than k scored trials, the value is None and the note names n and k
+    ("n = 2", "k = 3", spacing free).
   - Every other interval is wilson_interval(numerator, denominator) of the
     rate itself. A None value has no interval.
   - A trial whose needed component is None is left out of the numerator and
@@ -59,14 +69,21 @@ The contract these tests fix:
 - Paper columns: rows correct_rate, within_10pct_rate, first_try_rate, and
   sim_t_ge_0.6_rate show the paper's values for the table's direction.
   paper_published holds the published count as "<count>/<denominator>";
-  paper_recount holds the recount the same way, then the alternate reading
-  where the bible gives one (OMP -> CUDA within 10%: 23/32, then 24/32).
-  paper_cite names "Evaluation Protocol, LASSI Paper Metrics". Rows the
-  paper does not report (compile, run, cap-hit, fence-quirk) have None in
-  paper_published and paper_recount.
+  paper_recount holds the recount, the reference value, the same way, then
+  the alternate reading where the bible gives one (OMP -> CUDA within 10%:
+  24/32, then 23/32). paper_cite names "Evaluation Protocol, LASSI Paper
+  Metrics". Rows the paper does not report (compile, run, cap-hit,
+  fence-quirk) have None in paper_published and paper_recount. The
+  Markdown header labels the columns "Paper published (for reference
+  only)" and "Paper recount (reference)"; the Parquet names stay.
+- A table that is not a compile-stage reproduction carries b0_criterion,
+  the B0 criterion's interval in its direction (WizardCoder 9/10 OMP ->
+  CUDA, 10/10 CUDA -> OMP), shown under its heading and in the Parquet
+  metrics rows, with no verdict.
 - Compile-only: when every trial's correct is None with a note naming a
-  compile-stage reproduction (P2.7's compile-only note), the table is
-  labeled "compile-stage reproduction". correct_rate, first_try_rate,
+  compile-stage reproduction (P2.7's compile-only note) or for a trial that
+  ended at the baseline (compiled None), and at least one names one, the
+  table is labeled "compile-stage reproduction". correct_rate, first_try_rate,
   sim_t_ge_0.6_rate, pass@1, and pass@3 are None with that label in their
   notes and empty paper columns (None), and the Markdown shows none of the
   paper's correctness values.
@@ -143,12 +160,12 @@ SAMPLING = Sampling(temperature=0.2, top_p=0.9, max_tokens=4096)
 FAKE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
 
 COMPONENTS = (
-    "correct", "correct_paper", "within_10pct", "first_try", "sim_t", "sim_t_c", "sim_l",
+    "correct", "correct_paper", "within_10pct", "first_try", "sim_t", "sim_t_c", "sim_t_tiktoken", "sim_l",
     "self_corr", "cap_hit", "fence_quirk", "compiled", "compiled_first_try",
 )
 METRIC_NAMES = (
     "compile_rate", "run_rate", "correct_rate", "cap_hit_rate", "fence_quirk_rate",
-    "first_try_rate", "sim_t_ge_0.6_rate", "within_10pct_rate", "pass@1", "pass@3",
+    "first_try_rate", "sim_t_ge_0.6_rate", "sim_t_tiktoken_ge_0.6_rate", "within_10pct_rate", "pass@1", "pass@3",
 )
 ROW_FIELDS = (
     "name", "value", "numerator", "denominator", "wilson_low", "wilson_high",
@@ -156,20 +173,23 @@ ROW_FIELDS = (
 )
 STAGE_KEYS = ("S0", "S1", "S2", "S3", "S4", "S5", "none")
 NO_PAPER_VALUE = ("compile_rate", "run_rate", "cap_hit_rate", "fence_quirk_rate")
-CORRECTNESS_ROWS = ("correct_rate", "first_try_rate", "sim_t_ge_0.6_rate", "pass@1", "pass@3")
+CORRECTNESS_ROWS = ("correct_rate", "first_try_rate", "sim_t_ge_0.6_rate", "sim_t_tiktoken_ge_0.6_rate", "pass@1",
+                    "pass@3")
 # The bible's LASSI Paper Metrics values per direction and row: (published, recount readings in order).
 PAPER_COLUMNS = {
     OMP_TO_CUDA: {
         "correct_rate": (["32/40"], ["32/40"]),
-        "within_10pct_rate": (["25/32"], ["23/32", "24/32"]),
+        "within_10pct_rate": (["25/32"], ["24/32", "23/32"]),
         "first_try_rate": (["21/32"], ["21/32"]),
         "sim_t_ge_0.6_rate": (["13/32"], ["8/32"]),
+        "sim_t_tiktoken_ge_0.6_rate": (["13/32"], ["8/32"]),  # the paper's one Sim-T column (OQ-031)
     },
     CUDA_TO_OMP: {
         "correct_rate": (["34/40"], ["34/40"]),
         "within_10pct_rate": (["21/34"], ["20/34"]),
         "first_try_rate": (["19/34"], ["18/34"]),
         "sim_t_ge_0.6_rate": (["16/34"], ["15/34"]),
+        "sim_t_tiktoken_ge_0.6_rate": (["16/34"], ["15/34"]),
     },
 }
 
@@ -214,7 +234,7 @@ class Spec:
     correct: float | None
     first_try: float | None
     sim_t: float | None
-    compiled: float
+    compiled: float | None
     cap_hit: float
     fence_quirk: float
     correct_note: str = NOT_SCORED_NOTE
@@ -245,6 +265,7 @@ MAIN_FENCE_QUIRK_TOTAL = 5
 MAIN_CORRECT_RATES = {
     "first_try_rate": (2, 3),  # of the 3 correct trials, layout 1 and bsearch 2 have first_try 1.0
     "sim_t_ge_0.6_rate": (2, 3),  # of the 3 correct trials, layout 1 (0.75) and bsearch 1 (0.60); not 0.59
+    "sim_t_tiktoken_ge_0.6_rate": (2, 3),  # make_score gives sim_t_tiktoken the spec's sim_t
 }
 # pass@k per scenario (n = 5): layout c = 1, bsearch c = 2.
 # pass@1: 1/5 and 2/5, mean 0.3, sum 0.6 over 2 scenarios.
@@ -367,20 +388,22 @@ def make_score(spec: Spec) -> Score:
     """Return the lassi Score of `spec`, built by hand with the P2.7 component names and notes."""
     components: dict[str, float | None] = {
         "correct": spec.correct, "correct_paper": None, "within_10pct": None, "first_try": spec.first_try,
-        "sim_t": spec.sim_t, "sim_t_c": spec.sim_t, "sim_l": spec.sim_t, "self_corr": float(spec.corrections),
+        "sim_t": spec.sim_t, "sim_t_c": spec.sim_t, "sim_t_tiktoken": spec.sim_t, "sim_l": spec.sim_t,
+        "self_corr": float(spec.corrections),
         "cap_hit": spec.cap_hit, "fence_quirk": spec.fence_quirk, "compiled": spec.compiled,
-        "compiled_first_try": 1.0 if spec.compiled == 1.0 and spec.corrections == 0 else 0.0,
+        "compiled_first_try": None if spec.compiled is None
+        else 1.0 if spec.compiled == 1.0 and spec.corrections == 0 else 0.0,
     }
     assert tuple(components) == COMPONENTS
     notes = {
         "correct_paper": "SYNTHETIC note: the paper criterion is manual inspection and is never computed",
         "within_10pct": "SYNTHETIC note: no timing profiler exists",
-        **{name: "SYNTHETIC note: computed by python 3.10" for name in ("sim_t", "sim_t_c", "sim_l")},
+        **{name: "SYNTHETIC note: computed by python 3.10" for name in ("sim_t", "sim_t_c", "sim_t_tiktoken", "sim_l")},
     }
     if spec.correct is None:
         notes["correct"] = notes["first_try"] = spec.correct_note
     if spec.sim_t is None:
-        notes["sim_t"] = "SYNTHETIC note: sim_t not computed"
+        notes["sim_t"] = notes["sim_t_tiktoken"] = "SYNTHETIC note: sim_t not computed"
     try:
         return Score(components=components, scalar=spec.correct, notes=notes)
     except TypeError as error:
@@ -857,3 +880,163 @@ def test_the_fixture_does_carry_the_sentinel() -> None:
     assert SENTINEL in trial.context.knowledge_summary and SENTINEL in trial.context.source_description
     assert any(SENTINEL in diagnostic.message for diagnostic in trial.attempts[0].diagnostics)
     assert not SENTINEL.isascii()
+
+
+# ---------------------------------------------------------------------------
+# Task P4.15: the readings OQ-029 (part 1) and OQ-030 apply, and the OQ-021 labels
+
+BASELINE_NOTE = "SYNTHETIC note: not computed: the trial ended at the baseline, before any model call (baseline-run)"
+NOT_ALIGNED_NOTE = "SYNTHETIC note: not computed: a clean run the oracle did not align"
+# layout 4 as the lassi profile reads a trial that ended at the baseline: compiled, correct, first_try, and the
+# similarity values None (bible LASSI Score Profile), unlike MAIN's hand scores.
+BASELINE_ENDED = Spec("layout", 4, None, 0, None, None, None, None, 0.0, 0.0, correct_note=BASELINE_NOTE)
+MAIN_BASELINE = tuple(BASELINE_ENDED if (spec.item, spec.run) == ("layout", 4) else spec for spec in MAIN)
+# Hand counts over MAIN_BASELINE: layout 4 leaves all five trial rates, so each is over 9 trials.
+MAIN_BASELINE_RATES = {
+    "compile_rate": (7, 9), "run_rate": (6, 9), "correct_rate": (3, 9), "cap_hit_rate": (2, 9),
+    "fence_quirk_rate": (2, 9),
+}
+
+
+@pytest.mark.parametrize("name", list(MAIN_BASELINE_RATES))
+def test_a_trial_that_ended_at_the_baseline_leaves_every_trial_rate(name: str) -> None:
+    """OQ-030, part 1: the five trial rates share the trials that reached a model call; each note counts 1."""
+    row = rows_of(only_table(pairs_of(MAIN_BASELINE)))[name]
+    assert_rate(row, *MAIN_BASELINE_RATES[name])
+    assert re.search(r"\b1 excluded\b", row.note), f"{name}: {row.note!r}"
+
+
+def test_the_baseline_exclusion_note_names_the_baseline() -> None:
+    rows = rows_of(only_table(pairs_of(MAIN_BASELINE)))
+    for name in ("run_rate", "cap_hit_rate", "fence_quirk_rate"):
+        assert "ended at the baseline" in rows[name].note, f"{name}: {rows[name].note!r}"
+
+
+# entropy: two clean runs the oracle never aligned, so no scored trial in that scenario.
+NEVER_ALIGNED = tuple(
+    Spec("entropy", run, "S5", 0, None, None, 0.5, 1.0, 0.0, 0.0, correct_note=NOT_ALIGNED_NOTE) for run in (1, 2)
+)
+
+
+def test_a_scenario_with_no_scored_trial_is_left_out_of_pass_at_k_and_named() -> None:
+    """OQ-030, part 2: MAIN's two scenarios still give pass@1 0.3 and pass@3 0.75; entropy is named, not scored."""
+    rows = rows_of(only_table(pairs_of(MAIN + NEVER_ALIGNED)))
+    for name, (value, numerator, scenarios) in MAIN_PASS_AT_K.items():
+        assert_pass_at_k(rows[name], value, numerator, scenarios)
+        assert f"{SUITE}/entropy" in rows[name].note, f"{name}: {rows[name].note!r}"
+        assert re.search(r"\b2 excluded\b", rows[name].note), f"{name}: {rows[name].note!r}"
+
+
+def test_pass_at_k_is_none_when_no_scenario_has_a_scored_trial() -> None:
+    row = rows_of(only_table(pairs_of(NEVER_ALIGNED)))["pass@1"]
+    assert_none(row)
+    assert "no scenario has a scored trial" in row.note, row.note
+
+
+def test_a_scenario_with_fewer_than_k_scored_trials_still_nulls_pass_at_k() -> None:
+    rows = rows_of(only_table(pairs_of(SHORT + NEVER_ALIGNED)))
+    assert_none(rows["pass@3"])
+    assert re.search(r"\bn\s*=\s*2\b", rows["pass@3"].note), rows["pass@3"].note
+    assert_pass_at_k(rows["pass@1"], 0.6, 1.2, 2)
+
+
+# SYNTHETIC correct trials at the Sim-T boundary: .2f gives 0.60, 0.60, 0.59, 0.60, 0.59, 0.59.
+BOUNDARY_SIM_T = (0.5996, 0.5951, 0.595, 0.6, 0.59, 0.5949)
+BOUNDARY = tuple(Spec("bsearch", run, "S5", 0, 1.0, 1.0, value, 1.0, 0.0, 0.0)
+                 for run, value in enumerate(BOUNDARY_SIM_T, 1))
+
+
+def test_sim_t_is_compared_at_two_decimals_as_the_notebooks_store_it() -> None:
+    """OQ-030, part 3: 0.5996 and 0.5951 format as 0.60 and count; 0.595 and 0.5949 format as 0.59 and do not."""
+    metrics = module(METRICS)
+    assert [metrics.reaches_sim_t_threshold(value) for value in BOUNDARY_SIM_T] == [
+        True, True, False, True, False, False]
+    row = rows_of(only_table(pairs_of(BOUNDARY)))["sim_t_ge_0.6_rate"]
+    assert_rate(row, 3, 6)
+    assert ".2f" in row.note and "unrounded" in row.note, row.note
+
+
+B0_TEXT = {
+    OMP_TO_CUDA: "WizardCoder 9/10 = 0.900 (Wilson 95% 0.596 to 0.982)",
+    CUDA_TO_OMP: "WizardCoder 10/10 = 1.000 (Wilson 95% 0.722 to 1.000)",
+}
+
+
+@pytest.mark.parametrize("direction", [OMP_TO_CUDA, CUDA_TO_OMP])
+def test_each_table_shows_the_b0_criterion_interval_with_no_verdict(direction: str) -> None:
+    """OQ-030, part 4: the paper's B0 interval in the table's direction, labeled a paper value, with no verdict."""
+    table = only_table(pairs_of(MAIN, MODEL_A, direction))
+    assert table.b0_criterion == B0_TEXT[direction]
+    summary = markdown_of(table).split("| Metric |")[0]
+    assert B0_TEXT[direction] in summary and "B0 criterion" in summary
+    assert "no verdict" in summary and "paper value" in summary
+
+
+def test_a_compile_stage_reproduction_shows_no_b0_criterion() -> None:
+    table = compile_only_table()
+    assert table.b0_criterion is None
+    assert "B0 criterion" not in markdown_of(table)
+
+
+def test_parquet_holds_each_tables_b0_criterion(tmp_path: Path) -> None:
+    tables = mixed_tables()
+    read = written(tmp_path, tables)
+    for table in tables:
+        stored = {row["b0_criterion"] for row in read["metrics"] if (row["arm"], row["direction"]) ==
+                  (table.arm, table.direction)}
+        assert stored == {table.b0_criterion}, (table.arm, table.direction)
+
+
+def test_the_markdown_labels_the_recount_the_reference_and_the_published_value_for_reference_only() -> None:
+    """OQ-021, option (c): the header names each paper column's role; the Parquet column names stay."""
+    markdown = markdown_of(only_table(pairs_of(MAIN)))
+    header = next(row for row in cell_rows(markdown) if row and row[0] == "Metric")
+    published, recount = "Paper published (for reference only)", "Paper recount (reference)"
+    assert header.index(published) < header.index(recount)
+    legend = module(TABLES).LEGEND
+    assert "reference value" in legend and "for reference only" in legend
+    assert "no table marks a headline metric reproduced" in legend
+    names = module(TABLES).SCHEMAS["metrics"].names
+    assert names.index("paper_published") < names.index("paper_recount")
+
+
+def test_a_compile_only_run_with_a_baseline_ended_trial_keeps_its_label() -> None:
+    """OQ-029, part 1: baseline-ended trials beside compile-only ones keep the compile-stage label."""
+    baseline = Spec("bsearch", 4, None, 0, None, None, None, None, 0.0, 0.0, correct_note=BASELINE_NOTE)
+    table = only_table(pairs_of((*COMPILE_ONLY, baseline), MODEL_C, CUDA_TO_OMP, compile_only=True))
+    assert table.compile_only is True
+    for name in CORRECTNESS_ROWS:
+        row = rows_of(table)[name]
+        assert_none(row)
+        assert row.paper_published is None and row.paper_recount is None, name
+    assert only_table(pairs_of([baseline], MODEL_C, CUDA_TO_OMP)).compile_only is False, (
+        "a run whose every trial ended at the baseline names no compile-stage reproduction")
+
+
+def with_tiktoken(pairs: list[tuple[Trial, Score]], values: Sequence[float | None]) -> list[tuple[Trial, Score]]:
+    """Return `pairs` with each Score's sim_t_tiktoken set to the matching value of `values`."""
+    return [(trial, Score(components={**score.components, "sim_t_tiktoken": value}, scalar=score.scalar,
+                          notes=score.notes))
+            for (trial, score), value in zip(pairs, values, strict=True)]
+
+
+def test_the_tiktoken_sim_t_row_reads_sim_t_tiktoken_beside_the_same_recount() -> None:
+    """OQ-031, part 1 (c): the second Sim-T row reads sim_t_tiktoken at two decimals, beside the paper's one recount."""
+    # BOUNDARY's sim_t gives 3/6; sim_t_tiktoken here formats as 0.90, 0.10, 0.60, 0.59, 0.61, and None (excluded).
+    pairs = with_tiktoken(pairs_of(BOUNDARY), (0.9, 0.1, 0.5996, 0.5949, 0.61, None))
+    rows = rows_of(only_table(pairs))
+    assert_rate(rows["sim_t_ge_0.6_rate"], 3, 6)
+    tiktoken_row = rows["sim_t_tiktoken_ge_0.6_rate"]
+    assert_rate(tiktoken_row, 3, 5)
+    assert "sim_t_tiktoken" in tiktoken_row.note and "OQ-031" in tiktoken_row.note
+    assert re.search(r"\b1 excluded\b", tiktoken_row.note), tiktoken_row.note
+    sim_t_row = rows["sim_t_ge_0.6_rate"]
+    assert (tiktoken_row.paper_published, tiktoken_row.paper_recount, tiktoken_row.paper_cite) == (
+        sim_t_row.paper_published, sim_t_row.paper_recount, sim_t_row.paper_cite)
+
+
+def test_a_score_without_sim_t_tiktoken_is_refused() -> None:
+    trial, score = pairs_of(MAIN)[0]
+    components = {name: value for name, value in score.components.items() if name != "sim_t_tiktoken"}
+    with pytest.raises(ValueError, match="sim_t_tiktoken"):
+        module(METRICS).metric_tables([(trial, Score(components=components, scalar=score.scalar, notes=score.notes))])

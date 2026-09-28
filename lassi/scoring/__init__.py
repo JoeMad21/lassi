@@ -1,6 +1,7 @@
 """Scoring: code similarity measures, score profiles, and the scoring pass over a finished run.
 
-- lassi.scoring.similarity: the faithful Sim-T and Sim-L, and the C-aware Sim-T.
+- lassi.scoring.similarity: the faithful Sim-T and Sim-L, the C-aware Sim-T, and
+  the notebook's tiktoken similarity sim_t_tiktoken (cl100k_base, read offline).
 - lassi.scoring.df_v0: the ScoreProfile `df-v0` (bible Training Module, Reward
   Function), its weights read from assets/scoring/df-v0.yaml.
 - lassi.scoring.lassi_profile: the ScoreProfile `lassi` (bible Evaluation
@@ -22,13 +23,23 @@ default registry.
 from lassi.scoring.df_v0 import DfV0Profile, Weights, guard_state, load_weights, warning_count
 from lassi.scoring.lassi_profile import LassiProfile, ProfileFile, load_profile
 from lassi.scoring.profiles import build_profile, reads_bench_sources
-from lassi.scoring.similarity import Similarity, c_tokens, measure, sim_l, sim_t, sim_t_c
+from lassi.scoring.similarity import (
+    Similarity,
+    TiktokenCacheError,
+    c_tokens,
+    measure,
+    sim_l,
+    sim_t,
+    sim_t_c,
+    sim_t_tiktoken,
+)
 
 __all__ = [
     "DfV0Profile",
     "LassiProfile",
     "ProfileFile",
     "Similarity",
+    "TiktokenCacheError",
     "Weights",
     "build_profile",
     "c_tokens",
@@ -40,5 +51,6 @@ __all__ = [
     "sim_l",
     "sim_t",
     "sim_t_c",
+    "sim_t_tiktoken",
     "warning_count",
 ]

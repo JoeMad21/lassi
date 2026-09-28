@@ -7,11 +7,15 @@ human formats), Design Principle 7 (Parquet mirrors).
 
 table_markdown renders one lassi.analysis.metrics MetricTable: a heading
 with the arm and direction, the trial and scenario counts, the devices,
-the compile-stage label where it applies, one Markdown line per metric row
-(first cell the row name), and the stage-reached and corrections
-distributions, one line per key. metrics_markdown joins every table under a
-legend. The Markdown is plain ASCII and holds only names, counts, rates,
-and notes, never prompt, source, context, or model text (OQ-018).
+the compile-stage label where it applies, else the B0 criterion's interval
+(a paper value), one Markdown line per metric row (first cell the row
+name), and the stage-reached and corrections distributions, one line per
+key. Its paper columns are labeled `Paper published (for reference only)`
+and `Paper recount (reference)` (OQ-021, option (c)); the Parquet columns
+keep the names paper_published and paper_recount and their order, and the
+recount is the reference in every row. metrics_markdown joins every table
+under a legend. The Markdown is plain ASCII and holds only names, counts,
+rates, and notes, never prompt, source, context, or model text (OQ-018).
 
 write_metrics_parquet writes three tables, metrics, stage_reached, and
 corrections, as Hive-partitioned Parquet under
@@ -33,7 +37,7 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.dataset as ds
 
-from lassi.analysis.metrics import COMPILE_STAGE, MetricRow, MetricTable
+from lassi.analysis.metrics import B0_NOTE, COMPILE_STAGE, MetricRow, MetricTable
 
 TABLES = ("metrics", "stage_reached", "corrections")
 PARTITION_COLUMNS = ("arm", "direction")
@@ -59,6 +63,7 @@ SCHEMAS = {
             ("trials_per_scenario_min", _INT),
             ("trials_per_scenario_max", _INT),
             ("devices", pa.list_(_STRING)),
+            ("b0_criterion", _STRING),
             ("name", _STRING),
             ("value", _DOUBLE),
             ("numerator", _DOUBLE),
@@ -84,15 +89,21 @@ _SORT_KEYS = {
 LEGEND = (
     "One table per arm and direction (bible Evaluation Protocol). Every value comes from the lassi score "
     "profile's components and the trial records; nothing is rescored. Intervals are Wilson 95% over each row's "
-    "own count: compile, run, correct, cap-hit, and fence-quirk rates cover every trial of the arm and "
-    "direction; first try and Sim-T >= 0.6 cover the correct trials, the paper's denominator; pass@k is the "
-    "mean over scenarios of each scenario's unbiased pass@k, with its interval over the scenario count. A trial "
-    "whose component is None is excluded and counted in the row's note. PLACEHOLDER marks a value not yet "
-    "measured. The paper columns give the paper's published value and the recount read from its tables, each "
-    "with the Wilson 95% interval of the paper's own count and denominator; they are paper values, not "
-    "measurements, and a compile-stage reproduction shows none. The paper does not state which tokenizer its "
-    "Sim-T used ([OPEN], OQ-022); the Sim-T row compares the faithful Python-tokenize sim_t, unrounded, while "
-    "the paper prints Sim-T to two decimals."
+    "own count: compile, run, correct, cap-hit, and fence-quirk rates cover the trials of the arm and direction "
+    "that reached a model call, a trial that ended at the baseline being excluded and counted in each note; "
+    "first try and the two Sim-T >= 0.6 rows cover the correct trials, the paper's denominator; pass@k is the "
+    "mean over scenarios of each scenario's unbiased pass@k, with its interval over the scenario count, and a scenario "
+    "with no scored trial is left out and named in the note. A trial whose component is None is excluded and "
+    "counted in the row's note. PLACEHOLDER marks a value not yet measured. The paper columns give the recount "
+    "read from the paper's tables, which is the reference value, and the paper's published value, shown for "
+    "reference only (OQ-021), each with the Wilson 95% interval of the paper's own count and denominator; the "
+    "B0 criterion line gives the interval around the paper's B0 model count. These are paper values, not "
+    "measurements, a compile-stage reproduction shows none, and no table marks a headline metric reproduced or "
+    "computes its gap (the P10 gate applies the test of OQ-032). The paper does not state which tokenizer its "
+    "Sim-T used ([OPEN], OQ-022, OQ-031): one Sim-T row compares the faithful Python-tokenize sim_t and the other "
+    "the tiktoken cl100k_base sim_t_tiktoken, each formatted to two decimals, as the notebooks store them, while "
+    "each Score keeps the unrounded value; both stand beside the paper's one Sim-T recount, and neither is marked "
+    "reproduced."
 )
 
 
@@ -129,7 +140,7 @@ def _metric_line(row: MetricRow) -> str:
 
 
 def _summary(table: MetricTable) -> list[str]:
-    """Return the lines under a table's heading: trials, scenarios, devices, and the compile-stage label."""
+    """Return the lines under a table's heading: trials, scenarios, devices, and the label or the B0 criterion."""
     sizes = sorted(set(table.trials_per_scenario.values()))
     per = f"{sizes[0]}" if len(sizes) == 1 else f"{sizes[0]} to {sizes[-1]}"
     lines = [
@@ -139,6 +150,9 @@ def _summary(table: MetricTable) -> list[str]:
     if table.compile_only:
         lines.append(f"Label: {COMPILE_STAGE}. No program ran, so correctness is not computed, and no value "
                      "here is compared with the paper's correctness values.")
+    elif table.b0_criterion is not None:
+        lines.append(f"B0 criterion ({B0_NOTE}): B0 pass@1 inside {table.b0_criterion}; bible Evaluation "
+                     "Protocol, Acceptance Criteria.")
     return [_cell(line) for line in lines]
 
 
@@ -146,7 +160,8 @@ def table_markdown(table: MetricTable) -> str:
     """Return one metric table as plain ASCII Markdown (see the module docstring)."""
     lines = [f"## {_cell(table.arm)} {_cell(table.direction)}", "", *_summary(table), ""]
     lines += [
-        "| Metric | Value | Count | Wilson 95% | Paper published | Paper recount | Paper cite | Note |",
+        "| Metric | Value | Count | Wilson 95% | Paper published (for reference only) | Paper recount (reference) "
+        "| Paper cite | Note |",
         "| --- | --- | --- | --- | --- | --- | --- | --- |",
         *(_metric_line(row) for row in table.rows),
         "",
@@ -189,6 +204,7 @@ def metrics_rows(tables: Sequence[MetricTable]) -> dict[str, list[dict[str, Any]
             "trials_per_scenario_min": min(sizes, default=None),
             "trials_per_scenario_max": max(sizes, default=None),
             "devices": list(table.devices),
+            "b0_criterion": table.b0_criterion,
         }
         for ordinal, row in enumerate(table.rows):
             fields = {name: getattr(row, name) for name in ROW_FIELDS}

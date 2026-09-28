@@ -53,16 +53,44 @@ the lexer rules:
 
 The ScoreProfile `lassi` (lassi.scoring.lassi_profile) gives these values as
 its sim_t, sim_t_c, and sim_l components.
+
+The notebook's second token similarity (task P4.15; OQ-022, owner: keep both
+token similarities; a separate name, never reported as `sim_t`):
+
+- `sim_t_tiktoken`: the token ids of tiktoken's cl100k_base encoding, with
+  tiktoken's default special-token handling, compared by
+  `difflib.SequenceMatcher` with its defaults (autojunk on), reference first,
+  as the notebook's "tiktoken" method does. The notebook raises when a text
+  holds a special-token string (encode refuses it) or does not decode back
+  from its ids (its round-trip assert); there is no value to reproduce then,
+  so the function returns None and the caller notes why [DESIGN].
+- `cl100k_base()` reads the encoding offline, only from the directory the
+  environment variable TIKTOKEN_CACHE_DIR names, where tiktoken's own cache
+  keeps it (an `rx run` caches it under the scratch root). It never downloads
+  and never deletes a cached file: while tiktoken loads, its cached-file
+  reader is replaced by `cached_reader`, which reads the file tiktoken's
+  cache rule names and checks tiktoken's expected sha256, and refuses
+  otherwise. An unset or empty variable, a missing directory, a missing
+  file, or a hash mismatch raises TiktokenCacheError, an environment error,
+  never a null value. No source address appears in any message.
 """
 
 from __future__ import annotations
 
 import difflib
+import hashlib
 import io
+import os
 import platform
 import re
 import tokenize
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
+from functools import lru_cache
+from importlib import metadata
+from pathlib import Path
+from typing import Protocol
 
 # One alternative per token class, tried in order at each position. The last
 # alternative takes any single character, so every position matches something.
@@ -173,3 +201,121 @@ def measure(reference: str, candidate: str) -> Similarity:
         sim_t_c=sim_t_c(reference, candidate),
         python=platform.python_version(),
     )
+
+
+# The notebook's tiktoken similarity (task P4.15; see the module docstring).
+TIKTOKEN_ENCODING = "cl100k_base"
+TIKTOKEN_CACHE_ENV = "TIKTOKEN_CACHE_DIR"
+
+
+class TiktokenCacheError(OSError):
+    """The encoding cannot be read from the offline cache: an environment error, never a null value.
+
+    An OSError, so a caller that refuses a profile it cannot build (lassi score, lassi run) refuses this too.
+    """
+
+
+class TokenEncoding(Protocol):
+    """What sim_t_tiktoken needs of an encoding: tiktoken's encode and decode with their defaults."""
+
+    def encode(self, text: str) -> list[int]:
+        """Return the token ids of `text`; raise ValueError for a special-token string in it."""
+        ...
+
+    def decode(self, tokens: Sequence[int]) -> str:
+        """Return the text of `tokens`."""
+        ...
+
+
+def sim_t_tiktoken(reference: str, candidate: str, encoding: TokenEncoding | None = None) -> float | None:
+    """Return the notebook's tiktoken similarity of `candidate` against `reference`, or None where it raises.
+
+    `encoding` defaults to cl100k_base(). Each text, the reference first, is
+    encoded with the encoding's defaults. A ValueError from encode (the text
+    holds a special-token string) or ids that do not decode back to the text
+    (the notebook's round-trip assert) give None; otherwise the value is the
+    SequenceMatcher ratio of the two id lists, autojunk on.
+    """
+    enc = cl100k_base() if encoding is None else encoding
+    ids: list[list[int]] = []
+    for text in (reference, candidate):
+        try:
+            tokens = list(enc.encode(text))
+        except ValueError:
+            return None
+        if enc.decode(tokens) != text:
+            return None
+        ids.append(tokens)
+    return difflib.SequenceMatcher(None, ids[0], ids[1]).ratio()
+
+
+def cached_reader(cache_dir: Path) -> Callable[[str, str | None], bytes]:
+    """Return a stand-in for tiktoken's cached-file reader that only reads the cache in `cache_dir`.
+
+    It reads the file tiktoken's cache rule names, the sha1 hex digest of the
+    source address (tiktoken 0.14.0, load.read_file_cached), and checks the
+    sha256 tiktoken expects. It never downloads, writes, or deletes, and its
+    messages name the cache file, never the source address.
+    """
+
+    def read(source: str, expected_hash: str | None = None) -> bytes:
+        name = hashlib.sha1(source.encode()).hexdigest()
+        path = cache_dir / name
+        if not path.is_file():
+            raise TiktokenCacheError(
+                f"{TIKTOKEN_CACHE_ENV} names {cache_dir.as_posix()}, which holds no cached file {name} for "
+                f"{TIKTOKEN_ENCODING}; cache it there first (an rx run with {TIKTOKEN_CACHE_ENV} set), since "
+                "scoring never downloads it"
+            )
+        data = path.read_bytes()
+        if expected_hash is not None and hashlib.sha256(data).hexdigest() != expected_hash:
+            raise TiktokenCacheError(
+                f"{TIKTOKEN_CACHE_ENV}: the cached file {path.as_posix()} does not have the sha256 tiktoken expects "
+                f"({expected_hash}); "
+                "it is left in place, and scoring never downloads a replacement"
+            )
+        return data
+
+    return read
+
+
+def tiktoken_cache_dir() -> Path:
+    """Return the directory TIKTOKEN_CACHE_DIR names; raise TiktokenCacheError when it is unset, empty, or absent."""
+    value = os.environ.get(TIKTOKEN_CACHE_ENV, "")
+    if not value.strip():
+        raise TiktokenCacheError(
+            f"sim_t_tiktoken reads {TIKTOKEN_ENCODING} offline from the directory {TIKTOKEN_CACHE_ENV} names, "
+            "and it is unset or empty; set it to the cache under the scratch root"
+        )
+    path = Path(value)
+    if not path.is_dir():
+        raise TiktokenCacheError(f"{TIKTOKEN_CACHE_ENV} names {path.as_posix()}, which is not a directory")
+    return path
+
+
+@contextmanager
+def _offline(cache_dir: Path) -> Iterator[None]:
+    """Replace tiktoken's cached-file reader with cached_reader(cache_dir) while the block runs."""
+    import tiktoken.load
+
+    original = tiktoken.load.read_file_cached
+    tiktoken.load.read_file_cached = cached_reader(cache_dir)
+    try:
+        yield
+    finally:
+        tiktoken.load.read_file_cached = original
+
+
+@lru_cache(maxsize=1)
+def cl100k_base() -> TokenEncoding:
+    """Return tiktoken's cl100k_base encoding, read offline from TIKTOKEN_CACHE_DIR; raise TiktokenCacheError."""
+    cache_dir = tiktoken_cache_dir()
+    import tiktoken
+
+    with _offline(cache_dir):
+        return tiktoken.get_encoding(TIKTOKEN_ENCODING)
+
+
+def tiktoken_version() -> str:
+    """Return the installed tiktoken version, which a sim_t_tiktoken note names beside the interpreter."""
+    return metadata.version("tiktoken")

@@ -9,7 +9,11 @@ outputs, never runtime), Component Interfaces (ScoreProfile).
 A profile file, by default assets/scoring/lassi.yaml, names the components
 in the order a Score lists them, the component that is the scalar, and every
 note text; this module holds the definitions. The profile is built as
-`LassiProfile(bench_root=<root of the suite's fetched sources>)`. The
+`LassiProfile(bench_root=<root of the suite's fetched sources>)`; it reads
+tiktoken's cl100k_base encoding for sim_t_tiktoken when it is built
+(lassi.scoring.similarity.cl100k_base, offline from TIKTOKEN_CACHE_DIR),
+unless `encoding` names another, so a missing cache stops the build with
+TiktokenCacheError, an OSError, before anything is scored. The
 reference target is the item's one file in the direction's target language,
 found through the suite manifest assets/bench/<suite>.yaml under that root
 and read in text mode (lassi.core.fragments.as_text_mode), as the notebook
@@ -31,10 +35,11 @@ Components of a trial (task P2.7), each a float, or None with a note:
   run that stopped at the gap, which is not a model error, whatever its
   exit status or undefined behavior); a compile-only trial (the target
   reference was not run and no attempt ran), labeled a compile-stage
-  reproduction; and a clean standing run the oracle never aligned (no
-  reference stdout, a truncated one, or, under binary_io, a target
-  reference run whose workdir came back incomplete). The scalar is
-  correct.
+  reproduction; and a clean standing run the oracle never aligned (a
+  recipe that lists no oracle stage, a truncated reference stdout, or,
+  under binary_io, a target reference run whose workdir came back
+  incomplete; the oracle stage raises rather than leave a run unaligned for
+  want of a reference stdout). The scalar is correct.
 - correct_paper: the paper's criterion, a manual inspection of stdout.
   Never computed: always None.
 - within_10pct: None while no timing profiler exists, even when an attempt
@@ -45,6 +50,12 @@ Components of a trial (task P2.7), each a float, or None with a note:
   reference target and the last attempt's target file ("" when that attempt
   has none). Each note names the interpreter that computed the value. None
   when the trial holds no attempt.
+- sim_t_tiktoken (task P4.15; OQ-022, OQ-031): the notebook's tiktoken
+  similarity of the same pair (lassi.scoring.similarity.sim_t_tiktoken).
+  Its note names the encoding, the tiktoken version, and the interpreter.
+  None, with sim_t's note, when the trial holds no attempt, and None with
+  the tiktoken_null note where the notebook raises: a text that holds a
+  special-token string or does not decode back from its ids.
 - self_corr: final.corrections. cap_hit: 1.0 when final.end_reason is
   correction-cap, else 0.0. fence_quirk: the number of fence-quirk
   diagnostics over all attempts.
@@ -70,7 +81,8 @@ from lassi.core.fragments import as_text_mode
 from lassi.core.interfaces import Score
 from lassi.core.record import RunInfo, Trial, standing_attempt
 from lassi.core.registry import register
-from lassi.scoring.similarity import measure
+from lassi.scoring import similarity
+from lassi.scoring.similarity import TokenEncoding, measure
 
 REPO = Path(__file__).resolve().parents[2]
 # The profile file a recipe's `score: lassi` reads.
@@ -81,7 +93,8 @@ BENCH_DIR = REPO / "assets" / "bench"
 PURPOSE = "eval"
 
 CORRECT, CORRECT_PAPER, WITHIN_10PCT, FIRST_TRY = "correct", "correct_paper", "within_10pct", "first_try"
-SIMILARITY = ("sim_t", "sim_t_c", "sim_l")
+SIM_T_TIKTOKEN = "sim_t_tiktoken"
+SIMILARITY = ("sim_t", "sim_t_c", "sim_l", SIM_T_TIKTOKEN)
 SELF_CORR, CAP_HIT, FENCE_QUIRK = "self_corr", "cap_hit", "fence_quirk"
 COMPILED, COMPILED_FIRST_TRY = "compiled", "compiled_first_try"
 # Every component the profile computes; the profile file lists each one once, in the order a Score gives them.
@@ -91,7 +104,10 @@ COMPONENTS = frozenset(
 )
 # The note texts the profile file holds, in file order.
 COMPILE_ONLY, NOT_ALIGNED, BASELINE, GAP, NO_ATTEMPT = "compile_only", "not_aligned", "baseline", "gap", "no_attempt"
-NOTE_KEYS = (WITHIN_10PCT, CORRECT_PAPER, COMPILE_ONLY, NOT_ALIGNED, BASELINE, GAP, NO_ATTEMPT, *SIMILARITY)
+# The note of a sim_t_tiktoken the notebook could not compute (a special-token string, or no round trip; OQ-031).
+TIKTOKEN_NULL = "tiktoken_null"
+NOTE_KEYS = (WITHIN_10PCT, CORRECT_PAPER, COMPILE_ONLY, NOT_ALIGNED, BASELINE, GAP, NO_ATTEMPT, TIKTOKEN_NULL,
+             *SIMILARITY)
 FILE_KEYS = ("components", "scalar", "notes")
 
 # Record codes the components read. BASELINE_ENDS holds every end reason that can end a trial at the baseline, before
@@ -251,21 +267,27 @@ class LassiProfile:
     Built as `LassiProfile(bench_root=<root of the suite's fetched sources>)`
     it reads PROFILE_FILE; `profile_path` names another profile file. The
     file is read and checked, and the bench root must be a directory, when
-    the profile is built. It declares READS_BENCH_SOURCES, so
-    lassi.scoring.profiles.build_profile passes it the bench root.
+    the profile is built. sim_t_tiktoken's encoding is read then too:
+    `encoding`, or lassi.scoring.similarity.cl100k_base(), which raises
+    TiktokenCacheError (an OSError) when the offline cache lacks it. It
+    declares READS_BENCH_SOURCES, so lassi.scoring.profiles.build_profile
+    passes it the bench root.
     """
 
     name = "lassi"
     capabilities = frozenset({"scores_trials", READS_BENCH_SOURCES})
 
-    def __init__(self, *, bench_root: str | Path, profile_path: str | Path | None = None) -> None:
-        """Check the bench root and read the profile file: `profile_path`, or PROFILE_FILE when it is None."""
+    def __init__(
+        self, *, bench_root: str | Path, profile_path: str | Path | None = None, encoding: TokenEncoding | None = None
+    ) -> None:
+        """Check the bench root, read the profile file, and read sim_t_tiktoken's encoding (see the class docstring)."""
         root = Path(bench_root)
         if not root.is_dir():
             raise ValueError(f"the bench root {root.as_posix()} is not a directory; name the suite's fetched sources")
         self.bench_root = root
         self.profile_path = PROFILE_FILE if profile_path is None else Path(profile_path)
         self.profile = load_profile(self.profile_path)
+        self.encoding = similarity.cl100k_base() if encoding is None else encoding
         self._suites: dict[str, Suite] = {}
 
     @property
@@ -279,8 +301,8 @@ class LassiProfile:
         values: dict[str, float | None] = {CORRECT_PAPER: None, WITHIN_10PCT: None}
         written = {CORRECT_PAPER: notes[CORRECT_PAPER], WITHIN_10PCT: notes[WITHIN_10PCT]}
         outcome, outcome_notes = outcome_components(trial, notes)
-        similarity, similarity_notes = self.similarity_components(trial)
-        for found, noted in ((outcome, outcome_notes), (similarity, similarity_notes), (count_components(trial), {})):
+        similar, similar_notes = self.similarity_components(trial)
+        for found, noted in ((outcome, outcome_notes), (similar, similar_notes), (count_components(trial), {})):
             values.update(found)
             written.update(noted)
         components = {name: values[name] for name in self.profile.components}
@@ -288,16 +310,30 @@ class LassiProfile:
         return Score(components=components, scalar=components[self.profile.scalar], notes=ordered)
 
     def similarity_components(self, trial: Trial) -> tuple[dict[str, float | None], dict[str, str]]:
-        """Return sim_t, sim_t_c, and sim_l of the last attempt's target file, each noted with its interpreter."""
+        """Return sim_t, sim_t_c, sim_l, and sim_t_tiktoken of the last attempt's target file, each with a note.
+
+        Each note names the interpreter that computed the value, and
+        sim_t_tiktoken's also the encoding and the tiktoken version; a
+        sim_t_tiktoken the notebook could not compute is None with the
+        tiktoken_null note.
+        """
+        notes = self.profile.notes
         if not trial.attempts:
             end = baseline_end(trial)
-            why = self.profile.notes[NO_ATTEMPT] if end is None else f"{self.profile.notes[BASELINE]} ({end})"
+            why = notes[NO_ATTEMPT] if end is None else f"{notes[BASELINE]} ({end})"
             return dict.fromkeys(SIMILARITY), dict.fromkeys(SIMILARITY, why)
         name, reference = self.reference_target(trial)
-        values = measure(reference, trial.attempts[-1].files.get(name, ""))
-        found = {"sim_t": values.sim_t, "sim_t_c": values.sim_t_c, "sim_l": values.sim_l}
-        notes = {key: f"{self.profile.notes[key]}; computed by python {values.python}" for key in SIMILARITY}
-        return found, notes
+        candidate = trial.attempts[-1].files.get(name, "")
+        values = measure(reference, candidate)
+        tokens = similarity.sim_t_tiktoken(reference, candidate, self.encoding)
+        found = {"sim_t": values.sim_t, "sim_t_c": values.sim_t_c, "sim_l": values.sim_l, SIM_T_TIKTOKEN: tokens}
+        written = {key: f"{notes[key]}; computed by python {values.python}" for key in SIMILARITY}
+        encoding = getattr(self.encoding, "name", type(self.encoding).__name__)
+        written[SIM_T_TIKTOKEN] = notes[TIKTOKEN_NULL] if tokens is None else (
+            f"{notes[SIM_T_TIKTOKEN]}; computed with the encoding {encoding} by tiktoken "
+            f"{similarity.tiktoken_version()} on python {values.python}"
+        )
+        return found, written
 
     def reference_target(self, trial: Trial) -> tuple[str, str]:
         """Return the name of the trial item's one target-language file and its text as text mode reads it.

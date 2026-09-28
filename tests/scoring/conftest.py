@@ -23,6 +23,9 @@ This module provides these fixtures:
   `tiktoken` stub that refuses any use (the tokenizer import is stubbed), and
   a `print` recorder that counts upstream's error-branch messages without
   keeping their text.
+- `upstream_with_tiktoken`: the same functions compiled into a namespace of
+  their own that holds the real tiktoken module, for the remote tiktoken
+  test only (task P4.15); `upstream` keeps the stub.
 
 Upstream code runs only inside `UpstreamGuard`. While the guard is active,
 every way to start a process or open a socket is replaced by a function that
@@ -150,6 +153,10 @@ class Upstream:
         """Return upstream's compare_lines_with_reordering(reference, candidate)."""
         return self.call(SIM_L_NAME, reference, candidate)
 
+    def sim_t_tiktoken(self, reference: str, candidate: str) -> float:
+        """Return upstream's token_similarity(reference, candidate, "tiktoken"); needs the real tiktoken module."""
+        return self.call(SIM_T_NAME, reference, candidate, "tiktoken")
+
     def prints(self) -> int:
         """Return how many times upstream code has called print so far (its error branches print)."""
         return len(self.printed)
@@ -249,6 +256,14 @@ def upstream_root(upstream_pin: UpstreamPin) -> Path:
 def upstream(upstream_root: Path) -> Upstream:
     """Return upstream's similarity functions loaded from the pinned notebook under the guard."""
     return load_upstream(upstream_root)
+
+
+@pytest.fixture(scope="session")
+def upstream_with_tiktoken(upstream_root: Path) -> Upstream:
+    """Return upstream's similarity functions in a namespace of their own that holds the real tiktoken module."""
+    fresh = load_upstream(upstream_root)
+    fresh.namespace["tiktoken"] = importlib.import_module("tiktoken")
+    return fresh
 
 
 @pytest.fixture(scope="session")

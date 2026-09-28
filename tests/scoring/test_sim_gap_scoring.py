@@ -305,6 +305,22 @@ def test_df_v0_a_guard_violation_recorded_on_the_gap_attempt_still_sets_r() -> N
     assert score.scalar == pytest.approx(expected, abs=TOLERANCE) and score.notes == {}, score
 
 
+def test_df_v0_an_earlier_violation_sets_the_multi_turn_value_of_a_sim_gap_trial() -> None:
+    """OQ-028, part 3 (task P4.15): a violation on an earlier attempt sets the multi-turn value even when the gap
+    attempt's R is null, so a gap never hides a violation."""
+    violated = dataclasses.replace(ub_attempt(0), guards=Guards(oracle_access=True))
+    trial = trial_of([violated, gap_attempt(1)], SIM_GAP)
+    weights = load_weights(WEIGHTS_FILE)
+    profile = df_v0()
+    rs = [score.scalar for score in profile.score_attempts(trial)]
+    assert rs[0] == pytest.approx(weights.guard_violation, abs=TOLERANCE) and rs[1] is None
+    score = profile.score(trial)
+    expected = weights.guard_violation - weights.correction_penalty * 1
+    assert score.components["single_turn"] == pytest.approx(weights.guard_violation, abs=TOLERANCE)
+    assert score.scalar == pytest.approx(expected, abs=TOLERANCE) and dict(score.notes) == {}, score
+    assert profile.apply(trial).final.score == pytest.approx(expected, abs=TOLERANCE)
+
+
 def test_df_v0_notes_each_trial_component_the_gap_leaves_null() -> None:
     from lassi.scoring.df_v0 import GAP_NOTES
 

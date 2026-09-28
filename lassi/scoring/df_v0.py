@@ -30,9 +30,13 @@ Readings of the Result Record (task P2.6):
 - The trial's single_turn component is attempt 0's R. Its multi_turn
   component, which is also its scalar and final.score, is R_final minus
   correction_penalty x final.corrections, where R_final is the R of the
-  last attempt, a guard violation or a stale-output attempt included: each
-  attempt is scored by its own record (a sim-gap attempt's R is None,
-  below). A trial with no attempts has both None.
+  last attempt, a stale-output attempt included: each attempt is scored by
+  its own record (a sim-gap attempt's R is None, below). A guard violation
+  on any attempt, the last or an earlier one, puts guard_violation in place
+  of R_final, so a later correction never washes a violation out of the
+  multi-turn value (task P4.15; OQ-028, part 3, taken under the owner's
+  direction of 2026-09-26 and marked for the owner's review); single_turn
+  stays attempt 0's R. A trial with no attempts has both None.
 
 The reading of a sim-gap attempt (task P4.6): the gap attempt is the last
 attempt of a trial whose final.end_reason is sim-gap (ended_at_gap), the
@@ -45,8 +49,8 @@ those of its own record, as for any attempt, and a guard violation recorded
 on it (Attempt.guards; df-v0 reads the recorded guards, not the run) still
 sets R = guard_violation. Every earlier attempt is scored by its own record.
 single_turn is attempt 0's R, and multi_turn, the scalar, and final.score
-are None when R_final is; a trial Score component left None this way
-carries a note (GAP_NOTES). A trial that ended at sim-gap with no attempt
+are None when R_final is and no attempt violated a guard; a trial Score
+component left None this way carries a note (GAP_NOTES). A trial that ended at sim-gap with no attempt
 has no score, as any trial with no attempts. A kernel JIT failure (S1) and
 a run with undefined behavior (S4 with a run-error) need no reading of
 their own: each scores by its stage.
@@ -268,12 +272,15 @@ class DfV0Profile:
         """Return the trial's Score from its attempts' Scores; every value is None when there is no attempt.
 
         single_turn is attempt 0's R and multi_turn is R_final minus the
-        correction penalty, each None when the R it reads is None (the gap
+        correction penalty, where R_final is guard_violation when any
+        attempt's guard component is 1.0 (OQ-028, part 3) and otherwise the
+        last attempt's R. Each is None when the R it reads is None (the gap
         attempt's), with that component's GAP_NOTES note.
         """
         if not scores:
             return Score(components={SINGLE_TURN: None, MULTI_TURN: None}, scalar=None)
-        last = scores[-1].scalar
+        violated = any(score.components[GUARD] == 1.0 for score in scores)
+        last = self.weights.guard_violation if violated else scores[-1].scalar
         multi = None if last is None else last - self.weights.correction_penalty * trial.final.corrections
         components = {SINGLE_TURN: scores[0].scalar, MULTI_TURN: multi}
         notes = {name: GAP_NOTES[name] for name, value in components.items() if value is None}

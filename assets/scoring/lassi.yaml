@@ -11,6 +11,7 @@ components:
   - first_try  # correct with final.corrections = 0
   - sim_t  # faithful Sim-T (Python tokenize over the C text)
   - sim_t_c  # C-aware Sim-T
+  - sim_t_tiktoken  # the notebook's tiktoken Sim-T (cl100k_base token ids; task P4.15, OQ-022)
   - sim_l  # faithful Sim-L
   - self_corr  # final.corrections
   - cap_hit  # the trial ended at correction-cap
@@ -25,7 +26,8 @@ scalar: correct
 # not_aligned, baseline, and gap as the note of correct (and of first_try) when correct is None. baseline also notes
 # compiled, compiled_first_try, and the similarity values of a trial that ended at the baseline, with the end
 # reason code appended; no_attempt notes the similarity values of any other trial with no attempt. Each similarity
-# note gets the interpreter that computed the value.
+# note gets the interpreter that computed the value, and sim_t_tiktoken's also the encoding and the tiktoken version.
+# tiktoken_null notes a sim_t_tiktoken the notebook could not compute (OQ-031, part 2).
 notes:
   within_10pct: "not measured: no timing profiler exists yet, and the proxy checks outputs, never runtime"
   correct_paper: "not computed: the paper's criterion is a manual inspection of stdout against the reference"
@@ -36,6 +38,10 @@ notes:
   gap: "not computed: the trial ended at sim-gap, so the output that stands came from a run that stopped at a
     simulator gap, which is not a model error"
   no_attempt: "not computed: the trial holds no attempt to compare"
+  tiktoken_null: "not computed: a text holds a special-token string or does not decode back from its ids, where the
+    notebook raises"
   sim_t: "faithful Sim-T: Python tokenize tokens, difflib ratio with autojunk on"
   sim_t_c: "C-aware Sim-T: 2M/T over C tokens, difflib with autojunk off"
+  sim_t_tiktoken: "tiktoken Sim-T: token ids with tiktoken's default special-token handling, difflib ratio with
+    autojunk on"
   sim_l: "faithful Sim-L: stripped lines matched in any order over the larger line count"

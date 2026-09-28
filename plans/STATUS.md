@@ -93,5 +93,5 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.12 | READY | CPU -> TT guard | P4.6,P4.10 |  |
 | P4.13 | READY | Tier A suite tt-pairs-v0 | P4.4,P4.5,P4.11,P4.12 |  |
 | P4.14 | READY | Apply the owner's Tier A splits (OQ-025) | P4.13 | OQ-025 answered (d): keep every Tier A item unassigned; confirm the manifest |
-| P4.15 | READY | Carry the P2 review questions (OQ-024) | - |  |
+| P4.15 | ACTIVE | Carry the P2 review questions (OQ-024) | - | code, bible (rev 233), spike, OQ-028 to OQ-035 committed; clean-commit tiktoken cache and scoring pass pending |
 | P4.G | READY | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 |  |
