@@ -406,7 +406,7 @@ Owner's direction (working session, 2026-09-26; recorded by the agent): take the
 Review later: yes. The owner has not answered this item personally.
 
 ## OQ-036 How The ttsim Executor Reads Finding Classes
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: P4.11 (the executor's finding-class mapping)
 Evidence: plans/spikes/p4-ttsim-runtime.md (Results, Seeded captures; Owner queue); tests/executors/fixtures/ttsim/; results/p4-ttsim-runtime (rx job 20260926-140947-p49-ttsim-runtime-6f4c, clean 755c739); the ttsim README's error classes (read 2026-09-26)
@@ -415,10 +415,10 @@ Options: (a) NonContractualBehavior and UnpredictableValueUsed read as undefined
 Recommendation: (a) now, with (b) recorded as a follow-up for P7's reward work, when a trained policy could exploit a gap; (a) is what the class definitions say and needs no kernel attribution.
 Answer:
 Owner's direction (working session, 2026-09-27; recorded by the agent): take the recommendation of every open item not answered personally, apply it, and flag it for review in the next phase. Applied here: option (a), which P4.11 builds; the item closes with that commit.
-Review in the next phase: yes. The owner has not answered this item personally.
+Review in the next phase: yes. The owner has not answered this item personally. Closed with P4.11's commit, which builds option (a) (bible, ttsim Facts, the ttsim executor); option (b) is recorded for P7's planning (PHASE-NOTES P7). The review at P17's planning can reopen it.
 
 ## OQ-037 When The ttsim Executor Runs Watcher
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: P4.11 (the Watcher dump in the hang diagnostic)
 Evidence: plans/spikes/p4-ttsim-runtime.md (Results, Watcher); results/p4-ttsim-runtime (rx job 20260926-140947-p49-ttsim-runtime-6f4c, clean 755c739)
@@ -427,7 +427,7 @@ Options: (a) Every ttsim attempt runs with TT_METAL_WATCHER=1: the dump comes wi
 Recommendation: (b). Only hangs pay, scored runs stay as specified, and the seeded hang hung the same way with Watcher; its log is capped (about 12.8 KB per dump).
 Answer:
 Owner's direction (working session, 2026-09-27; recorded by the agent): take the recommendation of every open item not answered personally, apply it, and flag it for review in the next phase. Applied here: option (b), which P4.11 builds; the item closes with that commit.
-Review in the next phase: yes. The owner has not answered this item personally.
+Review in the next phase: yes. The owner has not answered this item personally. Closed with P4.11's commit, which builds option (b) (bible, Harness Contract and ttsim Facts). One extension beyond the option's words: the executor cannot tell a reference run from an attempt, so a hung reference run is rerun with Watcher too, at up to another 600 s on 16 CPUs (the reference's wall limit), and its note is not used. The review at P17's planning can reopen it.
 
 ## OQ-038 Where P17 Portable Stack Goes In The Work Order
 State: CLOSED

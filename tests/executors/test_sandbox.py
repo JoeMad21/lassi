@@ -727,6 +727,8 @@ def test_package_re_exports_the_sandbox_names(sandbox: ModuleType) -> None:
 # sandbox_command: the exact argv
 
 
+# The CPU-time cap in each layout is cpus x (the whole-second wall limit + KILL_AFTER_S 2 + CPU_MARGIN_S 1)
+# (task P4.11): 2 x 6, 3 x 4, 4 x 13, and 1 x 4.
 @pytest.mark.parametrize(
     ("overrides", "limits", "properties", "layout"),
     [
@@ -734,25 +736,25 @@ def test_package_re_exports_the_sandbox_names(sandbox: ModuleType) -> None:
             {},
             Limits(wall_s=2.5, memory_mb=512, cpus=2),
             ["MemoryMax=512M", "MemorySwapMax=0", "TasksMax=256", "RuntimeMaxSec=10", "TimeoutStopSec=1"],
-            [str(WORK), str(HARNESS), str(TOOLCHAINS), str(256 << 20), "2", str(SCRATCH), str(HOME), "5", "3", "2"],
+            [str(WORK), str(HARNESS), str(TOOLCHAINS), str(256 << 20), "2", str(SCRATCH), str(HOME), "12", "3", "2"],
         ),
         (
             {"hidden_roots": (SCRATCH,), "harness": None, "toolchains": None, "tasks_max": 64, "disk_mb": 8},
             Limits(wall_s=0.5, memory_mb=1, cpus=3),
             ["MemoryMax=1M", "MemorySwapMax=0", "TasksMax=64", "RuntimeMaxSec=8", "TimeoutStopSec=1"],
-            [str(WORK), "", "", str(1 << 20), "1", str(SCRATCH), "2", "1", "2"],
+            [str(WORK), "", "", str(1 << 20), "1", str(SCRATCH), "12", "1", "2"],
         ),
         (
             {"hidden_roots": (HOME, SCRATCH)},
             Limits(wall_s=10.0, memory_mb=2048, cpus=4),
             ["MemoryMax=2048M", "MemorySwapMax=0", "TasksMax=256", "RuntimeMaxSec=17", "TimeoutStopSec=1"],
-            [str(WORK), str(HARNESS), str(TOOLCHAINS), str(256 << 20), "2", str(HOME), str(SCRATCH), "40", "10", "2"],
+            [str(WORK), str(HARNESS), str(TOOLCHAINS), str(256 << 20), "2", str(HOME), str(SCRATCH), "52", "10", "2"],
         ),
         (
             {"hidden_roots": (SCRATCH, HOME / "sub", HOME, SCRATCH), "disk_mb": 32},
             Limits(wall_s=1.0, memory_mb=64, cpus=1),
             ["MemoryMax=64M", "MemorySwapMax=0", "TasksMax=256", "RuntimeMaxSec=8", "TimeoutStopSec=1"],
-            [str(WORK), str(HARNESS), str(TOOLCHAINS), str(32 << 20), "2", str(SCRATCH), str(HOME), "1", "1", "2"],
+            [str(WORK), str(HARNESS), str(TOOLCHAINS), str(32 << 20), "2", str(SCRATCH), str(HOME), "4", "1", "2"],
         ),
     ],
     ids=["ceil-wall-and-cpu", "sub-second-no-harness-no-toolchains", "whole-seconds-roots-in-order", "nested-roots"],
@@ -1873,7 +1875,8 @@ def test_hostile_paths_and_arguments_appear_only_as_separate_argv_elements(
     # ONE_SECOND has a 64 MiB memory limit, so the disk cap is half of it, 32 MiB.
     layout = ["sh", str(workdir), str(harness), str(toolchains), str(32 << 20), "2", str(first_root)]
     layout.append(str(second_root))
-    assert command[start + 1 :] == [*layout, "1", "1", "2", *program]
+    # The CPU-time cap is 1 x (1 + KILL_AFTER_S + CPU_MARGIN_S) = 4 s (task P4.11), the wall 1 s, the kill-after 2 s.
+    assert command[start + 1 :] == [*layout, "4", "1", "2", *program]
 
 
 # ---------------------------------------------------------------------------
@@ -2146,6 +2149,54 @@ def test_classify_table(
     sandbox: ModuleType, returncode: int, wall_s: float, limit_wall_s: float, expected: tuple[bool, bool]
 ) -> None:
     assert sandbox.classify(returncode, wall_s, limit_wall_s) == expected
+
+
+# Limits whose CPU-time cap is checked against the wall limit: a sub-second wall, the P4.15 randomAccess attempts'
+# limit (ten times a 4.95 s reference, with RUN_CPUS 16; plans/spikes/p4-p2-review.md, question 2), a baseline
+# reference run's (600 s, 16 CPUs), and a compile's (600 s, COMPILE_CPUS).
+CAPPED_LIMITS = [
+    Limits(wall_s=0.5, memory_mb=64, cpus=1),
+    Limits(wall_s=49.5, memory_mb=4096, cpus=16),
+    Limits(wall_s=600.0, memory_mb=8192, cpus=16),
+    Limits(wall_s=600.0, memory_mb=8192, cpus=2),
+]
+
+
+@pytest.mark.parametrize("limits", CAPPED_LIMITS, ids=["sub-second", "p415-attempt", "reference", "compile"])
+def test_the_cpu_cap_outlasts_the_wall_timeout_of_a_program_within_its_cpu_budget(
+    sandbox: ModuleType, limits: Limits
+) -> None:
+    # Task P4.11 (PHASE-NOTES P4, the P4.15 finding): with a cap of wall_s x cpus, a program keeping `cpus` CPUs busy
+    # met the cap just before the wall limit and read as killed. Now the cap outlasts the timeout's SIGTERM at the
+    # wall limit and its SIGKILL KILL_AFTER_S later, at `cpus` busy CPUs.
+    wall = max(1, math.ceil(limits.wall_s))
+    cap = sandbox.cpu_cap_seconds(limits)
+    assert isinstance(cap, int) and cap >= 1
+    assert cap > limits.cpus * (wall + sandbox.KILL_AFTER_S), (cap, limits)
+    layout = sandbox.sandbox_command(sample_spec(sandbox), PROGRAM, limits)[-len(PROGRAM) - 3 : -len(PROGRAM)]
+    assert layout == [str(cap), str(wall), str(sandbox.KILL_AFTER_S)], "the command's cpu, wall, and kill-after"
+
+
+@pytest.mark.parametrize("limits", CAPPED_LIMITS, ids=["sub-second", "p415-attempt", "reference", "compile"])
+def test_a_program_keeping_its_cpus_busy_until_the_wall_limit_reads_as_a_hang(
+    sandbox: ModuleType, limits: Limits
+) -> None:
+    # A program with `cpus` busy threads spends cpus x t seconds of CPU by time t, so the cap is not met before
+    # cap / cpus seconds: after the timeout's SIGTERM (status 124 at the wall limit) and its SIGKILL (137 after the
+    # grace). Either stop reads as a hang, never as a kill.
+    wall = max(1, math.ceil(limits.wall_s))
+    meets_cap_at = sandbox.cpu_cap_seconds(limits) / limits.cpus
+    assert meets_cap_at > wall + sandbox.KILL_AFTER_S
+    assert sandbox.classify(124, float(wall), wall) == (True, False)
+    assert sandbox.classify(137, float(wall + sandbox.KILL_AFTER_S), wall) == (True, False)
+
+
+def test_a_program_burning_more_than_its_cpu_budget_is_still_stopped_by_the_cap_as_killed(sandbox: ModuleType) -> None:
+    # Four busy threads on a one-CPU budget: the cap comes long before the wall limit, and the SIGKILL reads as a kill.
+    limits = Limits(wall_s=20.0, memory_mb=256, cpus=1)
+    meets_cap_at = sandbox.cpu_cap_seconds(limits) / (4 * limits.cpus)
+    assert meets_cap_at < limits.wall_s
+    assert sandbox.classify(137, meets_cap_at, 20) == (False, True)
 
 
 def test_classify_docstring_documents_the_mapping(sandbox: ModuleType) -> None:

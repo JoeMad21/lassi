@@ -32,9 +32,11 @@ The limits are test inputs. The run's environment is the native executor's
 (DEMO.2, tests/executors/test_native_threads.py): the sandbox default with
 OMP_NUM_THREADS set to LIMITS.cpus, so the OpenMP runtime starts that many
 threads rather than one per host CPU (on the build host one per CPU passed
-the sandbox's TasksMax, plans/spikes/demo-multicore-proxy.md), and the
-CPU-time budget is wall x cpus (Sandbox, OQ-011): a run that spends it ends
-by a signal, and its exit code shows that. Wall seconds are
+the sandbox's TasksMax, plans/spikes/demo-multicore-proxy.md), and each
+process's CPU-time cap is cpus x (the wall limit + KILL_AFTER_S +
+CPU_MARGIN_S) (Sandbox, OQ-011; lassi.executors.sandbox cpu_cap_seconds,
+task P4.11): a run that spends it ends by a signal, and its exit code
+shows that. Wall seconds are
 exploratory: the proxy checks outputs, never runtime, and no value this
 test prints is a performance number. Output from a dirty tree is
 exploratory; only a clean-commit rx run is evidence.

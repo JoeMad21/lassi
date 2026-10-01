@@ -39,6 +39,17 @@ The contract these tests fix:
   target language's device. A single-executor run keeps the `device`
   field: the bound executor's device (the native executor now names the
   host CPU where it recorded null), and each trial carries it.
+- Executor pins (task P4.11; Agent Rule 10): an executor may declare `pins`,
+  pin name -> the pin file's pairs, as BuiltToolchain.pins holds them. The
+  runner merges them into the toolchain_pins of each trial whose target
+  language's executor declares them (the single form: every trial), under
+  the matching ToolchainPins field ("tt-metal" -> tt_metal), and into
+  provenance.json's pins, and refuses, before any directory exists, a pin
+  that has no such field, as it refuses a toolchain's, and a pin that a
+  toolchain and an executor both declare with different content (the
+  refusal names the pin, the toolchain, and the executor); the same pin
+  declared twice with the same content is recorded once. The runner names
+  no executor to do it (Agent Rule 3).
 
 Every component here is a fake in a test Registry, beside the real stages
 (baseline, generate, compile_loop, run_loop) and the real NativeExecutor,
@@ -51,6 +62,7 @@ SYNTHETIC. No value in this module is a measurement.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -65,7 +77,7 @@ from lassi.core import runner as runner_module  # noqa: F401  (importing the run
 from lassi.core.files import render_file_blocks
 from lassi.core.interfaces import BuildResult, Completion, Limits, Message, RunResult, Sampling
 from lassi.core.recipe import RecipeError, executor_languages, load_recipe, resolved_yaml
-from lassi.core.record import Trial, make_trial_id
+from lassi.core.record import ToolchainPins, Trial, make_trial_id
 from lassi.core.registry import DEFAULT_REGISTRY, Registry
 from lassi.core.runner import RunError, RunOptions, run_recipe
 from lassi.core.stages import BaselineStage, RunContext
@@ -98,6 +110,7 @@ DEVICE = {
     "exec-cuda": "SYNTHETIC device A",
     "exec-omp": "SYNTHETIC device B",
     "exec-open": "SYNTHETIC device C",
+    "exec-pinned": "SYNTHETIC device D",
     "none": "none (compile only)",
 }
 HOST_CPU = "host CPU (native)"
@@ -756,3 +769,122 @@ def test_the_baseline_describes_each_reference_by_its_own_languages_executor(tmp
 def test_the_baseline_description_with_baseline_both_off_names_only_the_target(tmp_path: Path) -> None:
     text = baseline_description(tmp_path, {"kind": "exec-cuda"}, OMP_TO_CUDA, both=False)
     assert text == "baseline: build and run only the cuda reference program before any model call"
+
+
+# ---------------------------------------------------------------------------
+# Executor pins (task P4.11; Agent Rule 10)
+
+
+# SYNTHETIC pins an executor declares, as BuiltToolchain.pins holds a toolchain's: pin name -> the pin file's pairs.
+EXECUTOR_PINS = {
+    "ttsim": {"NAME": "ttsim", "VERSION": "SYNTHETIC-sim-1", "PREFIX_NAME": "ttsim@SYNTHETIC-sim-1"},
+    "tt-metal": {"NAME": "tt-metal", "VERSION": "SYNTHETIC-tree-2", "PREFIX_NAME": "tt-metal@SYNTHETIC-tree-2"},
+}
+
+
+def pinned_executor(label: str, log: Log, pins: Mapping[str, Mapping[str, str]]) -> type:
+    """Return a sandboxed Executor class registered as `label` that declares `pins` and runs nothing real."""
+    executor = scripted_executor(label, log, SANDBOXED_RUNNER)
+    executor.pins = {name: dict(pairs) for name, pairs in pins.items()}
+    return executor
+
+
+def pinned_options(tmp_path: Path, log: Log, pins: Mapping[str, Mapping[str, str]] = EXECUTOR_PINS) -> RunOptions:
+    """Return the run options with "exec-pinned", an executor declaring `pins`, in the test registry."""
+    run_options = options(tmp_path, log)
+    assert run_options.registry is not None
+    run_options.registry.register("Executor", "exec-pinned", pinned_executor("exec-pinned", log, pins))
+    return run_options
+
+
+def test_an_executors_pins_join_every_trials_toolchain_pins_in_the_single_form(tmp_path: Path) -> None:
+    log = Log(replies=[GOOD_REPLIES["cuda"]])
+    data = recipe_data([OMP_TO_CUDA], {"kind": "exec-pinned"})
+    run_dir = run_recipe(write_recipe(tmp_path, "pinned-single", data), pinned_options(tmp_path, log))
+    trial_id = make_trial_id("pinned-single", MODEL_ID, SUITE, "omp-cuda", ITEM, 1)
+    trial = read_trial(trial_dir(run_dir, trial_id), TextStore(run_dir))
+    assert trial.toolchain_pins == ToolchainPins(ttsim="SYNTHETIC-sim-1", tt_metal="SYNTHETIC-tree-2"), (
+        "the fake toolchains declare no pin, so the trial records the executor's"
+    )
+
+
+def test_an_executors_pins_join_only_the_trials_whose_target_it_runs(tmp_path: Path) -> None:
+    log = Log(replies=[GOOD_REPLIES[direction.target] for direction in DIRECTIONS])
+    data = recipe_data(DIRECTIONS, {"cuda": "exec-pinned", "omp": "exec-omp"})
+    run_dir = run_recipe(write_recipe(tmp_path, "pinned-per-language", data), pinned_options(tmp_path, log))
+    to_cuda, to_omp = (
+        read_trial(trial_dir(run_dir, make_trial_id("pinned-per-language", MODEL_ID, SUITE, name, ITEM, 1)),
+                   TextStore(run_dir))
+        for name in DIRECTION_IDS
+    )
+    assert to_cuda.toolchain_pins == ToolchainPins(ttsim="SYNTHETIC-sim-1", tt_metal="SYNTHETIC-tree-2")
+    assert to_omp.toolchain_pins == ToolchainPins(), "the omp target runs on an executor that declares no pin"
+
+
+def test_an_executor_pin_with_no_trial_field_is_refused_before_any_directory(tmp_path: Path) -> None:
+    log = Log(replies=[GOOD_REPLIES["cuda"]])
+    pins = {"synthetic-sim": {"NAME": "synthetic-sim", "VERSION": "SYNTHETIC-0"}}
+    data = recipe_data([OMP_TO_CUDA], {"kind": "exec-pinned"})
+    with pytest.raises(RunError, match="synthetic-sim"):
+        run_recipe(write_recipe(tmp_path, "pinned-unknown", data), pinned_options(tmp_path, log, pins))
+    assert not (tmp_path / "runs-root").exists() and log.events == [], "refused before anything is built or run"
+
+
+# Section 7 of the P4.11 design: the executor's pins also join provenance.json's pins, and a pin a toolchain and an
+# executor both declare must be the same pin.
+
+
+def toolchains_declaring(monkeypatch: pytest.MonkeyPatch, pins: Mapping[str, Mapping[str, Mapping[str, str]]]) -> None:
+    """Make build_toolchain give each named fake toolchain the SYNTHETIC `pins` (toolchain name -> its pins)."""
+    original = runner_module.build_toolchain
+
+    def build(name: str, root: Path | None, *args: Any, **kwargs: Any) -> Any:
+        """Build the toolchain as the runner does, then add the pins the test gives it."""
+        built = original(name, root, *args, **kwargs)
+        extra = {pin_name: dict(pin) for pin_name, pin in pins.get(name, {}).items()}
+        return dataclasses.replace(built, pins={**built.pins, **extra})
+
+    monkeypatch.setattr(runner_module, "build_toolchain", build)
+
+
+def test_an_executors_pins_join_provenance_json(tmp_path: Path) -> None:
+    log = Log(replies=[GOOD_REPLIES[direction.target] for direction in DIRECTIONS])
+    data = recipe_data(DIRECTIONS, {"cuda": "exec-pinned", "omp": "exec-omp"})
+    run_dir = run_recipe(write_recipe(tmp_path, "pinned-provenance", data), pinned_options(tmp_path, log))
+    provenance = json.loads((run_dir / "provenance.json").read_text(encoding="ascii"))
+    assert provenance["pins"] == {"tt_metal": "SYNTHETIC-tree-2", "ttsim": "SYNTHETIC-sim-1"}, (
+        "every pin the run used, the executor's included, whichever target it serves"
+    )
+
+
+def test_a_pin_a_toolchain_and_an_executor_both_declare_with_the_same_content_is_recorded_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    toolchains_declaring(monkeypatch, {TOOLCHAINS["cuda"]: {"tt-metal": EXECUTOR_PINS["tt-metal"]}})
+    log = Log(replies=[GOOD_REPLIES["cuda"]])
+    data = recipe_data([OMP_TO_CUDA], {"kind": "exec-pinned"})
+    run_dir = run_recipe(write_recipe(tmp_path, "pinned-shared", data), pinned_options(tmp_path, log))
+    trial_id = make_trial_id("pinned-shared", MODEL_ID, SUITE, "omp-cuda", ITEM, 1)
+    trial = read_trial(trial_dir(run_dir, trial_id), TextStore(run_dir))
+    assert trial.toolchain_pins == ToolchainPins(ttsim="SYNTHETIC-sim-1", tt_metal="SYNTHETIC-tree-2")
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [{"VERSION": "SYNTHETIC-tree-3", "PREFIX_NAME": "tt-metal@SYNTHETIC-tree-3"}, {"COMMIT": "SYNTHETIC-other"}],
+    ids=["another-version", "same-version-other-content"],
+)
+def test_a_pin_a_toolchain_and_an_executor_declare_differently_is_refused_before_any_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: Mapping[str, str]
+) -> None:
+    other = {**EXECUTOR_PINS["tt-metal"], **changed}
+    toolchains_declaring(monkeypatch, {TOOLCHAINS["cuda"]: {"tt-metal": other}})
+    log = Log(replies=[GOOD_REPLIES["cuda"]])
+    data = recipe_data([OMP_TO_CUDA], {"kind": "exec-pinned"})
+    with pytest.raises(RunError) as caught:
+        run_recipe(write_recipe(tmp_path, "pinned-clash", data), pinned_options(tmp_path, log))
+    message = str(caught.value)
+    assert "tt-metal" in message and TOOLCHAINS["cuda"] in message and "exec-pinned" in message, (
+        f"the refusal names the pin, the toolchain, and the executor: {message}"
+    )
+    assert not (tmp_path / "runs-root").exists() and log.events == [], "refused before anything is built or run"

@@ -26,6 +26,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 
 ## Agents and briefs
 
+- Write a large task's design into one scratch file that the test-writer and the implementer both read, and settle the points the test-writer raises in that file before implementation starts: P4.11's test-writer found eight (the CPU-time cap that hid hangs among them), and the implementer then built them in one pass with no test weakened.
 - Give agents task-specific log names in the shared scratchpad (for example p43-full-suite.txt). Two agents wrote the same full-suite.txt, and one read the other's failure as its own (P4.3).
 - Brief build scripts for the smallest build that serves the task. The first P4.2 draft built everything with Python bindings on; the owner wants minimal host activity, so name the needed targets in the brief.
 - Writing a task's tests and then its implementation took roughly 45 minutes of wall time in P4.3 (run times, not a measurement). Write the next task's tests while the current task is implemented, when their files do not overlap.

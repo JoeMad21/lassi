@@ -37,7 +37,8 @@ The runner checks either kind before any model is asked.
   than 0 ends it with `baseline-run`. The baseline does not read a
   reference run's diagnostics, so a kernel JIT error there counts only
   through the exit status, and a reference run that hangs gets no hang
-  diagnostic. The runner then runs no later stage, so no model is asked. When the recipe's Oracle compares output files
+  diagnostic and no Watcher dump, even when its executor added one (task
+  P4.11). The runner then runs no later stage, so no model is asked. When the recipe's Oracle compares output files
   (capability aligns_output_files, output_file_oracle), the target's output
   files are also kept in the binary store (RunInfo.outputs), a reference
   run whose output files that Oracle cannot compare against (an unreadable
@@ -118,9 +119,12 @@ The runner checks either kind before any model is asked.
   behavior (UB_FINDING), and for a run that hung on an executor that
   declares `simulator` (lassi.core.capabilities SIMULATOR) they carry the
   Harness Contract's hang diagnostic (HANG_DIAGNOSTIC), a likely
-  circular-buffer or semaphore deadlock (run_findings). That text is the
-  ttsim hint (circular buffers and semaphores are tt-metal constructs);
-  any executor that declares `simulator` gets it.
+  circular-buffer or semaphore deadlock, followed by the message of each
+  Watcher dump the executor added to that run, in order: its run-stage
+  notes coded WATCHER_CODE (task P4.11; run_findings). Those notes also
+  stay among the attempt's diagnostics. The hang text is the ttsim hint
+  (circular buffers and semaphores are tt-metal constructs); any executor
+  that declares `simulator` gets it.
 
 A context stage names the Trial.context field it fills in `fills_context`,
 and generate names the fields its fragment prompt joins, when a pack serves
@@ -228,7 +232,14 @@ from typing import cast
 
 from lassi.bench import Direction, Suite
 from lassi.core import fragments as fragment_text
-from lassi.core.capabilities import ALIGNS_OUTPUT_FILES, SIMULATOR, OutputFileOracle, declares, unload_before_run
+from lassi.core.capabilities import (
+    ALIGNS_OUTPUT_FILES,
+    SIMULATOR,
+    WATCHER_CODE,
+    OutputFileOracle,
+    declares,
+    unload_before_run,
+)
 from lassi.core.files import parse_file_blocks, render_file_blocks
 from lassi.core.interfaces import BuildResult, Executor, Limits, LLMBackend, Message, RunResult, Sampling, Toolchain
 from lassi.core.progress import ATTEMPT, REQUEST_SENT, Observer, notify
@@ -277,7 +288,9 @@ JIT = "jit"
 # undefined behavior (RunResult.sim_ub), and the Harness Contract's hang diagnostic for an attempt run that hung on an
 # executor that declares SIMULATOR (lassi.core.capabilities). HANG_DIAGNOSTIC is the ttsim hint: circular buffers and
 # semaphores are tt-metal constructs. The stages give it to any executor that declares SIMULATOR, so a simulator of
-# another device gets the same text; a reference run's hang message does not carry it (_reference_run_end).
+# another device gets the same text; a reference run's hang message does not carry it (_reference_run_end). After
+# it come the Watcher dumps the executor added to the hung run, its run-stage notes coded WATCHER_CODE (task P4.11;
+# lassi.core.capabilities defines the code, so an executor names it without importing the stages).
 UB_FINDING = "the simulator reported undefined behavior"
 HANG_DIAGNOSTIC = (
     "a hang on a simulator most likely means a deadlock: a circular buffer or a semaphore that a core waits on and "
@@ -585,7 +598,8 @@ def _reference_run_end(run: RunResult, language: str) -> tuple[str, str] | None:
     it; and so does an exit status other than 0, or none. A reference's
     diagnostics (RunResult.diagnostics, kernel JIT errors included) are not
     read here, so a JIT failure counts only through the exit status, and a
-    hang gets the message it got before task P4.6, with no hang diagnostic.
+    hang gets the message it got before task P4.6, with no hang diagnostic
+    and no Watcher dump (task P4.11).
     """
     if run.sim_gap is not None:
         message = (
@@ -1421,14 +1435,24 @@ def run_stage(run: RunResult) -> str:
 def run_findings(run: RunResult, simulator: bool) -> list[str]:
     """Return what the stages say about a failed run's simulator findings, in order; [] when there is none.
 
-    UB_FINDING when the run reported undefined behavior (sim_ub True), and
-    HANG_DIAGNOSTIC when it hung on an executor that declares SIMULATOR
-    (`simulator`), the Harness Contract's hang diagnostic.
+    UB_FINDING when the run reported undefined behavior (sim_ub True), and,
+    when it hung on an executor that declares SIMULATOR (`simulator`), the
+    Harness Contract's hang diagnostic, HANG_DIAGNOSTIC, followed by the
+    message of each Watcher dump the executor added to the run, in order:
+    each of the run's diagnostics with stage run, severity note, and code
+    WATCHER_CODE (task P4.11). A run that did not hang, or ran on an
+    executor that does not declare SIMULATOR, gets neither.
     """
     findings = [UB_FINDING] if run.sim_ub is True else []
     if run.hang and simulator:
         findings.append(HANG_DIAGNOSTIC)
+        findings += [item.message for item in run.diagnostics if _is_watcher_note(item)]
     return findings
+
+
+def _is_watcher_note(item: Diagnostic) -> bool:
+    """Return True for a Watcher dump an executor added to a hung run: a run-stage note coded WATCHER_CODE."""
+    return item.stage == "run" and item.severity == "note" and item.code == WATCHER_CODE
 
 
 def run_error_text(run: RunResult, limits: Limits, fragments: Mapping[str, str], *, simulator: bool = False) -> str:

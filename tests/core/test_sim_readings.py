@@ -45,7 +45,12 @@ The contract these tests fix:
     naming a likely circular-buffer or semaphore deadlock, which the
     correction prompt carries;
   - a clean simulator run records sim_ub False, and a run on an executor
-    that reports no finding keeps sim_ub None (not recorded), as before.
+    that reports no finding keeps sim_ub None (not recorded), as before;
+  - task P4.11: an attempt run that hung on a simulator executor also
+    carries, after the hang diagnostic and in order, the message of each of
+    its run-stage notes whose code is lassi.core.stages WATCHER_CODE
+    ("watcher"), the Watcher dump the executor added (run_findings); nothing
+    else changes, and a reference run's hang message carries neither.
 - Records: a trial that ended at sim-gap round-trips through trial.json, and
   a trial.json written before this task (without any key it adds) loads
   unchanged. With `score: df-v0`, a trial that ended at sim-gap after an
@@ -77,6 +82,7 @@ import yaml
 
 from lassi.core import record as record_module
 from lassi.core import runner as runner_module
+from lassi.core import stages as stages_module
 from lassi.core.files import render_file_blocks
 from lassi.core.interfaces import BuildResult, Completion, Limits, Message, RunResult, Sampling
 from lassi.core.record import (
@@ -820,3 +826,91 @@ def test_under_a_fragment_set_the_findings_follow_upstreams_report_after_one_lin
     hint = run_error_text(hung, LIMITS, FRAGMENTS, simulator=True)
     assert hint.startswith("SYNTHETIC exit lead None \n")
     assert all(words.search(hint) for words in HANG_WORDS), hint
+
+
+# ---------------------------------------------------------------------------
+# The Watcher dump of a hang reaches the model (task P4.11; Harness Contract; OQ-037 option (b))
+
+
+def watcher_code() -> str:
+    """Return lassi.core.stages.WATCHER_CODE; fail the test clearly while it does not exist."""
+    code = getattr(stages_module, "WATCHER_CODE", None)
+    if code is None:
+        pytest.fail("lassi.core.stages has no WATCHER_CODE; task P4.11 adds it")
+    assert isinstance(code, str)
+    return code
+
+
+# SYNTHETIC Watcher notes, as an executor adds them to a run that hung, and diagnostics that are not such notes.
+WATCHER_NOTES = (
+    Diagnostic(
+        stage="run", severity="note", code="watcher",
+        message="SYNTHETIC Watcher dump #3: worker core(x= 0,y= 0) NSW; k_id[  1]: kernels/synthetic_reader.cpp",
+    ),
+    Diagnostic(stage="run", severity="note", code="watcher", message="SYNTHETIC second Watcher note"),
+)
+OTHER_NOTE = Diagnostic(stage="run", severity="note", code="SYNTHETIC-other", message="SYNTHETIC other run note")
+WATCHER_ERROR = Diagnostic(stage="run", severity="error", code="watcher", message="SYNTHETIC error coded watcher")
+JIT_WATCHER_NOTE = Diagnostic(stage="jit", severity="note", code="watcher", message="SYNTHETIC jit note coded watcher")
+
+
+def hung_with_notes(**findings: Any) -> RunResult:
+    """Return a SYNTHETIC hung run whose diagnostics mix the Watcher notes with diagnostics that are not ones."""
+    diagnostics = [OTHER_NOTE, WATCHER_NOTES[0], WATCHER_ERROR, JIT_WATCHER_NOTE, WATCHER_NOTES[1]]
+    return RunResult(
+        exit_code=None, hang=True, stdout="", stderr="", wall_s=PLACEHOLDER_ATTEMPT_WALL_S, diagnostics=diagnostics,
+        **findings,
+    )
+
+
+def test_the_watcher_code_is_watcher() -> None:
+    assert watcher_code() == "watcher"
+
+
+def test_run_findings_add_each_watcher_note_after_the_hang_diagnostic() -> None:
+    watcher_code()
+    notes = [note.message for note in WATCHER_NOTES]
+    run_findings = stages_module.run_findings
+    assert run_findings(hung_with_notes(), True) == [stages_module.HANG_DIAGNOSTIC, *notes]
+    expected = [stages_module.UB_FINDING, stages_module.HANG_DIAGNOSTIC, *notes]
+    assert run_findings(hung_with_notes(sim_ub=True), True) == expected
+    assert run_findings(hung_with_notes(), False) == [], "off a simulator a hang gets neither"
+    ended = dataclasses.replace(hung_with_notes(), hang=False, exit_code=1)
+    assert run_findings(ended, True) == [], "a run that did not hang carries no Watcher dump"
+
+
+def test_the_error_texts_carry_the_watcher_notes_after_the_hang_diagnostic() -> None:
+    watcher_code()
+    findings = "; ".join([stages_module.HANG_DIAGNOSTIC, *(note.message for note in WATCHER_NOTES)])
+    hint = run_error_text(hung_with_notes(), LIMITS, FRAGMENTS, simulator=True)
+    assert hint == f"SYNTHETIC exit lead None \n{findings}", "under a fragment set, after upstream's report"
+    text = run_error_text(hung_with_notes(), LIMITS, {}, simulator=True)
+    assert text == f"the program was stopped at its wall limit of 30 s; {findings}", "under a template set"
+
+
+def test_an_attempt_run_that_hung_carries_its_watcher_dump_into_the_run_error_and_the_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hung = RunResult(
+        exit_code=None, hang=True, stdout="", stderr="", wall_s=PLACEHOLDER_ATTEMPT_WALL_S, sim_ub=False,
+        diagnostics=[WATCHER_NOTES[0]],
+    )
+    script = Script(
+        replies=[REPLY, FIXED_REPLY], references={TARGET: clean_sim_reference()}, attempt_runs=[hung, clean_sim_run()]
+    )
+    outcome = run_one(tmp_path, monkeypatch, script, recipe_data())
+    first = outcome.trial.attempts[0]
+    assert WATCHER_NOTES[0] in first.diagnostics, "the executor's note stays on the attempt"
+    (run_error,) = [item for item in errors_of(first, "run") if item.code == "run-error"]
+    assert all(words.search(run_error.message) for words in HANG_WORDS), run_error.message
+    assert run_error.message.endswith(WATCHER_NOTES[0].message), f"the dump follows the hint: {run_error.message!r}"
+    assert WATCHER_NOTES[0].message in outcome.prompt(1), "the correction prompt carries the Watcher dump"
+
+
+def test_a_reference_run_that_hangs_keeps_its_message_without_the_watcher_dump(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reference = dataclasses.replace(hung_with_notes(), wall_s=PLACEHOLDER_REFERENCE_WALL_S)
+    script = Script(replies=[REPLY], references={TARGET: reference})
+    reason = run_one(tmp_path, monkeypatch, script, recipe_data()).trial.final.end_reason
+    assert reason == EndReason(code=BASELINE_RUN, message="the tt reference run hung past its wall limit of 600.0 s")

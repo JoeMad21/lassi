@@ -27,7 +27,9 @@ command carries prlimit --core=1, so an unhardened sandbox never stores a
 core under /var/lib/systemd/coredump.
 
 The P0.10 tests check: a network connect fails, a memory hog and a CPU-time
-hog are killed, wall time ends a run at the limit and not before, writes to
+hog are killed, wall time ends a run at the limit and not before (task
+P4.11: a program that keeps its `cpus` CPUs busy until the wall limit is a
+hang, not a CPU-time kill), writes to
 the harness and the hidden roots fail while the workdir stays writable, the
 program holds no capability and cannot undo a mount, it cannot create a
 nested user namespace, it runs at nice 19, the environment and the bus
@@ -392,6 +394,20 @@ for thread in threads:
     thread.join()
 """
 
+# Keeps as many threads busy as its first argument says (hashlib releases the GIL on large buffers), until stopped.
+BUSY_THREADS = """
+import hashlib, sys, threading
+data = bytes(1 << 20)
+def burn() -> None:
+    while True:
+        hashlib.sha256(data).digest()
+threads = [threading.Thread(target=burn, daemon=True) for _ in range(int(sys.argv[1]))]
+for thread in threads:
+    thread.start()
+for thread in threads:
+    thread.join()
+"""
+
 PROCESSES = "import os; print(sum(name.isdigit() for name in os.listdir('/proc')))"
 
 # R1: every entry under /dev, without following links, as [kind, ...], plus the device of /dev/pts and
@@ -635,14 +651,15 @@ def test_memory_hog_is_killed(sandbox: ModuleType, layout: Layout) -> None:
 
 
 def test_cpu_time_hog_is_killed_before_the_wall_limit(sandbox: ModuleType, layout: Layout) -> None:
-    # CPU budget 20 s under a 20 s wall limit; four busy threads spend it in about 5 s of wall time.
+    # A CPU-time cap of 23 s (1 x (20 + KILL_AFTER_S + CPU_MARGIN_S)) under a 20 s wall limit; four busy threads,
+    # four times the one-CPU budget, spend it in about 6 s of wall time.
     result = run_in(sandbox, layout, [PY, "-c", CPU_BURN], PYTHON)
     assert (result.returncode, result.killed, result.hang) == (137, True, False), result
     assert result.wall_s < 20, result
 
 
 def test_sleep_past_wall_time_sets_hang(sandbox: ModuleType, layout: Layout) -> None:
-    # cpus=2 makes the CPU budget (6 s) differ from the wall limit (3 s), so a swap of the two shows.
+    # cpus=2 makes the CPU-time cap (12 s) differ from the wall limit (3 s), so a swap of the two shows.
     start = time.monotonic()
     result = run_in(sandbox, layout, ["sleep", "30"], Limits(wall_s=3.0, memory_mb=64, cpus=2))
     elapsed = time.monotonic() - start
@@ -652,6 +669,14 @@ def test_sleep_past_wall_time_sets_hang(sandbox: ModuleType, layout: Layout) -> 
     # The program's own time covers the innermost timeout's run, less at most one 10 ms clock step, and lies
     # within the whole command's.
     assert 3.0 - 0.01 <= result.program_s <= result.wall_s, result
+
+
+def test_a_program_keeping_its_cpus_busy_until_the_wall_limit_is_a_hang(sandbox: ModuleType, layout: Layout) -> None:
+    # Task P4.11 (the P4.15 finding): two busy threads on a two-CPU budget reach the wall limit before the CPU-time
+    # cap (2 x (3 + KILL_AFTER_S + CPU_MARGIN_S) = 12 s), so the innermost timeout stops them: a hang, not a kill.
+    result = run_in(sandbox, layout, [PY, "-c", BUSY_THREADS, "2"], Limits(wall_s=3.0, memory_mb=256, cpus=2))
+    assert (result.returncode, result.hang, result.killed) == (124, True, False), result
+    assert 3.0 <= result.wall_s < 3.0 + sandbox.KILL_AFTER_S + 2.0, result
 
 
 def test_a_program_ignoring_sigterm_is_killed_after_the_grace(sandbox: ModuleType, layout: Layout) -> None:

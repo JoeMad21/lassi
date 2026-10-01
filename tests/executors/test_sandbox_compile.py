@@ -10,7 +10,10 @@ caller's environment. The interface these tests pin:
   variables and nothing else. Its names come from ENVIRONMENT_NAMES, a fixed
   frozenset allowlist that holds PATH, LANG, LC_ALL, TMPDIR, and every
   variable a pin names (NVHPC_CUDA_HOME), and never HOME, a loader or
-  compiler-flag variable, or a credential. Its values are strings without
+  compiler-flag variable, or a credential. Since task P4.11 it is exactly
+  those, OMP_NUM_THREADS, and the TT_METAL_* names the ttsim executor sets
+  (the bible's ttsim row, and TT_METAL_WATCHER for its rerun of a hang),
+  with a comment above it saying why. Its values are strings without
   NUL. Anything else raises ValueError. Each variable reaches the command as
   one NAME=value element after the constant setup script, so no shell parses
   it, and the command otherwise stays the P0.16 command.
@@ -100,6 +103,19 @@ FORBIDDEN_NAMES = (
     "CPATH",
     "LASSI_TEST_API_KEY",
     "XDG_RUNTIME_DIR",
+)
+# The names the ttsim executor sets (the bible's ttsim row; task P4.11), and TT_METAL_WATCHER, which its Watcher rerun
+# of a hang adds.
+TTSIM_NAMES = (
+    "TT_METAL_SIMULATOR",
+    "TT_METAL_SLOW_DISPATCH_MODE",
+    "TT_METAL_DISABLE_SFPLOADMACRO",
+    "TT_METAL_RUNTIME_ROOT",
+    "TT_METAL_CACHE",
+    "TT_METAL_LOGS_PATH",
+    "TT_METAL_INSPECTOR_RPC",
+    "TT_METAL_THREADCOUNT",
+    "TT_METAL_WATCHER",
 )
 # Compiler stderr as an EDG error prints it (capture nvcc_undefined_identifier holds one such line).
 STDERR_TEXT = 'main.cu(7): error: identifier "undefined_var" is undefined\n'
@@ -340,6 +356,40 @@ def test_environment_names_are_a_fixed_allowlist_without_home_loader_flag_or_sec
     assert set(PREFIX_VARIABLES.values()) <= names, "every variable a pin names can reach its compile"
     assert not names & set(FORBIDDEN_NAMES), sorted(names & set(FORBIDDEN_NAMES))
     assert all(re.fullmatch(r"[A-Z][A-Z0-9_]*", name) for name in names), sorted(names)
+
+
+def test_environment_names_are_exactly_the_compile_program_and_ttsim_names(sandbox: ModuleType) -> None:
+    # Task P4.11: the names the ttsim executor sets (the bible's ttsim row) and TT_METAL_WATCHER, which its rerun
+    # of a hang adds, join the fixed allowlist; nothing else does.
+    expected = {"PATH", "LANG", "LC_ALL", "TMPDIR", "OMP_NUM_THREADS", *PREFIX_VARIABLES.values(), *TTSIM_NAMES}
+    assert sandbox.ENVIRONMENT_NAMES == frozenset(expected), sorted(sandbox.ENVIRONMENT_NAMES ^ expected)
+
+
+def test_the_comment_above_the_allowlist_says_why_the_ttsim_names_are_there(sandbox: ModuleType) -> None:
+    lines = inspect.getsource(sandbox).splitlines()
+    start = next(number for number, line in enumerate(lines) if line.startswith("ENVIRONMENT_NAMES ="))
+    comment: list[str] = []
+    for line in reversed(lines[:start]):
+        if not line.startswith("#"):
+            break
+        comment.insert(0, line)
+    assert re.search(r"\bttsim\b", " ".join(comment), re.IGNORECASE), "\n".join(comment)
+
+
+def test_a_spec_keeps_the_ttsim_program_environment(sandbox: ModuleType) -> None:
+    values = {name: f"/PLACEHOLDER/{name.lower()}" for name in TTSIM_NAMES}
+    environment = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C", "LC_ALL": "C", "TMPDIR": "/tmp", **values}
+    spec = sample_spec(sandbox, environment=environment)
+    assert dict(spec.environment) == environment
+
+
+@pytest.mark.parametrize(
+    "name", ["TT_METAL_HOME", "TT_METAL_KERNEL_PATH", "TT_METAL_VISIBLE_DEVICES", "TT_METAL_SKIP_DELETING_BUILT_CACHE"]
+)
+def test_a_tt_metal_name_the_ttsim_row_does_not_set_is_refused(sandbox: ModuleType, name: str) -> None:
+    with pytest.raises(ValueError) as refused:
+        sample_spec(sandbox, environment={**COMPILE_ENV, name: "/value"})
+    assert name in str(refused.value)
 
 
 def test_a_spec_keeps_an_allowed_environment(sandbox: ModuleType) -> None:
@@ -692,6 +742,15 @@ def test_f5_a_compile_killed_before_its_wall_limit_names_the_limits_that_kill(
     workdir.mkdir()
     toolchain.build({"main.cu": "int main() { return 0; }\n"}, workdir)
     assert (workdir / "compile.stderr").read_text(encoding="utf-8").rstrip("\n").splitlines()[-1] == last
+
+
+def test_a_killed_compile_names_the_cpu_time_cap_its_command_set(sandbox: ModuleType, real: RealLayout) -> None:
+    # Task P4.11: the note names the per-process cap the compile ran under, cpu_cap_seconds of its limits.
+    fake = FakeSandboxRunner(returncode=137, stderr="partial output\n", program_s=3.0)
+    runner = compile_runner(sandbox, fake, toolchains=real.toolchains, hidden_roots=real.hidden)
+    result = runner(real.compile_argv(), real.workdir, 600.0)
+    cap = sandbox.cpu_cap_seconds(runner.limits(600.0))
+    assert f"({cap} s per process)" in result.stderr.rstrip("\n").splitlines()[-1], result.stderr
 
 
 def test_f5_a_compile_whose_whole_sandbox_was_killed_says_the_build_dir_may_be_incomplete(

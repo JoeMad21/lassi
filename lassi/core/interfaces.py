@@ -197,7 +197,14 @@ class Toolchain(Component, Protocol):
 
 
 class Executor(Component, Protocol):
-    """Runs an artifact on inputs under enforced limits, and names the device its programs run on."""
+    """Runs an artifact on inputs under enforced limits, and names the device its programs run on.
+
+    An executor that runs programs on a pinned install may also declare
+    `pins`, pin name -> the pin file's pairs, as a built toolchain's pins
+    are held (task P4.11); the runner records their versions in the
+    toolchain_pins of the trials it serves and in provenance.json
+    (lassi.core.runner). An executor without the attribute declares none.
+    """
 
     def run(self, artifact: Path, inputs: Sequence[str], limits: Limits) -> RunResult:
         """Run `artifact` with `inputs` and return its RunResult."""

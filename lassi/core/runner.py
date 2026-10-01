@@ -56,14 +56,18 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    language (lassi.core.recipe, task P4.5), a direction's target language
    with no executor, and its source language with none when a listed stage
    builds the source reference under its `source_build_fix` (baseline under
-   baseline_both), each message naming executor.<language>; and a device()
+   baseline_both), each message naming executor.<language>; a device()
    that returns neither None nor one non-empty line of printable ASCII with
-   no leading or trailing blank.
+   no leading or trailing blank; and an executor's `pins` (task P4.11) that
+   are not pin name -> pairs with a VERSION, that name a pin with no Trial
+   toolchain_pins field, or that give a pin other pairs than a toolchain or
+   an earlier executor gives the same pin name.
    A stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id), each toolchain
    with its pinned compiler and a clean environment (below), each executor
    as factory(**config) (one, or one per language), asking each for its
-   device(), and the ScoreProfiles `score` and `metrics` need
+   device() and reading the pins it declares, and the ScoreProfiles
+   `score` and `metrics` need
    (lassi.scoring.profiles.build_profile, with the bench root for a profile
    that declares reads_bench_sources);
 4. loads the suite manifest assets/bench/<bench.suite>.yaml and finds the
@@ -111,8 +115,9 @@ host), resolve inside it (Agent Rule 7). The tree holds:
 - toolchains.json: per toolchain, its languages, pinned executable, compile
   environment, and pin files;
 - provenance.json: the commit, the dirty flag, host, Python, the executor
-  and its device, the start and end times (UTC), recipe hash, pin versions,
-  and a status. The single executor form records `executor` (its name) and
+  and its device, the start and end times (UTC), recipe hash, pin versions
+  (every bound toolchain's and every bound executor's), and a status. The
+  single executor form records `executor` (its name) and
   `device` (its device(), null for an executor that names none); executors
   per language record `executor` and `devices`, each a mapping from language
   to that language's executor name and device. It is
@@ -185,9 +190,16 @@ run directory exists, and so does a SandboxUnavailableError from the
 --version check. A class without PIN (a test fake) is built as factory().
 build_toolchain is that construction for one registry name, public so that
 a tool compiles exactly as a run does; the runner builds every bound
-toolchain with it. A trial's toolchain_pins records the pins of the
-toolchain that builds its target language; provenance.json records every
-bound toolchain's pins. git, for the commit and dirty flag, runs through
+toolchain with it. An executor may declare pins too (task P4.11; Agent
+Rule 10): `pins`, pin name -> the pin file's pairs, as BuiltToolchain.pins
+holds a toolchain's (the ttsim executor declares ttsim and tt-metal). A
+trial's toolchain_pins records the pins of the toolchain that builds its
+target language and of the executor that runs it; provenance.json records
+every bound toolchain's and executor's pins. A pin name that a toolchain
+and an executor, or two executors, declare must carry the same pairs, or
+the run is refused before any directory exists; the runner reads the
+attribute, never an executor's name (Agent Rule 3). git, for the commit
+and dirty flag, runs through
 lassi.toolchains.EnvRunner, the audited command runner, and every compiler
 command through the sandbox's runner, so this module starts no process
 itself.
@@ -380,6 +392,19 @@ class BuiltToolchain:
 
 
 @dataclass(frozen=True)
+class _DeclaredPins:
+    """The pins one bound executor declares (its `pins`), where the recipe binds it, and the languages it serves.
+
+    `languages` is None for the single form, whose executor serves every
+    language; `label` names the executor and its recipe path for messages.
+    """
+
+    label: str
+    languages: tuple[str, ...] | None
+    pins: Mapping[str, Mapping[str, str]]
+
+
+@dataclass(frozen=True)
 class _Executors:
     """The run's executors and what provenance.json records of them.
 
@@ -387,24 +412,32 @@ class _Executors:
     per-language form binds one per language in `by_language`, and `single`
     is None. `record` holds the manifest's executor keys: `executor` and
     `device` for the single form, `executor` and `devices` (each by
-    language) for the per-language form.
+    language) for the per-language form. `declared` holds the pins each
+    bound executor declares (task P4.11), in binding order.
     """
 
     single: Executor | None
     by_language: Mapping[str, Executor]
     record: Mapping[str, Any]
+    declared: tuple[_DeclaredPins, ...] = ()
 
     def for_language(self, language: str) -> Executor:
         """Return the executor that runs programs in `language`."""
         return self.single if self.single is not None else self.by_language[language]
+
+    def pins_for(self, language: str) -> list[Mapping[str, Mapping[str, str]]]:
+        """Return the pins of the executor that runs programs in `language`, as one mapping per declaring executor."""
+        return [item.pins for item in self.declared if item.languages is None or language in item.languages]
 
 
 @dataclass(frozen=True)
 class _Run:
     """Everything the trial loop and the run files read: the recipe, its components, the bench, and provenance.
 
-    `pins` holds every bound toolchain's pin versions and `target_pins` those
-    of the toolchain that builds each target language. `scoring` holds the
+    `pins` holds the pin versions of every bound toolchain and every bound
+    executor that declares pins, and `target_pins` those of the toolchain
+    that builds each target language and of the executor that runs it
+    (_run_pins). `scoring` holds the
     built ScoreProfiles of `score` and `metrics` (lassi.scoring.run_scoring).
     `observer` is RunOptions.observer in a GuardedObserver, or None.
     """
@@ -480,12 +513,8 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id)
     _check_backend(recipe, settings, backend)
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
-    pins = _trial_pins(toolchains)
-    target_pins = {
-        direction.target: _trial_pins(built for built in toolchains if direction.target in built.languages)
-        for direction in settings.directions
-    }
     executors = _executors(recipe, registry, settings)
+    pins, target_pins = _run_pins(recipe, settings, toolchains, executors)
     commit, dirty = _git_state()
     try:
         run_dir.mkdir(parents=True)
@@ -856,9 +885,10 @@ def _executors(recipe: Recipe, registry: Registry, settings: _Settings) -> _Exec
     Everything is checked before any executor is built: the languages the
     per-language form must bind (_check_executor_languages), the sandbox
     limits when any bound executor runs programs, and the sandboxed check for
-    each one that does. Each executor is then built as factory(**config) and
-    asked for its device() once (_device, _checked_device); RunError
-    before any directory exists.
+    each one that does. Each executor is then built as factory(**config),
+    asked for its device() once (_device, _checked_device), and read for
+    the pins it declares (_declared_pins); RunError before any directory
+    exists.
     """
     bindings = [binding for binding in recipe.bindings if binding.interface == "Executor"]
     languages = executor_languages(recipe.data)
@@ -872,14 +902,21 @@ def _executors(recipe: Recipe, registry: Registry, settings: _Settings) -> _Exec
             _check_sandboxed(recipe, registry, binding, entry.capabilities)
     built = [entry.factory(**binding.config) for binding, entry in zip(bindings, entries, strict=True)]
     devices = [_checked_device(_device(executor), binding) for executor, binding in zip(built, bindings, strict=True)]
+    # The single form's one executor serves every language (None); each per-language executor serves its own.
+    served: list[tuple[str, ...] | None] = [(language,) for language in languages] if languages else [None]
+    declared = tuple(
+        _declared_pins(executor, binding, serves)
+        for executor, binding, serves in zip(built, bindings, served, strict=True)
+    )
     if not languages:
         record = {"executor": bindings[0].name, "device": devices[0]}
-        return _Executors(single=built[0], by_language={}, record=record)
+        return _Executors(single=built[0], by_language={}, record=record, declared=declared)
     record = {
         "executor": {language: binding.name for language, binding in zip(languages, bindings, strict=True)},
         "devices": dict(zip(languages, devices, strict=True)),
     }
-    return _Executors(single=None, by_language=dict(zip(languages, built, strict=True)), record=record)
+    by_language = dict(zip(languages, built, strict=True))
+    return _Executors(single=None, by_language=by_language, record=record, declared=declared)
 
 
 def _check_executor_languages(recipe: Recipe, registry: Registry, settings: _Settings, bound: set[str]) -> None:
@@ -929,6 +966,32 @@ def _checked_device(device: Any, binding: Binding) -> str | None:
     if not device:
         raise RunError(f"Executor {binding.name!r} ({binding.where}): device() returned an empty string")
     return device
+
+
+def _declared_pins(executor: Executor, binding: Binding, languages: tuple[str, ...] | None) -> _DeclaredPins:
+    """Return the pins an executor declares, checked, for the languages it serves (None: every language).
+
+    An executor may declare `pins` (task P4.11; Agent Rule 10), as
+    BuiltToolchain.pins holds a toolchain's: a mapping from pin name to the
+    pin file's pairs, each with a VERSION string; an executor without it
+    declares none. Anything else is a RunError naming the binding, before
+    any directory exists. The runner reads the attribute and never the
+    executor's name (Agent Rule 3).
+    """
+    label = f"Executor {binding.name!r} ({binding.where})"
+    pins = getattr(executor, "pins", None)
+    if pins is None:
+        return _DeclaredPins(label, languages, {})
+    valid = isinstance(pins, Mapping) and all(
+        isinstance(name, str) and isinstance(pin, Mapping) and isinstance(pin.get("VERSION"), str)
+        for name, pin in pins.items()
+    )
+    if not valid:
+        raise RunError(
+            f"{label}: pins must map each pin name to the pin file's pairs, each with a VERSION, as a toolchain's "
+            f"pins do; got {pins!r}"
+        )
+    return _DeclaredPins(label, languages, {name: dict(pin) for name, pin in pins.items()})
 
 
 def _check_plan(recipe: Recipe, registry: Registry, settings: _Settings, bench: _Bench) -> None:
@@ -1581,11 +1644,64 @@ def _checked_version(
     return tuple(line.rstrip() for line in output.splitlines() if line.strip()), result.returncode
 
 
-def _trial_pins(toolchains: Iterable[BuiltToolchain]) -> ToolchainPins:
-    """Return the VERSION of every pin the given toolchains use, under the matching ToolchainPins field."""
-    versions: dict[str, str] = {}
+def _run_pins(
+    recipe: Recipe, settings: _Settings, toolchains: Sequence[BuiltToolchain], executors: _Executors
+) -> tuple[ToolchainPins, dict[str, ToolchainPins]]:
+    """Return the run's pin versions and each target language's, from the toolchains and the executors' pins.
+
+    The run's (provenance.json) are every bound toolchain's and every bound
+    executor's pins. A target language's (each of its trials'
+    toolchain_pins) are those of the toolchains bound for it and of the
+    executor that runs it, so a per-language executor's pins join only the
+    trials whose target it runs. A pin that an executor declares with other
+    pairs than a toolchain or another executor that declares the same pin
+    name is a RunError naming both (_check_shared_pins), and so is a pin
+    with no ToolchainPins field (_pin_versions); both come before any
+    directory exists.
+    """
+    _check_shared_pins(recipe, toolchains, executors)
+    everything = [*(built.pins for built in toolchains), *(item.pins for item in executors.declared)]
+    target_pins = {
+        direction.target: _pin_versions(
+            [
+                *(built.pins for built in toolchains if direction.target in built.languages),
+                *executors.pins_for(direction.target),
+            ]
+        )
+        for direction in settings.directions
+    }
+    return _pin_versions(everything), target_pins
+
+
+def _check_shared_pins(recipe: Recipe, toolchains: Sequence[BuiltToolchain], executors: _Executors) -> None:
+    """Refuse a pin an executor declares with other pairs than an earlier declarer of that pin name.
+
+    The earlier declarers are the bound toolchains, then the executors in
+    binding order; the same pin declared twice with the same pairs is one
+    pin (a ttsim run's tt-metal pin, which the host toolchain declares
+    too). Two toolchains are not compared here, as before task P4.11.
+    """
+    first: dict[str, tuple[str, Mapping[str, str]]] = {}
     for built in toolchains:
-        for pin_name, pin in built.pins.items():
+        for name, pin in built.pins.items():
+            first.setdefault(name, (f"Toolchain {built.name!r}", pin))
+    for item in executors.declared:
+        for name, pin in item.pins.items():
+            label, earlier = first.setdefault(name, (item.label, pin))
+            if dict(earlier) != dict(pin):
+                keys = sorted(key for key in {*earlier, *pin} if earlier.get(key) != pin.get(key))
+                raise RunError(
+                    f"{recipe.path}: {label} and {item.label} both declare the pin {name!r} but differ in "
+                    f"{', '.join(keys)} ({label}: VERSION {earlier.get('VERSION')!r}; {item.label}: VERSION "
+                    f"{pin.get('VERSION')!r}); a run records one version of each pin (Agent Rule 10)"
+                )
+
+
+def _pin_versions(pin_maps: Iterable[Mapping[str, Mapping[str, str]]]) -> ToolchainPins:
+    """Return the VERSION of every pin the given pin maps hold (pin name -> pairs), under its ToolchainPins field."""
+    versions: dict[str, str] = {}
+    for pins in pin_maps:
+        for pin_name, pin in pins.items():
             field = pin_name.replace("-", "_")
             if field not in TOOLCHAIN_PIN_NAMES:
                 raise RunError(f"the pin {pin_name!r} has no Trial toolchain_pins field; fields: {TOOLCHAIN_PIN_NAMES}")

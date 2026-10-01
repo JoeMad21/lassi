@@ -36,6 +36,11 @@ READS_BENCH_SOURCES = "reads_bench_sources"
 # run of it that hung (lassi.core.stages HANG_DIAGNOSTIC). Its findings (undefined behavior, a gap, jit-stage
 # diagnostics) come in RunResult's fields.
 SIMULATOR = "simulator"
+# The Diagnostic code of a Watcher dump that such an executor adds to a run that hung (task P4.11; the Harness
+# Contract's hang diagnostic plus the Watcher dump): a run-stage note whose message is the condensed dump. It is here,
+# beside SIMULATOR, so the executor and lassi.core.stages (which re-exports it as WATCHER_CODE and carries each such
+# note into the run's error text after the hang diagnostic) share one name without importing each other.
+WATCHER_CODE = "watcher"
 
 # The capability of an Oracle that compares a run's output files (RunResult.output_files, one lassi_io array per
 # file) instead of its stdout; it provides the OutputFileOracle methods below. For such an Oracle the oracle stage
