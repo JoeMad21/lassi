@@ -90,7 +90,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.8 | DONE | Progress hook and live inference table | P4.7 | progress hook, live inference table, broken-stderr exit status kept |
 | P4.9 | DONE | Spike: ttsim runtime facts, unpack_to_dest, and Watcher | P4.2 | ttsim runtime spike: six examples pass, findings and classes, Watcher works, sandbox needs TT_METAL_THREADCOUNT; rx job 20260926-140947 (755c739); OQ-036, OQ-037; bible rev 236 |
 | P4.10 | DONE | tt-metal host toolchain | P4.2,P4.5 | ttmetal-host toolchain and pin checks (cf5f127); clang fixtures from clean rx 20260926-142744; 13 remote tests passed; bible rev 231 |
-| P4.11 | DONE | ttsim executor and the smoke driver | P4.6,P4.9,P4.10 | ttsim executor, Watcher rerun, CPU-cap fix, smoke driver |
+| P4.11 | DONE | ttsim executor and the smoke driver | P4.6,P4.9,P4.10 | b9fc0d3; remote tests 50 passed and smoke 6/6 pass, rx 20260930-172230-p411-evidence-92e0 |
 | P4.12 | READY | CPU -> TT guard | P4.6,P4.10 |  |
 | P4.13 | READY | Tier A suite tt-pairs-v0 | P4.4,P4.5,P4.11,P4.12 |  |
 | P4.14 | READY | Apply the owner's Tier A splits (OQ-025) | P4.13 | OQ-025 answered (d): keep every Tier A item unassigned; confirm the manifest |

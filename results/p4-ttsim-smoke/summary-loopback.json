@@ -1,0 +1,60 @@
+{
+ "argv": [
+  "metal_example_loopback"
+ ],
+ "build_diagnostics": 0,
+ "commit": "b9fc0d3b3cd7b98c6aefaea9224686d8af69df13",
+ "compiler": {
+  "executable": "/usr/bin/clang++-20",
+  "version": [
+   "Ubuntu clang version 20.1.8 (++20250708082409+6fb913d3e2ec-1~exp1~20250708202428.132)",
+   "Target: x86_64-pc-linux-gnu",
+   "Thread model: posix",
+   "InstalledDir: /usr/lib/llvm-20/bin"
+  ]
+ },
+ "date": "2026-10-01T00:25:17+00:00",
+ "device": "ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon",
+ "dirty": false,
+ "example": "loopback",
+ "exit_code": 0,
+ "findings": [],
+ "hang": false,
+ "host": "alpha01",
+ "limits": {
+  "cpus": 16,
+  "memory_mb": 8192,
+  "tasks_max": 256,
+  "wall_s": 120.0,
+  "workdir_disk_mb": 256
+ },
+ "pcc": null,
+ "pins": {
+  "tt-metal": {
+   "COMMIT": "5280a9cfb00998fd49667a29523d03aee905c129",
+   "EXECUTABLE": "/usr/bin/clang++-20",
+   "EXPECT_VERSION": "Ubuntu clang version 20.1.8 (++20250708082409+6fb913d3e2ec-1~exp1~20250708202428.132)",
+   "NAME": "tt-metal",
+   "VERSION": "5280a9cf"
+  },
+  "ttsim": {
+   "LIBRARY": "libttsim_wh.so",
+   "NAME": "ttsim",
+   "SHA256": "7b10aa05a5297c4a28f274e39526bfe6c69373661d1b4d4e47c4257e44b79507",
+   "SOC_DESCRIPTOR_SHA256": "24fd3dfae80435a7d9113e255d6d6af9cdf83f6ae3b1c385e1d48a24795ccf49",
+   "VERSION": "v1.3.4"
+  }
+ },
+ "reasons": [],
+ "rx_run_id": "20260930-172230-p411-evidence-92e0",
+ "sim_gap": null,
+ "sim_ub": false,
+ "snapshot_of": null,
+ "success_line": "Test Passed",
+ "tool": "tools/ttsim_smoke.py",
+ "verdict": "pass",
+ "wall_s": {
+  "label": "simulator wall time, exploratory, sizing only",
+  "value": 1.6775922440137947
+ }
+}

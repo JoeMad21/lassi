@@ -1,0 +1,8 @@
+Using CPython 3.10.12 interpreter at: /usr/bin/python3.10
+Creating virtual environment at: .venv
+   Building lassi @ file:///mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-detached-b9fc0d3b
+      Built lassi @ file:///mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-detached-b9fc0d3b
+Installed 19 packages in 20ms
+..................................................                       [100%]
+50 passed in 153.82s (0:02:33)
+remote_rc=0
