@@ -95,4 +95,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.13 | DONE | Tier A suite tt-pairs-v0 | P4.4,P4.5,P4.11,P4.12 | 5e72f4e; remote Tier A tests 5 passed, rx 20261005-122628-desktop-8r113ei-detached-5e72f4e8-56d0; bible rev 244 |
 | P4.14 | DONE | Apply the owner's Tier A splits (OQ-025) | P4.13 | OQ-025 (d) confirmed: every tt-pairs-v0 item unassigned and refused to training, prompt tuning, and harvest (tests/bench/test_tt_pairs.py); recipe hashes at 184f130 equal bc4c132's for every committed recipe |
 | P4.15 | DONE | Carry the P2 review questions (OQ-024) | - | P2 review questions closed (f0c4a85); OQ-028 to OQ-033 applied for review; sim_t_tiktoken; scoring pass rx 20260927-204249; bible rev 233 |
-| P4.G | READY | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 |  |
+| P4.G | ACTIVE | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 |  |
