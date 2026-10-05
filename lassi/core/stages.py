@@ -70,7 +70,15 @@ The runner checks either kind before any model is asked.
   direction's system prompt. Its error text is the parsed diagnostics,
   capped at DIAGNOSTIC_COUNT_CAP diagnostics and DIAGNOSTIC_BYTES_CAP bytes
   of whole lines, with a line saying how many were left out when any were
-  (diagnostics_text).
+  (diagnostics_text). After every build that gave a program, the target
+  language's toolchain, when it declares host_compute_guard
+  (lassi.core.capabilities, task P4.12; found by capability, never by
+  name), reads the attempt's files with the item's support files: the
+  reading sets Attempt.guards.host_compute and adds its parse-stage
+  warnings or notes after the build's diagnostics. It never changes a
+  stage or asks for a correction, and every later copy of the attempt
+  keeps it. A guard's diagnostics (codes starting with "guard-") never
+  enter a correction prompt (prompt_diagnostics).
 - run_loop continues compile_loop's loop (it runs compile_loop first, which
   changes nothing when compile_loop already ran) and, when the executor runs
   programs (capability `runs_code`), runs each compiling attempt from its
@@ -149,10 +157,10 @@ when there is one, and nothing a stage does depends on them: before each
 model call, once its messages are stored, a request-sent event with the
 trial before the request is recorded (_send); an attempt event after
 generate or a correction appends an attempt (with its request recorded),
-after compile_loop builds the last attempt (_build_last), and after
-run_loop runs it (_run_last). Later changes (run_loop's `stale-output`
-warning, an end reason, the oracle stage's alignment) reach the observer
-with the runner's trial-end event.
+after compile_loop builds the last attempt (_build_last; the event carries
+the host-compute reading), and after run_loop runs it (_run_last). Later
+changes (run_loop's `stale-output` warning, an end reason, the oracle
+stage's alignment) reach the observer with the runner's trial-end event.
 
 Upstream quirks are reproduced when their fixes (lassi.core.recipe.FIXES)
 are off, and each stage class names the fixes it reproduces in
@@ -234,10 +242,13 @@ from lassi.bench import Direction, Suite
 from lassi.core import fragments as fragment_text
 from lassi.core.capabilities import (
     ALIGNS_OUTPUT_FILES,
+    GUARD_CODE_PREFIX,
+    HOST_COMPUTE_GUARD,
     SIMULATOR,
     WATCHER_CODE,
     OutputFileOracle,
     declares,
+    host_compute_reading,
     unload_before_run,
 )
 from lassi.core.files import parse_file_blocks, render_file_blocks
@@ -631,9 +642,23 @@ def _toolchain_name(toolchain: Toolchain) -> str:
     return str(getattr(toolchain, "name", type(toolchain).__name__))
 
 
+def _support_files(context: RunContext) -> dict[str, str]:
+    """Return the item's support files (build-directory name -> text), the harness files of every build."""
+    return context.suite.support_files(context.item, context.sources_root, purpose=PURPOSE)
+
+
+def prompt_diagnostics(diagnostics: Sequence[Diagnostic]) -> list[Diagnostic]:
+    """Return `diagnostics` without a guard's (code starting with GUARD_CODE_PREFIX), which never enter a prompt.
+
+    The order is kept and the sequence given is not changed (task P4.12;
+    the guard's outcome is never fed back to the model).
+    """
+    return [item for item in diagnostics if not (item.code or "").startswith(GUARD_CODE_PREFIX)]
+
+
 def _harness_build(context: RunContext, toolchain: Toolchain, files: Mapping[str, str], workdir: Path) -> BuildResult:
     """Build `files` in `workdir`, with the item's support files as the `harness` argument when it has any."""
-    harness = context.suite.support_files(context.item, context.sources_root, purpose=PURPOSE)
+    harness = _support_files(context)
     if harness:
         return toolchain.build(files, workdir, harness=harness)
     return toolchain.build(files, workdir)
@@ -1151,14 +1176,16 @@ class CompileLoopStage:
         The last attempt is built (_build_last) with the target language's
         toolchain in a fresh build directory; its copy gets the compile
         diagnostics after the parse diagnostics, and S4 when an artifact was
-        built. A build with no artifact always carries an error: "no-artifact"
-        when the toolchain reported none, and "unwritable" when a file name
-        could not be written. While the latest attempt has an error and is
-        not S4, the stage asks for a correction (_correction), appends the
-        reply with its diff from the previous files and records the request,
-        and builds that. When the cap (corrections are the attempts after the
-        first) stops the loop with an error remaining, final.end_reason is set
-        to `correction-cap`. A cap of None never stops the loop.
+        built, then the host-compute reading when the toolchain declares
+        host_compute_guard (_guarded). A build with no artifact always
+        carries an error: "no-artifact" when the toolchain reported none,
+        and "unwritable" when a file name could not be written. While the
+        latest attempt has an error and is not S4, the stage asks for a
+        correction (_correction), appends the reply with its diff from the
+        previous files and records the request, and builds that. When the
+        cap (corrections are the attempts after the first) stops the loop
+        with an error remaining, final.end_reason is set to
+        `correction-cap`. A cap of None never stops the loop.
         """
         if not trial.attempts:
             raise ValueError(f"{trial.trial_id}: compile_loop needs an attempt; run the generate stage first")
@@ -1179,6 +1206,8 @@ class CompileLoopStage:
         limit = "no correction cap" if cap is None else f"at most {cap} corrections"
         toolchain = context.toolchains.get(context.direction.target)
         builder = "no bound toolchain" if toolchain is None else _toolchain_name(toolchain)
+        if toolchain is not None and declares(toolchain, HOST_COMPUTE_GUARD):
+            builder += f" ({HOST_COMPUTE_GUARD} after each build)"
         source = f"the {context.prompts} fragments" if context.fragments else f"{context.prompts}/correct.txt"
         errors = "parsed diagnostics" if fix_on(context, "parsed_diagnostics") else "the raw compiler stderr"
         return (
@@ -1210,10 +1239,11 @@ class CompileLoopStage:
 
         The trial comes back unchanged, with None, when the last attempt is
         not buildable. A built program is kept in RunContext.artifacts under
-        the attempt's index. The stderr is read only with
-        fixes.parsed_diagnostics off, the one case a prompt carries it, and
-        is None otherwise or when the build kept no attachment
-        (BuildResult.stderr_ref).
+        the attempt's index, and the attempt gains the target toolchain's
+        host-compute reading (_guarded) before the attempt event. The stderr
+        is read only with fixes.parsed_diagnostics off, the one case a
+        prompt carries it, and is None otherwise or when the build kept no
+        attachment (BuildResult.stderr_ref).
         """
         attempt = trial.attempts[-1]
         if not self._buildable(attempt):
@@ -1231,11 +1261,31 @@ class CompileLoopStage:
             diagnostics=diagnostics,
             stage_reached=COMPILED if result.artifact is not None else attempt.stage_reached,
         )
+        if result.artifact is not None:
+            built = self._guarded(built)
         trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], built])
         notify(self.context.observer, ATTEMPT, trial, self.name)
         if fix_on(self.context, "parsed_diagnostics"):
             return trial, None
         return trial, _attachment_text(workdir, result.stderr_ref)
+
+    def _guarded(self, attempt: Attempt) -> Attempt:
+        """Return `attempt` with the target toolchain's host-compute reading (task P4.12); unchanged without one.
+
+        The toolchain is found by capability (host_compute_reading), never by
+        name, and is given the attempt's files and the item's support files.
+        The reading sets Attempt.guards.host_compute, and its diagnostics
+        follow the parse and build diagnostics. A reading outside the guard
+        contract raises ValueError, which stops the run before the attempt
+        is recorded.
+        """
+        context = self.context
+        toolchain = _toolchain(context, context.direction.target)
+        reading = host_compute_reading(toolchain, attempt.files, _support_files(context))
+        if reading is None:
+            return attempt
+        guards = dataclasses.replace(attempt.guards, host_compute=reading.host_compute)
+        return dataclasses.replace(attempt, guards=guards, diagnostics=[*attempt.diagnostics, *reading.diagnostics])
 
     def _build(self, files: Mapping[str, str], workdir: Path) -> BuildResult:
         """Build `files` in `workdir`; a file name the filesystem refuses becomes an "unwritable" error.
@@ -1266,11 +1316,12 @@ class CompileLoopStage:
 
         The error text is the raw stderr (`stderr`, which _build_last reads
         only with fixes.parsed_diagnostics off) when it is not empty, else
-        diagnostics_text of the attempt's diagnostics: upstream reads an empty
-        stderr as a success, so a failed build that left none (a sandbox
-        timeout, say) has no upstream counterpart.
+        diagnostics_text of the attempt's diagnostics without a guard's
+        (prompt_diagnostics): upstream reads an empty stderr as a success, so
+        a failed build that left none (a sandbox timeout, say) has no
+        upstream counterpart.
         """
-        errors = stderr if stderr else diagnostics_text(trial.attempts[-1].diagnostics)
+        errors = stderr if stderr else diagnostics_text(prompt_diagnostics(trial.attempts[-1].diagnostics))
         return _corrected(self.context, trial, self.name, expected, errors, run_error=False)
 
 

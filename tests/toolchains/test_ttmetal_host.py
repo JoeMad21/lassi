@@ -11,7 +11,11 @@ The design these tests fix:
 
 Registration. Importing lassi.toolchains registers the Toolchain
 "ttmetal-host" (module lassi.toolchains.ttmetal_build, the name Repository
-Layout gives). It declares `diagnostics` and no offload capability. Its PIN
+Layout gives). It declares `diagnostics` and no offload capability. Since
+task P4.12 it also declares `host_compute_guard` and provides it as a static
+method, so the CPU -> TT guard's reading can be taken on the class without a
+tree: it returns lassi.toolchains.ttmetal_guard.read_host_compute's reading
+(tests/toolchains/test_ttmetal_guard.py holds the reader's tests). Its PIN
 is "tt-metal" and it declares no PIN_BIN: the compiler is the build host's
 clang++-20, pinned by path as the host g++ is (toolchains/gcc.pin), so a
 trial it builds records toolchain_pins.tt_metal.
@@ -122,6 +126,8 @@ the flags, paths, and banner are what the named rx execs printed.
 
 from __future__ import annotations
 
+import importlib
+import inspect
 import shutil
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -252,6 +258,10 @@ HOST_KEYS = {
 BUILD_DIR_INCLUDE = ("-idirafter", ".")
 KERNEL_DIR = "kernels"
 SOURCE_SUFFIXES = (".cpp", ".cc", ".cxx")
+# The CPU -> TT guard's capability (task P4.12), its hand-written programs, and the harness header a build gets.
+GUARD_CAPABILITY = "host_compute_guard"
+GUARD_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "host_compute"
+HARNESS_HEADER = REPO / "assets" / "harness" / "c" / "lassi_io.h"
 
 
 @pytest.fixture(autouse=True)
@@ -355,6 +365,30 @@ def test_it_is_pinned_by_the_tt_metal_pin_and_uses_the_host_clang() -> None:
     cls = ttmetal_class()
     assert getattr(cls, "PIN", None) == PIN_NAME, "the class names its pin file toolchains/tt-metal.pin"
     assert getattr(cls, "PIN_BIN", None) is None, "the compiler is the host clang++-20, not a file under the tree"
+
+
+def test_it_declares_the_host_compute_guard() -> None:
+    ttmetal_class()
+    capabilities = DEFAULT_REGISTRY.get("Toolchain", NAME).capabilities
+    assert GUARD_CAPABILITY in capabilities, "task P4.12: compile_loop asks it for the CPU -> TT guard's reading"
+    assert {"diagnostics", "emits_warnings"} <= capabilities, "the capabilities it declared before stay"
+
+
+def test_the_guard_is_called_on_the_class_without_a_tree() -> None:
+    cls = ttmetal_class()
+    if not isinstance(inspect.getattr_static(cls, GUARD_CAPABILITY, None), staticmethod):
+        pytest.fail("TtMetalHost.host_compute_guard is not a static method; task P4.12 adds one")
+    try:
+        guard = importlib.import_module("lassi.toolchains.ttmetal_guard")
+    except ModuleNotFoundError as error:
+        pytest.fail(f"lassi.toolchains.ttmetal_guard does not exist ({error}); task P4.12 adds it")
+    root = GUARD_FIXTURES / "clean_offload"
+    paths = sorted(path for path in root.rglob("*") if path.is_file())
+    files = {path.relative_to(root).as_posix(): path.read_bytes().decode("utf-8") for path in paths}
+    harness = {"lassi_io.h": HARNESS_HEADER.read_bytes().decode("utf-8")}
+    result = cls.host_compute_guard(files, harness)
+    assert result == guard.read_host_compute(files, harness), "the method returns read_host_compute's reading"
+    assert (result.host_compute, result.diagnostics) == (False, ()), "the clean offload reads False, unflagged"
 
 
 # ---------------------------------------------------------------------------

@@ -44,6 +44,14 @@ toolchains/tt-metal-cpm-sources.txt line for line; the --version check
 follows. It declares `diagnostics` and `emits_warnings`, and no offload
 capability: without -Werror a warning in a host program stays a warning.
 
+It also declares host_compute_guard (lassi.core.capabilities, task P4.12):
+the static method host_compute_guard(files, harness) returns the CPU -> TT
+guard's reading of a built program's host code
+(lassi.toolchains.ttmetal_guard read_host_compute), which compile_loop
+records after every build that gave a program. Being static, it can be
+called on the class without a tree, so a later check of a TT reference
+needs none (plans/p4-ttsim.md, P4.13: each TT reference passes the guard).
+
 parse_diagnostics reads the stderr of clang and of ld.lld, which links
 through -fuse-ld=lld, with the patterns shared with the other adapters
 (lassi.toolchains._stderr):
@@ -75,6 +83,7 @@ import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePath, PurePosixPath
 
+from lassi.core.capabilities import HOST_COMPUTE_GUARD, HostComputeReading
 from lassi.core.record import Diagnostic
 from lassi.core.registry import register
 from lassi.toolchains import pins
@@ -255,7 +264,7 @@ class TtMetalHost(CompilerToolchain):
     """Builds a TT host program with the pinned host clang++-20 against the pinned tt-metal tree."""
 
     name = "ttmetal-host"
-    capabilities = frozenset({"diagnostics", "emits_warnings"})
+    capabilities = frozenset({"diagnostics", "emits_warnings", HOST_COMPUTE_GUARD})
     SOURCE_SUFFIXES = (".cpp", ".cc", ".cxx")
     # The pinned host clang++-20 and tree: toolchains/tt-metal.pin, whose EXECUTABLE is an absolute path on the build
     # host and whose PREFIX_NAME is the tree. No PIN_BIN, since the compiler is not installed under the tree.
@@ -289,6 +298,17 @@ class TtMetalHost(CompilerToolchain):
         check_install_record(tree, pin)
         check_cpm_sources(tree)
         host_words(pin, tree)
+
+    @staticmethod
+    def host_compute_guard(files: Mapping[str, str], harness: Mapping[str, str]) -> HostComputeReading:
+        """Return the CPU -> TT guard's reading of a built program's host code (lassi.toolchains.ttmetal_guard).
+
+        `files` are the model's files and `harness` the item's support files,
+        each build-directory path -> text, as compile_loop gives them.
+        """
+        from lassi.toolchains.ttmetal_guard import read_host_compute  # ttmetal_guard imports this module
+
+        return read_host_compute(files, harness)
 
     def command(self, sources: Sequence[str]) -> list[str]:
         """Return the compile and link command for the host `sources`, as given (see the module docstring)."""

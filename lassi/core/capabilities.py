@@ -8,11 +8,12 @@ declarations at load time, before any backend is constructed.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, Protocol, cast, runtime_checkable
 
 if TYPE_CHECKING:
-    from lassi.core.record import Alignment, OutputStats
+    from lassi.core.record import Alignment, Diagnostic, OutputStats
     from lassi.core.tolerance import Tolerance
 
 # The capability of an LLM backend whose model is unloaded before generated code runs, as upstream's notebook does
@@ -48,6 +49,18 @@ WATCHER_CODE = "watcher"
 # (lassi.core.store.BlobStore, RunInfo.outputs); for any other Oracle they keep none.
 ALIGNS_OUTPUT_FILES = "aligns_output_files"
 
+# The capability of a Toolchain that reads a built program's host code for the Harness Contract's
+# host-compute guard (task P4.12): it provides host_compute_guard(files, harness) (HostComputeGuard).
+# compile_loop asks the target language's toolchain for a reading after every build that gave a
+# program, by this capability, never by the toolchain's name.
+HOST_COMPUTE_GUARD = "host_compute_guard"
+# Every Diagnostic code of a guard reading starts with this prefix; compile_loop keeps such diagnostics
+# out of every correction prompt (lassi.core.stages prompt_diagnostics).
+GUARD_CODE_PREFIX = "guard-"
+# A guard reads program text and never fails an attempt: its diagnostics are parse-stage warnings or notes.
+GUARD_STAGE = "parse"
+GUARD_SEVERITIES = frozenset({"warning", "note"})
+
 
 @runtime_checkable
 class Component(Protocol):
@@ -82,6 +95,80 @@ def unload_before_run(backend: object) -> None:
     """
     if declares(backend, UNLOAD_BEFORE_RUN):
         cast(Unloads, backend).unload()
+
+
+@dataclass(frozen=True)
+class HostComputeReading:
+    """A guard's reading of one built program: host_compute (True, False, or None for not checked) and its notes.
+
+    host_compute is True for a violation, False when the guard checked and
+    found none, and None when it did not check. `diagnostics` are the
+    guard's parse-stage warnings or notes, each with a code that starts
+    with GUARD_CODE_PREFIX; the record itself checks nothing, and
+    host_compute_reading refuses one outside that contract.
+    """
+
+    host_compute: bool | None
+    diagnostics: tuple[Diagnostic, ...] = ()
+
+
+class HostComputeGuard(Protocol):
+    """A Toolchain that declares HOST_COMPUTE_GUARD."""
+
+    def host_compute_guard(self, files: Mapping[str, str], harness: Mapping[str, str]) -> HostComputeReading:
+        """Return the reading of the program built from `files` (the model's) and `harness` (the support files)."""
+        ...
+
+
+def host_compute_reading(
+    toolchain: object, files: Mapping[str, str], harness: Mapping[str, str]
+) -> HostComputeReading | None:
+    """Return `toolchain`'s reading when it declares HOST_COMPUTE_GUARD, else None (not checked).
+
+    The method of a toolchain that does not declare the capability is never
+    called. A ValueError naming the toolchain (its `name`, else its class
+    name) and the capability refuses a declared capability without a
+    callable host_compute_guard, and a reading outside the contract: not a
+    HostComputeReading, host_compute not a bool or None, diagnostics not a
+    tuple, or an item that is not a Diagnostic, has a stage other than
+    GUARD_STAGE, a severity outside GUARD_SEVERITIES, or a code that is not
+    a str starting with GUARD_CODE_PREFIX. So a guard can never add an
+    error, change a stage, or start a correction.
+    """
+    if not declares(toolchain, HOST_COMPUTE_GUARD):
+        return None
+    name = getattr(toolchain, "name", type(toolchain).__name__)
+    method = getattr(toolchain, HOST_COMPUTE_GUARD, None)
+    if not callable(method):
+        raise ValueError(
+            f"Toolchain {name!r} declares {HOST_COMPUTE_GUARD!r} but has no callable {HOST_COMPUTE_GUARD}()"
+        )
+    reading = method(files, harness)
+    problem = _reading_problem(reading)
+    if problem is not None:
+        raise ValueError(f"Toolchain {name!r} declares {HOST_COMPUTE_GUARD!r}, but its reading {problem}")
+    return cast(HostComputeReading, reading)
+
+
+def _reading_problem(reading: object) -> str | None:
+    """Return why `reading` is outside the guard contract (see host_compute_reading), or None when it is inside."""
+    from lassi.core.record import Diagnostic  # lassi.core.record imports this module through lassi.core.interfaces
+
+    if not isinstance(reading, HostComputeReading):
+        return f"is a {type(reading).__name__}, not a HostComputeReading"
+    if not (reading.host_compute is None or isinstance(reading.host_compute, bool)):
+        return f"has host_compute {reading.host_compute!r}, not True, False, or None"
+    if not isinstance(reading.diagnostics, tuple):
+        return f"has diagnostics of type {type(reading.diagnostics).__name__}, not a tuple"
+    for item in reading.diagnostics:
+        if not isinstance(item, Diagnostic):
+            return f"holds a {type(item).__name__} among its diagnostics, not a Diagnostic"
+        if item.stage != GUARD_STAGE or item.severity not in GUARD_SEVERITIES:
+            allowed = f"{GUARD_STAGE}-stage warnings or notes"
+            return f"holds a {item.stage}-stage {item.severity}; a guard gives only {allowed}"
+        if not isinstance(item.code, str) or not item.code.startswith(GUARD_CODE_PREFIX):
+            return f"holds the diagnostic code {item.code!r}, which does not start with {GUARD_CODE_PREFIX!r}"
+    return None
 
 
 class OutputFileOracle(Protocol):
