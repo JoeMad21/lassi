@@ -23,6 +23,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - Before the audit, tick off every bible section the task's acceptance names; P4.4 missed its Harness Contract edit, and scoped rules (which runs, which settings) were written wider than the code (commit audit).
 - When a task changes what a shared term means (P4.6 made a clean run also need no UB and no simulator gap), grep every reader of that term before the audit: the lassi profile still read exit 0 and no hang as clean, and four audit lenses found it.
 - A fix for one audit finding can change a rule stated elsewhere. P17's planning took four audit rounds: holding a task for the owner's review made "the phase stalls with only BLOCKED tasks" untrue in five files. After each fix, grep the change set for every statement of the rule it touches.
+- Limits text for a static analyzer converges only when it says what the code does in plain terms and says the list is not complete. P4.12's sentences on lambdas called inside other lambdas failed five audit rounds in a row, each round finding another sub-case; instructions that a probe checks, plus a pointer to the limits, passed. Snapshot the files a fix round will change before it starts, so the next audit reviews only that round's delta.
 
 ## Agents and briefs
 
