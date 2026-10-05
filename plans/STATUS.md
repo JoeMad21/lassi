@@ -12,7 +12,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1 Faithful LASSI | p1-faithful | DONE | base: main at c3cf248 (P0 merged, PR 1); plan plans/p1-faithful.md; owner 2026-09-23: scope fixed at planning, P2 follows without pause; owner 2026-09-24: curated LASSI demo at 15:00 EDT |
 | P2 Scoring | p2-scoring | DONE | base: p1-faithful at 5d5fd0c; plan plans/p2-scoring.md; gate evidence results/p2-gate; owner review OQ-024 accepted with option (b), review questions moved to P4.15; PR 3 merged |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
-| P4 ttsim Execution | p4-ttsim | ACTIVE | base: main at 75eceef (P2 DONE, PR 3 merged); plan plans/p4-ttsim.md |
+| P4 ttsim Execution | p4-ttsim | DONE | base: main at 75eceef (P2 DONE, PR 3 merged); plan plans/p4-ttsim.md; gate passed 2026-10-05 (results/p4-gate); PR P4 ttsim Execution open |
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
 | P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
@@ -95,4 +95,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.13 | DONE | Tier A suite tt-pairs-v0 | P4.4,P4.5,P4.11,P4.12 | 5e72f4e; remote Tier A tests 5 passed, rx 20261005-122628-desktop-8r113ei-detached-5e72f4e8-56d0; bible rev 244 |
 | P4.14 | DONE | Apply the owner's Tier A splits (OQ-025) | P4.13 | OQ-025 (d) confirmed: every tt-pairs-v0 item unassigned and refused to training, prompt tuning, and harvest (tests/bench/test_tt_pairs.py); recipe hashes at 184f130 equal bc4c132's for every committed recipe |
 | P4.15 | DONE | Carry the P2 review questions (OQ-024) | - | P2 review questions closed (f0c4a85); OQ-028 to OQ-033 applied for review; sim_t_tiktoken; scoring pass rx 20260927-204249; bible rev 233 |
-| P4.G | ACTIVE | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 |  |
+| P4.G | DONE | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 | gate passed: smoke rx 20261005-123001-desktop-8r113ei-detached-ec1c9a2b-2979; Tier A job 20261005-123023-p4-tier-a-c247; ec1c9a2 clean; results/p4-gate |
