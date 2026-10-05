@@ -12,7 +12,27 @@ end reason shows as `<code>: <message>`, or "none" for a trial that ended
 normally. The Reference run table and each attempt's Run table have one row
 per RunInfo field, the run flags (stdout_truncated, stderr_truncated,
 workdir_incomplete) included: true or false when recorded, PLACEHOLDER when
-not.
+not. Their outputs row shows the count of recorded output files
+(RunInfo.outputs), PLACEHOLDER when not recorded, and a table after it lists
+each file with its sha256 in the binary store.
+
+Simulator wall times (task P4.6): rendered with `simulator` (the trial's
+target-language executor declares the simulator capability, which the
+runner passes), the wall_s row of the Reference run table and of each
+attempt's Run table is named SIMULATOR_WALL_S, "wall_s (simulator wall
+time, not performance)", and still shows the value. The summary's "Wall
+time (s)" row is the trial's pipeline time (Final.wall_s) and is not
+labeled. Without it the page is as before.
+
+Per-output statistics (task P4.4): a "## Reference agreement" section after
+the reference run shows Trial.reference_agreement when it was measured, and
+an attempt whose Alignment holds statistics shows them under "#### Per
+output" after its Alignment table. Each is a table with one row per output:
+its name, pcc, max_abs, max_ulp, and passed, formatted as the page formats
+values, with "-" for a statistic that was not computed or does not apply,
+and its note ("-" when none). A trial without them shows neither. A
+"## Baseline diagnostics" section after them shows Trial.baseline_diagnostics
+as a diagnostics table when the baseline noted anything.
 
 The page is a list of blocks (headings, lines, tables, fenced code), each
 ending with one newline and separated by one blank line. Fenced text goes
@@ -45,6 +65,7 @@ from lassi.core.record import (
     Context,
     Diagnostic,
     EndReason,
+    OutputStats,
     Provenance,
     Request,
     RunInfo,
@@ -56,6 +77,9 @@ if TYPE_CHECKING:
     from lassi.core.store import TextStore
 
 PLACEHOLDER = "PLACEHOLDER"
+# The name of a run's wall_s row when the trial's runs ran on an executor that declares the simulator capability
+# (task P4.6): a simulator's wall time is never performance (Agent Rule 2).
+SIMULATOR_WALL_S = "wall_s (simulator wall time, not performance)"
 
 
 # ---------------------------------------------------------------------------
@@ -109,8 +133,41 @@ def fmt_end_reason(reason: EndReason | None) -> str:
 
 
 def _field_rows(record: object) -> list[tuple[str, str]]:
-    """Return one (field name, formatted value) row per field of a record, in field order."""
-    return [(spec.name, fmt(getattr(record, spec.name))) for spec in dataclasses.fields(record)]
+    """Return one (field name, formatted value) row per field of a record, in field order.
+
+    A mapping of output files (RunInfo.outputs) shows as its file count; the
+    files themselves are listed by _output_file_blocks.
+    """
+    rows = []
+    for spec in dataclasses.fields(record):
+        value = getattr(record, spec.name)
+        rows.append((spec.name, f"{len(value)} file(s)" if isinstance(value, dict) else fmt(value)))
+    return rows
+
+
+def _output_file_blocks(run: RunInfo) -> list[str]:
+    """Return the table of a run's recorded output files (file, sha256 in the binary store); none when it has none."""
+    if not run.outputs:
+        return []
+    rows = [(f"`{file}`", f"`{run.outputs[file]}`") for file in sorted(run.outputs)]
+    return [_table(("Output file", "sha256"), rows)]
+
+
+def _stat(value: object) -> str:
+    """Format one output statistic: '-' when it was not computed or does not apply (None), else fmt."""
+    return "-" if value is None else fmt(value)
+
+
+def _stats_blocks(stats: Sequence[OutputStats]) -> list[str]:
+    """Return the table of per-output statistics: name, pcc, max_abs, max_ulp, passed, and the note."""
+    if not stats:
+        return ["None.\n"]
+    header = ("Output", "pcc", "max_abs", "max_ulp", "passed", "Note")
+    rows = [
+        (entry.name, _stat(entry.pcc), _stat(entry.max_abs), _stat(entry.max_ulp), fmt(entry.passed), entry.note or "-")
+        for entry in stats
+    ]
+    return [_table(header, rows)]
 
 
 # ---------------------------------------------------------------------------
@@ -156,9 +213,33 @@ def _pins_blocks(trial: Trial) -> list[str]:
     return ["## Toolchain pins\n", _table(("Toolchain", "Pin"), rows)]
 
 
-def _reference_run_blocks(reference_run: RunInfo) -> list[str]:
+def _run_rows(run: RunInfo, simulator: bool) -> list[tuple[str, str]]:
+    """Return a run's table rows (_field_rows); with `simulator`, the wall_s row's name is SIMULATOR_WALL_S."""
+    rows = _field_rows(run)
+    if not simulator:
+        return rows
+    return [(SIMULATOR_WALL_S if name == "wall_s" else name, value) for name, value in rows]
+
+
+def _reference_run_blocks(reference_run: RunInfo, simulator: bool = False) -> list[str]:
     """Return the table of the target reference's baseline run; a value not measured reads PLACEHOLDER."""
-    return ["## Reference run\n", _table(("Field", "Value"), _field_rows(reference_run))]
+    table = _table(("Field", "Value"), _run_rows(reference_run, simulator))
+    return ["## Reference run\n", table, *_output_file_blocks(reference_run)]
+
+
+def _agreement_blocks(trial: Trial) -> list[str]:
+    """Return the references' agreement per output (Trial.reference_agreement); nothing when it was not measured."""
+    if trial.reference_agreement is None:
+        return []
+    lead = "The source reference's outputs against the target reference's, judged against the item's tolerance.\n"
+    return ["## Reference agreement\n", lead, *_stats_blocks(trial.reference_agreement)]
+
+
+def _baseline_note_blocks(trial: Trial) -> list[str]:
+    """Return the baseline's notes (Trial.baseline_diagnostics) under their own heading; nothing when there are none."""
+    if not trial.baseline_diagnostics:
+        return []
+    return ["## Baseline diagnostics\n", *_diagnostic_blocks(trial.baseline_diagnostics, "##")[1:]]
 
 
 def _context_blocks(context: Context) -> list[str]:
@@ -264,19 +345,22 @@ def _diagnostic_blocks(diagnostics: Sequence[Diagnostic], level: str = "###") ->
     return [heading, _table(header, rows)]
 
 
-def _measurement_blocks(attempt: Attempt) -> list[str]:
-    """Return the Run, Alignment, Profile, Guards, and Score breakdown tables."""
+def _measurement_blocks(attempt: Attempt, simulator: bool = False) -> list[str]:
+    """Return the Run, Alignment, Profile, Guards, and Score breakdown tables; `simulator` labels the run's wall_s."""
     alignment, score = attempt.alignment, attempt.score
     per_input = ", ".join(fmt(value) for value in alignment.per_input) or PLACEHOLDER
     alignment_rows = [("per_input", per_input), ("mean", fmt(alignment.mean))]
     score_rows = [(name, fmt(score.components[name])) for name in sorted(score.components)]
     score_rows.append(("scalar", fmt(score.scalar)))
     fields = ("Field", "Value")
+    per_output = [] if alignment.outputs is None else ["#### Per output\n", *_stats_blocks(alignment.outputs)]
     return [
         "### Run\n",
-        _table(fields, _field_rows(attempt.run)),
+        _table(fields, _run_rows(attempt.run, simulator)),
+        *_output_file_blocks(attempt.run),
         "### Alignment\n",
         _table(fields, alignment_rows),
+        *per_output,
         "### Profile\n",
         _table(fields, _field_rows(attempt.profile)),
         "### Guards\n",
@@ -286,14 +370,14 @@ def _measurement_blocks(attempt: Attempt) -> list[str]:
     ]
 
 
-def _attempt_blocks(attempt: Attempt, store: TextStore) -> list[str]:
-    """Return the whole section of one attempt."""
+def _attempt_blocks(attempt: Attempt, store: TextStore, simulator: bool = False) -> list[str]:
+    """Return the whole section of one attempt; `simulator` labels its run's wall_s."""
     blocks = [f"## Attempt {attempt.index}\n", f"Stage reached: {attempt.stage_reached}\n"]
     blocks += _prompt_blocks(attempt, store)
     blocks += _code_blocks(attempt.files)
     blocks += _diff_blocks(attempt)
     blocks += _diagnostic_blocks(attempt.diagnostics)
-    blocks += _measurement_blocks(attempt)
+    blocks += _measurement_blocks(attempt, simulator)
     return blocks
 
 
@@ -301,16 +385,20 @@ def _attempt_blocks(attempt: Attempt, store: TextStore) -> list[str]:
 # The page
 
 
-def render_trial_md(trial: Trial, store: TextStore) -> str:
+def render_trial_md(trial: Trial, store: TextStore, *, simulator: bool = False) -> str:
     """Return trial.md for `trial`, resolving prompt and request message texts through `store`.
 
-    The result is deterministic, plain ASCII (non-ASCII characters become
-    backslash escapes), uses LF newlines, and ends with exactly one newline.
+    `simulator` says that the trial's runs ran on an executor that declares
+    the simulator capability; each run's wall_s row is then labeled (see
+    the module docstring). The result is deterministic, plain ASCII
+    (non-ASCII characters become backslash escapes), uses LF newlines, and
+    ends with exactly one newline.
     """
     blocks = _summary_blocks(trial) + _provenance_blocks(trial.provenance)
-    blocks += _pins_blocks(trial) + _reference_run_blocks(trial.reference_run) + _context_blocks(trial.context)
+    blocks += _pins_blocks(trial) + _reference_run_blocks(trial.reference_run, simulator) + _agreement_blocks(trial)
+    blocks += _baseline_note_blocks(trial) + _context_blocks(trial.context)
     blocks += _requests_blocks(trial, store)
     for attempt in trial.attempts:
-        blocks += _attempt_blocks(attempt, store)
+        blocks += _attempt_blocks(attempt, store, simulator)
     page = "\n".join(blocks)
     return page.encode("ascii", "backslashreplace").decode("ascii")

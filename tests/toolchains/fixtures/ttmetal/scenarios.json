@@ -1,0 +1,34 @@
+{
+  "ttm_clean": {
+    "scenario": "Clean build: main.cpp includes the pinned host API and does no device work, beside a data-movement kernel under kernels/ that includes a device header and so would fail if the host compiler built it; empty stderr, exit status 0",
+    "toolchain": "ttmetal-host"
+  },
+  "ttm_header_error": {
+    "scenario": "Error in an included header: main.cpp includes host/scale.h, whose inline function uses the undeclared identifier factor, so clang prints the include chain before the error",
+    "toolchain": "ttmetal-host"
+  },
+  "ttm_linker_error": {
+    "scenario": "Linker error: main calls helper, which is declared and never defined, so ld.lld reports an undefined symbol and the clang driver reports that the linker command failed",
+    "toolchain": "ttmetal-host"
+  },
+  "ttm_missing_header": {
+    "scenario": "Missing header: main.cpp includes tt-metalium/p410_no_such_header.hpp, which the pinned tree does not hold, a fatal error at the include line",
+    "toolchain": "ttmetal-host"
+  },
+  "ttm_note_chain": {
+    "scenario": "Note chain: main calls scale with an int array, which matches neither the float nor the double overload, so the error is followed by one candidate note per overload",
+    "toolchain": "ttmetal-host"
+  },
+  "ttm_syntax_error": {
+    "scenario": "Syntax error: the declaration of total in main has no semicolon before the for loop",
+    "toolchain": "ttmetal-host"
+  },
+  "ttm_undeclared_identifier": {
+    "scenario": "Undeclared identifier: a loop body in main uses undefined_var, which is never declared",
+    "toolchain": "ttmetal-host"
+  },
+  "ttm_unused_parameter": {
+    "scenario": "Warning that stays a warning: scale_value never uses its parameter factor, so the pinned -Wunused-parameter warns, and without -Werror (OQ-027, option (b)) the build succeeds, exit status 0",
+    "toolchain": "ttmetal-host"
+  }
+}

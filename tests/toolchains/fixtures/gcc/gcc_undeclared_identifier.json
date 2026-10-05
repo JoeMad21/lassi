@@ -1,0 +1,14 @@
+{
+  "derivation": "Four lines. 'main.cpp: In function ...' is a context line, no diagnostic. 'main.cpp:7:30: error: ...' is one error: file main.cpp and line 7 as printed; main.cpp is a built file, so column 30 is kept (line 7 is eight blanks and 'y[i] = 2.0f * y[i] + ' before 'undefined_var', which starts at column 30); no trailing bracketed option, so the code is null; the message is the text after 'error: '. The source echo and caret lines give nothing.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.cpp",
+      "line": 7,
+      "column": 30,
+      "message": "'undefined_var' was not declared in this scope"
+    }
+  ]
+}

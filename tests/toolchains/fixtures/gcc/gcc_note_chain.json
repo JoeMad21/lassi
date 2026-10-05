@@ -1,0 +1,50 @@
+{
+  "derivation": "Sixteen lines. 'main.cpp: In function ...' is a context line, no diagnostic. Then five GCC style lines, each followed by a source echo and a caret line that give nothing: the error at main.cpp:18:10 (line 18 is four blanks and 'scale' before the '(' at column 10), then four notes, main.cpp:4:6 and main.cpp:4:19 for the float overload and main.cpp:10:6 and main.cpp:10:20 for the double overload (column 6 is 'scale' in each declaration, and columns 19 and 20 are the parameter name 'x' after 'float *' and 'double *'). main.cpp is a built file, so every column is kept as printed. The messages are the text after '<severity>: ' as printed: the two nested notes are printed as 'note:' and three blanks, so their messages keep two leading blanks. No line ends in a bracketed option, so every code is null.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.cpp",
+      "line": 18,
+      "column": 10,
+      "message": "no matching function for call to 'scale(int [4], int)'"
+    },
+    {
+      "stage": "compile",
+      "severity": "note",
+      "code": null,
+      "file": "main.cpp",
+      "line": 4,
+      "column": 6,
+      "message": "candidate: 'void scale(float*, int)'"
+    },
+    {
+      "stage": "compile",
+      "severity": "note",
+      "code": null,
+      "file": "main.cpp",
+      "line": 4,
+      "column": 19,
+      "message": "  no known conversion for argument 1 from 'int [4]' to 'float*'"
+    },
+    {
+      "stage": "compile",
+      "severity": "note",
+      "code": null,
+      "file": "main.cpp",
+      "line": 10,
+      "column": 6,
+      "message": "candidate: 'void scale(double*, int)'"
+    },
+    {
+      "stage": "compile",
+      "severity": "note",
+      "code": null,
+      "file": "main.cpp",
+      "line": 10,
+      "column": 20,
+      "message": "  no known conversion for argument 1 from 'int [4]' to 'double*'"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# The P4 gate's Tier A driver (plans/p4-ttsim.md, P4.13 and P4.G): P4.G runs
+# `uv run lassi run tests/fixtures/recipes/p4-tier-a-dry-run.yaml --run-id p4-gate-tier-a` on the build host, from
+# one clean commit, after `uv run tools/fetch_bench.py assets/bench/tt-pairs-v0.yaml`. Like the P1 dry run, it uses
+# the mock LLM, which answers every request with the item's reference target, so every candidate is the target
+# reference program again: its passes check the path (the baseline's two references, their binary_io agreement,
+# the CPU -> TT guard on each CPU -> TT attempt, the ttsim and native runs, the oracle), never a model.
+extends: base  # projects/base.yaml: sampling, loop cap, runs root, sandbox, and report choices
+model: {backend: mock, id: mock-reference}  # replies with the item's reference target in FILE blocks
+llm:
+  sampling:
+    max_tokens: 4096  # base.yaml leaves max_tokens open and the runner never picks it; the mock ignores it
+bench:
+  suite: tt-pairs-v0  # assets/bench/tt-pairs-v0.yaml: the five Tier A pairs
+  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025); evaluation may read it
+  items: [eltwise_binary, eltwise_sfpu, loopback, matmul_multi_core, matmul_single_core]  # all five items
+directions: [{source: cpp, target: tt}, {source: tt, target: cpp}]  # both directions: 10 trials
+prompts: p0-smoke  # assets/prompts/p0-smoke/: generate.txt and correct.txt, a template set any direction can use
+toolchain:
+  cpp: gcc-native  # the pinned host g++ with the native row's flags (toolchains/gcc.pin)
+  tt: ttmetal-host  # the pinned clang++-20 against the pinned tt-metal tree (toolchains/tt-metal.pin)
+fixes:
+  baseline_both: true  # build and run both references, so the baseline records their agreement
+stages: [baseline, generate, compile_loop, run_loop, oracle]  # the references first; no context stage
+executor:
+  cpp: {kind: native}  # the C++ reference and every C++ candidate run in the sandbox on the host CPU
+  tt: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # TT programs run in the sandbox on ttsim, a simulator
+oracle: {kind: binary_io, metric: pcc, threshold: from_baseline}  # each output's PCC at least the references' own
+trials: {n: 1}  # one trial per item and direction

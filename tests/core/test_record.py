@@ -90,9 +90,10 @@ NESTED_RECORDS = {
     "Request": ["Request", "Request.reply_ref"],
     "RequestMessage": ["RequestMessage", "RequestMessage.ref"],
     "Diagnostic": ["Diagnostic"],
+    "OutputStats": ["OutputStats"],
 }
 # The top-level blocks of the bible's Result Record yaml block, in order, and the record class of each.
-BIBLE_BLOCKS = ("Trial", "Request", "RequestMessage", "Attempt", "Diagnostic")
+BIBLE_BLOCKS = ("Trial", "Request", "RequestMessage", "Attempt", "Diagnostic", "OutputStats")
 
 CORE_MODULES = ("lassi.core.record", "lassi.core.store", "lassi.core.trial_md", "lassi.core.parquet")
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
@@ -1303,8 +1304,9 @@ def test_minimal_attempt_to_dict_exact() -> None:
             "stdout_truncated": None,
             "stderr_truncated": None,
             "workdir_incomplete": None,
+            "outputs": None,
         },
-        "alignment": {"per_input": [], "mean": None},
+        "alignment": {"per_input": [], "mean": None, "outputs": None},
         "profile": {"runtime_s": None, "avg_power_w": None, "energy_j": None},
         "guards": {"host_compute": None, "harness_tamper": None, "oracle_access": None},
         "score": {"components": {}, "scalar": None},

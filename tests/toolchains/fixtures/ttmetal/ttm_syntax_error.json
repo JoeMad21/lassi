@@ -1,0 +1,14 @@
+{
+  "derivation": "Five lines. 'main.cpp:5:18: error: ...' is one error: file main.cpp and line 5 as printed; main.cpp is a built file, so the column 18 is kept as printed, one past the last character of line 5 ('    int total = 0' is 17 characters), where the missing ';' belongs; code null; the message the text after 'error: '. The source echo, the caret line, the fix-it line (';' in the gutter), and '1 error generated.' give nothing. clang recovered at the missing ';', so the loop gives no further error.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.cpp",
+      "line": 5,
+      "column": 18,
+      "message": "expected ';' at end of declaration"
+    }
+  ]
+}

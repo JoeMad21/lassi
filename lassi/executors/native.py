@@ -23,6 +23,10 @@ The program's environment bounds its OpenMP threads by Limits.cpus
 bound the OpenMP runtime starts one thread per host CPU, which on a host with
 as many CPUs as the sandbox's TasksMax fails a thread creation and aborts
 the program. See NativeExecutor.run for the exact environment.
+
+NativeExecutor.device() names the device its programs run on, the host CPU,
+with the CPU model read from CPUINFO (task P4.5; Agent Rule 1); the runner
+records it in provenance.json and every trial's provenance.
 """
 
 from __future__ import annotations
@@ -36,6 +40,12 @@ from lassi.core.interfaces import Limits, RunResult
 from lassi.core.registry import register
 from lassi.executors.sandbox import SANDBOX_PATH, Sandbox, SandboxSpec, SandboxUnavailableError
 from lassi.executors.workdir import runs_root
+
+# The file the host CPU model is read from, and the device name of a native run without a model.
+CPUINFO = Path("/proc/cpuinfo")
+HOST_CPU = "host CPU (native)"
+# The field of CPUINFO that names the CPU model.
+_MODEL_FIELD = "model name"
 
 # The environment variables that name the default hidden roots, in order.
 _ROOT_VARIABLES = ("LASSI_SCRATCH", "HOME")
@@ -54,6 +64,32 @@ def _program_environment(limits: Limits) -> dict[str, str]:
     anything runs.
     """
     return {**_PROGRAM_ENVIRONMENT, "OMP_NUM_THREADS": str(limits.cpus)}
+
+
+def _cpu_model() -> str:
+    """Return the value of the first "model name" line of CPUINFO as one line of printable ASCII, or "" for none.
+
+    The whitespace is collapsed: surrounding whitespace is dropped and each
+    inner run of whitespace becomes one space. Any other character that is
+    not printable ASCII becomes its backslash escape (as ascii() writes it),
+    so the result has no leading or trailing blank. A file that cannot be
+    read, holds no such line, or whose first such line has no value gives "".
+    Only the file is read; no process starts.
+    """
+    try:
+        with CPUINFO.open("rb") as handle:
+            for raw in handle:
+                key, colon, value = raw.decode("utf-8", errors="replace").partition(":")
+                if colon and key.strip() == _MODEL_FIELD:
+                    return "".join(_printable(character) for character in " ".join(value.split()))
+    except OSError:
+        return ""
+    return ""
+
+
+def _printable(character: str) -> str:
+    """Return `character` when it is printable ASCII, else its backslash escape as ascii() writes it."""
+    return character if character.isascii() and character.isprintable() else ascii(character)[1:-1]
 
 
 def _absolute_variable(name: str, use: str) -> Path | None:
@@ -152,6 +188,17 @@ class NativeExecutor:
         )
         self.toolchains: Path | None = None if toolchains is None else Path(toolchains)
         self.sandbox: Sandbox = Sandbox() if sandbox is None else sandbox
+
+    def device(self) -> str:
+        """Return the device the programs run on: "host CPU (native): <model>", or HOST_CPU without a model.
+
+        The model is the first "model name" value of CPUINFO with its
+        whitespace collapsed (_cpu_model), so the result is one non-empty
+        line of printable ASCII with no leading or trailing blank. It reads
+        that file only: it starts no process and never uses the sandbox.
+        """
+        model = _cpu_model()
+        return f"{HOST_CPU}: {model}" if model else HOST_CPU
 
     def run(self, artifact: Path, inputs: Sequence[str], limits: Limits) -> RunResult:
         """Run `artifact` with `inputs` in the sandbox under `limits` and return its RunResult.

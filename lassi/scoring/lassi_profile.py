@@ -9,7 +9,11 @@ outputs, never runtime), Component Interfaces (ScoreProfile).
 A profile file, by default assets/scoring/lassi.yaml, names the components
 in the order a Score lists them, the component that is the scalar, and every
 note text; this module holds the definitions. The profile is built as
-`LassiProfile(bench_root=<root of the suite's fetched sources>)`. The
+`LassiProfile(bench_root=<root of the suite's fetched sources>)`; it reads
+tiktoken's cl100k_base encoding for sim_t_tiktoken when it is built
+(lassi.scoring.similarity.cl100k_base, offline from TIKTOKEN_CACHE_DIR),
+unless `encoding` names another, so a missing cache stops the build with
+TiktokenCacheError, an OSError, before anything is scored. The
 reference target is the item's one file in the direction's target language,
 found through the suite manifest assets/bench/<suite>.yaml under that root
 and read in text mode (lassi.core.fragments.as_text_mode), as the notebook
@@ -19,14 +23,23 @@ nothing stands in for it.
 Components of a trial (task P2.7), each a float, or None with a note:
 
 - correct: 1.0 when the output that stands (lassi.core.record
-  standing_attempt) came from a clean run, exit status 0 and hang False,
-  that the oracle aligned at 1.0. 0.0 when that run was not clean, when the
-  oracle gave less than 1.0, or when no output stands. None in three cases,
-  each with its note: a trial with no attempt that ended at the baseline
-  (the model was never asked); a compile-only trial (the target reference
-  was not run and no attempt ran), labeled a compile-stage reproduction;
-  and a clean standing run the oracle never aligned (no reference stdout,
-  or a truncated one). The scalar is correct.
+  standing_attempt) came from a clean run (clean_run: exit status 0, hang
+  False, and no undefined behavior, RunInfo.sim_ub not True) of an attempt
+  that reached S4 or S5 (a kernel JIT failure leaves it at S1, never clean)
+  that the oracle aligned at 1.0. 0.0 when that run was not clean, when the oracle
+  gave less than 1.0, or when no output stands. None in four cases, each
+  with its note: a trial with no attempt that ended at the baseline
+  (BASELINE_ENDS: baseline-compile, baseline-run, baseline-disagree, or
+  sim-gap; the model was never asked); a trial with attempts that ended at
+  sim-gap (the gap note, task P4.6: the output that stands came from the
+  run that stopped at the gap, which is not a model error, whatever its
+  exit status or undefined behavior); a compile-only trial (the target
+  reference was not run and no attempt ran), labeled a compile-stage
+  reproduction; and a clean standing run the oracle never aligned (a
+  recipe that lists no oracle stage, a truncated reference stdout, or,
+  under binary_io, a target reference run whose workdir came back
+  incomplete; the oracle stage raises rather than leave a run unaligned for
+  want of a reference stdout). The scalar is correct.
 - correct_paper: the paper's criterion, a manual inspection of stdout.
   Never computed: always None.
 - within_10pct: None while no timing profiler exists, even when an attempt
@@ -37,6 +50,12 @@ Components of a trial (task P2.7), each a float, or None with a note:
   reference target and the last attempt's target file ("" when that attempt
   has none). Each note names the interpreter that computed the value. None
   when the trial holds no attempt.
+- sim_t_tiktoken (task P4.15; OQ-022, OQ-031): the notebook's tiktoken
+  similarity of the same pair (lassi.scoring.similarity.sim_t_tiktoken).
+  Its note names the encoding, the tiktoken version, and the interpreter.
+  None, with sim_t's note, when the trial holds no attempt, and None with
+  the tiktoken_null note where the notebook raises: a text that holds a
+  special-token string or does not decode back from its ids.
 - self_corr: final.corrections. cap_hit: 1.0 when final.end_reason is
   correction-cap, else 0.0. fence_quirk: the number of fence-quirk
   diagnostics over all attempts.
@@ -62,7 +81,8 @@ from lassi.core.fragments import as_text_mode
 from lassi.core.interfaces import Score
 from lassi.core.record import RunInfo, Trial, standing_attempt
 from lassi.core.registry import register
-from lassi.scoring.similarity import measure
+from lassi.scoring import similarity
+from lassi.scoring.similarity import TokenEncoding, measure
 
 REPO = Path(__file__).resolve().parents[2]
 # The profile file a recipe's `score: lassi` reads.
@@ -73,7 +93,8 @@ BENCH_DIR = REPO / "assets" / "bench"
 PURPOSE = "eval"
 
 CORRECT, CORRECT_PAPER, WITHIN_10PCT, FIRST_TRY = "correct", "correct_paper", "within_10pct", "first_try"
-SIMILARITY = ("sim_t", "sim_t_c", "sim_l")
+SIM_T_TIKTOKEN = "sim_t_tiktoken"
+SIMILARITY = ("sim_t", "sim_t_c", "sim_l", SIM_T_TIKTOKEN)
 SELF_CORR, CAP_HIT, FENCE_QUIRK = "self_corr", "cap_hit", "fence_quirk"
 COMPILED, COMPILED_FIRST_TRY = "compiled", "compiled_first_try"
 # Every component the profile computes; the profile file lists each one once, in the order a Score gives them.
@@ -82,13 +103,21 @@ COMPONENTS = frozenset(
      COMPILED_FIRST_TRY}
 )
 # The note texts the profile file holds, in file order.
-COMPILE_ONLY, NOT_ALIGNED, BASELINE, NO_ATTEMPT = "compile_only", "not_aligned", "baseline", "no_attempt"
-NOTE_KEYS = (WITHIN_10PCT, CORRECT_PAPER, COMPILE_ONLY, NOT_ALIGNED, BASELINE, NO_ATTEMPT, *SIMILARITY)
+COMPILE_ONLY, NOT_ALIGNED, BASELINE, GAP, NO_ATTEMPT = "compile_only", "not_aligned", "baseline", "gap", "no_attempt"
+# The note of a sim_t_tiktoken the notebook could not compute (a special-token string, or no round trip; OQ-031).
+TIKTOKEN_NULL = "tiktoken_null"
+NOTE_KEYS = (WITHIN_10PCT, CORRECT_PAPER, COMPILE_ONLY, NOT_ALIGNED, BASELINE, GAP, NO_ATTEMPT, TIKTOKEN_NULL,
+             *SIMILARITY)
 FILE_KEYS = ("components", "scalar", "notes")
 
-# Record codes the components read.
-BASELINE_ENDS = frozenset({"baseline-compile", "baseline-run"})
+# Record codes the components read. BASELINE_ENDS holds every end reason that can end a trial at the baseline, before
+# any model call (lassi.core.record END_REASONS); sim-gap does when a reference run stops at a simulator gap (task
+# P4.6), and baseline_end reads a code as a baseline end only for a trial that holds no attempt.
+BASELINE_ENDS = frozenset({"baseline-compile", "baseline-run", "baseline-disagree", "sim-gap"})
 CAP_END = "correction-cap"
+# The end reason of a trial stopped by a simulator gap (task P4.6). With attempts, its last attempt's run stopped at the
+# gap, and that attempt's output is the one that stands.
+GAP_END = "sim-gap"
 FENCE_QUIRK_CODE = "fence-quirk"
 COMPILED_STAGES = frozenset({"S4", "S5"})
 
@@ -159,16 +188,30 @@ def baseline_end(trial: Trial) -> str | None:
     return None
 
 
+def clean_run(run: RunInfo) -> bool:
+    """Return True for a clean run: exit status 0, hang False, and no undefined behavior (sim_ub not True).
+
+    A run that stopped at a simulator gap has no field of its own in
+    RunInfo. A gap with no kernel JIT error ends the trial at sim-gap,
+    which correct_value reads from the end reason (GAP_END); a run with a
+    kernel JIT error leaves its attempt at S1, which correct_value never
+    reads as clean, whatever the run's exit status.
+    """
+    return run.exit_code == 0 and run.hang is False and run.sim_ub is not True
+
+
 def correct_value(trial: Trial, notes: Mapping[str, str]) -> tuple[float | None, str | None]:
     """Return the component correct and, when it is None, the note saying why (see the module docstring)."""
     end = baseline_end(trial)
     if end is not None:
         return None, f"{notes[BASELINE]} ({end})"
+    reason = trial.final.end_reason
+    if reason is not None and reason.code == GAP_END:
+        return None, notes[GAP]
     standing = standing_attempt(trial)
     if standing is None:
         return (0.0, None) if _ran(trial.reference_run) else (None, notes[COMPILE_ONLY])
-    run = standing.run
-    if run.exit_code != 0 or run.hang is not False:
+    if standing.stage_reached not in COMPILED_STAGES or not clean_run(standing.run):
         return 0.0, None
     if standing.alignment.mean is None:
         return None, notes[NOT_ALIGNED]
@@ -224,21 +267,27 @@ class LassiProfile:
     Built as `LassiProfile(bench_root=<root of the suite's fetched sources>)`
     it reads PROFILE_FILE; `profile_path` names another profile file. The
     file is read and checked, and the bench root must be a directory, when
-    the profile is built. It declares READS_BENCH_SOURCES, so
-    lassi.scoring.profiles.build_profile passes it the bench root.
+    the profile is built. sim_t_tiktoken's encoding is read then too:
+    `encoding`, or lassi.scoring.similarity.cl100k_base(), which raises
+    TiktokenCacheError (an OSError) when the offline cache lacks it. It
+    declares READS_BENCH_SOURCES, so lassi.scoring.profiles.build_profile
+    passes it the bench root.
     """
 
     name = "lassi"
     capabilities = frozenset({"scores_trials", READS_BENCH_SOURCES})
 
-    def __init__(self, *, bench_root: str | Path, profile_path: str | Path | None = None) -> None:
-        """Check the bench root and read the profile file: `profile_path`, or PROFILE_FILE when it is None."""
+    def __init__(
+        self, *, bench_root: str | Path, profile_path: str | Path | None = None, encoding: TokenEncoding | None = None
+    ) -> None:
+        """Check the bench root, read the profile file, and read sim_t_tiktoken's encoding (see the class docstring)."""
         root = Path(bench_root)
         if not root.is_dir():
             raise ValueError(f"the bench root {root.as_posix()} is not a directory; name the suite's fetched sources")
         self.bench_root = root
         self.profile_path = PROFILE_FILE if profile_path is None else Path(profile_path)
         self.profile = load_profile(self.profile_path)
+        self.encoding = similarity.cl100k_base() if encoding is None else encoding
         self._suites: dict[str, Suite] = {}
 
     @property
@@ -252,8 +301,8 @@ class LassiProfile:
         values: dict[str, float | None] = {CORRECT_PAPER: None, WITHIN_10PCT: None}
         written = {CORRECT_PAPER: notes[CORRECT_PAPER], WITHIN_10PCT: notes[WITHIN_10PCT]}
         outcome, outcome_notes = outcome_components(trial, notes)
-        similarity, similarity_notes = self.similarity_components(trial)
-        for found, noted in ((outcome, outcome_notes), (similarity, similarity_notes), (count_components(trial), {})):
+        similar, similar_notes = self.similarity_components(trial)
+        for found, noted in ((outcome, outcome_notes), (similar, similar_notes), (count_components(trial), {})):
             values.update(found)
             written.update(noted)
         components = {name: values[name] for name in self.profile.components}
@@ -261,23 +310,38 @@ class LassiProfile:
         return Score(components=components, scalar=components[self.profile.scalar], notes=ordered)
 
     def similarity_components(self, trial: Trial) -> tuple[dict[str, float | None], dict[str, str]]:
-        """Return sim_t, sim_t_c, and sim_l of the last attempt's target file, each noted with its interpreter."""
+        """Return sim_t, sim_t_c, sim_l, and sim_t_tiktoken of the last attempt's target file, each with a note.
+
+        Each note names the interpreter that computed the value, and
+        sim_t_tiktoken's also the encoding and the tiktoken version; a
+        sim_t_tiktoken the notebook could not compute is None with the
+        tiktoken_null note.
+        """
+        notes = self.profile.notes
         if not trial.attempts:
             end = baseline_end(trial)
-            why = self.profile.notes[NO_ATTEMPT] if end is None else f"{self.profile.notes[BASELINE]} ({end})"
+            why = notes[NO_ATTEMPT] if end is None else f"{notes[BASELINE]} ({end})"
             return dict.fromkeys(SIMILARITY), dict.fromkeys(SIMILARITY, why)
         name, reference = self.reference_target(trial)
-        values = measure(reference, trial.attempts[-1].files.get(name, ""))
-        found = {"sim_t": values.sim_t, "sim_t_c": values.sim_t_c, "sim_l": values.sim_l}
-        notes = {key: f"{self.profile.notes[key]}; computed by python {values.python}" for key in SIMILARITY}
-        return found, notes
+        candidate = trial.attempts[-1].files.get(name, "")
+        values = measure(reference, candidate)
+        tokens = similarity.sim_t_tiktoken(reference, candidate, self.encoding)
+        found = {"sim_t": values.sim_t, "sim_t_c": values.sim_t_c, "sim_l": values.sim_l, SIM_T_TIKTOKEN: tokens}
+        written = {key: f"{notes[key]}; computed by python {values.python}" for key in SIMILARITY}
+        encoding = getattr(self.encoding, "name", type(self.encoding).__name__)
+        written[SIM_T_TIKTOKEN] = notes[TIKTOKEN_NULL] if tokens is None else (
+            f"{notes[SIM_T_TIKTOKEN]}; computed with the encoding {encoding} by tiktoken "
+            f"{similarity.tiktoken_version()} on python {values.python}"
+        )
+        return found, written
 
     def reference_target(self, trial: Trial) -> tuple[str, str]:
         """Return the name of the trial item's one target-language file and its text as text mode reads it.
 
         Raises ValueError when the suite, item, or direction is unknown or the
         target language has more or fewer than one file, and FileNotFoundError
-        naming the path when the file is missing under the bench root.
+        naming the path when the file is missing: under the bench root, or in
+        this repository for a tracked language (LanguageSources.base).
         """
         bench = trial.bench_item
         suite = self._suite(bench.suite)
@@ -286,7 +350,7 @@ class LassiProfile:
         where = f"{suite.name}/{bench.item} ({direction.name})"
         if len(spec.files) != 1:
             raise ValueError(f"{where}: the lassi profile compares one target file; the manifest has {len(spec.files)}")
-        path = self.bench_root / spec.dir / spec.files[0]
+        path = spec.base(self.bench_root) / spec.files[0]
         if not path.is_file():
             raise FileNotFoundError(f"the reference target of {where} is missing: {path.as_posix()}")
         files = suite.reference_target(bench.item, direction, self.bench_root, purpose=PURPOSE)

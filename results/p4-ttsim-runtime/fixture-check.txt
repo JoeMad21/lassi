@@ -1,0 +1,13 @@
+== per capture (already sanitized): source-context lines still present (should be 0), compile-command lines, and Watcher lines before the first dump; any quoted line is in local/fixture-context.txt
+seed-gap-decode: 0 source-context lines at []; 0 compile-command lines; 0 watcher lines before the first dump
+seed-gap-ecall: 0 source-context lines at []; 0 compile-command lines; 0 watcher lines before the first dump
+seed-gap-wfi: 0 source-context lines at []; 0 compile-command lines; 0 watcher lines before the first dump
+seed-gap-zicsr: 0 source-context lines at []; 0 compile-command lines; 0 watcher lines before the first dump
+seed-hang: 0 source-context lines at []; 0 compile-command lines; 0 watcher lines before the first dump
+seed-jit-error: 0 source-context lines at []; 0 compile-command lines; 0 watcher lines before the first dump
+seed-ub-fence: 0 source-context lines at []; 0 compile-command lines; 0 watcher lines before the first dump
+seed-ub-fencei: 0 source-context lines at []; 0 compile-command lines; 0 watcher lines before the first dump
+seed-ub-unaligned: 0 source-context lines at []; 0 compile-command lines; 0 watcher lines before the first dump
+seed-ub-unaligned-unbuffered: 0 source-context lines at []; 0 compile-command lines; 0 watcher lines before the first dump
+watcher-add2: 0 source-context lines at []; 0 compile-command lines; 18 watcher lines before the first dump
+watcher-hang: 0 source-context lines at []; 0 compile-command lines; 18 watcher lines before the first dump

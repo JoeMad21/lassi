@@ -556,7 +556,8 @@ def test_trial_without_attempts_or_recorded_requests_ends_after_the_requests(tex
         "| outputs_ref | PLACEHOLDER |\n"
         "| stdout_truncated | PLACEHOLDER |\n"
         "| stderr_truncated | PLACEHOLDER |\n"
-        "| workdir_incomplete | PLACEHOLDER |\n\n"
+        "| workdir_incomplete | PLACEHOLDER |\n"
+        "| outputs | PLACEHOLDER |\n\n"
         "## Context\n\n"
         "### Knowledge summary\n\n"
         "None.\n\n"
@@ -760,6 +761,7 @@ def test_value_formatting_in_tables(text_store: store.TextStore) -> None:
         "| exit_code | 3 |\n| hang | true |\n| sim_ub | false |\n| wall_s | 0.5 |\n"
         f"| stdout_ref | `{ref.path}` |\n| outputs_ref | PLACEHOLDER |\n"
         "| stdout_truncated | true |\n| stderr_truncated | false |\n| workdir_incomplete | PLACEHOLDER |\n"
+        "| outputs | PLACEHOLDER |\n"
     )
     alignment = "### Alignment\n\n| Field | Value |\n| --- | --- |\n| per_input | 0.25, 1.0 |\n| mean | PLACEHOLDER |\n"
     profile = (

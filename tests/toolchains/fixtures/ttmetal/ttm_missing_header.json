@@ -1,0 +1,14 @@
+{
+  "derivation": "Four lines. 'main.cpp:3:10: fatal error: ...' is one diagnostic, and a fatal error is read as an error: file main.cpp and line 3 as printed; main.cpp is a built file, so the column 10 is kept (line 3 is '#include ' and then the '<' that starts the header name, at column 10); no trailing [option], so the code is null; the message is the text after 'fatal error: '. The source echo, the caret line, and '1 error generated.' give nothing.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.cpp",
+      "line": 3,
+      "column": 10,
+      "message": "'tt-metalium/p410_no_such_header.hpp' file not found"
+    }
+  ]
+}

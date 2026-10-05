@@ -1,0 +1,4 @@
+main.cpp: In function 'int main()':
+main.cpp:7:30: error: 'undefined_var' was not declared in this scope
+    7 |         y[i] = 2.0f * y[i] + undefined_var;
+      |                              ^~~~~~~~~~~~~

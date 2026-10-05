@@ -1,0 +1,61 @@
+{
+ "cache_dir": "/mnt/nvme10/joseph_ufl/lassi-runs/p49-ttsim-runtime/20260926-140947-p49-ttsim-runtime-6f4c/raw/seed-gap-ecall/cache",
+ "check": "none printed",
+ "cwd_files": [
+  "2539 tt_metal/programming_examples/add_2_integers_in_riscv/kernels/reader_writer_add_in_riscv.cpp"
+ ],
+ "device": "ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf; simulator, not silicon",
+ "ended_at": "2026-09-26T14:10:22-0700",
+ "example": "add_2_integers_in_riscv",
+ "home": [],
+ "jit_first": "",
+ "kind": "seed",
+ "leftover_tasks_killed": 0,
+ "limit_s": 120.0,
+ "logs": [
+  "105 generated/watcher/kernel_names.txt",
+  "144 generated/inspector/startup.yaml",
+  "228 generated/inspector/mesh_workloads_log.yaml",
+  "245 generated/watcher/kernel_elf_paths.txt",
+  "324 generated/inspector/mesh_devices_log.yaml",
+  "422 generated/inspector/kernels.yaml",
+  "885 generated/inspector/programs_log.yaml"
+ ],
+ "logs_dir": "/mnt/nvme10/joseph_ufl/lassi-runs/p49-ttsim-runtime/20260926-140947-p49-ttsim-runtime-6f4c/raw/seed-gap-ecall/logs",
+ "loopback": "down",
+ "maxrss_kib": 102400.0,
+ "name": "seed-gap-ecall",
+ "pcc": null,
+ "peak_group_rss_kib": 139264,
+ "peak_process_threads": 257,
+ "peak_tasks": 283,
+ "private_tmp": [
+  "d 40 /run/mount"
+ ],
+ "rc": 1,
+ "samples": 2,
+ "seed": "gap-ecall",
+ "seeded_copy_compiled": true,
+ "seeded_copy_in_cache": true,
+ "sim_classes": [
+  "UnsupportedFunctionality"
+ ],
+ "sim_errors": 1,
+ "sim_first": "UnsupportedFunctionality: decode_and_execute_ecall_ebreak: inst=0x73",
+ "sim_line_count": 1,
+ "sim_lines": [
+  "[4489] ERROR: UnsupportedFunctionality: decode_and_execute_ecall_ebreak: inst=0x73"
+ ],
+ "sim_rate_line": "",
+ "started_at": "2026-09-26T14:10:20-0700",
+ "stopped_reason": "",
+ "system_s": 1.33,
+ "time_elapsed": "0:01.32",
+ "time_exit_status": 1.0,
+ "timed_out": false,
+ "timing_note": "wall_s, program_s, and sim_rate_line are simulator wall time and the simulator's own rate: exploratory, sizing only, never performance",
+ "user_s": 2.9,
+ "wall_s": 1.44,
+ "watcher_log": "",
+ "wrapper_reached_program": true
+}

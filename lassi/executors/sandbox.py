@@ -106,9 +106,12 @@ tests pass from a clean commit. One command runs each program:
       - setpriv --no-new-privs with empty inheritable and bounding sets: the
         program is uid 0 of its user namespace but holds no capability, so
         it cannot unmount or remount anything, nor raise the limit of step 2;
-      - prlimit --cpu (a CPU-time cap; the cgroup cpu controller is not
-        delegated, OQ-011), --core=1 again, and --fsize at the disk cap, so
-        no file the program writes, sparse or not, grows past the cap
+      - prlimit --cpu (a CPU-time cap of cpus x (the wall limit +
+        KILL_AFTER_S + CPU_MARGIN_S) seconds per process, cpu_cap_seconds, so
+        the wall limit stops a program that keeps at most `cpus` CPUs busy;
+        the cgroup cpu controller is not delegated, OQ-011), --core=1
+        again, and --fsize at the disk cap, so no file the program
+        writes, sparse or not, grows past the cap
         (EFBIG, or SIGXFSZ when not ignored; observed, probe L, exploratory);
       - CONFINE_PROGRAM (python3 -I -S): a new session, so the program has
         no controlling terminal; a new session keyring, so it holds none of
@@ -311,6 +314,9 @@ from lassi.toolchains.pins import PREFIX_VARIABLES
 
 # Grace seconds between the innermost timeout's SIGTERM and its SIGKILL.
 KILL_AFTER_S = 2
+# Seconds past the wall limit and KILL_AFTER_S that the CPU-time cap allows at `cpus` busy CPUs (cpu_cap_seconds), so
+# the innermost timeout always stops a program that keeps at most `cpus` CPUs busy before the cap can.
+CPU_MARGIN_S = 1
 # Seconds past the wall limit and KILL_AFTER_S before the scope's RuntimeMaxSec backstop fires.
 OUTER_MARGIN_S = 5
 # Seconds past the backstop before the runner itself gives up on the command (returncode -1).
@@ -340,12 +346,32 @@ SYSTEM_DIRS = ("/var", "/sys")
 SANDBOX_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
 # The caller's environment variables the sandbox command keeps, when set: what systemd-run --user needs.
 PASSED_VARIABLES = ("XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")
-# The only names SandboxSpec.environment may hold (P0.20): PATH, the locale (LANG, LC_ALL), TMPDIR, each
-# variable a pin names (lassi.toolchains.pins PREFIX_VARIABLES, NVHPC_CUDA_HOME), and OMP_NUM_THREADS, the OpenMP
-# runtime's default thread count, which the native executor sets to Limits.cpus (DEMO.2). HOME, loader variables
-# (LD_PRELOAD, LD_LIBRARY_PATH), variables that change a compile silently (NVCC_PREPEND_FLAGS, CPATH), and
-# credentials are never on it (Agent Rule 12). It is fixed: nothing adds a name at run time.
-ENVIRONMENT_NAMES = frozenset({"PATH", "LANG", "LC_ALL", "TMPDIR", "OMP_NUM_THREADS", *PREFIX_VARIABLES.values()})
+# The tt-metal settings the ttsim executor gives every program it runs (lassi.executors.ttsim; the bible's ttsim
+# row: the pinned simulator library and tree, slow dispatch, SFPLOADMACRO off, the JIT cache and logs in the
+# workdir, no Inspector server, and the thread pool's size), then TT_METAL_WATCHER, which it adds only to its rerun
+# of a hung program. Each value is a path, a count, or a flag.
+TT_METAL_NAMES = (
+    "TT_METAL_SIMULATOR",
+    "TT_METAL_SLOW_DISPATCH_MODE",
+    "TT_METAL_DISABLE_SFPLOADMACRO",
+    "TT_METAL_RUNTIME_ROOT",
+    "TT_METAL_CACHE",
+    "TT_METAL_LOGS_PATH",
+    "TT_METAL_INSPECTOR_RPC",
+    "TT_METAL_THREADCOUNT",
+    "TT_METAL_WATCHER",
+)
+# The only names SandboxSpec.environment may hold (P0.20), by group: PATH, the locale (LANG, LC_ALL), and TMPDIR,
+# which programs and compiles get; each variable a pin names (lassi.toolchains.pins PREFIX_VARIABLES,
+# NVHPC_CUDA_HOME), for compiles; OMP_NUM_THREADS, the OpenMP runtime's default thread count, which the native
+# executor sets to Limits.cpus (DEMO.2); and TT_METAL_NAMES, which the ttsim executor sets (task P4.11), so a
+# program on ttsim finds the pinned simulator and tree and keeps its JIT cache in its own workdir. HOME, loader
+# variables (LD_PRELOAD, LD_LIBRARY_PATH), variables that change a compile silently (NVCC_PREPEND_FLAGS, CPATH), any
+# other TT_METAL_* name (such as TT_METAL_KERNEL_PATH or TT_METAL_HOME), and credentials are never on it (Agent
+# Rule 12). It is fixed: nothing adds a name at run time.
+ENVIRONMENT_NAMES = frozenset(
+    {"PATH", "LANG", "LC_ALL", "TMPDIR", "OMP_NUM_THREADS", *PREFIX_VARIABLES.values(), *TT_METAL_NAMES}
+)
 # The positional element that tells SETUP_SCRIPT that the program's environment follows it, one NAME=value
 # element per variable, right before the program argv. sandbox_command refuses a program argv that starts with it.
 ENVIRONMENT_MARKER = "lassi-sandbox-environment"
@@ -362,8 +388,9 @@ COMPILE_DISK_MB = 2048
 # The memory limit in MiB (MemoryMax, tmpfs pages included): at least twice COMPILE_DISK_MB (here four times), so
 # workdir_cap_bytes never halves the disk cap, and a full disk cap still leaves 6 GiB for the compiler itself.
 COMPILE_MEMORY_MB = 8192
-# The CPU count for the CPU-time cap: each process may use wall_s x COMPILE_CPUS seconds of CPU (1200 s at the
-# default 600 s timeout), room for a compiler that runs two threads for the whole wall limit.
+# The CPU count for the CPU-time cap: each process may use cpu_cap_seconds of the compile's limits, COMPILE_CPUS x
+# (the timeout + KILL_AFTER_S + CPU_MARGIN_S) seconds of CPU (1206 s at the default 600 s timeout), room for a
+# compiler that runs two threads for the whole wall limit.
 COMPILE_CPUS = 2
 # A compile's output cap in bytes, for each of stdout and stderr (the CappedRunner SandboxedCompileRunner uses by
 # default): 64 MiB, over 20000 times the largest compiler stderr the fixture scenarios and the layout app printed in
@@ -968,6 +995,29 @@ def _wall_seconds(limits: Limits) -> int:
     return max(1, math.ceil(limits.wall_s))
 
 
+def cpu_cap_seconds(limits: Limits) -> int:
+    """Return the CPU-time cap of each process of a run, in seconds: cpus x (wall + KILL_AFTER_S + CPU_MARGIN_S).
+
+    `wall` is the whole-second wall limit the innermost timeout enforces
+    (wall_s rounded up, at least 1). prlimit --cpu sets the cap as both the
+    soft and the hard RLIMIT_CPU of the program's chain, and each process
+    it starts inherits it, so a process whose own CPU time (all its
+    threads) reaches the cap dies by SIGKILL, status 137. CPU is capped as
+    CPU time because the cgroup cpu controller is not delegated (OQ-011).
+
+    A process that keeps at most `cpus` CPUs busy spends at most cpus x t
+    seconds of CPU in t seconds, so it cannot reach the cap before the
+    timeout's SIGTERM at the wall limit or its SIGKILL KILL_AFTER_S later:
+    stopped there, it reads as a hang (classify). With the earlier cap of
+    wall_s x cpus, such a program met the cap just before the wall limit,
+    died by SIGKILL, and read as killed, not hang (task P4.15, question 2 of
+    plans/spikes/p4-p2-review.md: exit status 137 and hang false at about
+    the wall limit). A process that burns more than that budget, on more
+    busy threads than `cpus`, still meets the cap first and reads as killed.
+    """
+    return limits.cpus * (_wall_seconds(limits) + KILL_AFTER_S + CPU_MARGIN_S)
+
+
 def workdir_cap_bytes(spec: SandboxSpec, limits: Limits) -> int:
     """Return the workdir disk cap a run gets, in bytes: spec.disk_mb MiB, but at most half of limits.memory_mb.
 
@@ -989,8 +1039,9 @@ def sandbox_command(spec: SandboxSpec, argv: Sequence[str], limits: Limits) -> l
     """Return the command that runs `argv` in the sandbox described by `spec` under `limits`.
 
     The wall limit is wall_s rounded up to whole seconds (at least 1). The
-    CPU-time budget is wall_s x cpus, rounded up (at least 1): CPU is capped
-    as CPU time because the cgroup cpu controller is not delegated (OQ-011).
+    CPU-time cap of each process is cpu_cap_seconds(limits), cpus x (the
+    wall limit + KILL_AFTER_S + CPU_MARGIN_S), so the wall limit, not the
+    cap, stops a program that keeps at most `cpus` CPUs busy.
     The backstop RuntimeMaxSec is the wall limit plus KILL_AFTER_S plus
     OUTER_MARGIN_S. The disk cap is workdir_cap_bytes. env -i gives the
     sandbox PATH=SANDBOX_PATH and, from this process's environment when set,
@@ -1005,7 +1056,7 @@ def sandbox_command(spec: SandboxSpec, argv: Sequence[str], limits: Limits) -> l
     """
     _check_request(argv, limits, spec.environment)
     wall = _wall_seconds(limits)
-    cpu = max(1, math.ceil(limits.wall_s * limits.cpus))
+    cpu = cpu_cap_seconds(limits)
     optional = ["" if path is None else str(path) for path in (spec.harness, spec.toolchains)]
     roots = [str(root) for root in spec.hidden_roots]
     environment = ["env", "-i", f"PATH={SANDBOX_PATH}", *_passed_variables()]
@@ -1048,7 +1099,9 @@ def classify(returncode: int, wall_s: float, limit_wall_s: float) -> tuple[bool,
     - 137 with wall_s < limit_wall_s: killed. A SIGKILL death before the
       wall limit: a memory (cgroup MemoryMax) or CPU-time (prlimit --cpu)
       limit kill, or the program killing itself, which the status cannot
-      tell apart.
+      tell apart. The CPU-time cap (cpu_cap_seconds) comes before the wall
+      limit only for a process that keeps more than `cpus` CPUs busy, so a
+      program within its CPU budget stopped at the wall limit is a hang.
     - Anything else: (False, False), the program's own exit status. That
       includes 124, 143, and -1 before the wall limit, and a crash (139,
       134).
@@ -1243,7 +1296,7 @@ def _compile_stderr(result: SandboxResult, cap_bytes: int | None, timeout_s: flo
         if cut
     ]
     if result.killed:
-        cpu = max(1, math.ceil(timeout_s * COMPILE_CPUS))
+        cpu = cpu_cap_seconds(Limits(wall_s=timeout_s, memory_mb=COMPILE_MEMORY_MB, cpus=COMPILE_CPUS))
         notes.append(
             f"lassi-sandbox: the compile was killed before its wall limit, probably by its memory limit "
             f"({COMPILE_MEMORY_MB} MiB) or its CPU-time limit ({cpu} s per process), or by a SIGKILL from within"

@@ -1,0 +1,14 @@
+{
+  "derivation": "Four lines. 'main.cpp:7:18: error: ...' is one error: file main.cpp and line 7 as printed; main.cpp is a built file, so the column 18 is kept (line 7 is eight blanks and 'total += ' before 'undefined_var', which starts at column 18); no trailing [option], so the code is null; the message is the text after 'error: '. The source echo, the caret line, and '1 error generated.' give nothing.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.cpp",
+      "line": 7,
+      "column": 18,
+      "message": "use of undeclared identifier 'undefined_var'"
+    }
+  ]
+}

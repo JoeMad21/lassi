@@ -1,0 +1,14 @@
+{
+  "derivation": "Five lines. 'In file included from main.cpp:4:' is the include chain, a context line with no severity, so no diagnostic. './host/scale.h:5:20: error: ...' is one error: clang names the header it found beside main.cpp as './host/scale.h', and the leading './' is dropped, so the file is host/scale.h, a built file of the scenario; line 5 as printed; the column 20 is kept (line 5 is four blanks and 'return value * ' before 'factor', which starts at column 20); no trailing [option], so the code is null; the message is the text after 'error: '. The source echo, the caret line, and '1 error generated.' give nothing.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "host/scale.h",
+      "line": 5,
+      "column": 20,
+      "message": "use of undeclared identifier 'factor'"
+    }
+  ]
+}

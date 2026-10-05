@@ -1,4 +1,4 @@
-"""Shared pieces of the compiler stderr parsers in lassi.toolchains.nvcc and lassi.toolchains.nvcpp.
+"""Shared pieces of the compiler stderr parsers in lassi.toolchains.nvcc, nvcpp, and gcc.
 
 A parser reads stderr line by line (split on "\\n" only) and tries each
 LinePattern in order against the line with trailing whitespace removed; the
@@ -17,16 +17,19 @@ continuation lines to the message after "; ", and when a source echo and a
 caret line (spaces, one "^") follow, it consumes both and takes the column
 from edg_column; otherwise the column stays None. The linker pattern's fold
 keeps the linker's place only as a built file (_fold_linker_place), and an
-adapter may fold a GCC style line to decide whether to keep GCC's column.
+adapter may fold a GCC style line to decide whether to keep GCC's column
+(fold_built_column keeps it only on a built file).
 
 A line or column number is read only up to 10 digits, enough for any C or
 C++ line number (#line allows at most 2147483647). Model-controlled text can
 reach stderr, and int() refuses a digit string past 4300 digits, so a longer
 number never becomes a place.
 
-This module also holds what both adapters share: the EDG severity words,
-the severity words of the CUDA tools (ptxas under nvcc, nvlink under nvc++),
-and the patterns for host GCC style lines and the linker lines.
+This module also holds what the adapters share: the EDG severity words
+and the severity words of the CUDA tools (ptxas under nvcc, nvlink under
+nvc++), which nvcc and nvcpp use, and the patterns for GCC style lines and
+the linker lines with the built-file column fold (fold_built_column), which
+gcc uses too.
 """
 
 from __future__ import annotations
@@ -237,7 +240,7 @@ def cuda_tool_diagnostic(match: re.Match[str]) -> Diagnostic:
 #   main.cu:3:10: fatal error: kernels/missing.cuh: No such file or directory
 # A source echo and a caret line in a gutter follow; parse_stderr skips them. The column is kept here as
 # printed, and each adapter decides whether to keep it (lassi.toolchains.nvcc never does; lassi.toolchains.nvcpp
-# does only for a built file).
+# and lassi.toolchains.gcc do only for a built file, with fold_built_column).
 _GCC = re.compile(
     r"(?P<file>.+?):(?P<line>[0-9]{1,10}):(?P<column>[0-9]{1,10}): "
     r"(?P<severity>fatal error|error|warning|note): "
@@ -320,6 +323,20 @@ def _fold_linker_place(
     if located.file is None or _file_line(files, located) is None:
         return dataclasses.replace(diagnostic, file=None, line=None), index
     return located, index
+
+
+def fold_built_column(
+    diagnostic: Diagnostic, lines: list[str], index: int, files: Mapping[str, str], patterns: Sequence[LinePattern]
+) -> tuple[Diagnostic, int]:
+    """Keep a GCC style column only when the named file is a key of `files`, else set it to None; consume no line.
+
+    For a compiler that reads the built files itself (nvc++, g++), GCC's
+    column counts in the named file, so it is kept for a built file; a
+    system header, a harness file, or a parse with no files gets none.
+    """
+    if diagnostic.file in files:
+        return diagnostic, index
+    return dataclasses.replace(diagnostic, column=None), index
 
 
 GCC = LinePattern(_GCC, _gcc)

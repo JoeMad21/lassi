@@ -1,0 +1,4 @@
+{
+  "derivation": "The capture's stderr is empty (0 bytes) and g++ exited 0: a clean build prints nothing, so there is no diagnostic.",
+  "diagnostics": []
+}

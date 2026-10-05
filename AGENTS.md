@@ -49,7 +49,7 @@ Once terminal graphics exist (bible, Readability Standards, Terminal Presentatio
 
 ## Session Loop
 
-1. Orient: `git status`, current branch, `uv run tools/status.py summary`. Read `plans/OWNER-QUEUE.md`; apply every item in state ANSWERED first (record the decision where it belongs, unblock tasks, set the item CLOSED).
+1. Orient: `git status`, current branch, `uv run tools/status.py summary`. Read `plans/LESSONS.md`. Read `plans/OWNER-QUEUE.md`; apply every item in state ANSWERED first (record the decision where it belongs, unblock tasks, set the item CLOSED).
 2. Pick: `uv run tools/status.py next`. It returns a task (resume an ACTIVE one first), an advance (plan the next phase), or none.
 3. Do that one item with the Task Lifecycle or Phase Planning below.
 4. Leave clean: working tree clean, `plans/STATUS.md` true, branch pushed. End with one line: `SUMMARY: <item> <state> <result>`.
@@ -87,11 +87,11 @@ For an advance item on phase P<N>:
 
 ## Work Order
 
-P0, P1, P2, P4, P5, then P12 and P11, as in the bible's Build Roadmap. A phase may start when the previous phase in this order is DONE, GATE-OWNER, or stalled (only OWNER or BLOCKED tasks left). P11 beyond design notes needs P5. Phases marked BLOCKED in `plans/STATUS.md` stay blocked until the owner records in the phase Note that the blocker is cleared.
+P0, P1, P2, P4, P17, P5, then P12 and P11, as in the bible's Build Roadmap. P17 opens a pull request for its hardware-free half when gate part (a) passes and then stalls, with only its GPU tasks BLOCKED and any task held for the owner's review OWNER, until a GPU host exists (OQ-038, OQ-040). A phase may start when the previous phase in this order is DONE, GATE-OWNER, or stalled (only OWNER or BLOCKED tasks left). P11 beyond design notes needs P5. Phases marked BLOCKED in `plans/STATUS.md` stay blocked until the owner records in the phase Note that the blocker is cleared.
 
 ## Owner Queue
 
-`plans/OWNER-QUEUE.md` is the only channel to the owner. Item format:
+`plans/OWNER-QUEUE.md` is the only channel to the owner in an unattended session, and the record of every owner decision; in an attended session a question may be asked directly, and its answer is recorded there. Item format:
 
 ```
 ## OQ-<nnn> <Title>
@@ -167,6 +167,7 @@ When a step names a role, use a dedicated sub-agent for it if your environment p
 - `plans/STATUS.md`: phase and task state; change it only with `tools/status.py`.
 - `plans/OWNER-QUEUE.md`: owner decisions, reviews, access requests.
 - `plans/PHASE-NOTES.md`: repository-specific hints per phase.
+- `plans/LESSONS.md`: working lessons; read it before a task, and append what cost a retry, an extra audit round, or a wait.
 - `plans/p<N>-<topic>.md`: phase plans. `plans/spikes/`: evidence. `plans/runs/`: run reports.
 - `tools/`: `check_text_policy.py`, `policy_canary.py`, `status.py`, `rx.py`, `check_setup.py`; `tools/server/` is the gate the owner installs on the build host.
 

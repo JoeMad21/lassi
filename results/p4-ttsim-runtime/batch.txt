@@ -1,0 +1,19 @@
+commit 755c739e3d44a5a94c5f942f8f3872cc1fbb5fd3 (dirty=false, changed paths 0); rx id 20260926-140947-p49-ttsim-runtime-6f4c
+start 2026-09-26T14:09:51-07:00; host alpha01
+device: ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf;
+  every wall time and ttsim rate line is simulator wall time: exploratory, sizing only, never performance
+tt-metal: tt-metal 5280a9cfb00998fd49667a29523d03aee905c129 https://github.com/tenstorrent/tt-metal.git
+ttsim: /mnt/nvme10/joseph_ufl/toolchains/ttsim@v1.3.4/libttsim_wh.so sha256 7b10aa05a5297c4a28f274e39526bfe6c69373661d1b4d4e47c4257e44b79507
+tools: strace -- version 5.16; time (GNU Time) UNKNOWN; kernel 6.6.29+main+3.0.0r1-amd64-gio-epilmore-dev+
+core limit (RLIMIT_CORE): 1 byte, set with prlimit --core=1:1 and verified by getrlimit; no core is stored
+base environment of every measuring run (env -i): PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C TMPDIR=/tmp TT_METAL_RUNTIME_ROOT=/mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf TT_METAL_SIMULATOR=/mnt/nvme10/joseph_ufl/toolchains/ttsim@v1.3.4/libttsim_wh.so TT_METAL_SLOW_DISPATCH_MODE=1 TT_METAL_INSPECTOR_RPC=0
+  plus TT_METAL_DISABLE_SFPLOADMACRO=1 (not in sfplm-on), TT_METAL_CACHE=<step>/cache,
+  TT_METAL_LOGS_PATH=<step>/logs, and HOME=<step>/home (the probe: no HOME); LC_ALL=C is the locale
+  P4.11 must use too (ASCII compiler diagnostics)
+isolation: unshare -rmnipf --kill-child --mount-proc (user, mount, net, ipc, pid namespaces); private
+  tmpfs on /tmp /var/tmp /dev/shm /run; read-only rbinds of: /mnt/nvme10/joseph_ufl/toolchains /mnt/nvme10/joseph_ufl/tt-metal /mnt/nvme10/joseph_ufl/.cache/tt-metal-cache
+  prlimit per chain: --core=1 (one byte), --fsize=2147483648, --as=1099511627776;
+  per-step output cap 2147483648 bytes
+limits: clean 900s each; batch budget 9000s; run directory cap 6291456 KiB
+stop files: per-run /mnt/nvme10/joseph_ufl/lassi-runs/p49-ttsim-runtime/20260926-140947-p49-ttsim-runtime-6f4c/STOP; shared /mnt/nvme10/joseph_ufl/lassi-runs/p49-ttsim-runtime/STOP (only if fresh); owner /mnt/nvme10/joseph_ufl/lassi-gate/STOP; rx job kill is not used
+limits: seed 120s, hang 120s, probe 300s, watcher 180s (from the gate example's 2s of simulator wall time)

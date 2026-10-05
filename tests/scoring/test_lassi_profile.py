@@ -38,6 +38,15 @@ definitions (Evaluation Protocol, LASSI Paper Metrics):
 - sim_t, sim_t_c, sim_l: lassi.scoring.similarity's sim_t, sim_t_c, and
   sim_l of the text-mode reference target against the last attempt's
   target file ("" when the last attempt has none).
+- sim_t_tiktoken (task P4.15; OQ-022, OQ-031): lassi.scoring.similarity's
+  sim_t_tiktoken of the same pair with the encoding the profile read when
+  it was built (cl100k_base, which tests/conftest.py replaces with a
+  SYNTHETIC character encoding); its note names the encoding, the tiktoken
+  version, and the interpreter. None with the tiktoken_null note where the
+  notebook raises (a special-token string in a text), and None with the
+  baseline or no_attempt note, as sim_t, when the trial holds no attempt.
+  A profile whose encoding cannot be read is not built (TiktokenCacheError,
+  an OSError).
 - self_corr: final.corrections. cap_hit: 1.0 when final.end_reason is
   correction-cap, else 0.0. fence_quirk: the number of `fence-quirk`
   diagnostics over all attempts.
@@ -98,7 +107,8 @@ from lassi.core.record import (
 )
 from lassi.core.registry import DEFAULT_REGISTRY, RegistryError
 from lassi.core.store import TextStore
-from lassi.scoring.similarity import sim_l, sim_t, sim_t_c
+from lassi.scoring import similarity
+from lassi.scoring.similarity import TiktokenCacheError, sim_l, sim_t, sim_t_c, tiktoken_version
 
 REPO = Path(__file__).resolve().parents[2]
 PROFILE_NAME = "lassi"
@@ -115,10 +125,12 @@ SAMPLING = Sampling(temperature=0.2, top_p=0.9, max_tokens=4096)
 FAKE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
 
 COMPONENTS = (
-    "correct", "correct_paper", "within_10pct", "first_try", "sim_t", "sim_t_c", "sim_l",
+    "correct", "correct_paper", "within_10pct", "first_try", "sim_t", "sim_t_c", "sim_t_tiktoken", "sim_l",
     "self_corr", "cap_hit", "fence_quirk", "compiled", "compiled_first_try",
 )
 SIMILARITY = ("sim_t", "sim_t_c", "sim_l")
+SIM_T_TIKTOKEN = "sim_t_tiktoken"
+ALL_SIMILARITY = (*SIMILARITY, SIM_T_TIKTOKEN)
 FENCE_QUIRK = "fence-quirk"
 STALE_OUTPUT = "stale-output"
 CORRECTION_CAP = "correction-cap"
@@ -490,7 +502,7 @@ def test_the_paper_criterion_is_never_computed_and_is_labeled(case: Case, tmp_pa
 def test_each_similarity_value_carries_the_interpreter_version(case: Case, tmp_path: Path) -> None:
     _, score = build(case, tmp_path)
     version = f"python {platform.python_version()}"
-    for name in SIMILARITY:
+    for name in ALL_SIMILARITY:
         assert score.components[name] is not None
         assert version in score.notes.get(name, "").lower(), f"{name} carries the interpreter version ({version})"
 
@@ -546,6 +558,76 @@ def test_similarity_compares_with_the_target_language_reference(direction: Direc
     want = expected_similarity(REFERENCE[direction.target], source)
     assert want["sim_t"] != 1.0
     assert {name: score.components[name] for name in SIMILARITY} == want
+
+
+# ---------------------------------------------------------------------------
+# sim_t_tiktoken (task P4.15)
+
+
+@pytest.mark.parametrize("case", CASES, ids=CASE_IDS)
+def test_sim_t_tiktoken_is_the_notebooks_tiktoken_similarity_of_the_same_pair(case: Case, tmp_path: Path) -> None:
+    _, score = build(case, tmp_path)
+    encoding = similarity.cl100k_base()
+    want = similarity.sim_t_tiktoken(text_mode(REF), case.last_code, encoding)
+    assert want is not None and score.components[SIM_T_TIKTOKEN] == want
+    note = score.notes[SIM_T_TIKTOKEN]
+    assert encoding.name in note and f"tiktoken {tiktoken_version()}" in note, note
+    assert f"python {platform.python_version()}" in note, note
+
+
+def test_sim_t_tiktoken_is_null_with_its_note_where_the_notebook_raises(tmp_path: Path) -> None:
+    store = TextStore(tmp_path / "store")
+    candidate = CAND + "// SYNTHETIC <|endoftext|>\n"
+    trial = make_trial([ran(0, store, candidate, value=0.0)], store)
+    score = score_of(trial, default_bench(tmp_path / "bench"))
+    assert score.components[SIM_T_TIKTOKEN] is None
+    assert score.notes[SIM_T_TIKTOKEN] == profile_file()["notes"]["tiktoken_null"]
+    assert all(score.components[name] is not None for name in SIMILARITY), "the other similarity values stand"
+
+
+def test_a_missing_encoding_refuses_lassi_score_and_the_runs_scoring_plan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With TIKTOKEN_CACHE_DIR unset the loader raises, and both builders refuse before scoring, naming the variable."""
+    from lassi.scoring.run_scoring import plan_scoring
+    from lassi.scoring.score_run import ScoreError, _build
+
+    bench = default_bench(tmp_path / "bench")
+    monkeypatch.delenv(similarity.TIKTOKEN_CACHE_ENV, raising=False)
+    monkeypatch.setattr(similarity, "cl100k_base", similarity.tiktoken_cache_dir)
+    with pytest.raises(ScoreError, match="TIKTOKEN_CACHE_DIR"):
+        _build(["lassi"], bench)
+    with pytest.raises(ValueError, match="TIKTOKEN_CACHE_DIR"):
+        plan_scoring({"metrics": ["sim_t"]}, DEFAULT_REGISTRY, bench)
+
+
+def test_the_profile_reads_its_encoding_when_it_is_built(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    bench = default_bench(tmp_path / "bench")
+
+    def refuse() -> None:
+        raise TiktokenCacheError("SYNTHETIC: TIKTOKEN_CACHE_DIR is unset")
+
+    monkeypatch.setattr(similarity, "cl100k_base", refuse)
+    with pytest.raises(OSError, match="TIKTOKEN_CACHE_DIR"):
+        profile_class()(bench_root=bench)
+
+    class Named:
+        """A SYNTHETIC encoding with a name of its own."""
+
+        name = "synthetic-named"
+
+        def encode(self, text: str) -> list[int]:
+            """Return one id per character."""
+            return [ord(char) for char in text]
+
+        def decode(self, tokens: list[int]) -> str:
+            """Return the characters of the ids."""
+            return "".join(chr(token) for token in tokens)
+
+    store = TextStore(tmp_path / "store")
+    trial = make_trial([ran(0, store, REF, value=1.0)], store)
+    score = profile_class()(bench_root=bench, encoding=Named()).score(trial)
+    assert score.components[SIM_T_TIKTOKEN] == 1.0 and "synthetic-named" in score.notes[SIM_T_TIKTOKEN]
 
 
 # ---------------------------------------------------------------------------
@@ -627,7 +709,7 @@ def test_a_trial_that_ended_at_the_baseline_is_not_scored(
                          workdir_incomplete=False)
         trial = dataclasses.replace(trial, reference_run=failed)
     score = score_of(trial, default_bench(tmp_path / "bench"))
-    unscored = ("correct", "first_try", "compiled", "compiled_first_try", *SIMILARITY)
+    unscored = ("correct", "first_try", "compiled", "compiled_first_try", *ALL_SIMILARITY)
     assert all(score.components[name] is None for name in unscored)
     baseline = profile_file()["notes"]["baseline"]
     for name in unscored:
@@ -644,7 +726,7 @@ def test_a_trial_with_no_attempt_past_a_clean_baseline_is_not_correct(tmp_path: 
     assert score.components["correct"] == 0.0 and score.components["first_try"] == 0.0
     assert (score.components["compiled"], score.components["compiled_first_try"]) == (0.0, 0.0)
     no_attempt = profile_file()["notes"]["no_attempt"]
-    assert all(score.components[name] is None and score.notes[name] == no_attempt for name in SIMILARITY)
+    assert all(score.components[name] is None and score.notes[name] == no_attempt for name in ALL_SIMILARITY)
 
 
 def test_a_missing_reference_file_raises_naming_its_path(tmp_path: Path) -> None:

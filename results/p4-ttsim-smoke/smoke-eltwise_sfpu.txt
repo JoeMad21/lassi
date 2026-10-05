@@ -1,0 +1,4 @@
+ttsim_smoke: eltwise_sfpu: pass (every check passed)
+ttsim_smoke: device: ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon
+ttsim_smoke: summary: /mnt/nvme10/joseph_ufl/lassi-runs/ttsim-smoke/20261001-002542-eltwise_sfpu-wbbn8o51/summary.json
+smoke_rc=0

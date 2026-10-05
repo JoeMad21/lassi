@@ -14,6 +14,9 @@ from pathlib import Path
 from lassi.core.interfaces import Limits, RunResult
 from lassi.core.registry import register
 
+# The device a compile-only run records: nothing ran on any device.
+COMPILE_ONLY_DEVICE = "none (compile only)"
+
 
 @register("Executor", "none")
 class NoneExecutor:
@@ -26,6 +29,10 @@ class NoneExecutor:
 
     name = "none"
     capabilities = frozenset({"compile_only"})
+
+    def device(self) -> str:
+        """Return the device name runs record for a compile-only executor, "none (compile only)"."""
+        return COMPILE_ONLY_DEVICE
 
     def run(self, artifact: Path, inputs: Sequence[str], limits: Limits) -> RunResult:
         """Return the compile-only RunResult; `artifact`, `inputs`, and `limits` are not used."""

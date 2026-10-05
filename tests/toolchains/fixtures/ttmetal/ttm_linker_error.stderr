@@ -1,0 +1,4 @@
+ld.lld: error: undefined symbol: helper(int)
+>>> referenced by main.cpp
+>>>               /mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20260926-142744-desktop-8r113ei-detached-cf5f1274-326e/work/ttm_linker_error/@lassi-tmp/main-eaa0c1.o:(main)
+clang++-20: error: linker command failed with exit code 1 (use -v to see invocation)

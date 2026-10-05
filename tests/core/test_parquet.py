@@ -1,8 +1,13 @@
 """Tests for the Parquet mirror of Result records (P0.2), with the requests table (P2.1).
 
-lassi/core/parquet.py flattens Trials into four tables (trials, attempts,
-diagnostics, requests), writes them as Hive-partitioned Parquet by project, arm, bench,
-and direction, and reads them back to exactly the rows trial_rows produces.
+lassi/core/parquet.py flattens Trials into tables (trials, attempts,
+diagnostics, requests, and since P4.4 output_stats), writes them as
+Hive-partitioned Parquet by project, arm, bench, and direction, and reads
+them back to exactly the rows trial_rows produces. P4.4 also adds the
+columns reference_run_outputs and run_outputs; these fixtures record no
+output files, statistics, or baseline notes, so those columns are null and
+output_stats has no rows here (tests/core/test_output_stats_views.py and
+tests/core/test_binary_io_runs.py cover them).
 Parquet mirrors the JSON records and never replaces them (bible Design
 Principle 7). The fixtures span two arms and two directions, with None values,
 an empty per_input list, a trial without attempts, a numeric-looking bench
@@ -72,6 +77,7 @@ REFERENCE_RUN_COLUMNS = (
     "reference_run_stdout_truncated",
     "reference_run_stderr_truncated",
     "reference_run_workdir_incomplete",
+    "reference_run_outputs",
 )
 END_REASON_COLUMNS = ("final_end_reason_code", "final_end_reason_message")
 TRIAL_COLUMNS = (
@@ -130,6 +136,7 @@ ATTEMPT_COLUMNS = (
     "run_stdout_truncated",
     "run_stderr_truncated",
     "run_workdir_incomplete",
+    "run_outputs",
     "alignment_per_input",
     "alignment_mean",
     "profile_runtime_s",
@@ -633,6 +640,7 @@ def expected_attempt_rows_a_omp_entropy() -> list[dict[str, Any]]:
         "run_stdout_truncated": None,
         "run_stderr_truncated": None,
         "run_workdir_incomplete": None,
+        "run_outputs": None,
     }
     unset_profile = {"profile_runtime_s": None, "profile_avg_power_w": None, "profile_energy_j": None}
     first = {
@@ -797,6 +805,7 @@ def expected_trial_row_b_omp_filled() -> dict[str, Any]:
         "reference_run_stdout_truncated": True,
         "reference_run_stderr_truncated": False,
         "reference_run_workdir_incomplete": False,
+        "reference_run_outputs": None,
         "context_knowledge_summary": "knowledge b\n",
         "context_source_description": "source b\n",
         "final_stage_reached": "S4",
@@ -834,6 +843,7 @@ def expected_attempt_row_b_omp_filled_0() -> dict[str, Any]:
         "run_stdout_truncated": False,
         "run_stderr_truncated": True,
         "run_workdir_incomplete": False,
+        "run_outputs": None,
         "alignment_per_input": [0.5],
         "alignment_mean": 0.625,
         "profile_runtime_s": 0.25,
@@ -871,6 +881,7 @@ def expected_attempt_row_b_omp_filled_1() -> dict[str, Any]:
         "run_stdout_truncated": False,
         "run_stderr_truncated": False,
         "run_workdir_incomplete": True,
+        "run_outputs": None,
         "alignment_per_input": [0.75, 0.25],
         "alignment_mean": 0.5,
         "profile_runtime_s": 0.5,
@@ -903,6 +914,7 @@ def expected_rows_b_omp_filled() -> dict[str, list[dict[str, Any]]]:
         "attempts": [expected_attempt_row_b_omp_filled_0(), expected_attempt_row_b_omp_filled_1()],
         "diagnostics": [diagnostic],
         "requests": expected_request_rows_b_omp_filled(),
+        "output_stats": [],
     }
 
 
@@ -911,7 +923,7 @@ def expected_rows_b_omp_filled() -> dict[str, list[dict[str, Any]]]:
 
 
 def test_table_and_partition_constants() -> None:
-    assert parquet.TABLES == ("trials", "attempts", "diagnostics", "requests")
+    assert parquet.TABLES == ("trials", "attempts", "diagnostics", "requests", "output_stats")
     assert parquet.PARTITION_COLUMNS == ("project", "arm", "bench", "direction")
 
 
@@ -1045,7 +1057,7 @@ def test_round_trip_keeps_partition_values_as_strings(tmp_path: Path) -> None:
     out = tmp_path / "parquet"
     parquet.write_run_parquet([trial_b_cuda_stencil()], out)
     back = parquet.read_run_parquet(out)
-    for table in parquet.TABLES:
+    for table in COLUMNS:
         (row,) = back[table]
         assert row["bench"] == "2024", table
         assert row["arm"] == "arm-b", table

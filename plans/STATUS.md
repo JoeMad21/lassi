@@ -1,7 +1,7 @@
 # Status
 
 Single source of phase and task state. Edit only with `uv run tools/status.py`; the tables are parsed.
-Work order while hardware is blocked: P0, P1, P2, P4, P5, P12, P11 (docs/BIBLE.md, Build Roadmap).
+Work order while hardware is blocked: P0, P1, P2, P4, P17, P5, P12, P11 (docs/BIBLE.md, Build Roadmap).
 A phase marked BLOCKED stays blocked until the owner records in its Note that the blocker is cleared.
 
 ## Phases
@@ -10,9 +10,9 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | --- | --- | --- | --- |
 | P0 Core | p0-core | DONE | base: main; gate passed 2026-09-23 (results/p0-gate); merged into main as c3cf248 (PR 1) |
 | P1 Faithful LASSI | p1-faithful | DONE | base: main at c3cf248 (P0 merged, PR 1); plan plans/p1-faithful.md; owner 2026-09-23: scope fixed at planning, P2 follows without pause; owner 2026-09-24: curated LASSI demo at 15:00 EDT |
-| P2 Scoring | p2-scoring | GATE-OWNER | base: p1-faithful at 5d5fd0c (P1 DONE, PR 2 open, not merged); plan plans/p2-scoring.md; gate is an owner review on run demo-rngd-cpu-1, then GATE-OWNER and P4 |
+| P2 Scoring | p2-scoring | DONE | base: p1-faithful at 5d5fd0c; plan plans/p2-scoring.md; gate evidence results/p2-gate; owner review OQ-024 accepted with option (b), review questions moved to P4.15; PR 3 merged |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
-| P4 ttsim Execution | p4-ttsim | NOT-STARTED | - |
+| P4 ttsim Execution | p4-ttsim | DONE | base: main at 75eceef (P2 DONE, PR 3 merged); plan plans/p4-ttsim.md; gate passed 2026-10-05 (results/p4-gate); PR P4 ttsim Execution open |
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
 | P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
@@ -25,6 +25,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
 | P16 Adversarial | p16-adversarial | BLOCKED | P4, P8 for training |
+| P17 Portable Stack | p17-portable | NOT-STARTED | owner request 2026-09-27 (working session): GPUs and standard frameworks; after P4, before P5 (OQ-038, option (a)); GPU half blocked: GPU host (OQ-040); draft plan plans/p17-portable.md, re-read at advance |
 
 ## Tasks
 
@@ -78,3 +79,20 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2.9 | DONE | lassi score: score a finished run and write the review packet | P2.2,P2.8 | lassi score writes the score tree and review packet; bible rev 156 |
 | P2.10 | DONE | Recipes bind score and metrics in lassi run | P2.9 | lassi run binds score and metrics; run.md Metrics section; bible rev 180 |
 | P2.G | DONE | Phase gate: owner review of score components on run demo-rngd-cpu-1 | P2.1,P2.2,P2.5,P2.9,P2.10 | checks passed at a10fdd0 (rx e027, 1b00); owner review OQ-024 |
+| P4.0 | DONE | Plan phase P4 into plans/p4-ttsim.md and add its tasks here | - | plan written; commit P4.0: plan phase |
+| P4.1 | DONE | Spike: joint pin of tt-mlir, tt-metal, and ttsim; build budget | - | joint pin tt-mlir 0.9.0.dev20260221, tt-metal 5280a9cf, ttsim v1.3.4 (OQ-026 a); bible rev 198 |
+| P4.2 | DONE | Install the pinned tt-metal and ttsim | P4.1 | tt-metal@5280a9cf and ttsim@v1.3.4 installed (rx job 20260925-173117-p4-tt-metal-9c48, clean f9bb560); 25 CPM packages recorded, not pinned (PHASE-NOTES P4); bible rev 217 |
+| P4.3 | DONE | lassi_io harness and its binary file format | - | lassi_io format, Python side, C header; remote tests 7 passed (rx 20260925-165726, exploratory snapshot of the staged code); bible rev 215 |
+| P4.4 | DONE | binary_io oracle over output files | P4.3 | binary_io oracle, item tolerances, binary store, output_stats; bible rev 222 |
+| P4.5 | DONE | Native C++ toolchain and executors per language | - | gcc-native, executors per language, device() (94368a4); GCC fixtures from clean rx 20260925-195420; bible rev 226 |
+| P4.6 | DONE | Record readings for simulator runs | - | simulator readings: sim-gap, UB, jit at S1, hang hint, wall-time labels, df-v0 and lassi profile readings; bible rev 229 |
+| P4.7 | DONE | Graphics setting, preset, and banner | - | graphics setting, preset, banner; bible rev 211 |
+| P4.8 | DONE | Progress hook and live inference table | P4.7 | progress hook, live inference table, broken-stderr exit status kept |
+| P4.9 | DONE | Spike: ttsim runtime facts, unpack_to_dest, and Watcher | P4.2 | ttsim runtime spike: six examples pass, findings and classes, Watcher works, sandbox needs TT_METAL_THREADCOUNT; rx job 20260926-140947 (755c739); OQ-036, OQ-037; bible rev 236 |
+| P4.10 | DONE | tt-metal host toolchain | P4.2,P4.5 | ttmetal-host toolchain and pin checks (cf5f127); clang fixtures from clean rx 20260926-142744; 13 remote tests passed; bible rev 231 |
+| P4.11 | DONE | ttsim executor and the smoke driver | P4.6,P4.9,P4.10 | b9fc0d3; remote tests 50 passed and smoke 6/6 pass, rx 20260930-172230-p411-evidence-92e0 |
+| P4.12 | DONE | CPU -> TT guard | P4.6,P4.10 | 9e8dc50; remote guard tests 10 passed, rx 20261004-220812-desktop-8r113ei-detached-9e8dc504-a6b1; bible rev 243 |
+| P4.13 | DONE | Tier A suite tt-pairs-v0 | P4.4,P4.5,P4.11,P4.12 | 5e72f4e; remote Tier A tests 5 passed, rx 20261005-122628-desktop-8r113ei-detached-5e72f4e8-56d0; bible rev 244 |
+| P4.14 | DONE | Apply the owner's Tier A splits (OQ-025) | P4.13 | OQ-025 (d) confirmed: every tt-pairs-v0 item unassigned and refused to training, prompt tuning, and harvest (tests/bench/test_tt_pairs.py); recipe hashes at 184f130 equal bc4c132's for every committed recipe |
+| P4.15 | DONE | Carry the P2 review questions (OQ-024) | - | P2 review questions closed (f0c4a85); OQ-028 to OQ-033 applied for review; sim_t_tiktoken; scoring pass rx 20260927-204249; bible rev 233 |
+| P4.G | DONE | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 | gate passed: smoke rx 20261005-123001-desktop-8r113ei-detached-ec1c9a2b-2979; Tier A job 20261005-123023-p4-tier-a-c247; ec1c9a2 clean; results/p4-gate |

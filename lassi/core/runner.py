@@ -34,23 +34,40 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    item with more than one source file under a fragment set, or more than
    one target file with fixes.fence_tag off, since each reads one file; and
    an oracle section that no listed stage uses (none names Oracle in
-   `requires`) or that its Oracle refuses (factory(**config) raises
-   ValueError, as for an unset oracle.passfail); a backend that declares
+   `requires`), whose Oracle declares none of the capabilities a listed
+   stage accepts (`oracle_capabilities`), or that its Oracle refuses
+   (factory(**config) raises ValueError, as for an unset oracle.passfail or
+   oracle.threshold); an Oracle that reads the references' agreement
+   (`agreement_setting`, binary_io's threshold from_baseline) while
+   fixes.baseline_both is off, no listed stage builds the references, or an
+   item of the run declares no tolerance in its suite manifest; a backend that declares
    `unload_before_run` but has no unload(), or `needs_reference` but has no
    with_reference() (or, with fixes.fence_tag off, no with_untagged_fence());
    a `score` profile or, when the recipe names metrics, any registered
    ScoreProfile that cannot be built, and a `metrics` name that no
    registered provider offers, that two offer, or that is named twice
    (lassi.scoring.run_scoring.plan_scoring);
-   and, when the executor runs programs, a sandbox.wall_s that is neither a
-   number of seconds above 0 nor `baseline_x10`, or a sandbox.mem_gb that
-   is not above 0 (the limits of every run, lassi.core.stages
-   attempt_limits and reference_limits), and an executor without
-   `sandboxed` when a listed stage declares `runs_model_code` (Agent Rule 6).
+   and, when any bound executor runs programs, a sandbox.wall_s that is
+   neither a number of seconds above 0 nor `baseline_x10`, or a
+   sandbox.mem_gb that is not above 0 (the limits of every run,
+   lassi.core.stages attempt_limits and reference_limits), and each bound
+   executor that runs programs without `sandboxed` when a listed stage
+   declares `runs_model_code` (Agent Rule 6); with executors bound per
+   language (lassi.core.recipe, task P4.5), a direction's target language
+   with no executor, and its source language with none when a listed stage
+   builds the source reference under its `source_build_fix` (baseline under
+   baseline_both), each message naming executor.<language>; a device()
+   that returns neither None nor one non-empty line of printable ASCII with
+   no leading or trailing blank; and an executor's `pins` (task P4.11) that
+   are not pin name -> pairs with a VERSION, that name a pin with no Trial
+   toolchain_pins field, or that give a pin other pairs than a toolchain or
+   an earlier executor gives the same pin name.
    A stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id), each toolchain
-   with its pinned compiler and a clean environment (below), the executor
-   as factory(**config), and the ScoreProfiles `score` and `metrics` need
+   with its pinned compiler and a clean environment (below), each executor
+   as factory(**config) (one, or one per language), asking each for its
+   device() and reading the pins it declares, and the ScoreProfiles
+   `score` and `metrics` need
    (lassi.scoring.profiles.build_profile, with the bench root for a profile
    that declares reads_bench_sources);
 4. loads the suite manifest assets/bench/<bench.suite>.yaml and finds the
@@ -64,7 +81,10 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    reply form), a backend that declares `unload_before_run` is asked to
    unload (upstream's setup unload, lassi.core.capabilities), then the
    stages run in recipe order on a fresh RunContext (which carries the
-   prompt set's fragments and the context packs by language), then the
+   prompt set's fragments, the context packs by language, the target
+   language's executor, which runs every attempt, and, with executors per
+   language, every language's executor, so the baseline runs each reference
+   on its own language's), then the
    trial's final block, whose alignment is that of the attempt whose output
    stands (_final). A stage that sets final.end_reason ends the trial:
    no later stage runs, and the final block keeps the end reason. With
@@ -74,6 +94,15 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    named metric (these Scores stay out of the trials) and builds the run
    metric tables (lassi.scoring.run_scoring.compute_metrics);
 7. writes the run tree and prints one line per trial and the run directory.
+
+With RunOptions.observer set, the run also sends progress events
+(lassi.core.progress, task P4.8) to that observer, wrapped in a
+GuardedObserver shared by every trial: trial-start (the run id, the
+trial's place in the run and the run's trial count, and the item's source
+files), stage-start before each stage, and trial-end after the trial is
+scored and written, just before its line is printed; the stages send the
+rest through RunContext.observer. An observer that raises is dropped for
+the rest of the run, and no record, file, or exit status depends on one.
 
 The run tree is <runs root>/runs/<run_id>, where the runs root is the
 runs_root option, else $LASSI_RUNS_ROOT, else the recipe's runs_root. The
@@ -85,22 +114,37 @@ host), resolve inside it (Agent Rule 7). The tree holds:
   (Design Principle 5);
 - toolchains.json: per toolchain, its languages, pinned executable, compile
   environment, and pin files;
-- provenance.json: the commit, the dirty flag, host, Python, the device, the
-  start and end times (UTC), recipe hash, pin versions, and a status. It is
+- provenance.json: the commit, the dirty flag, host, Python, the executor
+  and its device, the start and end times (UTC), recipe hash, pin versions
+  (every bound toolchain's and every bound executor's), and a status. The
+  single executor form records `executor` (its name) and
+  `device` (its device(), null for an executor that names none); executors
+  per language record `executor` and `devices`, each a mapping from language
+  to that language's executor name and device. It is
   written before the first trial with status "running", and again at the
   end with "complete", or with "failed" when a trial or a write raised, so
   every trial.json in the tree has a commit and a date beside it. Each
-  trial's provenance copies the commit, dirty flag, device, driver (as sdk),
+  trial's provenance copies the commit, dirty flag, device (the device of
+  its target language with executors per language), driver (as sdk),
   and started_utc (as date) of the manifest written first, and the final
   manifest is that same manifest with only its status and finish time
   changed, so a trial and its manifest never disagree;
 - run.md: the page a person reads (Readability Standards, Run row). Its
   summary shows the manifest's provenance, with an unknown value (null) as
-  "-" as trial.md shows it, since provenance is not a measurement. With
+  "-" as trial.md shows it, since provenance is not a measurement; with
+  executors per language, one Device row per language. When a direction's
+  target language, or its source language when the baseline runs the
+  source reference too, runs on an executor that declares `simulator`
+  (lassi.core.capabilities SIMULATOR), its Trials section opens with a
+  note naming those languages: their run wall times are simulator wall
+  time, not performance, and the wall_s column is each trial's pipeline
+  wall time (task P4.6). With
   `metrics` it ends in a Metrics section
   (lassi.scoring.run_scoring.metrics_section);
 - one directory per trial (one level per trial_id segment) with trial.json,
-  trial.md, and attempt<NN>/build, each attempt's fresh build directory
+  trial.md (each run's wall_s row labeled as simulator wall time when the
+  trial's target-language executor declares `simulator`), and
+  attempt<NN>/build, each attempt's fresh build directory
   (the run directory is the stages' build root, so a rerun of the recipe
   never meets an earlier run's builds);
 - texts/, the text store of prompts and replies; parquet/, the mirror, which
@@ -109,12 +153,21 @@ host), resolve inside it (Agent Rule 7). The tree holds:
 
 Pinned toolchains (Agent Rule 10): a toolchain class that declares PIN and
 PIN_BIN is built as factory(executable=<toolchains root>/<PREFIX_NAME>/
-<PIN_BIN>, runner=SandboxedCompileRunner(...)), where the toolchains root is
-the toolchains_root option, else $LASSI_TOOLCHAINS, resolved once (links and
+<PIN_BIN>, runner=SandboxedCompileRunner(...)); one that declares PIN and no
+PIN_BIN uses a host compiler the project does not install, and its
+executable is the pin's EXECUTABLE, an absolute path taken as given
+(_host_executable; toolchains/gcc.pin). Such a class that also defines
+check_tree builds against the pin's installed tree, <resolved toolchains
+root>/<PREFIX_NAME>, which must be a directory that resolves inside the
+root and which check_tree(tree, pin) must accept (its ValueError becomes a
+RunError); it is built as factory(executable=..., runner=..., tree=<that
+tree>) (_checked_tree; toolchains/tt-metal.pin). The toolchains root is the
+toolchains_root option, else $LASSI_TOOLCHAINS, resolved once (links and
 `..` segments followed), and the pin is read from toolchains/<PIN>.pin. The
-executable, each linked prefix, and the sandbox's read-only toolchains root
-all come from that resolved root, which is what a compile sees, and an
-executable or prefix that resolves outside it is refused. The compile
+executable, the tree, each linked prefix, and the sandbox's read-only
+toolchains root all come from that resolved root, which is what a compile
+sees, and an executable, tree, or prefix that resolves outside it is
+refused. The compile
 environment is the parent's PATH, LANG=C and LC_ALL=C (ASCII diagnostics),
 and each variable the pin names (NVHPC_CUDA_HOME for toolchains/nvhpc.pin);
 nothing else, so a variable such as NVCC_PREPEND_FLAGS never reaches a
@@ -137,9 +190,16 @@ run directory exists, and so does a SandboxUnavailableError from the
 --version check. A class without PIN (a test fake) is built as factory().
 build_toolchain is that construction for one registry name, public so that
 a tool compiles exactly as a run does; the runner builds every bound
-toolchain with it. A trial's toolchain_pins records the pins of the
-toolchain that builds its target language; provenance.json records every
-bound toolchain's pins. git, for the commit and dirty flag, runs through
+toolchain with it. An executor may declare pins too (task P4.11; Agent
+Rule 10): `pins`, pin name -> the pin file's pairs, as BuiltToolchain.pins
+holds a toolchain's (the ttsim executor declares ttsim and tt-metal). A
+trial's toolchain_pins records the pins of the toolchain that builds its
+target language and of the executor that runs it; provenance.json records
+every bound toolchain's and executor's pins. A pin name that a toolchain
+and an executor, or two executors, declare must carry the same pairs, or
+the run is refused before any directory exists; the runner reads the
+attribute, never an executor's name (Agent Rule 3). git, for the commit
+and dirty flag, runs through
 lassi.toolchains.EnvRunner, the audited command runner, and every compiler
 command through the sandbox's runner, so this module starts no process
 itself.
@@ -154,7 +214,7 @@ import re
 import shutil
 import tempfile
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -162,11 +222,20 @@ from typing import Any
 
 from lassi.bench import Direction, Suite, load_suite, sources_dir
 from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
-from lassi.core.capabilities import UNLOAD_BEFORE_RUN, declares, unload_before_run
+from lassi.core.capabilities import SIMULATOR, UNLOAD_BEFORE_RUN, declares, unload_before_run
 from lassi.core.fragments import fragment_key, pack_language
 from lassi.core.interfaces import Executor, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
-from lassi.core.recipe import UNCAPPED, Recipe, RecipeError, load_recipe, resolved_data, resolved_yaml
+from lassi.core.progress import STAGE_START, TRIAL_END, TRIAL_START, GuardedObserver, Observer, ProgressEvent, notify
+from lassi.core.recipe import (
+    UNCAPPED,
+    Recipe,
+    RecipeError,
+    executor_languages,
+    load_recipe,
+    resolved_data,
+    resolved_yaml,
+)
 from lassi.core.record import (
     TOOLCHAIN_PIN_NAMES,
     Final,
@@ -178,7 +247,7 @@ from lassi.core.record import (
     make_trial_id,
     standing_attempt,
 )
-from lassi.core.registry import DEFAULT_REGISTRY, Registry
+from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry
 from lassi.core.stages import BASELINE_X10, PURPOSE, RUNS_CODE, SANDBOXED, RunContext
 from lassi.core.store import TextStore, write_trial
 from lassi.core.trial_md import fenced, fmt, fmt_provenance
@@ -253,6 +322,8 @@ class RunOptions:
     - registry: the components a recipe may bind; None means DEFAULT_REGISTRY.
     - roots: the directories searched for a recipe named in `extends`; None
       means lassi.core.recipe.default_roots().
+    - observer: gets the run's progress events (lassi.core.progress); None
+      means none are sent. Nothing the run writes or returns depends on it.
     """
 
     runs_root: Path | None = None
@@ -261,6 +332,7 @@ class RunOptions:
     toolchains_root: Path | None = None
     registry: Registry | None = None
     roots: Sequence[Path] | None = None
+    observer: Observer | None = None
 
 
 # The options run_recipe uses when none are given: every field falls back as RunOptions says.
@@ -320,12 +392,54 @@ class BuiltToolchain:
 
 
 @dataclass(frozen=True)
+class _DeclaredPins:
+    """The pins one bound executor declares (its `pins`), where the recipe binds it, and the languages it serves.
+
+    `languages` is None for the single form, whose executor serves every
+    language; `label` names the executor and its recipe path for messages.
+    """
+
+    label: str
+    languages: tuple[str, ...] | None
+    pins: Mapping[str, Mapping[str, str]]
+
+
+@dataclass(frozen=True)
+class _Executors:
+    """The run's executors and what provenance.json records of them.
+
+    The single form binds one executor, `single`, for every language; the
+    per-language form binds one per language in `by_language`, and `single`
+    is None. `record` holds the manifest's executor keys: `executor` and
+    `device` for the single form, `executor` and `devices` (each by
+    language) for the per-language form. `declared` holds the pins each
+    bound executor declares (task P4.11), in binding order.
+    """
+
+    single: Executor | None
+    by_language: Mapping[str, Executor]
+    record: Mapping[str, Any]
+    declared: tuple[_DeclaredPins, ...] = ()
+
+    def for_language(self, language: str) -> Executor:
+        """Return the executor that runs programs in `language`."""
+        return self.single if self.single is not None else self.by_language[language]
+
+    def pins_for(self, language: str) -> list[Mapping[str, Mapping[str, str]]]:
+        """Return the pins of the executor that runs programs in `language`, as one mapping per declaring executor."""
+        return [item.pins for item in self.declared if item.languages is None or language in item.languages]
+
+
+@dataclass(frozen=True)
 class _Run:
     """Everything the trial loop and the run files read: the recipe, its components, the bench, and provenance.
 
-    `pins` holds every bound toolchain's pin versions and `target_pins` those
-    of the toolchain that builds each target language. `scoring` holds the
+    `pins` holds the pin versions of every bound toolchain and every bound
+    executor that declares pins, and `target_pins` those of the toolchain
+    that builds each target language and of the executor that runs it
+    (_run_pins). `scoring` holds the
     built ScoreProfiles of `score` and `metrics` (lassi.scoring.run_scoring).
+    `observer` is RunOptions.observer in a GuardedObserver, or None.
     """
 
     recipe: Recipe
@@ -333,7 +447,7 @@ class _Run:
     settings: _Settings
     bench: _Bench
     backend: Any
-    executor: Executor
+    executors: _Executors
     toolchains: tuple[BuiltToolchain, ...]
     pins: ToolchainPins
     target_pins: Mapping[str, ToolchainPins]
@@ -343,6 +457,7 @@ class _Run:
     commit: str | None
     dirty: bool | None
     scoring: ScoringPlan
+    observer: GuardedObserver | None = None
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -366,7 +481,7 @@ def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
     manifest = _provenance(run)
     _write(run_dir / PROVENANCE_JSON, json_text(manifest))
     try:
-        trials = _run_trials(run, _trial_provenance(manifest))
+        trials = _run_trials(run, manifest)
         metrics = _metrics(run, trials)
         provenance = _final_provenance(manifest, COMPLETE)
         _write(run_dir / RUN_MD, _run_md(run, provenance, trials, metrics))
@@ -393,22 +508,13 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         raise RunError(f"the run directory {run_dir} already exists; choose another run id")
     bench = _bench(recipe, settings, options)
     _check_plan(recipe, registry, settings, bench)
-    _check_oracle(recipe, registry)
+    _check_oracle(recipe, registry, bench)
     scoring = _scoring(recipe, registry, bench)
     backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id)
     _check_backend(recipe, settings, backend)
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
-    pins = _trial_pins(toolchains)
-    target_pins = {
-        direction.target: _trial_pins(built for built in toolchains if direction.target in built.languages)
-        for direction in settings.directions
-    }
-    executor_binding = next(binding for binding in recipe.bindings if binding.interface == "Executor")
-    executor_entry = registry.get("Executor", executor_binding.name)
-    if RUNS_CODE in executor_entry.capabilities:
-        _check_sandbox(recipe)
-        _check_sandboxed(recipe, registry, executor_binding.name, executor_entry.capabilities)
-    executor = executor_entry.factory(**executor_binding.config)
+    executors = _executors(recipe, registry, settings)
+    pins, target_pins = _run_pins(recipe, settings, toolchains, executors)
     commit, dirty = _git_state()
     try:
         run_dir.mkdir(parents=True)
@@ -420,7 +526,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         settings=settings,
         bench=bench,
         backend=backend,
-        executor=executor,
+        executors=executors,
         toolchains=toolchains,
         pins=pins,
         target_pins=target_pins,
@@ -430,6 +536,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         commit=commit,
         dirty=dirty,
         scoring=scoring,
+        observer=None if options.observer is None else GuardedObserver(options.observer),
     )
 
 
@@ -752,21 +859,139 @@ def _check_sandbox(recipe: Recipe) -> None:
         )
 
 
-def _check_sandboxed(recipe: Recipe, registry: Registry, executor: str, capabilities: frozenset[str]) -> None:
+def _check_sandboxed(recipe: Recipe, registry: Registry, binding: Binding, capabilities: frozenset[str]) -> None:
     """Refuse an executor that runs programs outside the sandbox when a listed stage runs model-generated code.
 
     Such a stage declares `runs_model_code` (run_loop); the executor must
     then declare SANDBOXED (Agent Rule 6). baseline runs only bench
-    references, so it needs no such declaration.
+    references, so it needs no such declaration. With executors per
+    language, every bound executor that runs programs is checked, and the
+    message names its recipe path, executor.<language>.
     """
     if SANDBOXED in capabilities:
         return
     for name in recipe.data["stages"]:
         if getattr(registry.get("Stage", name).factory, "runs_model_code", False):
             raise RunError(
-                f"{recipe.path}: stage {name!r} runs model-generated code, but Executor {executor!r} runs programs "
-                f"without declaring {SANDBOXED!r}; model-generated code runs only in the sandbox (Agent Rule 6)"
+                f"{recipe.path}: stage {name!r} runs model-generated code, but Executor {binding.name!r} "
+                f"({binding.where}) runs programs without declaring {SANDBOXED!r}; model-generated code runs only "
+                "in the sandbox (Agent Rule 6)"
             )
+
+
+def _executors(recipe: Recipe, registry: Registry, settings: _Settings) -> _Executors:
+    """Check and build the recipe's executors, one or one per language, and name each one's device.
+
+    Everything is checked before any executor is built: the languages the
+    per-language form must bind (_check_executor_languages), the sandbox
+    limits when any bound executor runs programs, and the sandboxed check for
+    each one that does. Each executor is then built as factory(**config),
+    asked for its device() once (_device, _checked_device), and read for
+    the pins it declares (_declared_pins); RunError before any directory
+    exists.
+    """
+    bindings = [binding for binding in recipe.bindings if binding.interface == "Executor"]
+    languages = executor_languages(recipe.data)
+    if languages:
+        _check_executor_languages(recipe, registry, settings, set(languages))
+    entries = [registry.get("Executor", binding.name) for binding in bindings]
+    if any(RUNS_CODE in entry.capabilities for entry in entries):
+        _check_sandbox(recipe)
+    for binding, entry in zip(bindings, entries, strict=True):
+        if RUNS_CODE in entry.capabilities:
+            _check_sandboxed(recipe, registry, binding, entry.capabilities)
+    built = [entry.factory(**binding.config) for binding, entry in zip(bindings, entries, strict=True)]
+    devices = [_checked_device(_device(executor), binding) for executor, binding in zip(built, bindings, strict=True)]
+    # The single form's one executor serves every language (None); each per-language executor serves its own.
+    served: list[tuple[str, ...] | None] = [(language,) for language in languages] if languages else [None]
+    declared = tuple(
+        _declared_pins(executor, binding, serves)
+        for executor, binding, serves in zip(built, bindings, served, strict=True)
+    )
+    if not languages:
+        record = {"executor": bindings[0].name, "device": devices[0]}
+        return _Executors(single=built[0], by_language={}, record=record, declared=declared)
+    record = {
+        "executor": {language: binding.name for language, binding in zip(languages, bindings, strict=True)},
+        "devices": dict(zip(languages, devices, strict=True)),
+    }
+    by_language = dict(zip(languages, built, strict=True))
+    return _Executors(single=None, by_language=by_language, record=record, declared=declared)
+
+
+def _check_executor_languages(recipe: Recipe, registry: Registry, settings: _Settings, bound: set[str]) -> None:
+    """Refuse executors per language that leave a language the run needs without an executor.
+
+    Every direction's target language needs one, since the attempts run
+    there. A stage that builds the source reference under a fix that is on
+    (`source_build_fix`, baseline under baseline_both) runs it on the source
+    language's executor, so that language needs one too. Each message names
+    the key to set, executor.<language>.
+    """
+    for direction in settings.directions:
+        if direction.target not in bound:
+            raise RunError(
+                f"{recipe.path}: no executor is bound for the target language {direction.target!r}; "
+                f"set executor.{direction.target}"
+            )
+    for name in recipe.data["stages"]:
+        fix = getattr(registry.get("Stage", name).factory, "source_build_fix", None)
+        if fix is None or recipe.data["fixes"].get(fix, True) is False:
+            continue
+        for direction in settings.directions:
+            if direction.source not in bound:
+                raise RunError(
+                    f"{recipe.path}: stage {name!r} builds the source reference too while fixes.{fix} is on, and "
+                    f"runs it on the source language's executor, but no executor is bound for {direction.source!r}; "
+                    f"set executor.{direction.source}, or turn fixes.{fix} off"
+                )
+
+
+def _checked_device(device: Any, binding: Binding) -> str | None:
+    """Return an executor's device after checking it: None, or one non-empty line of printable ASCII.
+
+    The line has no leading or trailing blank (whitespace). A device enters
+    provenance.json, every trial's provenance, and run.md, so anything else
+    (a tab or another character that is not printable ASCII, a line break,
+    a leading or trailing blank) is a RunError naming the binding, before
+    any directory exists.
+    """
+    if device is None:
+        return None
+    if not isinstance(device, str) or not device.isascii() or not device.isprintable() or device.strip() != device:
+        raise RunError(
+            f"Executor {binding.name!r} ({binding.where}): device() must return one non-empty line of printable "
+            f"ASCII with no leading or trailing blank, got {device!r}"
+        )
+    if not device:
+        raise RunError(f"Executor {binding.name!r} ({binding.where}): device() returned an empty string")
+    return device
+
+
+def _declared_pins(executor: Executor, binding: Binding, languages: tuple[str, ...] | None) -> _DeclaredPins:
+    """Return the pins an executor declares, checked, for the languages it serves (None: every language).
+
+    An executor may declare `pins` (task P4.11; Agent Rule 10), as
+    BuiltToolchain.pins holds a toolchain's: a mapping from pin name to the
+    pin file's pairs, each with a VERSION string; an executor without it
+    declares none. Anything else is a RunError naming the binding, before
+    any directory exists. The runner reads the attribute and never the
+    executor's name (Agent Rule 3).
+    """
+    label = f"Executor {binding.name!r} ({binding.where})"
+    pins = getattr(executor, "pins", None)
+    if pins is None:
+        return _DeclaredPins(label, languages, {})
+    valid = isinstance(pins, Mapping) and all(
+        isinstance(name, str) and isinstance(pin, Mapping) and isinstance(pin.get("VERSION"), str)
+        for name, pin in pins.items()
+    )
+    if not valid:
+        raise RunError(
+            f"{label}: pins must map each pin name to the pin file's pairs, each with a VERSION, as a toolchain's "
+            f"pins do; got {pins!r}"
+        )
+    return _DeclaredPins(label, languages, {name: dict(pin) for name, pin in pins.items()})
 
 
 def _check_plan(recipe: Recipe, registry: Registry, settings: _Settings, bench: _Bench) -> None:
@@ -955,7 +1180,8 @@ def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
             try:
                 sources = bench.suite.source_files(item, direction, bench.root, purpose=PURPOSE)
                 bench.suite.reference_target(item, direction, bench.root, purpose=PURPOSE)
-                bench.suite.support_files(item, bench.root, purpose=PURPOSE)
+                for language in (direction.target, direction.source):
+                    bench.suite.support_files(item, bench.root, purpose=PURPOSE, language=language)
             except (OSError, ValueError) as error:
                 raise RunError(
                     f"cannot read {bench.suite.name}/{item} ({direction.name}) under {bench.root}: {error}; "
@@ -986,29 +1212,70 @@ def _check_one_file(
         )
 
 
-def _check_oracle(recipe: Recipe, registry: Registry) -> None:
-    """Refuse an oracle section that no listed stage uses, or one its Oracle cannot be built from.
+def _check_oracle(recipe: Recipe, registry: Registry, bench: _Bench) -> None:
+    """Refuse an oracle section no listed stage uses or accepts, one its Oracle refuses, or one the run cannot serve.
 
     A listed stage uses an Oracle when its registry entry names Oracle in
     `requires` (the load already refuses such a stage when no oracle is
-    bound). Each bound Oracle is built once as factory(**config) and
-    dropped, so a choice its section leaves unset, such as oracle.passfail,
-    fails here, before any directory is created, and not when the first
-    trial builds its stages.
+    bound). A stage class that names `oracle_capabilities` (the oracle stage)
+    needs its Oracle to declare one of them. Each bound Oracle is built once
+    as factory(**config) and dropped, so a choice its section leaves unset,
+    such as oracle.passfail or oracle.threshold, fails here, before any
+    directory is created, and not when the first trial builds its stages.
+    An Oracle whose `agreement_setting` is set (binary_io's threshold
+    from_baseline) is checked by _check_agreement.
     """
     bindings = [binding for binding in recipe.bindings if binding.interface == "Oracle"]
     if not bindings:
         return
-    if not any("Oracle" in registry.get("Stage", name).requires for name in recipe.data["stages"]):
+    stages = [registry.get("Stage", name) for name in recipe.data["stages"]]
+    if not any("Oracle" in entry.requires for entry in stages):
         raise RunError(
             f"{recipe.path}: sets oracle, but no listed stage uses an Oracle; "
             "list the oracle stage or remove the section"
         )
     for binding in bindings:
+        entry = registry.get("Oracle", binding.name)
+        for stage in stages:
+            accepted = tuple(getattr(stage.factory, "oracle_capabilities", ()))
+            if accepted and not set(accepted) & entry.capabilities:
+                declared = ", ".join(sorted(entry.capabilities)) or "nothing"
+                raise RunError(
+                    f"{recipe.path}: {binding.where}: stage {stage.name!r} needs an Oracle that declares one of "
+                    f"{', '.join(accepted)}, but Oracle {binding.name!r} declares: {declared}"
+                )
         try:
-            registry.get("Oracle", binding.name).factory(**binding.config)
+            oracle = entry.factory(**binding.config)
         except ValueError as error:
             raise RunError(f"{recipe.path}: {binding.where}: {error}") from error
+        setting = getattr(oracle, "agreement_setting", None)
+        if setting is not None:
+            _check_agreement(recipe, stages, bench, setting)
+
+
+def _check_agreement(recipe: Recipe, stages: Sequence[Any], bench: _Bench, setting: str) -> None:
+    """Refuse an oracle `setting` that reads the references' agreement when the run could never measure it.
+
+    The baseline stage measures the source reference's agreement with the
+    target reference only with fixes.baseline_both on and only for an item
+    whose suite manifest declares a tolerance, so the fix must be on, a
+    listed stage must build the references (`builds_references`), and every
+    item the run covers must declare a tolerance.
+    """
+    reads = f"{recipe.path}: {setting} reads the references' agreement"
+    if recipe.data.get("fixes", {}).get("baseline_both", True) is False:
+        raise RunError(
+            f"{reads}, which the baseline measures only with fixes.baseline_both on (faithful: true turns it off); "
+            "turn fixes.baseline_both on, or set a number"
+        )
+    if not any("builds_references" in stage.capabilities for stage in stages):
+        raise RunError(f"{reads}, but no listed stage builds the reference programs; list the baseline stage")
+    missing = [item for item in bench.items if bench.suite.items[item].tolerance is None]
+    if missing:
+        raise RunError(
+            f"{reads}, which the baseline measures only for an item whose suite manifest declares a tolerance; "
+            f"{bench.suite.name} item(s) {', '.join(missing)} declare none"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1038,7 +1305,11 @@ def build_toolchain(
     """Build the toolchain registered as `name` exactly as the stage runner builds it, with no languages.
 
     A class that declares PIN gets its pinned executable under the
-    toolchains root `root` (None means none is set, which is refused), a
+    toolchains root `root` (None means none is set, which is refused), or,
+    without PIN_BIN, the pin's EXECUTABLE (a host compiler, which must be
+    an absolute path to an existing file; the root is still required, since
+    the compile sandbox exposes it; with check_tree, also the installed tree
+    it builds against, checked before any process starts), a
     clean compile environment, and the linked prefixes its pin names, run
     through SandboxedCompileRunner (see the module docstring), after its
     `--version` output was checked against the pin's EXPECT_VERSION through
@@ -1047,7 +1318,8 @@ def build_toolchain(
     run passes its runs root): every compile hides it, apart from its own
     build dir, and the compile layout is checked against a build dir under
     it first. Raises RunError, saying what to install or set, when the pin
-    file, the root, the executable (or it resolves outside the root), a
+    file, the root, the executable (or it resolves outside the root), the
+    installed tree (or check_tree refuses it), a
     linked prefix, TMPDIR (unset, or outside $LASSI_SCRATCH), or every
     hidden root is missing, when a hidden root is not absolute, when the
     sandbox refuses the compile layout, or when the compiler is not the
@@ -1065,23 +1337,98 @@ def build_toolchain(
 def _pinned_toolchain(name: str, factory: type, root: Path | None, build_root: Path | None) -> BuiltToolchain:
     """Build a toolchain with its pinned executable and the sandboxed compile runner, checked by --version.
 
-    Every refusal is a RunError that says what is missing, raised before any
-    process starts: the pin file, the root, the executable, TMPDIR (unset,
-    or outside $LASSI_SCRATCH), a hidden root, a linked prefix, or a compile
-    layout the sandbox refuses. Then `<executable> --version` must print the
-    pin's EXPECT_VERSION in the compile sandbox.
+    A class with PIN_BIN finds its compiler under the toolchains root
+    (_pinned_executable); a class with PIN and no PIN_BIN uses a host
+    compiler the project does not install, the pin's EXECUTABLE
+    (_host_executable), and one that also defines check_tree builds
+    against the pin's installed tree (_checked_tree). Every refusal is a
+    RunError that says what is missing, raised before any process starts:
+    the pin file, the root, the executable, the tree (or check_tree refuses
+    it), TMPDIR (unset, or outside $LASSI_SCRATCH), a hidden root, a linked
+    prefix, or a compile layout the sandbox refuses. Then
+    `<executable> --version` must print the pin's EXPECT_VERSION in the
+    compile sandbox.
     """
     pin_name = factory.PIN
-    pin = _pin(pin_name)
-    resolved, executable = _pinned_executable(name, factory, pin, root)
+    host = getattr(factory, "PIN_BIN", None) is None
+    check_tree = getattr(factory, "check_tree", None) if host else None
+    pin = _pin(pin_name, ("VERSION",) if host and check_tree is None else ("VERSION", "PREFIX_NAME"))
+    if host:
+        resolved, executable = _host_executable(name, pin_name, pin, root)
+    else:
+        resolved, executable = _pinned_executable(name, factory, pin, root)
+    keywords = {} if check_tree is None else {"tree": _checked_tree(name, pin_name, pin, resolved, check_tree)}
     tmpdir = _checked_tmpdir()
     hidden_roots = _compile_hidden_roots(build_root)
     environment = _compile_environment()
     pins = {pin_name: pin, **_linked_pins(name, pin_name, pin, resolved, environment)}
     runner = _compile_runner(name, environment, resolved, hidden_roots, build_root)
     version, status = _checked_version(name, executable, runner, Path(tmpdir), pin_name, pin)
-    toolchain = factory(executable=str(executable), runner=runner)
+    toolchain = factory(executable=str(executable), runner=runner, **keywords)
     return BuiltToolchain(name, (), toolchain, str(executable), environment, pins, version, status)
+
+
+def _host_executable(name: str, pin_name: str, pin: Mapping[str, str], root: Path | None) -> tuple[Path, str]:
+    """Return the resolved toolchains root and a host pin's EXECUTABLE, as the pin gives it.
+
+    A host compiler (toolchains/gcc.pin) is not installed under the
+    toolchains root, so its path is the pin's EXECUTABLE: it must be set, an
+    absolute path on this host (Path.is_absolute, so the host's own path
+    rules apply), and an existing file, or a RunError names it before any
+    process starts. The compile sandbox still exposes the toolchains root
+    read-only, as for every compile, so a root must be set. The --version
+    check then proves the compiler is the pinned one and reachable in the
+    compile's view.
+    """
+    if root is None:
+        raise RunError(
+            f"toolchain {name!r} uses the pinned host {pin_name} {pin['VERSION']} in the compile sandbox, which "
+            "exposes the toolchains root read-only, but no toolchains root is set; set LASSI_TOOLCHAINS (the gate "
+            "sets it on the build host)"
+        )
+    if not root.is_absolute():
+        raise RunError(f"the toolchains root {root} must be an absolute path (LASSI_TOOLCHAINS or the option)")
+    executable = pin.get("EXECUTABLE", "")
+    if not executable:
+        raise RunError(
+            f"toolchains/{pin_name}.pin has no EXECUTABLE, the absolute path of the host compiler toolchain {name!r} "
+            "runs; add it"
+        )
+    if not Path(executable).is_absolute():
+        raise RunError(
+            f"toolchain {name!r}: EXECUTABLE {executable!r} in toolchains/{pin_name}.pin is not an absolute path; "
+            "a pinned compiler is never looked up on PATH (Agent Rule 10)"
+        )
+    if not Path(executable).is_file():
+        raise RunError(
+            f"toolchain {name!r}: the pinned host compiler {executable} (EXECUTABLE in toolchains/{pin_name}.pin) "
+            "does not exist on this host; install the package it names, or run on the build host"
+        )
+    return root.resolve(), executable
+
+
+def _checked_tree(
+    name: str, pin_name: str, pin: Mapping[str, str], root: Path, check_tree: Callable[[Path, Mapping[str, str]], None]
+) -> Path:
+    """Return the installed tree a host compiler builds against, <root>/<PREFIX_NAME>, once check_tree accepts it.
+
+    `root` is the resolved toolchains root. The tree must be a directory
+    that resolves inside it, since a compile sees only that root, and
+    `check_tree(tree, pin)`, the toolchain class's own check of its install
+    (lassi.toolchains.ttmetal_build), must raise no ValueError. Every
+    refusal is a RunError, raised before any process starts.
+    """
+    tree = root / pin["PREFIX_NAME"]
+    if not tree.is_dir() or not _within(tree.resolve(), root):
+        raise RunError(
+            f"toolchain {name!r} builds against the installed {pin_name} tree {tree}, which is not a directory "
+            f"inside the toolchains root; install it on the build host with toolchains/{pin_name}.sh"
+        )
+    try:
+        check_tree(tree, pin)
+    except (OSError, ValueError) as error:
+        raise RunError(f"toolchain {name!r}: {error}") from error
+    return tree
 
 
 def _pinned_executable(name: str, factory: type, pin: Mapping[str, str], root: Path | None) -> tuple[Path, Path]:
@@ -1150,13 +1497,13 @@ def _linked_pins(
     return linked_pins
 
 
-def _pin(name: str) -> dict[str, str]:
-    """Return toolchains/<name>.pin as read_pin reads it; RunError when it is missing or lacks a needed key."""
+def _pin(name: str, keys: Sequence[str] = ("VERSION", "PREFIX_NAME")) -> dict[str, str]:
+    """Return toolchains/<name>.pin as read_pin reads it; RunError when it is missing or lacks one of `keys`."""
     try:
         pin = read_pin(name)
     except (OSError, ValueError) as error:
         raise RunError(f"cannot read the pin file toolchains/{name}.pin: {error}") from error
-    for key in ("VERSION", "PREFIX_NAME"):
+    for key in keys:
         if not pin.get(key):
             raise RunError(f"toolchains/{name}.pin has no {key}")
     return pin
@@ -1250,7 +1597,12 @@ def _compile_runner(
 
 
 def _checked_version(
-    name: str, executable: Path, runner: SandboxedCompileRunner, tmpdir: Path, pin_name: str, pin: Mapping[str, str]
+    name: str,
+    executable: Path | str,
+    runner: SandboxedCompileRunner,
+    tmpdir: Path,
+    pin_name: str,
+    pin: Mapping[str, str],
 ) -> tuple[tuple[str, ...], int]:
     """Run `<executable> --version` once through `runner`; return its non-blank lines and its status.
 
@@ -1293,11 +1645,64 @@ def _checked_version(
     return tuple(line.rstrip() for line in output.splitlines() if line.strip()), result.returncode
 
 
-def _trial_pins(toolchains: Iterable[BuiltToolchain]) -> ToolchainPins:
-    """Return the VERSION of every pin the given toolchains use, under the matching ToolchainPins field."""
-    versions: dict[str, str] = {}
+def _run_pins(
+    recipe: Recipe, settings: _Settings, toolchains: Sequence[BuiltToolchain], executors: _Executors
+) -> tuple[ToolchainPins, dict[str, ToolchainPins]]:
+    """Return the run's pin versions and each target language's, from the toolchains and the executors' pins.
+
+    The run's (provenance.json) are every bound toolchain's and every bound
+    executor's pins. A target language's (each of its trials'
+    toolchain_pins) are those of the toolchains bound for it and of the
+    executor that runs it, so a per-language executor's pins join only the
+    trials whose target it runs. A pin that an executor declares with other
+    pairs than a toolchain or another executor that declares the same pin
+    name is a RunError naming both (_check_shared_pins), and so is a pin
+    with no ToolchainPins field (_pin_versions); both come before any
+    directory exists.
+    """
+    _check_shared_pins(recipe, toolchains, executors)
+    everything = [*(built.pins for built in toolchains), *(item.pins for item in executors.declared)]
+    target_pins = {
+        direction.target: _pin_versions(
+            [
+                *(built.pins for built in toolchains if direction.target in built.languages),
+                *executors.pins_for(direction.target),
+            ]
+        )
+        for direction in settings.directions
+    }
+    return _pin_versions(everything), target_pins
+
+
+def _check_shared_pins(recipe: Recipe, toolchains: Sequence[BuiltToolchain], executors: _Executors) -> None:
+    """Refuse a pin an executor declares with other pairs than an earlier declarer of that pin name.
+
+    The earlier declarers are the bound toolchains, then the executors in
+    binding order; the same pin declared twice with the same pairs is one
+    pin (a ttsim run's tt-metal pin, which the host toolchain declares
+    too). Two toolchains are not compared here, as before task P4.11.
+    """
+    first: dict[str, tuple[str, Mapping[str, str]]] = {}
     for built in toolchains:
-        for pin_name, pin in built.pins.items():
+        for name, pin in built.pins.items():
+            first.setdefault(name, (f"Toolchain {built.name!r}", pin))
+    for item in executors.declared:
+        for name, pin in item.pins.items():
+            label, earlier = first.setdefault(name, (item.label, pin))
+            if dict(earlier) != dict(pin):
+                keys = sorted(key for key in {*earlier, *pin} if earlier.get(key) != pin.get(key))
+                raise RunError(
+                    f"{recipe.path}: {label} and {item.label} both declare the pin {name!r} but differ in "
+                    f"{', '.join(keys)} ({label}: VERSION {earlier.get('VERSION')!r}; {item.label}: VERSION "
+                    f"{pin.get('VERSION')!r}); a run records one version of each pin (Agent Rule 10)"
+                )
+
+
+def _pin_versions(pin_maps: Iterable[Mapping[str, Mapping[str, str]]]) -> ToolchainPins:
+    """Return the VERSION of every pin the given pin maps hold (pin name -> pairs), under its ToolchainPins field."""
+    versions: dict[str, str] = {}
+    for pins in pin_maps:
+        for pin_name, pin in pins.items():
             field = pin_name.replace("-", "_")
             if field not in TOOLCHAIN_PIN_NAMES:
                 raise RunError(f"the pin {pin_name!r} has no Trial toolchain_pins field; fields: {TOOLCHAIN_PIN_NAMES}")
@@ -1322,19 +1727,29 @@ def _toolchains_record(toolchains: Sequence[BuiltToolchain]) -> dict[str, Any]:
 # Trials
 
 
-def _run_trials(run: _Run, provenance: Provenance) -> list[Trial]:
-    """Run and write every trial, each with `provenance`: directions in recipe order, items sorted, runs 1 to n.
+def _run_trials(run: _Run, manifest: Mapping[str, Any]) -> list[Trial]:
+    """Run and write every trial: directions in recipe order, items sorted, runs 1 to n.
 
-    The recipe's `score` profile, when it binds one, scores each trial
-    before it is written (_scored).
+    Each trial carries the provenance the first-written `manifest` gives its
+    direction's target language (_trial_provenance). The recipe's `score`
+    profile, when it binds one, scores each trial before it is written
+    (_scored). Its trial.md labels its run wall times as simulator wall time
+    when its target language's executor declares SIMULATOR (task P4.6). The
+    observer, when the run has one, gets each trial's trial-end event after
+    the trial is written and before its line is printed.
     """
     trials: list[Trial] = []
+    count = len(run.settings.directions) * len(run.bench.items) * run.settings.trials
     for direction in run.settings.directions:
+        provenance = _trial_provenance(manifest, direction.target)
+        simulator = declares(run.executors.for_language(direction.target), SIMULATOR)
         for item in run.bench.items:
             for number in range(1, run.settings.trials + 1):
-                trial = _scored(run, _run_trial(run, provenance, direction, item, number))
-                write_trial(trial, run.run_dir, run.store)
+                place = (len(trials) + 1, count)
+                trial = _scored(run, _run_trial(run, provenance, direction, item, number, place))
+                write_trial(trial, run.run_dir, run.store, simulator=simulator)
                 trials.append(trial)
+                notify(run.observer, TRIAL_END, trial)
                 final = trial.final
                 ended = "" if final.end_reason is None else f"  end {final.end_reason.code}"
                 print(
@@ -1345,7 +1760,9 @@ def _run_trials(run: _Run, provenance: Provenance) -> list[Trial]:
     return trials
 
 
-def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: str, number: int) -> Trial:
+def _run_trial(
+    run: _Run, provenance: Provenance, direction: Direction, item: str, number: int, place: tuple[int, int]
+) -> Trial:
     """Run the recipe's stages on one new trial, each built on a fresh RunContext, and set its final block.
 
     The trial id's first segment is the recipe's project. A backend that
@@ -1356,7 +1773,10 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
     runs. A stage that sets final.end_reason ends the trial: no later stage
     runs, and the final block keeps the end reason. Every trial starts with
     an empty Trial.requests, so its model requests are recorded and a trial
-    that ends before any model call records none ([], never None).
+    that ends before any model call records none ([], never None). The
+    observer gets the trial-start event (_trial_start; `place` is the
+    trial's 1-based place in the run and the run's trial count) before the
+    backend unloads, and a stage-start event before each stage runs.
     """
     settings, suite = run.settings, run.bench.suite
     backend = run.backend
@@ -1375,14 +1795,32 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
         model=model_info(backend, settings.sampling),
         requests=[],
     )
-    context = RunContext(
+    context = _context(run, backend, direction, item)
+    _trial_start(run, trial, direction, item, place)
+    started = time.monotonic()
+    unload_before_run(backend)
+    names = run.recipe.data["stages"]
+    stages = [run.registry.get("Stage", name).factory(context=context) for name in names]
+    for name, stage in zip(names, stages, strict=True):
+        notify(run.observer, STAGE_START, trial, name)
+        trial = stage(trial)
+        if trial.final.end_reason is not None:
+            break
+    return dataclasses.replace(trial, final=_final(trial, time.monotonic() - started))
+
+
+def _context(run: _Run, backend: Any, direction: Direction, item: str) -> RunContext:
+    """Return a fresh RunContext for one trial of `item` in `direction`, with the run's observer."""
+    settings = run.settings
+    return RunContext(
         recipe=run.recipe,
         backend=backend,
         sampling=settings.sampling,
         toolchains={language: built.toolchain for built in run.toolchains for language in built.languages},
-        executor=run.executor,
+        executor=run.executors.for_language(direction.target),
+        executors=run.executors.by_language,
         store=run.store,
-        suite=suite,
+        suite=run.bench.suite,
         sources_root=run.bench.root,
         item=item,
         direction=direction,
@@ -1391,15 +1829,31 @@ def _run_trial(run: _Run, provenance: Provenance, direction: Direction, item: st
         max_corrections=settings.max_corrections,
         fragments=settings.fragments,
         packs=settings.packs,
+        observer=run.observer,
     )
-    started = time.monotonic()
-    unload_before_run(backend)
-    stages = [run.registry.get("Stage", name).factory(context=context) for name in run.recipe.data["stages"]]
-    for stage in stages:
-        trial = stage(trial)
-        if trial.final.end_reason is not None:
-            break
-    return dataclasses.replace(trial, final=_final(trial, time.monotonic() - started))
+
+
+def _trial_start(run: _Run, trial: Trial, direction: Direction, item: str, place: tuple[int, int]) -> None:
+    """Send the observer the trial-start event: the run id, the trial's place and the run's count, and the source.
+
+    Nothing is read when the run has no observer or it was dropped. The
+    source is the item's files in the direction's source language as
+    Suite.source_files reads them, None when they cannot be read, so the
+    event never stops a run.
+    """
+    observer = run.observer
+    if observer is None or observer.dropped:
+        return
+    try:
+        source = run.bench.suite.source_files(item, direction, run.bench.root, purpose=PURPOSE)
+    except (OSError, ValueError):
+        source = None
+    number, count = place
+    observer(
+        ProgressEvent(
+            kind=TRIAL_START, trial=trial, run_id=run.run_dir.name, number=number, count=count, source=source
+        )
+    )
 
 
 def _scored(run: _Run, trial: Trial) -> Trial:
@@ -1474,11 +1928,14 @@ def _utc(moment: datetime) -> str:
 
 
 def _device(executor: Executor) -> str | None:
-    """Return the device the run's programs ran on: "none (compile only)" for a compile-only executor, else None.
+    """Return the device an executor's programs run on: its device() (task P4.5; Agent Rule 1).
 
-    None (null) means the executor reports no device yet; an executor that
-    runs programs fills this field when it can name its device.
+    An executor without device() (a test fake) names "none (compile only)"
+    when it declares compile_only and no device (None, null) otherwise.
     """
+    named = getattr(executor, "device", None)
+    if callable(named):
+        return named()
     return "none (compile only)" if "compile_only" in getattr(executor, "capabilities", ()) else None
 
 
@@ -1486,8 +1943,10 @@ def _provenance(run: _Run) -> dict[str, Any]:
     """Return provenance.json as first written: where the run came from, when it started, what it ran on, the pins.
 
     Its status is "running" and `finished_utc` is null until
-    _final_provenance closes it. `driver` (an SDK or driver version) stays
-    null until an executor that runs programs reports one.
+    _final_provenance closes it. The executor keys are the run's
+    (_Executors.record): executor and device, or, with executors per
+    language, executor and devices by language. `driver` (an SDK or driver
+    version) stays null until an executor that runs programs reports one.
     """
     pins = dataclasses.asdict(run.pins)
     return {
@@ -1502,8 +1961,7 @@ def _provenance(run: _Run) -> dict[str, Any]:
         "host": platform.node(),
         "platform": platform.platform(),
         "python": platform.python_version(),
-        "executor": run.recipe.data["executor"]["kind"],
-        "device": _device(run.executor),
+        **run.executors.record,
         "driver": None,
         "started_utc": _utc(run.started),
         "finished_utc": None,
@@ -1521,18 +1979,21 @@ def _final_provenance(manifest: Mapping[str, Any], status: str) -> dict[str, Any
     return {**manifest, "status": status, "finished_utc": _utc(datetime.now(timezone.utc))}
 
 
-def _trial_provenance(manifest: Mapping[str, Any]) -> Provenance:
-    """Return the Trial provenance a run manifest gives, so every trial carries a copy of provenance.json.
+def _trial_provenance(manifest: Mapping[str, Any], language: str) -> Provenance:
+    """Return the Trial provenance a run manifest gives a trial whose target is `language`.
 
-    commit, dirty, and device keep their manifest keys; sdk is the manifest's
-    "driver" and date its "started_utc". A key the manifest lacks raises
-    KeyError, and a value of the wrong type raises ValueError: the copy never
-    fills in a value the manifest does not hold.
+    Every trial carries a copy of provenance.json: commit and dirty keep
+    their manifest keys; device is the manifest's "device", or, with
+    executors per language, its "devices" entry for `language`; sdk is the
+    manifest's "driver" and date its "started_utc". A key the manifest lacks
+    raises KeyError, and a value of the wrong type raises ValueError: the
+    copy never fills in a value the manifest does not hold.
     """
+    device = manifest["devices"][language] if "devices" in manifest else manifest["device"]
     return Provenance(
         commit=manifest["commit"],
         dirty=manifest["dirty"],
-        device=manifest["device"],
+        device=device,
         sdk=manifest["driver"],
         date=manifest["started_utc"],
     )
@@ -1556,7 +2017,8 @@ def _pin_rows(toolchains: Sequence[BuiltToolchain]) -> list[tuple[str, ...]]:
         if not built.pins:
             rows.append((built.name, languages, "-", "not pinned", "-"))
         for pin_name, pin in built.pins.items():
-            rows.append((built.name, languages, pin_name, pin["VERSION"], pin["PREFIX_NAME"]))
+            prefix = pin.get("PREFIX_NAME") or f"none, host {pin.get('EXECUTABLE', '-')}"
+            rows.append((built.name, languages, pin_name, pin["VERSION"], prefix))
     return rows
 
 
@@ -1584,12 +2046,59 @@ def _trial_blocks(trials: Sequence[Trial]) -> list[str]:
     return blocks or ["No trials.\n"]
 
 
+def _simulator_note(run: _Run, trials: Sequence[Trial]) -> list[str]:
+    """Return the Trials section's note on simulator wall times, or nothing (task P4.6; Agent Rule 2).
+
+    The note is written when the run has trials and _simulated_languages
+    names any language; it names them. Otherwise run.md is as before.
+    """
+    languages = _simulated_languages(run)
+    if not trials or not languages:
+        return []
+    return [
+        f"The {', '.join(languages)} programs of this run ran on a simulator executor: their run wall times are "
+        "simulator wall time, not performance, and trial.md labels each one it shows. The wall_s column below is "
+        "each trial's pipeline wall time, which includes those runs, so it is not performance either.\n"
+    ]
+
+
+def _simulated_languages(run: _Run) -> list[str]:
+    """Return, sorted, each language whose programs the run's trials run on an executor that declares SIMULATOR.
+
+    A direction's target language counts when its executor declares it, and
+    so does its source language when a listed stage builds the source
+    reference under a fix that is on (`source_build_fix`, baseline under
+    baseline_both), since that reference then runs on the source language's
+    executor and its run time is part of the trial's pipeline wall time.
+    """
+    stages = [run.registry.get("Stage", name).factory for name in run.recipe.data["stages"]]
+    fixes = [getattr(stage, "source_build_fix", None) for stage in stages]
+    sources = any(fix is not None and run.recipe.data["fixes"].get(fix, True) is not False for fix in fixes)
+    found: set[str] = set()
+    for direction in run.settings.directions:
+        languages = [direction.target]
+        if sources and direction.source != direction.target:
+            languages.append(direction.source)
+        found.update(language for language in languages if declares(run.executors.for_language(language), SIMULATOR))
+    return sorted(found)
+
+
+def _executor_rows(provenance: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Return run.md's executor rows: Executor and Device, or, per language, the executors and one Device row each."""
+    if "devices" not in provenance:
+        return [("Executor", provenance["executor"]), ("Device", fmt_provenance(provenance["device"]))]
+    names = "; ".join(f"{language}: {name}" for language, name in sorted(provenance["executor"].items()))
+    devices = sorted(provenance["devices"].items())
+    return [("Executor", names), *((f"Device ({language})", fmt_provenance(device)) for language, device in devices)]
+
+
 def _run_md(
     run: _Run, provenance: Mapping[str, Any], trials: Sequence[Trial], metrics: RunMetrics | None = None
 ) -> str:
     """Return run.md: the run summary, the resolved recipe, the toolchain pins, and one trials table per arm.
 
-    With `metrics` (the recipe names metrics), a Metrics section follows
+    The Trials section opens with _simulator_note when it applies. With
+    `metrics` (the recipe names metrics), a Metrics section follows
     the trials (lassi.scoring.run_scoring.metrics_section). It is
     deterministic for given records, plain ASCII (non-ASCII becomes
     backslash escapes) with LF newlines, and names no absolute run path, so
@@ -1600,8 +2109,7 @@ def _run_md(
         ("Recipe hash", f"`{run.recipe.recipe_hash}`"),
         ("Commit", fmt_provenance(provenance["commit"])),
         ("Dirty", fmt_provenance(provenance["dirty"])),
-        ("Executor", provenance["executor"]),
-        ("Device", fmt_provenance(provenance["device"])),
+        *_executor_rows(provenance),
         ("Driver", fmt_provenance(provenance["driver"])),
         ("Started (UTC)", provenance["started_utc"]),
         ("Finished (UTC)", fmt(provenance["finished_utc"])),
@@ -1611,7 +2119,7 @@ def _run_md(
     blocks += ["## Resolved recipe\n", fenced(resolved_yaml(run.recipe), "yaml")]
     pin_header = ("Toolchain", "Languages", "Pin", "Version", "Install prefix")
     blocks += ["## Toolchain pins\n", _md_table(pin_header, _pin_rows(run.toolchains))]
-    blocks += ["## Trials\n", *_trial_blocks(trials)]
+    blocks += ["## Trials\n", *_simulator_note(run, trials), *_trial_blocks(trials)]
     if metrics is not None:
         blocks.append(metrics_section(metrics, run.scoring.score))
     return "\n".join(blocks).encode("ascii", "backslashreplace").decode("ascii")

@@ -21,8 +21,12 @@ The contract these tests fix:
 - A PaperMetric has `published` and `recount` (each a PaperCount with int
   `count` and `denominator`), `recount_alternate` (a PaperCount or None),
   and `cite`, which names "Evaluation Protocol, LASSI Paper Metrics". Both
-  the published and the recounted values are carried, since OQ-021 is open
-  and its recommendation carries both. Where the bible says a published
+  are carried: the recount is the reference value and the published value
+  is shown for reference only (OQ-021, option (c); bible Decision Log,
+  2026-09-24). For OMP -> CUDA within 10% or faster the recount is 24/32,
+  GPT-4's atomicCost Ratio recomputed from Table IV (the Reporting Rules'
+  recompute-from-raw rule), and the alternate is 23/32 from the printed
+  Ratios (task P4.15 swapped the two). Where the bible says a published
   value recounts to itself (correct output in both directions, OMP -> CUDA
   first try), the recount equals the published count.
 - `PaperValues.correct_by_model(direction) -> Mapping[str, PaperCount]` gives
@@ -65,7 +69,7 @@ EXACT = 1e-12
 PAPER = {
     OMP_TO_CUDA: {
         "correct_rate": ((32, 40), (32, 40), None),
-        "within_10pct_rate": ((25, 32), (23, 32), (24, 32)),
+        "within_10pct_rate": ((25, 32), (24, 32), (23, 32)),
         "first_try_rate": ((21, 32), (21, 32), None),
         "sim_t_ge_0.6_rate": ((13, 32), (8, 32), None),
     },
@@ -153,6 +157,14 @@ def test_published_and_recount_values_match_the_bible(direction: str, name: str)
         assert metric.recount_alternate is None
     else:
         assert pair(metric.recount_alternate) == alternate
+
+
+def test_the_omp_to_cuda_within_10pct_reference_is_the_recomputed_recount() -> None:
+    """OQ-021, option (c): the reference is 24/32, the Ratio recomputed; 23/32 from the printed Ratios is beside it."""
+    metric = shipped_paper().metric(OMP_TO_CUDA, "within_10pct_rate")
+    assert pair(metric.recount) == (24, 32)
+    assert pair(metric.recount_alternate) == (23, 32)
+    assert pair(metric.published) == (25, 32)
 
 
 @pytest.mark.parametrize("direction", DIRECTIONS)

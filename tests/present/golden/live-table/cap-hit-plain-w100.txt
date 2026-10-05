@@ -1,0 +1,19 @@
+LASSI run p48-synthetic-run  trial 2 of 5  elapsed 1:02:05
+arm synthetic-arm-7b  item layout (omp-cuda)
+device SYNTHETIC device of the live table tests
++---------------+----------------------------------------------------------------------------------+
+| Step          | Status                                                                           |
++---------------+----------------------------------------------------------------------------------+
+| source        | the starter code                                                                 |
++---------------+----------------------------------------------------------------------------------+
+| translation   | S1 parses; compile error: no member named xx                                     |
++---------------+----------------------------------------------------------------------------------+
+| correction 1  | S1 parses; compile error: no member named xx                                     |
++---------------+----------------------------------------------------------------------------------+
+| correction 2  | S1 parses; compile error: no member named xx                                     |
++---------------+----------------------------------------------------------------------------------+
+| correction 3  | S1 parses; compile error: no member named xx                                     |
++---------------+----------------------------------------------------------------------------------+
+| final product | S1 parses; 3 corrections; end correction-cap: the correction cap of 3 was        |
+|               | reached with an error remaining                                                  |
++---------------+----------------------------------------------------------------------------------+

@@ -1,0 +1,46 @@
+LASSI run p48-synthetic-run  trial 2 of 5  elapsed 1:02:05
+arm synthetic-arm-7b  item layout (omp-cuda)
+device SYNTHETIC device of the live table tests
++---------------+--------------------------------+-------------------------------------------------+
+| Step          | Status                         | Code                                            |
++---------------+--------------------------------+-------------------------------------------------+
+| source        | the starter code               | main.cpp, from line 10                          |
+|               |                                | #pragma omp target teams distribute parallel f~ |
+|               |                                |   for (int i = 0; i < N; ++i) {                 |
+|               |                                |     b[i] = 2.0f * a[i];                         |
+|               |                                |   }                                             |
+|               |                                |   float sum = 0.0f;                             |
+|               |                                |   for (int i = 0; i < N; ++i) {                 |
+|               |                                |     sum += b[i];                                |
+|               |                                |   }                                             |
+|               |                                |   if (sum < 0.0f) {                             |
+|               |                                |     std::puts("FAIL");                          |
+|               |                                |     return 1;                                   |
+|               |                                |   }                                             |
++---------------+--------------------------------+-------------------------------------------------+
+| translation   | S1 parses; compile error: no   |                                                 |
+|               | member named xx                |                                                 |
++---------------+--------------------------------+-------------------------------------------------+
+| correction 1  | S1 parses; compile error: no   |                                                 |
+|               | member named xx                |                                                 |
++---------------+--------------------------------+-------------------------------------------------+
+| correction 2  | S1 parses; compile error: no   |                                                 |
+|               | member named xx                |                                                 |
++---------------+--------------------------------+-------------------------------------------------+
+| correction 3  | S1 parses; compile error: no   |                                                 |
+|               | member named xx                |                                                 |
++---------------+--------------------------------+-------------------------------------------------+
+| final product | S1 parses; 3 corrections; end  | main.cu, from line 6                            |
+|               | correction-cap: the correction | __global__ void scale_v3(const float* a, float~ |
+|               | cap of 3 was reached with an   |   int i = blockIdx.xx * blockDim.x + threadIdx~ |
+|               | error remaining                |   if (i < N) b[i] = 2.0f * a[i];                |
+|               |                                | }                                               |
+|               |                                |                                                 |
+|               |                                | int main() {                                    |
+|               |                                |   float *da, *db;                               |
+|               |                                |   cudaMalloc(&da, N * sizeof(float));           |
+|               |                                |   cudaMalloc(&db, N * sizeof(float));           |
+|               |                                |   scale_v3<<<N / 256, 256>>>(da, db);           |
+|               |                                |   cudaDeviceSynchronize();                      |
+|               |                                |   cudaFree(da);                                 |
++---------------+--------------------------------+-------------------------------------------------+

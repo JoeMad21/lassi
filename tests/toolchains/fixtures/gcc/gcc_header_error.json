@@ -1,0 +1,14 @@
+{
+  "derivation": "Five lines. 'In file included from main.cpp:2:' and 'kernels/scale.h: In function ...' are context lines with no severity, so no diagnostic. 'kernels/scale.h:6:17: error: ...' is one error: file kernels/scale.h and line 6 as printed; kernels/scale.h is a built file of the scenario, so GCC's column 17 is kept (line 6 is eight blanks and 'x[i] *= ' before 'factor', which starts at column 17); no trailing [option], so the code is null; the message is the text after 'error: '. The source echo and caret lines under it give nothing.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "kernels/scale.h",
+      "line": 6,
+      "column": 17,
+      "message": "'factor' was not declared in this scope"
+    }
+  ]
+}

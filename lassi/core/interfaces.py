@@ -6,7 +6,9 @@ registry name. Contract rules (bible, Component Interfaces):
 - Toolchains return diagnostics parsed into Diagnostic records; raw stderr is
   kept as an attachment and never consumed downstream.
 - Executors enforce wall time, memory, and CPU limits and return exit status,
-  stdout, stderr, output files, and a hang flag.
+  stdout, stderr, output files, and a hang flag, with a simulator's findings
+  when they report any (RunResult); each names the device its programs run
+  on (device()).
 - Oracles never trust a program's self-reported PASS as the only signal.
 - Stages are pure over the trial record: read fields, append an attempt or
   annotation, return. Side effects go through components.
@@ -91,6 +93,16 @@ class RunResult:
     when the executor returned only part of what the run wrote in its
     workdir, because it passed a cap or limit (lassi.executors.sandbox), so
     output_files may lack files the program wrote.
+
+    The last three fields carry a simulator's findings (task P4.6); the
+    defaults read as no finding, so an executor that reports none builds
+    its RunResult as before. `sim_ub` is True when the simulator reported
+    undefined behavior, False when the executor checked and found none, and
+    None when it did not check. `sim_gap` names the class of a simulator gap
+    (such as "UnimplementedFunctionality"), a program the simulator cannot
+    run, and is None otherwise. `diagnostics` holds what the executor parsed
+    from the run, kernel JIT messages among them with stage "jit"; the
+    stages read these fields, never the executor's name (lassi.core.stages).
     """
 
     exit_code: int | None
@@ -102,6 +114,9 @@ class RunResult:
     stdout_truncated: bool = False
     stderr_truncated: bool = False
     workdir_incomplete: bool = False
+    sim_ub: bool | None = None
+    sim_gap: str | None = None
+    diagnostics: list[Diagnostic] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -182,10 +197,29 @@ class Toolchain(Component, Protocol):
 
 
 class Executor(Component, Protocol):
-    """Runs an artifact on inputs under enforced limits."""
+    """Runs an artifact on inputs under enforced limits, and names the device its programs run on.
+
+    An executor that runs programs on a pinned install may also declare
+    `pins`, pin name -> the pin file's pairs, as a built toolchain's pins
+    are held (task P4.11); the runner records their versions in the
+    toolchain_pins of the trials it serves and in provenance.json
+    (lassi.core.runner). An executor without the attribute declares none.
+    """
 
     def run(self, artifact: Path, inputs: Sequence[str], limits: Limits) -> RunResult:
         """Run `artifact` with `inputs` and return its RunResult."""
+        ...
+
+    def device(self) -> str:
+        """Return the device the programs run on, starting no process and never using the sandbox (task P4.5).
+
+        The result is one non-empty line of printable ASCII with no leading
+        or trailing blank. The runner (lassi.core.runner) asks each bound
+        executor once, before the run directory exists, and refuses any
+        other result except None, which it records as no device (null). An
+        executor without device() is read as naming "none (compile only)"
+        when it declares compile_only, and no device (null) otherwise.
+        """
         ...
 
 

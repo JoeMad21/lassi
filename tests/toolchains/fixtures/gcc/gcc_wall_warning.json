@@ -1,0 +1,14 @@
+{
+  "derivation": "Four lines. 'main.cpp: In function ...' is a context line, no diagnostic. 'main.cpp:7:9: warning: ... [-Wunused-variable]' is one warning: file main.cpp and line 7 as printed; main.cpp is a built file, so column 9 is kept (line 7 is four blanks and 'int ' before 'unused', which starts at column 9); the trailing bracket starts with '-', so -Wunused-variable is the code and leaves the message, which is the text after 'warning: ' up to it. The source echo and caret lines give nothing. g++ exited 0: a warning alone does not fail the build.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "warning",
+      "code": "-Wunused-variable",
+      "file": "main.cpp",
+      "line": 7,
+      "column": 9,
+      "message": "unused variable 'unused'"
+    }
+  ]
+}

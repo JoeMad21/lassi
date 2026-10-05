@@ -1,8 +1,8 @@
 """The Parquet mirror of a run's Trial records.
 
 Parquet mirrors the JSON records and never replaces them (bible Design
-Principle 7). A run's trials flatten into four tables, trials, attempts,
-diagnostics, and requests, each written as Hive-partitioned Parquet under
+Principle 7). A run's trials flatten into five tables, trials, attempts,
+diagnostics, requests, and output_stats, each written as Hive-partitioned Parquet under
 `<out_dir>/<table>/project=.../arm=.../bench=.../direction=.../part-0.parquet`.
 Partition values come from the parsed trial_id and are URI-encoded in
 directory names as pyarrow does by default, so a '+' is written as `%2B` and
@@ -15,7 +15,22 @@ reference_run_<key> columns, and the end reason as final_end_reason_code
 and final_end_reason_message (null when the trial ended normally). The run
 flags of Trial.reference_run and Attempt.run (lassi.core.record
 RUN_FLAG_NAMES) are bool columns reference_run_<flag> and run_<flag>, right
-after the run's outputs_ref columns, null where not recorded.
+after the run's outputs_ref columns, null where not recorded. RunInfo.outputs
+(task P4.4) follows them as the string column reference_run_outputs or
+run_outputs: the file -> sha256 mapping as JSON text with sorted keys, as
+the files and score_components columns hold theirs, null where not
+recorded.
+
+The output_stats table (task P4.4) has one row per OutputStats: those of
+the references' agreement (Trial.reference_agreement), with attempt_index
+null, then those of each attempt's Alignment.outputs. Each row holds the key
+columns, attempt_index, ordinal (the entry's position in its list), name,
+pcc, max_abs, max_ulp, passed, and note. max_ulp is an unsigned 64-bit
+column, since an f64 ULP distance can pass the signed range. A trial with
+no statistics has no rows. Rows sort by trial_id, then attempt_index with
+null first, then ordinal. The diagnostics table also holds the baseline's
+notes (Trial.baseline_diagnostics), with attempt_index null, before each
+trial's attempt diagnostics.
 
 The requests table has one row per recorded model request (Trial.requests),
 in index order: the stage that sent it, the attempt its reply became
@@ -43,6 +58,7 @@ from lassi.core.record import (
     TOOLCHAIN_PIN_NAMES,
     Attempt,
     Diagnostic,
+    OutputStats,
     Request,
     RunInfo,
     TextRef,
@@ -51,17 +67,19 @@ from lassi.core.record import (
 )
 from lassi.core.store import sha256_text
 
-TABLES = ("trials", "attempts", "diagnostics", "requests")
+TABLES = ("trials", "attempts", "diagnostics", "requests", "output_stats")
 PARTITION_COLUMNS = ("project", "arm", "bench", "direction")
 
 _STRING = pa.string()
 _INT = pa.int64()
 _DOUBLE = pa.float64()
 _BOOL = pa.bool_()
+_UINT = pa.uint64()
 _DOUBLE_LIST = pa.list_(pa.float64())
 _STRING_LIST = pa.list_(pa.string())
 _INT64_MIN = -(2**63)
 _INT64_MAX = 2**63 - 1
+_UINT64_MAX = 2**64 - 1
 
 _KEY_FIELDS = [(name, _STRING) for name in (*PARTITION_COLUMNS, "trial_id")]
 
@@ -98,6 +116,7 @@ SCHEMAS = {
             ("reference_run_stdout_truncated", _BOOL),
             ("reference_run_stderr_truncated", _BOOL),
             ("reference_run_workdir_incomplete", _BOOL),
+            ("reference_run_outputs", _STRING),
             ("context_knowledge_summary", _STRING),
             ("context_source_description", _STRING),
             ("final_stage_reached", _STRING),
@@ -132,6 +151,7 @@ SCHEMAS = {
             ("run_stdout_truncated", _BOOL),
             ("run_stderr_truncated", _BOOL),
             ("run_workdir_incomplete", _BOOL),
+            ("run_outputs", _STRING),
             ("alignment_per_input", _DOUBLE_LIST),
             ("alignment_mean", _DOUBLE),
             ("profile_runtime_s", _DOUBLE),
@@ -171,6 +191,19 @@ SCHEMAS = {
             ("diagnostic_count", _INT),
         ]
     ),
+    "output_stats": pa.schema(
+        [
+            *_KEY_FIELDS,
+            ("attempt_index", _INT),
+            ("ordinal", _INT),
+            ("name", _STRING),
+            ("pcc", _DOUBLE),
+            ("max_abs", _DOUBLE),
+            ("max_ulp", _UINT),
+            ("passed", _BOOL),
+            ("note", _STRING),
+        ]
+    ),
 }
 
 _SORT_KEYS = {
@@ -178,6 +211,7 @@ _SORT_KEYS = {
     "attempts": ("trial_id", "index"),
     "diagnostics": ("trial_id", "attempt_index", "ordinal"),
     "requests": ("trial_id", "index"),
+    "output_stats": ("trial_id", "attempt_index", "ordinal"),
 }
 
 
@@ -186,26 +220,39 @@ _SORT_KEYS = {
 
 
 def _typed_row(table: str, values: dict[str, Any]) -> dict[str, Any]:
-    """Return values in the table's column order; an int that does not fit int64 raises ValueError.
+    """Return values in the table's column order; an int its column cannot hold raises ValueError.
 
     The record classes already store every float field as a float, so no value
-    needs converting. Record ints are unbounded, but their columns are int64.
+    needs converting. Record ints are unbounded, but their columns are int64,
+    or uint64 for output_stats.max_ulp.
     """
     schema = SCHEMAS[table]
     if set(values) != set(schema.names):
         raise ValueError(f"{table} row columns differ from the schema: {sorted(set(values) ^ set(schema.names))}")
     for spec in schema:
         value = values[spec.name]
-        if spec.type == _INT and value is not None and not _INT64_MIN <= value <= _INT64_MAX:
-            where = f"{table}.{spec.name} of trial {values['trial_id']!r}"
-            raise ValueError(f"{where} must fit in a 64-bit signed int, got {value!r}")
+        if value is None:
+            continue
+        if spec.type == _INT and not _INT64_MIN <= value <= _INT64_MAX:
+            rule = "must fit in a 64-bit signed int"
+        elif spec.type == _UINT and not 0 <= value <= _UINT64_MAX:
+            rule = "must fit in a 64-bit unsigned int"
+        else:
+            continue
+        where = f"{table}.{spec.name} of trial {values['trial_id']!r}"
+        raise ValueError(f"{where} {rule}, got {_shown_int(value)}")
     return {name: values[name] for name in schema.names}
 
 
+def _shown_int(value: int) -> str:
+    """Return an int for a message: by its digits, or by its width when it is wider than 128 bits."""
+    return f"an int of {value.bit_length()} bits" if value.bit_length() > 128 else repr(value)
+
+
 def _sorted_rows(table: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return rows in the table's sort order."""
+    """Return rows in the table's sort order; a null sort value comes before every other value."""
     keys = _SORT_KEYS[table]
-    return sorted(rows, key=lambda row: tuple(row[key] for key in keys))
+    return sorted(rows, key=lambda row: tuple((row[key] is not None, row[key]) for key in keys))
 
 
 def _ref_columns(prefix: str, ref: TextRef | None) -> dict[str, str | None]:
@@ -213,9 +260,15 @@ def _ref_columns(prefix: str, ref: TextRef | None) -> dict[str, str | None]:
     return {f"{prefix}_sha256": ref.sha256 if ref else None, f"{prefix}_path": ref.path if ref else None}
 
 
-def _flag_columns(prefix: str, run: RunInfo) -> dict[str, bool | None]:
-    """Return the run flag columns of a RunInfo: `<prefix>_<flag>`, null where the flag was not recorded."""
-    return {f"{prefix}_{flag}": getattr(run, flag) for flag in RUN_FLAG_NAMES}
+def _flag_and_output_columns(prefix: str, run: RunInfo) -> dict[str, bool | str | None]:
+    """Return the run flag columns of a RunInfo, `<prefix>_<flag>`, then `<prefix>_outputs`; null where not recorded.
+
+    The outputs column holds RunInfo.outputs as JSON text with sorted keys.
+    """
+    columns: dict[str, bool | str | None] = {f"{prefix}_{flag}": getattr(run, flag) for flag in RUN_FLAG_NAMES}
+    outputs = None if run.outputs is None else json.dumps(run.outputs, sort_keys=True, ensure_ascii=True)
+    columns[f"{prefix}_outputs"] = outputs
+    return columns
 
 
 def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
@@ -250,7 +303,7 @@ def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
         "reference_run_wall_s": reference.wall_s,
         **_ref_columns("reference_run_stdout_ref", reference.stdout_ref),
         **_ref_columns("reference_run_outputs_ref", reference.outputs_ref),
-        **_flag_columns("reference_run", reference),
+        **_flag_and_output_columns("reference_run", reference),
         "context_knowledge_summary": trial.context.knowledge_summary,
         "context_source_description": trial.context.source_description,
         "final_stage_reached": final.stage_reached,
@@ -282,7 +335,7 @@ def _attempt_row(attempt: Attempt, key: dict[str, str]) -> dict[str, Any]:
         "run_wall_s": run.wall_s,
         **_ref_columns("run_stdout_ref", run.stdout_ref),
         **_ref_columns("run_outputs_ref", run.outputs_ref),
-        **_flag_columns("run", run),
+        **_flag_and_output_columns("run", run),
         "alignment_per_input": list(attempt.alignment.per_input),
         "alignment_mean": attempt.alignment.mean,
         "profile_runtime_s": profile.runtime_s,
@@ -296,8 +349,13 @@ def _attempt_row(attempt: Attempt, key: dict[str, str]) -> dict[str, Any]:
     }
 
 
-def _diagnostic_row(diagnostic: Diagnostic, key: dict[str, str], attempt_index: int, ordinal: int) -> dict[str, Any]:
-    """Return the diagnostics row of one diagnostic; ordinal is its position in the attempt."""
+def _diagnostic_row(
+    diagnostic: Diagnostic, key: dict[str, str], attempt_index: int | None, ordinal: int
+) -> dict[str, Any]:
+    """Return the diagnostics row of one diagnostic; ordinal is its position in its list.
+
+    attempt_index is None for a note of the baseline (Trial.baseline_diagnostics).
+    """
     fields = ("stage", "severity", "code", "file", "line", "column", "message")
     return {
         **key,
@@ -321,6 +379,17 @@ def _request_row(request: Request, key: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def _stats_rows(
+    stats: Sequence[OutputStats] | None, key: dict[str, str], attempt_index: int | None
+) -> list[dict[str, Any]]:
+    """Return the output_stats rows of one list of OutputStats; none when it is None."""
+    fields = ("name", "pcc", "max_abs", "max_ulp", "passed", "note")
+    return [
+        {**key, "attempt_index": attempt_index, "ordinal": ordinal, **{name: getattr(entry, name) for name in fields}}
+        for ordinal, entry in enumerate(stats or [])
+    ]
+
+
 def trial_rows(trials: Sequence[Trial]) -> dict[str, list[dict[str, Any]]]:
     """Flatten trials into rows for each table, in column order and sorted by trial_id, index, and ordinal.
 
@@ -337,8 +406,12 @@ def trial_rows(trials: Sequence[Trial]) -> dict[str, list[dict[str, Any]]]:
         key = {name: getattr(parsed, name) for name in PARTITION_COLUMNS}
         key["trial_id"] = trial.trial_id
         rows["trials"].append(_trial_row(trial, key))
+        rows["output_stats"] += _stats_rows(trial.reference_agreement, key, None)
+        for ordinal, diagnostic in enumerate(trial.baseline_diagnostics):
+            rows["diagnostics"].append(_diagnostic_row(diagnostic, key, None, ordinal))
         for attempt in trial.attempts:
             rows["attempts"].append(_attempt_row(attempt, key))
+            rows["output_stats"] += _stats_rows(attempt.alignment.outputs, key, attempt.index)
             for ordinal, diagnostic in enumerate(attempt.diagnostics):
                 rows["diagnostics"].append(_diagnostic_row(diagnostic, key, attempt.index, ordinal))
         for request in trial.requests or []:
@@ -393,14 +466,14 @@ def _arrow_tables(rows: dict[str, list[dict[str, Any]]]) -> dict[str, pa.Table]:
 
 
 def write_run_parquet(trials: Sequence[Trial], out_dir: Path) -> None:
-    """Write the four tables of `trials` as Hive-partitioned Parquet under `out_dir`.
+    """Write the tables of `trials` as Hive-partitioned Parquet under `out_dir`.
 
     Each table directory is removed first, so the result holds only these
     trials; other files in `out_dir` are kept. A table with no rows gets no
     directory. Every table is built before any directory is removed, so a
-    value no table can hold (an int outside int64, or partition values that
-    cannot be stored as distinct directory names on every OS) raises
-    ValueError and leaves `out_dir` unchanged.
+    value no table can hold (an int outside int64, a max_ulp outside
+    uint64, or partition values that cannot be stored as distinct directory
+    names on every OS) raises ValueError and leaves `out_dir` unchanged.
     """
     rows = trial_rows(trials)
     _check_partition_dirs(rows["trials"])

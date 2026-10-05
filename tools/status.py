@@ -15,6 +15,8 @@ Commands:
   set ID STATE [--note TEXT]       set a task state
   add ID TITLE [--depends A,B] [--state S] [--note TEXT]
   phase PN STATE [--note TEXT]     set a phase state
+  phase-add PN NAME BRANCH [--state S] [--note TEXT]
+                                   append a phase row "PN NAME" on branch p<n>-<topic>
   check                            validate the file
 
 Standard library only.
@@ -32,7 +34,7 @@ from typing import Dict, List, Optional
 
 REPO = Path(__file__).resolve().parents[1]
 STATUS = REPO / "plans" / "STATUS.md"
-WORK_ORDER = ["P0", "P1", "P2", "P4", "P5", "P12", "P11"]
+WORK_ORDER = ["P0", "P1", "P2", "P4", "P17", "P5", "P12", "P11"]
 PHASE_STATES = {"NOT-STARTED", "ACTIVE", "GATE-OWNER", "DONE", "BLOCKED"}
 TASK_STATES = {"READY", "ACTIVE", "DONE", "BLOCKED", "OWNER"}
 TASK_ID = re.compile(r"^P(\d+)\.(\d+|G)$")
@@ -220,7 +222,31 @@ def cmd_phase(st: Status, pid: str, state: str, note: Optional[str]) -> None:
     raise SystemExit(f"status: phase {pid} not found")
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def cmd_phase_add(st: Status, pid: str, name: str, branch: str, state: str, note: str) -> None:
+    """Append the phase row "<pid> <name>" on `branch`.
+
+    Refuse a bad id, an existing phase, a name that is empty or holds a '|' or a
+    control character, a note with a control character, a bad branch name, or
+    an unknown state.
+    """
+    m = PHASE_ID.match(pid)
+    if not m:
+        raise SystemExit(f"status: bad phase id {pid} (use P<n>)")
+    if any(r[0].split()[0] == pid for r in st.phases.rows):
+        raise SystemExit(f"status: phase {pid} exists")
+    if not name.strip() or "|" in name or not name.isprintable():
+        raise SystemExit("status: the phase name must be non-empty and hold no '|' or control character")
+    if not note.isprintable():
+        raise SystemExit("status: the note must hold no control character")
+    if not re.fullmatch(rf"p{m.group(1)}-[a-z0-9]+(-[a-z0-9]+)*", branch):
+        raise SystemExit(f"status: branch {branch} must be p{m.group(1)}-<topic> (AGENTS.md, Branches)")
+    if state not in PHASE_STATES:
+        raise SystemExit(f"status: unknown phase state {state}")
+    st.phases.rows.append([f"{pid} {name.strip()}", branch, state, note.replace("|", "/") or "-"])
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Return the command-line parser: one subcommand per command in the module docstring."""
     p = argparse.ArgumentParser(description="Read and update plans/STATUS.md")
     p.add_argument("--file", default=str(STATUS), help=argparse.SUPPRESS)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -241,8 +267,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     s.add_argument("id")
     s.add_argument("state")
     s.add_argument("--note")
+    s = sub.add_parser("phase-add")
+    s.add_argument("id")
+    s.add_argument("name")
+    s.add_argument("branch")
+    s.add_argument("--state", default="NOT-STARTED")
+    s.add_argument("--note", default="-")
     sub.add_parser("check")
-    a = p.parse_args(argv)
+    return p
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """Run one command on the status file; return 0, or 1 when the file or the change is invalid."""
+    a = build_parser().parse_args(argv)
     path = Path(a.file)
     st = load(path)
     if a.cmd in ("summary", "next"):
@@ -266,6 +303,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         cmd_add(st, a.id, a.title, a.depends, a.state, a.note)
     elif a.cmd == "phase":
         cmd_phase(st, a.id, a.state, a.note)
+    elif a.cmd == "phase-add":
+        cmd_phase_add(st, a.id, a.name, a.branch, a.state, a.note)
     validate(st)
     if st.errors:
         for e in st.errors:

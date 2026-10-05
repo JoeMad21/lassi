@@ -9,13 +9,27 @@ whitespace is not part of the value. The keys the runner reads:
 - NAME and VERSION: the pin's name and version; VERSION is what a Trial's
   toolchain_pins records.
 - PREFIX_NAME: the install directory under the toolchains root
-  ($LASSI_TOOLCHAINS), written <NAME>@<VERSION>.
+  ($LASSI_TOOLCHAINS), written <NAME>@<VERSION>, for a toolchain the
+  project installs.
+- EXECUTABLE: for a host compiler the project does not install (a
+  toolchain class with PIN and no PIN_BIN, such as toolchains/gcc.pin),
+  its absolute path on the build host, which the runner uses as given; such
+  a pin has no PREFIX_NAME and no install script, unless its class defines
+  check_tree and builds against the pin's installed tree, which
+  PREFIX_NAME then names (toolchains/tt-metal.pin, with its install script).
+- EXPECT_VERSION: text the pinned compiler's `--version` must print, checked
+  in the compile sandbox before the first build.
 - COMPILER_SUBDIR (optional): the compiler directory inside the prefix,
   which a toolchain class may name in its PIN_BIN as {COMPILER_SUBDIR}.
 - CUDA_HOME_FROM (optional): the PREFIX_NAME of another pin that the
   compiler needs at run time; the runner passes <toolchains root>/<it> to the
   compile as NVHPC_CUDA_HOME (PREFIX_VARIABLES), and the Trial records that
   pin's VERSION too.
+
+Other keys are read by the pin's install script or its toolchain class, such
+as COMMIT and the HOST_* build line of toolchains/tt-metal.pin, which
+lassi.toolchains.ttmetal_build reads. PINS_DIR also holds the tracked lists a
+toolchain class compares an install with (toolchains/tt-metal-cpm-sources.txt).
 """
 
 from __future__ import annotations

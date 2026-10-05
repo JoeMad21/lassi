@@ -22,15 +22,40 @@ The runner checks either kind before any model is asked.
 - baseline builds the item's target reference program in a fresh
   directory under the trial's directory (<trial>/baseline-<language>/build,
   never an attempt's), with the target language's toolchain and the item's
-  support files as harness files, and runs it when the executor runs
-  programs (capability `runs_code`), with the item's run arguments and
-  reference_limits. The target's run is kept in Trial.reference_run (exit
-  code, hang flag, wall time, stdout in the text store, and the RunResult
-  flags as bools); the source reference's run is never recorded. A cut
+  support files for that language as harness files (Suite.support_files
+  with the language: the item-level ones and the language's own, task
+  P4.13), and runs it when that language's executor (executor_for) runs
+  programs (capability `runs_code`), with the item's program arguments
+  and reference_limits. The arguments come from
+  lassi.bench.registry.stage_inputs: an item that declares held-out inputs
+  has them written under the build directory's @inputs first, drawn with
+  its seed, and takes the input files, then the output files, as its
+  arguments; any other item takes its run_args. The target's run is kept in
+  Trial.reference_run (exit code, hang flag, wall time, stdout in the text
+  store, and the RunResult flags as bools); the source reference's run is
+  never recorded. A cut
   output does not end the trial. A reference that does not build ends the
-  trial with final.end_reason `baseline-compile`, and a run that exits
-  nonzero or hangs with `baseline-run`; the runner then runs no later stage,
-  so no model is asked.
+  trial with final.end_reason `baseline-compile`. A run is read in this
+  order (task P4.6; _reference_run_end): a simulator gap
+  (RunResult.sim_gap) ends it with `sim-gap`, the message naming the gap's
+  class, whatever the exit status; then a hang, undefined behavior
+  (RunResult.sim_ub, even after exit status 0), or an exit status other
+  than 0 ends it with `baseline-run`. The baseline does not read a
+  reference run's diagnostics, so a kernel JIT error there counts only
+  through the exit status, and a reference run that hangs gets no hang
+  diagnostic and no Watcher dump, even when its executor added one (task
+  P4.11). The runner then runs no later stage, so no model is asked. When the recipe's Oracle compares output files
+  (capability aligns_output_files, output_file_oracle), the target's output
+  files are also kept in the binary store (RunInfo.outputs), a reference
+  run whose output files that Oracle cannot compare against (an unreadable
+  file, two files holding one array name, or none) ends the trial with
+  `baseline-run` (unless its workdir came back incomplete), and, when both
+  references ran and the item declares a tolerance, the source reference's
+  agreement with the target reference is recorded in
+  Trial.reference_agreement; an output outside that tolerance ends the trial
+  with `baseline-disagree`. When the agreement would be measured but either
+  reference run's workdir came back incomplete, no agreement is recorded and
+  Trial.baseline_diagnostics gains a `reference-workdir-incomplete` warning.
 - summarize_context sends [system, user]: the general system prompt, then
   the summary request followed by the target language's context pack. The
   reply fills Trial.context.knowledge_summary.
@@ -51,13 +76,24 @@ The runner checks either kind before any model is asked.
   direction's system prompt. Its error text is the parsed diagnostics,
   capped at DIAGNOSTIC_COUNT_CAP diagnostics and DIAGNOSTIC_BYTES_CAP bytes
   of whole lines, with a line saying how many were left out when any were
-  (diagnostics_text).
+  (diagnostics_text). After every build that gave a program, the target
+  language's toolchain, when it declares host_compute_guard
+  (lassi.core.capabilities, task P4.12; found by capability, never by
+  name), reads the attempt's files with the item's support files for the
+  target language: the reading sets Attempt.guards.host_compute and adds its parse-stage
+  warnings or notes after the build's diagnostics. It never changes a
+  stage or asks for a correction, and every later copy of the attempt
+  keeps it. A guard's diagnostics (codes starting with "guard-") never
+  enter a correction prompt (prompt_diagnostics).
 - run_loop continues compile_loop's loop (it runs compile_loop first, which
   changes nothing when compile_loop already ran) and, when the executor runs
   programs (capability `runs_code`), runs each compiling attempt from its
-  build directory with the item's run arguments and attempt_limits. The run
+  build directory with the item's program arguments (stage_inputs, as the
+  baseline gets them) and attempt_limits. The run
   is kept in Attempt.run (exit code, hang flag, wall time, stdout in the text
-  store, and the RunResult flags as bools, a failed run's included); a clean
+  store, the RunResult flags as bools, and, when the recipe's Oracle compares
+  output files, every output file in the binary store by hash; a failed
+  run's included); a clean
   run (exit status 0, no hang) is S5, and a failed one stays S4 with a
   run-stage `run-error` Diagnostic. A failed run is fed back
   with the execute-error prompt, whose error text (run_error_text) is, under
@@ -78,6 +114,33 @@ The runner checks either kind before any model is asked.
   trial's RunContext (RunContext.artifacts), in memory and not in the
   record, so an attempt cannot be run again from the record alone.
 
+  Simulator readings (task P4.6; RunResult's findings, never the
+  executor's name). The attempt also gains the executor's diagnostics of
+  the run (RunResult.diagnostics) and records RunResult.sim_ub in
+  Attempt.run, then reads the run in this order (run_stage and
+  RunLoopStage.__call__): a jit-stage error, then a gap, then undefined
+  behavior, a hang, or the exit status. A jit-stage error among those
+  diagnostics is a kernel JIT failure, whatever else the run reported: the
+  attempt, run recorded, drops to S1 with no run-error, and
+  compile_loop asks for its correction as for a compile error (Request
+  stage compile_loop, the attempt's parsed diagnostics in the prompt,
+  under the same count and cap). Undefined behavior (sim_ub True) is a
+  failed run, S4 even after exit status 0, fed back like any other. A
+  simulator gap (sim_gap) in a run with no jit-stage error leaves the
+  attempt at S4 with no run-error and ends the trial with `sim-gap`, the
+  message naming the gap's class, with no correction, whatever the exit
+  status and even when the run also reported undefined behavior.
+  The run-error message and the error text name the undefined
+  behavior (UB_FINDING), and for a run that hung on an executor that
+  declares `simulator` (lassi.core.capabilities SIMULATOR) they carry the
+  Harness Contract's hang diagnostic (HANG_DIAGNOSTIC), a likely
+  circular-buffer or semaphore deadlock, followed by the message of each
+  Watcher dump the executor added to that run, in order: its run-stage
+  notes coded WATCHER_CODE (task P4.11; run_findings). Those notes also
+  stay among the attempt's diagnostics. The hang text is the ttsim hint
+  (circular buffers and semaphores are tt-metal constructs); any executor
+  that declares `simulator` gets it.
+
 A context stage names the Trial.context field it fills in `fills_context`,
 and generate names the fields its fragment prompt joins, when a pack serves
 the target, in `joins_context`; the runner checks that an earlier stage
@@ -90,10 +153,21 @@ the stage that sends it keeps each message it sends in the text store
 before sending, system messages included, and appends a Request with those
 references, the attempt its reply became (None for a context request), and
 the reply as kept. A correction is recorded under the loop stage that asked
-for it: compile_loop for a compile error, run_loop for a failed run. An
+for it: compile_loop for a compile error (a kernel JIT failure included),
+run_loop for a failed run. An
 attempt's own `invalid-text` warning stays on the attempt; Trial.context
 carries no diagnostics, so a context reply that held a lone surrogate gives
 its request one parse-stage `invalid-text` warning.
+
+Progress events (lassi.core.progress, task P4.8) go to RunContext.observer
+when there is one, and nothing a stage does depends on them: before each
+model call, once its messages are stored, a request-sent event with the
+trial before the request is recorded (_send); an attempt event after
+generate or a correction appends an attempt (with its request recorded),
+after compile_loop builds the last attempt (_build_last; the event carries
+the host-compute reading), and after run_loop runs it (_run_last). Later
+changes (run_loop's `stale-output` warning, an end reason, the oracle
+stage's alignment) reach the observer with the runner's trial-end event.
 
 Upstream quirks are reproduced when their fixes (lassi.core.recipe.FIXES)
 are off, and each stage class names the fixes it reproduces in
@@ -143,13 +217,16 @@ and reward reads (Design Principle 2):
   error is `missing-file`, an expected file with no block. That error is
   the build error of the Harness Contract: compile_loop feeds it back to
   the model in the correction prompt without building the incomplete
-  files, so the attempt stays S1.
+  files, so the attempt stays S1. A built attempt whose run reported a
+  kernel JIT error (a jit-stage error in RunResult.diagnostics) is S1 too.
 - S2, verifies, and S3, lowers: the MLIR verifier and the lowering passes.
   Source-level translation has neither step, so these stages never record
   S2 or S3.
-- S4, compiles: the toolchain built the files into an artifact.
+- S4, compiles: the toolchain built the files into an artifact, and no
+  run of it reported a kernel JIT error.
 - S5, runs clean: the artifact ran with no crash, undefined behavior, or
-  hang; the run loop records it.
+  hang (exit status 0, no hang, sim_ub not True, no simulator gap;
+  run_stage); the run loop records it.
 
 Output agreement with the oracle is never a stage: it is Attempt.alignment
 and Final.alignment, which the reward weighs separately. Only run_loop runs
@@ -166,12 +243,24 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
-from lassi.bench import Direction, Suite
+from lassi.bench import Direction, Suite, stage_inputs
 from lassi.core import fragments as fragment_text
-from lassi.core.capabilities import declares, unload_before_run
+from lassi.core.capabilities import (
+    ALIGNS_OUTPUT_FILES,
+    GUARD_CODE_PREFIX,
+    HOST_COMPUTE_GUARD,
+    SIMULATOR,
+    WATCHER_CODE,
+    OutputFileOracle,
+    declares,
+    host_compute_reading,
+    unload_before_run,
+)
 from lassi.core.files import parse_file_blocks, render_file_blocks
 from lassi.core.interfaces import BuildResult, Executor, Limits, LLMBackend, Message, RunResult, Sampling, Toolchain
+from lassi.core.progress import ATTEMPT, REQUEST_SENT, Observer, notify
 from lassi.core.recipe import Recipe
 from lassi.core.record import (
     Attempt,
@@ -185,8 +274,8 @@ from lassi.core.record import (
     standing_attempt,
     unified_diff,
 )
-from lassi.core.registry import register
-from lassi.core.store import TextStore
+from lassi.core.registry import DEFAULT_REGISTRY, register
+from lassi.core.store import BlobStore, TextStore
 from lassi.executors.workdir import build_dir, fresh_build_dir
 from lassi.prompts import render
 
@@ -205,8 +294,26 @@ MISSING_FILE = "missing-file"
 # The end codes these stages set in final.end_reason (lassi.core.record END_REASONS).
 BASELINE_COMPILE = "baseline-compile"
 BASELINE_RUN = "baseline-run"
+BASELINE_DISAGREE = "baseline-disagree"
 CORRECTION_CAP = "correction-cap"
 UPSTREAM_CRASH = "upstream-crash"
+SIM_GAP = "sim-gap"
+
+# The Diagnostic stage of kernel JIT messages, which an executor parses from a run (RunResult.diagnostics). A jit-stage
+# error means the program's kernels did not compile, so the attempt reached no more than S1 (see the module docstring).
+JIT = "jit"
+# What the stages say about a run's simulator findings (task P4.6), in its run-stage error and its correction prompt:
+# undefined behavior (RunResult.sim_ub), and the Harness Contract's hang diagnostic for an attempt run that hung on an
+# executor that declares SIMULATOR (lassi.core.capabilities). HANG_DIAGNOSTIC is the ttsim hint: circular buffers and
+# semaphores are tt-metal constructs. The stages give it to any executor that declares SIMULATOR, so a simulator of
+# another device gets the same text; a reference run's hang message does not carry it (_reference_run_end). After
+# it come the Watcher dumps the executor added to the hung run, its run-stage notes coded WATCHER_CODE (task P4.11;
+# lassi.core.capabilities defines the code, so an executor names it without importing the stages).
+UB_FINDING = "the simulator reported undefined behavior"
+HANG_DIAGNOSTIC = (
+    "a hang on a simulator most likely means a deadlock: a circular buffer or a semaphore that a core waits on and "
+    "that is never filled or signalled"
+)
 
 # The capability of an executor that runs programs; baseline runs a reference only on such an executor.
 RUNS_CODE = "runs_code"
@@ -242,6 +349,11 @@ RUN_WALL_FLOOR_S = 30.0
 # The CPU count of an attempt run [DESIGN]: the reference run's, so a translation runs with the threads its
 # reference had (an executor sets OMP_NUM_THREADS to Limits.cpus).
 RUN_CPUS = REFERENCE_CPUS
+
+# The run-stage warning code of a reference run whose workdir came back incomplete (RunResult.workdir_incomplete)
+# under an Oracle that compares output files: the baseline notes it in Trial.baseline_diagnostics when it skips
+# the references' agreement, and the oracle stage puts it on each attempt it does not align against a cut target.
+REFERENCE_WORKDIR_INCOMPLETE = "reference-workdir-incomplete"
 
 # The run-stage Diagnostic codes run_loop sets: a failed run (error) and stale output (warning).
 RUN_ERROR = "run-error"
@@ -307,6 +419,10 @@ class RunContext:
     """What every stage of one trial reads: the recipe, the components, the bench item, and the run's settings.
 
     `toolchains` maps a language to the toolchain that builds it.
+    `executor` runs the trial's attempts: the target language's executor.
+    `executors` maps each language to its executor when the recipe binds
+    executors per language (task P4.5), and is empty for the single form,
+    whose one executor is `executor`; executor_for reads both.
     `build_root` is the root that lassi.executors.workdir.build_dir places each
     attempt's build directory under; the runner passes the run directory, so
     one run's builds never meet another's. `prompts` is the prompt set, and
@@ -316,7 +432,10 @@ class RunContext:
     serves. `artifacts` maps the index of each attempt a build turned into a
     program to that program (BuildResult.artifact): compile_loop fills it and
     run_loop runs from it. The runner builds one RunContext per trial, so it
-    never carries an artifact from one trial to the next.
+    never carries an artifact from one trial to the next. `observer` gets the
+    stages' progress events (lassi.core.progress: request-sent and attempt);
+    the runner passes its GuardedObserver, or None when the run has no
+    observer, and no stage reads anything back from it.
     """
 
     recipe: Recipe
@@ -335,6 +454,24 @@ class RunContext:
     fragments: Mapping[str, str] = field(default_factory=dict)
     packs: Mapping[str, str] = field(default_factory=dict)
     artifacts: dict[int, Path] = field(default_factory=dict)
+    executors: Mapping[str, Executor] = field(default_factory=dict)
+    observer: Observer | None = None
+
+
+def executor_for(context: RunContext, language: str) -> Executor:
+    """Return the executor that runs programs in `language`: its own with executors per language, else the one.
+
+    With executors per language, a language without one raises ValueError
+    rather than run on another language's executor; the runner refuses such
+    a recipe before any directory exists.
+    """
+    if not context.executors:
+        return context.executor
+    executor = context.executors.get(language)
+    if executor is None:
+        bound = ", ".join(sorted(context.executors))
+        raise ValueError(f"no executor is bound for {language!r}; executors are bound for: {bound}")
+    return executor
 
 
 def target_files(context: RunContext) -> list[str]:
@@ -421,21 +558,81 @@ def reference_limits(context: RunContext) -> Limits:
     return Limits(wall_s=REFERENCE_WALL_S, memory_mb=memory_mb, cpus=REFERENCE_CPUS)
 
 
-def _run_info(context: RunContext, run: RunResult) -> RunInfo:
-    """Return the RunInfo of a run that happened: exit code, hang flag, wall time, stdout in the store, run flags.
+def _run_info(context: RunContext, run: RunResult, keep_outputs: bool = False) -> RunInfo:
+    """Return the RunInfo of a run that happened: exit code, hang flag, UB, wall time, stdout in the store, run flags.
 
     Each RunResult flag (RUN_FLAGS) is copied as a bool, so a run whose
-    output was kept whole records False, never None.
+    output was kept whole records False, never None. sim_ub is copied as
+    the executor reported it: True, False, or None when it did not check.
+    With `keep_outputs`, every output file's bytes go into the binary store
+    beside the text store and RunInfo.outputs maps each file to its sha256;
+    otherwise outputs stays None (not recorded).
     """
     flags = {flag: bool(getattr(run, flag)) for flag in RUN_FLAGS}
     stdout_ref = context.store.put(run.stdout)
-    return RunInfo(exit_code=run.exit_code, hang=run.hang, wall_s=run.wall_s, stdout_ref=stdout_ref, **flags)
+    outputs = _kept_outputs(context, run) if keep_outputs else None
+    return RunInfo(
+        exit_code=run.exit_code, hang=run.hang, sim_ub=run.sim_ub, wall_s=run.wall_s, stdout_ref=stdout_ref,
+        outputs=outputs, **flags,
+    )
+
+
+def _kept_outputs(context: RunContext, run: RunResult) -> dict[str, str]:
+    """Store every output file of `run` in BlobStore(<the text store's root>) and return file -> sha256, sorted."""
+    blobs = BlobStore(context.store.root)
+    return {file: blobs.put(Path(run.output_files[file]).read_bytes()) for file in sorted(run.output_files)}
+
+
+def output_file_oracle(context: RunContext) -> OutputFileOracle | None:
+    """Return the recipe's Oracle, built from its section, when it declares ALIGNS_OUTPUT_FILES; else None.
+
+    The class is looked up by the binding's name in the default registry,
+    as the oracle stage looks it up, since a RunContext carries no registry;
+    the runner checks the binding against its own registry when the recipe
+    loads. baseline and run_loop keep run output files only when this
+    returns an oracle.
+    """
+    for binding in context.recipe.bindings:
+        if binding.interface == "Oracle":
+            entry = DEFAULT_REGISTRY.get("Oracle", binding.name)
+            if ALIGNS_OUTPUT_FILES in entry.capabilities:
+                return cast(OutputFileOracle, entry.factory(**binding.config))
+    return None
 
 
 def _ended(trial: Trial, code: str, message: str) -> Trial:
     """Return `trial` with final.end_reason set to `code` and `message`; the runner then runs no later stage."""
     reason = EndReason(code=code, message=message)
     return dataclasses.replace(trial, final=dataclasses.replace(trial.final, end_reason=reason))
+
+
+def _reference_run_end(run: RunResult, language: str) -> tuple[str, str] | None:
+    """Return the end code and message of a reference run that ends the trial at the baseline, or None.
+
+    Checked in this order (task P4.6): a simulator gap (RunResult.sim_gap)
+    ends it at SIM_GAP, the message naming the gap's class, whatever the
+    exit status; a hang ends it at BASELINE_RUN; so does undefined behavior
+    (RunResult.sim_ub True), even after exit status 0, the message naming
+    it; and so does an exit status other than 0, or none. A reference's
+    diagnostics (RunResult.diagnostics, kernel JIT errors included) are not
+    read here, so a JIT failure counts only through the exit status, and a
+    hang gets the message it got before task P4.6, with no hang diagnostic
+    and no Watcher dump (task P4.11).
+    """
+    if run.sim_gap is not None:
+        message = (
+            f"the {language} reference run stopped at a simulator gap, {run.sim_gap}: the simulator cannot run it, "
+            "which is not a model error, so no model is asked"
+        )
+        return SIM_GAP, message
+    if run.hang:
+        return BASELINE_RUN, f"the {language} reference run hung past its wall limit of {REFERENCE_WALL_S} s"
+    status = "no exit status" if run.exit_code is None else f"exit status {run.exit_code}"
+    if run.sim_ub is True:
+        return BASELINE_RUN, f"{UB_FINDING} in the {language} reference run, which ended with {status}"
+    if run.exit_code != 0:
+        return BASELINE_RUN, f"the {language} reference run ended with {status}"
+    return None
 
 
 def _toolchain(context: RunContext, language: str) -> Toolchain:
@@ -452,9 +649,30 @@ def _toolchain_name(toolchain: Toolchain) -> str:
     return str(getattr(toolchain, "name", type(toolchain).__name__))
 
 
-def _harness_build(context: RunContext, toolchain: Toolchain, files: Mapping[str, str], workdir: Path) -> BuildResult:
-    """Build `files` in `workdir`, with the item's support files as the `harness` argument when it has any."""
-    harness = context.suite.support_files(context.item, context.sources_root, purpose=PURPOSE)
+def _support_files(context: RunContext, language: str) -> dict[str, str]:
+    """Return the harness files of a build in `language` (build-directory name -> text).
+
+    They are the item's support files for that language: the item-level
+    ones and the language's own (Suite.support_files with `language`, task
+    P4.13), so a TT build gets its kernels and a C++ build does not.
+    """
+    return context.suite.support_files(context.item, context.sources_root, purpose=PURPOSE, language=language)
+
+
+def prompt_diagnostics(diagnostics: Sequence[Diagnostic]) -> list[Diagnostic]:
+    """Return `diagnostics` without a guard's (code starting with GUARD_CODE_PREFIX), which never enter a prompt.
+
+    The order is kept and the sequence given is not changed (task P4.12;
+    the guard's outcome is never fed back to the model).
+    """
+    return [item for item in diagnostics if not (item.code or "").startswith(GUARD_CODE_PREFIX)]
+
+
+def _harness_build(
+    context: RunContext, toolchain: Toolchain, files: Mapping[str, str], workdir: Path, language: str
+) -> BuildResult:
+    """Build `files` in `workdir`, with the item's support files for `language` as `harness` when there are any."""
+    harness = _support_files(context, language)
     if harness:
         return toolchain.build(files, workdir, harness=harness)
     return toolchain.build(files, workdir)
@@ -569,15 +787,21 @@ def _reply_attempt(
     return _fenced_attempt(index, prompt_ref, reply, expected)
 
 
-def _send(context: RunContext, prompt: str, system: str | None = None) -> tuple[list[RequestMessage], str]:
+def _send(
+    context: RunContext, trial: Trial, stage: str, prompt: str, system: str | None = None
+) -> tuple[list[RequestMessage], str]:
     """Send `prompt` as the user message, after `system` as the system message when given.
 
-    Each message is kept in the text store before anything is sent. Returns
+    Each message is kept in the text store before anything is sent, and
+    then the observer gets a request-sent event with `trial`, the trial
+    before this request is recorded, and `stage`, the stage it is recorded
+    under (lassi.core.progress). Returns
     the messages as a Request records them (role and text reference, in the
     order sent; the user message is last) and the reply text as returned.
     """
     messages = [Message("user", prompt)] if system is None else [Message("system", system), Message("user", prompt)]
     recorded = [RequestMessage(role=message.role, ref=context.store.put(message.content)) for message in messages]
+    notify(context.observer, REQUEST_SENT, trial, stage)
     return recorded, context.backend.complete(messages, context.sampling).text
 
 
@@ -630,6 +854,18 @@ class BaselineStage:
     for the source language while that fix is on. The capability
     `builds_references` makes the runner refuse the stage when a stage that
     asks the model is listed before it.
+
+    When the recipe's Oracle compares output files (output_file_oracle), each
+    reference run's output files must be ones it can compare against
+    (reference_problem) unless the run's workdir came back incomplete, the
+    target's are kept in the binary store (Trial.reference_run.outputs), and,
+    when both references ran and the item declares a tolerance (suite
+    manifest), the source reference's agreement with the target reference is
+    recorded in Trial.reference_agreement, judged against that tolerance.
+    When the agreement would be measured (those same conditions) but either
+    reference run's workdir came back incomplete, no agreement is recorded
+    and Trial.baseline_diagnostics gains one run-stage warning, code
+    REFERENCE_WORKDIR_INCOMPLETE, naming the run.
     """
 
     name = "baseline"
@@ -640,65 +876,135 @@ class BaselineStage:
     source_build_fix = "baseline_both"
 
     def __init__(self, *, context: RunContext) -> None:
-        """Keep the trial's run context."""
+        """Keep the trial's run context and the recipe's Oracle when it compares output files."""
         self.context = context
+        self.files_oracle = output_file_oracle(context)
 
     def __call__(self, trial: Trial) -> Trial:
         """Return `trial` with the target reference's run kept, or ended with a baseline end reason.
 
-        The target reference is built, and run when the executor runs
-        programs; with the baseline_both fix on, the source reference follows
-        (unless the direction's two languages are one). The first failure
-        sets final.end_reason and stops the stage.
+        The target reference is built, and run when its language's executor
+        runs programs; with the baseline_both fix on, the source reference
+        follows (unless the direction's two languages are one), on the source
+        language's executor (executor_for). The first failure
+        sets final.end_reason and stops the stage. Then the references'
+        agreement is measured when it applies (_agreement).
         """
         direction = self.context.direction
         languages = [direction.target]
         if fix_on(self.context, "baseline_both") and direction.source != direction.target:
             languages.append(direction.source)
+        runs: dict[str, RunResult] = {}
         for language in languages:
-            trial = self._reference(trial, language)
+            trial, run = self._reference(trial, language)
             if trial.final.end_reason is not None:
-                break
-        return trial
+                return trial
+            if run is not None:
+                runs[language] = run
+        return self._agreement(trial, runs)
 
     def describe(self) -> str:
-        """Return a one-line description of the stage."""
+        """Return a one-line description of the stage: each reference it builds, and runs on its own executor.
+
+        A reference runs only when its language's executor runs programs
+        (executor_for), so with a compile-only source executor the source
+        reference is described as built, not run.
+        """
         direction = self.context.direction
-        both = fix_on(self.context, "baseline_both")
-        which = f"the {direction.target} and {direction.source}" if both else f"only the {direction.target}"
-        runs = RUNS_CODE in getattr(self.context.executor, "capabilities", ())
-        action = "build and run" if runs else "build"
-        return f"baseline: {action} {which} reference program(s) before any model call"
+        both = fix_on(self.context, "baseline_both") and direction.source != direction.target
+        languages = [direction.target, direction.source] if both else [direction.target]
+        running = [RUNS_CODE in getattr(executor_for(self.context, lang), "capabilities", ()) for lang in languages]
+        only = "" if fix_on(self.context, "baseline_both") else "only "
+        parts = [
+            f"{'build and run' if runs else 'build'} {only}the {language} reference program"
+            for language, runs in zip(languages, running, strict=True)
+        ]
+        text = f"baseline: {' and '.join(parts)} before any model call"
+        if any(running) and self.files_oracle is not None:
+            text += ", keeping the target reference's output files for the oracle"
+        return text
 
-    def _reference(self, trial: Trial, language: str) -> Trial:
-        """Build the item's reference in `language` and run it when the executor runs programs.
+    def _reference(self, trial: Trial, language: str) -> tuple[Trial, RunResult | None]:
+        """Build the item's reference in `language` and run it when that language's executor runs programs.
 
-        A build with no artifact ends the trial with `baseline-compile`, and
-        a run that exits nonzero, ends with no exit status, or hangs ends it
-        with `baseline-run`. The target's run is kept in Trial.reference_run
-        (_run_info), a failed one included; a cut output alone ends nothing.
+        Returns the trial and the RunResult (None when nothing ran). A build
+        with no artifact ends the trial with `baseline-compile`; a run the
+        reading of _reference_run_end ends (a simulator gap at `sim-gap`; a
+        hang, undefined behavior, or an exit status other than 0 at
+        `baseline-run`) ends it there, as do output files the recipe's
+        output-file Oracle cannot compare against (reference_problem names
+        the file, at `baseline-run`); that check is skipped for a run whose
+        workdir came back incomplete, since a cut output alone ends nothing.
+        The target's run is kept in Trial.reference_run (_run_info, with its
+        output files in the binary store when that Oracle is bound), a failed
+        one included; the source reference's files are read but not stored.
         """
         context = self.context
         files = self._files(language)
         toolchain = _toolchain(context, language)
         workdir = _baseline_dir(context.build_root, trial.trial_id, language)
-        result = _harness_build(context, toolchain, files, workdir)
+        result = _harness_build(context, toolchain, files, workdir, language)
         if result.artifact is None:
-            return _ended(trial, BASELINE_COMPILE, self._build_message(language, files, toolchain, result))
-        if RUNS_CODE not in getattr(context.executor, "capabilities", ()):
-            return trial
+            return _ended(trial, BASELINE_COMPILE, self._build_message(language, files, toolchain, result)), None
+        executor = executor_for(context, language)
+        if RUNS_CODE not in getattr(executor, "capabilities", ()):
+            return trial, None
         item = context.suite.item(context.item, purpose=PURPOSE)
-        run = context.executor.run(result.artifact, list(item.run_args), reference_limits(context))
-        info = _run_info(context, run)
-        if language == context.direction.target:
+        args = stage_inputs(item, result.artifact.parent)
+        run = executor.run(result.artifact, args, reference_limits(context))
+        target = language == context.direction.target
+        info = _run_info(context, run, keep_outputs=target and self.files_oracle is not None)
+        if target:
             trial = dataclasses.replace(trial, reference_run=info)
-        if run.hang:
-            message = f"the {language} reference run hung past its wall limit of {REFERENCE_WALL_S} s"
-            return _ended(trial, BASELINE_RUN, message)
-        if run.exit_code != 0:
-            status = "no exit status" if run.exit_code is None else f"exit status {run.exit_code}"
-            return _ended(trial, BASELINE_RUN, f"the {language} reference run ended with {status}")
-        return trial
+        end = _reference_run_end(run, language)
+        if end is not None:
+            return _ended(trial, *end), run
+        if self.files_oracle is not None and not run.workdir_incomplete:
+            problem = self.files_oracle.reference_problem(run.output_files, side=f"{language} reference")
+            if problem is not None:
+                return _ended(trial, BASELINE_RUN, problem), run
+        return trial, run
+
+    def _agreement(self, trial: Trial, runs: Mapping[str, RunResult]) -> Trial:
+        """Record the source reference's agreement with the target reference, and end the trial when it misses.
+
+        It applies when the recipe's Oracle compares output files, both
+        references ran, and the item declares a tolerance; otherwise the
+        trial comes back unchanged. When either run's workdir came back
+        incomplete, its output files may be cut, so no agreement is recorded
+        and Trial.baseline_diagnostics gains one REFERENCE_WORKDIR_INCOMPLETE
+        warning naming the run(s). Otherwise Trial.reference_agreement holds
+        one OutputStats per output, judged against the item's tolerance under
+        its own metric, and an output that fails ends the trial with
+        `baseline-disagree`, before any model call.
+        """
+        context, oracle = self.context, self.files_oracle
+        direction = context.direction
+        tolerance = context.suite.item(context.item, purpose=PURPOSE).tolerance
+        if oracle is None or tolerance is None or direction.source not in runs or direction.target not in runs:
+            return trial
+        cut = [language for language in (direction.target, direction.source) if runs[language].workdir_incomplete]
+        if cut:
+            names = " and ".join(f"the {language} reference" for language in cut)
+            message = (
+                f"{names} run's workdir came back incomplete, so its output files may be cut and the references' "
+                "agreement was not measured"
+            )
+            note = Diagnostic(stage="run", severity="warning", code=REFERENCE_WORKDIR_INCOMPLETE, message=message)
+            return dataclasses.replace(trial, baseline_diagnostics=[*trial.baseline_diagnostics, note])
+        sides = (f"{direction.target} reference", f"{direction.source} reference")
+        target, source = runs[direction.target].output_files, runs[direction.source].output_files
+        stats = oracle.with_tolerance(tolerance).compare(target, source, sides=sides)
+        trial = dataclasses.replace(trial, reference_agreement=stats)
+        missed = [entry.name for entry in stats if not entry.passed]
+        if not missed:
+            return trial
+        bound = "at least" if tolerance.metric == "pcc" else "at most"
+        message = (
+            f"the {direction.target} and {direction.source} references disagree past the item's tolerance, "
+            f"{tolerance.metric} {bound} {tolerance.threshold!r}, on output(s) {', '.join(missed)}"
+        )
+        return _ended(trial, BASELINE_DISAGREE, message)
 
     def _files(self, language: str) -> dict[str, str]:
         """Return the item's reference program in `language` (file name -> text), as the manifest pins it."""
@@ -748,9 +1054,11 @@ class GenerateStage:
         system, prompt = self._prompt(trial, expected)
         if not fix_on(context, "prompt_spaces"):
             prompt = fragment_text.collapse_spaces(prompt)
-        messages, reply = _send(context, prompt, system)
+        messages, reply = _send(context, trial, self.name, prompt, system)
         attempt = _reply_attempt(context, 0, messages[-1].ref, reply, expected)
-        return _recorded(context, trial.with_attempt(attempt), self.name, 0, messages, attempt.response_text)
+        trial = _recorded(context, trial.with_attempt(attempt), self.name, 0, messages, attempt.response_text)
+        notify(context.observer, ATTEMPT, trial, self.name)
+        return trial
 
     def _prompt(self, trial: Trial, expected: Sequence[str]) -> tuple[str | None, str]:
         """Return the system prompt (None for a template set) and the user prompt.
@@ -821,7 +1129,7 @@ class SummarizeContextStage:
         context = self.context
         pack = context.packs[context.direction.target]
         prompt = fragment_text.summary_request(context.fragments, context.direction, pack)
-        messages, reply = _send(context, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
         return _context_reply(context, trial, self.name, "knowledge_summary", messages, reply)
 
     def describe(self) -> str:
@@ -854,7 +1162,7 @@ class DescribeSourceStage:
         """
         context = self.context
         prompt = fragment_text.description_request(context.fragments, source_as_read(context))
-        messages, reply = _send(context, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
         return _context_reply(context, trial, self.name, "source_description", messages, reply)
 
     def describe(self) -> str:
@@ -883,14 +1191,16 @@ class CompileLoopStage:
         The last attempt is built (_build_last) with the target language's
         toolchain in a fresh build directory; its copy gets the compile
         diagnostics after the parse diagnostics, and S4 when an artifact was
-        built. A build with no artifact always carries an error: "no-artifact"
-        when the toolchain reported none, and "unwritable" when a file name
-        could not be written. While the latest attempt has an error and is
-        not S4, the stage asks for a correction (_correction), appends the
-        reply with its diff from the previous files and records the request,
-        and builds that. When the cap (corrections are the attempts after the
-        first) stops the loop with an error remaining, final.end_reason is set
-        to `correction-cap`. A cap of None never stops the loop.
+        built, then the host-compute reading when the toolchain declares
+        host_compute_guard (_guarded). A build with no artifact always
+        carries an error: "no-artifact" when the toolchain reported none,
+        and "unwritable" when a file name could not be written. While the
+        latest attempt has an error and is not S4, the stage asks for a
+        correction (_correction), appends the reply with its diff from the
+        previous files and records the request, and builds that. When the
+        cap (corrections are the attempts after the first) stops the loop
+        with an error remaining, final.end_reason is set to
+        `correction-cap`. A cap of None never stops the loop.
         """
         if not trial.attempts:
             raise ValueError(f"{trial.trial_id}: compile_loop needs an attempt; run the generate stage first")
@@ -911,6 +1221,8 @@ class CompileLoopStage:
         limit = "no correction cap" if cap is None else f"at most {cap} corrections"
         toolchain = context.toolchains.get(context.direction.target)
         builder = "no bound toolchain" if toolchain is None else _toolchain_name(toolchain)
+        if toolchain is not None and declares(toolchain, HOST_COMPUTE_GUARD):
+            builder += f" ({HOST_COMPUTE_GUARD} after each build)"
         source = f"the {context.prompts} fragments" if context.fragments else f"{context.prompts}/correct.txt"
         errors = "parsed diagnostics" if fix_on(context, "parsed_diagnostics") else "the raw compiler stderr"
         return (
@@ -942,10 +1254,11 @@ class CompileLoopStage:
 
         The trial comes back unchanged, with None, when the last attempt is
         not buildable. A built program is kept in RunContext.artifacts under
-        the attempt's index. The stderr is read only with
-        fixes.parsed_diagnostics off, the one case a prompt carries it, and
-        is None otherwise or when the build kept no attachment
-        (BuildResult.stderr_ref).
+        the attempt's index, and the attempt gains the target toolchain's
+        host-compute reading (_guarded) before the attempt event. The stderr
+        is read only with fixes.parsed_diagnostics off, the one case a
+        prompt carries it, and is None otherwise or when the build kept no
+        attachment (BuildResult.stderr_ref).
         """
         attempt = trial.attempts[-1]
         if not self._buildable(attempt):
@@ -963,23 +1276,46 @@ class CompileLoopStage:
             diagnostics=diagnostics,
             stage_reached=COMPILED if result.artifact is not None else attempt.stage_reached,
         )
+        if result.artifact is not None:
+            built = self._guarded(built)
         trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], built])
+        notify(self.context.observer, ATTEMPT, trial, self.name)
         if fix_on(self.context, "parsed_diagnostics"):
             return trial, None
         return trial, _attachment_text(workdir, result.stderr_ref)
 
+    def _guarded(self, attempt: Attempt) -> Attempt:
+        """Return `attempt` with the target toolchain's host-compute reading (task P4.12); unchanged without one.
+
+        The toolchain is found by capability (host_compute_reading), never by
+        name, and is given the attempt's files and the item's support files
+        for the target language.
+        The reading sets Attempt.guards.host_compute, and its diagnostics
+        follow the parse and build diagnostics. A reading outside the guard
+        contract raises ValueError, which stops the run before the attempt
+        is recorded.
+        """
+        context = self.context
+        toolchain = _toolchain(context, context.direction.target)
+        reading = host_compute_reading(toolchain, attempt.files, _support_files(context, context.direction.target))
+        if reading is None:
+            return attempt
+        guards = dataclasses.replace(attempt.guards, host_compute=reading.host_compute)
+        return dataclasses.replace(attempt, guards=guards, diagnostics=[*attempt.diagnostics, *reading.diagnostics])
+
     def _build(self, files: Mapping[str, str], workdir: Path) -> BuildResult:
         """Build `files` in `workdir`; a file name the filesystem refuses becomes an "unwritable" error.
 
-        The item's support files from the suite manifest go into the build
-        directory as harness files, passed as the toolchain's `harness`
-        argument only when the item has some. Only a name error (too long, or
-        refused as invalid) is the model's to fix; any other OSError, such as
-        a full disk, propagates and stops the run.
+        The item's support files for the target language from the suite
+        manifest go into the build directory as harness files, passed as the
+        toolchain's `harness` argument only when there are some. Only a name
+        error (too long, or refused as invalid) is the model's to fix; any
+        other OSError, such as a full disk, propagates and stops the run.
         """
         context = self.context
         try:
-            return _harness_build(context, _toolchain(context, context.direction.target), files, workdir)
+            target = context.direction.target
+            return _harness_build(context, _toolchain(context, target), files, workdir, target)
         except UnicodeError as error:
             reason = f"a file is not valid Unicode text ({error.reason})"
         except OSError as error:
@@ -997,11 +1333,12 @@ class CompileLoopStage:
 
         The error text is the raw stderr (`stderr`, which _build_last reads
         only with fixes.parsed_diagnostics off) when it is not empty, else
-        diagnostics_text of the attempt's diagnostics: upstream reads an empty
-        stderr as a success, so a failed build that left none (a sandbox
-        timeout, say) has no upstream counterpart.
+        diagnostics_text of the attempt's diagnostics without a guard's
+        (prompt_diagnostics): upstream reads an empty stderr as a success, so
+        a failed build that left none (a sandbox timeout, say) has no
+        upstream counterpart.
         """
-        errors = stderr if stderr else diagnostics_text(trial.attempts[-1].diagnostics)
+        errors = stderr if stderr else diagnostics_text(prompt_diagnostics(trial.attempts[-1].diagnostics))
         return _corrected(self.context, trial, self.name, expected, errors, run_error=False)
 
 
@@ -1026,8 +1363,9 @@ class RunLoopStage:
     runs_model_code = True
 
     def __init__(self, *, context: RunContext) -> None:
-        """Keep the trial's run context."""
+        """Keep the trial's run context, and whether the recipe's Oracle compares output files."""
         self.context = context
+        self.keeps_outputs = output_file_oracle(context) is not None
 
     def __call__(self, trial: Trial) -> Trial:
         """Return `trial` with its compiling attempts run and any corrections appended.
@@ -1038,7 +1376,10 @@ class RunLoopStage:
         runs (Agent Rule 6). Otherwise, while the last attempt
         is S4 and the trial has not ended: past the execution gate (fix off)
         the trial ends unexecuted (_past_gate); else the attempt runs
-        (_run_last). A clean run ends the loop. A failed run with the cap
+        (_run_last). A clean run ends the loop. A kernel JIT failure leaves
+        the attempt at S1, and compile_loop corrects it as a compile error,
+        under the same cap. A simulator gap ends the trial with `sim-gap`
+        (_gap_message), with no correction. A failed run with the cap
         reached ends the trial with `correction-cap`; below it, the
         execute-error correction is appended and compile_loop builds and
         corrects it.
@@ -1054,17 +1395,24 @@ class RunLoopStage:
                 "model-generated code only in the sandbox (Agent Rule 6)"
             )
         cap = context.max_corrections
+        simulator = declares(context.executor, SIMULATOR)
         while trial.final.end_reason is None and trial.attempts[-1].stage_reached == COMPILED:
             index = trial.attempts[-1].index
             if not fix_on(context, "execution_gate") and index > EXECUTION_GATE_CORRECTIONS:
                 return _past_gate(trial)
             trial, run, limits = self._run_last(trial)
-            if trial.attempts[-1].stage_reached == RAN_CLEAN:
+            reached = trial.attempts[-1].stage_reached
+            if reached == RAN_CLEAN:
                 break
+            if reached == PARSED:
+                trial = compile_loop(trial)
+                continue
+            if run.sim_gap is not None:
+                return _ended(trial, SIM_GAP, _gap_message(index, run.sim_gap))
             if cap is not None and index >= cap:
                 message = f"a run error remained after {cap} correction(s), the cap loop.max_corrections sets"
                 return _ended(trial, CORRECTION_CAP, message)
-            errors = run_error_text(run, limits, context.fragments)
+            errors = run_error_text(run, limits, context.fragments, simulator=simulator)
             trial = compile_loop(_corrected(context, trial, self.name, target_files(context), errors, run_error=True))
         return trial
 
@@ -1085,9 +1433,13 @@ class RunLoopStage:
 
         A backend that declares `unload_before_run` is asked to unload first.
         The attempt keeps the run in Attempt.run (_run_info: stdout in the
-        text store, each RunResult flag as a bool), gains one warning per
-        RunResult flag that is set (RUN_FLAGS), and is S5 after a
-        clean run; after a failed one it stays S4 with a `run-error`.
+        text store, sim_ub as reported, each RunResult flag as a bool, and,
+        when the recipe's Oracle compares output files, every output file in
+        the binary store by hash), gains the executor's diagnostics of the
+        run (RunResult.diagnostics) and one warning per RunResult flag that
+        is set (RUN_FLAGS), and reaches the stage run_stage gives. A failed
+        run that is neither a JIT failure (S1) nor a simulator gap stays S4
+        with a `run-error` whose message is _run_status's.
         """
         context = self.context
         attempt = trial.attempts[-1]
@@ -1098,19 +1450,19 @@ class RunLoopStage:
                 "list compile_loop or run_loop, which build the attempts, before any stage that appends one"
             )
         limits = attempt_limits(context, trial)
-        run_args = list(context.suite.item(context.item, purpose=PURPOSE).run_args)
+        run_args = stage_inputs(context.suite.item(context.item, purpose=PURPOSE), artifact.parent)
         unload_before_run(context.backend)
         run = context.executor.run(artifact, run_args, limits)
-        info = _run_info(context, run)
-        diagnostics = [*attempt.diagnostics, *_run_flag_warnings(run)]
-        clean = run.exit_code == 0 and not run.hang
-        if not clean:
-            status = _run_status(run, limits)
+        info = _run_info(context, run, keep_outputs=self.keeps_outputs)
+        diagnostics = [*attempt.diagnostics, *run.diagnostics, *_run_flag_warnings(run)]
+        reached = run_stage(run)
+        if reached == COMPILED and run.sim_gap is None:
+            status = _run_status(run, limits, simulator=declares(context.executor, SIMULATOR))
             diagnostics.append(Diagnostic(stage="run", severity="error", code=RUN_ERROR, message=status))
-        ran = dataclasses.replace(
-            attempt, run=info, diagnostics=diagnostics, stage_reached=RAN_CLEAN if clean else COMPILED
-        )
-        return dataclasses.replace(trial, attempts=[*trial.attempts[:-1], ran]), run, limits
+        ran = dataclasses.replace(attempt, run=info, diagnostics=diagnostics, stage_reached=reached)
+        trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], ran])
+        notify(context.observer, ATTEMPT, trial, self.name)
+        return trial, run, limits
 
 
 def attempt_limits(context: RunContext, trial: Trial) -> Limits:
@@ -1133,7 +1485,45 @@ def attempt_limits(context: RunContext, trial: Trial) -> Limits:
     return Limits(wall_s=wall_s, memory_mb=round(float(sandbox["mem_gb"]) * 1024), cpus=RUN_CPUS)
 
 
-def run_error_text(run: RunResult, limits: Limits, fragments: Mapping[str, str]) -> str:
+def run_stage(run: RunResult) -> str:
+    """Return the stage an attempt reaches with the run `run` (task P4.6).
+
+    S1 (PARSED) when the run's diagnostics hold a jit-stage error: the
+    kernels did not compile, and S4 needs host and kernel JIT. Otherwise S5
+    (RAN_CLEAN) after a clean run, exit status 0 with no hang, no undefined
+    behavior (sim_ub True), and no simulator gap, and S4 (COMPILED) after
+    any other run.
+    """
+    if any(item.stage == JIT and item.severity == "error" for item in run.diagnostics):
+        return PARSED
+    clean = run.exit_code == 0 and not run.hang and run.sim_ub is not True and run.sim_gap is None
+    return RAN_CLEAN if clean else COMPILED
+
+
+def run_findings(run: RunResult, simulator: bool) -> list[str]:
+    """Return what the stages say about a failed run's simulator findings, in order; [] when there is none.
+
+    UB_FINDING when the run reported undefined behavior (sim_ub True), and,
+    when it hung on an executor that declares SIMULATOR (`simulator`), the
+    Harness Contract's hang diagnostic, HANG_DIAGNOSTIC, followed by the
+    message of each Watcher dump the executor added to the run, in order:
+    each of the run's diagnostics with stage run, severity note, and code
+    WATCHER_CODE (task P4.11). A run that did not hang, or ran on an
+    executor that does not declare SIMULATOR, gets neither.
+    """
+    findings = [UB_FINDING] if run.sim_ub is True else []
+    if run.hang and simulator:
+        findings.append(HANG_DIAGNOSTIC)
+        findings += [item.message for item in run.diagnostics if _is_watcher_note(item)]
+    return findings
+
+
+def _is_watcher_note(item: Diagnostic) -> bool:
+    """Return True for a Watcher dump an executor added to a hung run: a run-stage note coded WATCHER_CODE."""
+    return item.stage == "run" and item.severity == "note" and item.code == WATCHER_CODE
+
+
+def run_error_text(run: RunResult, limits: Limits, fragments: Mapping[str, str], *, simulator: bool = False) -> str:
     """Return the error text of the execute-error prompt for the failed run `run`.
 
     With a fragment set (`fragments` not empty) it is upstream's report of
@@ -1143,14 +1533,20 @@ def run_error_text(run: RunResult, limits: Limits, fragments: Mapping[str, str])
     wrote any stderr, RUN_REPORT_STDERR and the stderr. A hang has no
     upstream counterpart (upstream waits for the program without a limit);
     its report is built the same way from the status the executor gives.
+    Upstream has no simulator either, so the run's findings (run_findings,
+    with `simulator` saying whether the executor declares SIMULATOR)
+    follow the report after one line feed, joined by "; ", when there
+    are any; a run with none gets upstream's report alone. With
+    fixes.prompt_newlines off, _corrected removes that line feed as it
+    removes every other, so the findings then follow the report directly.
     With a template set it is this project's wording [DESIGN]: how the run
-    ended, then the stderr when there is any. Either way the stderr is whole
-    (the executor caps it) and read as text mode reads it, as upstream reads
-    the program's output.
+    ended and its findings (_run_status), then the stderr when there is any.
+    Either way the stderr is whole (the executor caps it) and read as text
+    mode reads it, as upstream reads the program's output.
     """
     stderr = fragment_text.as_text_mode(run.stderr)
     if not fragments:
-        status = _run_status(run, limits)
+        status = _run_status(run, limits, simulator=simulator)
         return f"{status}; its standard error follows:\n{stderr}" if stderr else status
     code = popen_return_code(run.exit_code)
     report = fragments[RUN_REPORT_EXIT] + str(code) + " "
@@ -1158,7 +1554,8 @@ def run_error_text(run: RunResult, limits: Limits, fragments: Mapping[str, str])
         report += fragments[RUN_REPORT_SEGFAULT]
     if stderr:
         report += fragments[RUN_REPORT_STDERR] + stderr
-    return report
+    findings = run_findings(run, simulator)
+    return f"{report}\n{'; '.join(findings)}" if findings else report
 
 
 def popen_return_code(exit_code: int | None) -> int | None:
@@ -1174,13 +1571,28 @@ def popen_return_code(exit_code: int | None) -> int | None:
     return exit_code
 
 
-def _run_status(run: RunResult, limits: Limits) -> str:
-    """Return one sentence saying how a failed run ended: stopped at its wall limit, no exit status, or its status."""
+def _run_status(run: RunResult, limits: Limits, *, simulator: bool = False) -> str:
+    """Return one sentence saying how a failed run ended, then its findings (run_findings), each after "; ".
+
+    How it ended: stopped at its wall limit, no exit status, or its exit
+    status; a run with no finding gets that clause alone, as before task
+    P4.6.
+    """
     if run.hang:
-        return f"the program was stopped at its wall limit of {limits.wall_s:g} s"
-    if run.exit_code is None:
-        return "the program ended with no exit status"
-    return f"the program exited with status {run.exit_code}"
+        status = f"the program was stopped at its wall limit of {limits.wall_s:g} s"
+    elif run.exit_code is None:
+        status = "the program ended with no exit status"
+    else:
+        status = f"the program exited with status {run.exit_code}"
+    return "; ".join([status, *run_findings(run, simulator)])
+
+
+def _gap_message(index: int, gap: str) -> str:
+    """Return the end reason message of a trial whose attempt `index` stopped at the simulator gap `gap`."""
+    return (
+        f"the run of attempt {index} stopped at a simulator gap, {gap}: the simulator cannot run the program, which "
+        "is not a model error, so the trial stops with no correction"
+    )
 
 
 def _run_flag_warnings(run: RunResult) -> list[Diagnostic]:
@@ -1231,10 +1643,12 @@ def _corrected(
     system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error)
     if not fix_on(context, "prompt_newlines"):
         prompt = prompt.replace("\n", "")
-    messages, reply = _send(context, prompt, system)
+    messages, reply = _send(context, trial, stage, prompt, system)
     attempt = _reply_attempt(context, previous.index + 1, messages[-1].ref, reply, expected)
     attempt = dataclasses.replace(attempt, diff_from_previous=unified_diff(previous.files, attempt.files))
-    return _recorded(context, trial.with_attempt(attempt), stage, attempt.index, messages, attempt.response_text)
+    trial = _recorded(context, trial.with_attempt(attempt), stage, attempt.index, messages, attempt.response_text)
+    notify(context.observer, ATTEMPT, trial, stage)
+    return trial
 
 
 def _correction_messages(

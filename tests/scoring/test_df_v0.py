@@ -41,7 +41,9 @@ the planning decisions on W and on final.score (plans/p2-scoring.md):
 - `score(trial)` returns the trial's Score: component `single_turn` is
   attempt 0's R, component `multi_turn` is the last attempt's R minus
   0.05 x final.corrections, and the scalar is the multi-turn value
-  (the planning decision on final.score). The last attempt is the final one, as final.stage_reached
+  (the planning decision on final.score). A guard violation on any
+  attempt, an earlier one included, puts -1 in place of the last
+  attempt's R (task P4.15; OQ-028, part 3). The last attempt is the final one, as final.stage_reached
   reads it; a stale-output last attempt did not run, so its own record
   scores it, never the output that stands.
 - `apply(trial)` returns the trial with each Attempt.score holding its
@@ -338,8 +340,8 @@ def formula(weights: Mapping[str, Any]) -> tuple[list[float], float, float]:
     """Return the probe's R per attempt, its single-turn value, and its multi-turn value, by the bible's formula.
 
     R = b(s) - warning_weight x min(W, warning_cap) + alignment_weight x A x 1[s = S5], or guard_violation
-    when a guard is violated; single turn = R of attempt 0; multi turn = R of the last attempt minus
-    correction_penalty x corrections.
+    when a guard is violated; single turn = R of attempt 0; multi turn = R of the last attempt, or
+    guard_violation when any attempt violated a guard (OQ-028, part 3), minus correction_penalty x corrections.
     """
     rs = []
     for stage, count, alignment, violated in PROBE_FACTS:
@@ -349,7 +351,8 @@ def formula(weights: Mapping[str, Any]) -> tuple[list[float], float, float]:
         term = weights["alignment_weight"] * alignment if stage == "S5" else 0.0
         rs.append(weights["stage_base"][stage] - weights["warning_weight"] * min(count, weights["warning_cap"]) + term)
     corrections = len(PROBE_FACTS) - 1
-    return rs, rs[0], rs[-1] - weights["correction_penalty"] * corrections
+    final = weights["guard_violation"] if any(fact[3] for fact in PROBE_FACTS) else rs[-1]
+    return rs, rs[0], final - weights["correction_penalty"] * corrections
 
 
 def profile_values(profile: Any, trial: Trial) -> tuple[list[float], float, float]:
@@ -363,10 +366,11 @@ def test_the_shipped_weights_score_the_probe_by_the_bible() -> None:
     rs, single, multi = profile_values(default_profile(), probe_trial())
     # Hand-computed with the bible's weights: S0 -1.0; S1 -0.8 (its warning uncounted); S2 -0.6; S3 -0.4;
     # S4 with W 12: 0.0 - 0.02 x 10 = -0.2 (A uncounted below S5); S5 guarded: -1.0;
-    # S5 with W 3, A 0.5: 0.2 - 0.06 + 0.4 = 0.54. Single turn -1.0; multi turn 0.54 - 0.05 x 6 = 0.24.
+    # S5 with W 3, A 0.5: 0.2 - 0.06 + 0.4 = 0.54. Single turn -1.0. Attempt 5 violated a guard, so the
+    # multi turn is -1.0 - 0.05 x 6 = -1.30, not 0.54 - 0.05 x 6 = 0.24 (OQ-028, part 3).
     assert rs == pytest.approx([-1.0, -0.8, -0.6, -0.4, -0.2, -1.0, 0.54], abs=TOLERANCE)
     assert single == pytest.approx(-1.0, abs=TOLERANCE)
-    assert multi == pytest.approx(0.24, abs=TOLERANCE)
+    assert multi == pytest.approx(-1.30, abs=TOLERANCE)
 
 
 # A changed value for each weight, each far enough from the bible's to move the probe's score.
@@ -684,6 +688,27 @@ def test_a_guard_violation_on_the_last_attempt_is_r_final() -> None:
     # Hand-computed: single turn = -0.8 (S1); R_final = -1.0 (guard); multi turn = -1.0 - 0.05 x 1 = -1.05.
     assert_components(score.components, {SINGLE_TURN: -0.8, MULTI_TURN: -1.05})
     assert score.scalar == pytest.approx(-1.05, abs=TOLERANCE)
+
+
+def test_a_guard_violation_on_an_earlier_attempt_sets_the_multi_turn_value() -> None:
+    """OQ-028, part 3: a later clean attempt never washes an earlier violation out of the multi-turn value."""
+    trial = hand_trial([clean(0, 1.0), clean(1, 1.0, guards=Guards(harness_tamper=True)), clean(2, 1.0)],
+                       final_alignment=1.0)
+    profile = default_profile()
+    assert [score.scalar for score in attempt_scores(profile, trial)] == pytest.approx([1.0, -1.0, 1.0],
+                                                                                        abs=TOLERANCE)
+    score = profile.score(trial)
+    # Hand-computed: single turn = 0.2 + 0.8 = 1.0; a violation on attempt 1, so multi turn = -1.0 - 0.05 x 2.
+    assert_components(score.components, {SINGLE_TURN: 1.0, MULTI_TURN: -1.10})
+    assert score.scalar == pytest.approx(-1.10, abs=TOLERANCE)
+    assert profile.apply(trial).final.score == pytest.approx(-1.10, abs=TOLERANCE)
+
+
+def test_without_a_violation_the_multi_turn_value_reads_the_last_attempt() -> None:
+    trial = hand_trial([clean(0, 1.0, guards=Guards(host_compute=False, harness_tamper=False, oracle_access=False)),
+                        clean(1, 0.5)], final_alignment=0.5)
+    # Hand-computed: guards checked and clear on attempt 0; R_final = 0.2 + 0.4 = 0.6; multi = 0.6 - 0.05.
+    assert default_profile().score(trial).scalar == pytest.approx(0.55, abs=TOLERANCE)
 
 
 def test_a_trial_with_no_attempts_has_no_score() -> None:

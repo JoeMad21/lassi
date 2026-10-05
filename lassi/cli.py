@@ -1,7 +1,26 @@
 """The `lassi` command line: `lassi run` runs a recipe, and `lassi score` scores a finished run.
 
-    lassi run <recipe> [--runs-root P] [--run-id ID] [--bench-root P]
-    lassi score <run dir> --profile NAME [--profile NAME ...] [--score-id ID] [--bench-root P] [--runs-root P]
+    lassi [--graphics on|off] run <recipe> [--runs-root P] [--run-id ID] [--bench-root P]
+    lassi [--graphics on|off] score <run dir> --profile NAME [--profile NAME ...] [--score-id ID]
+          [--bench-root P] [--runs-root P]
+    lassi [--graphics on|off] settings graphics [on|off]
+
+Every command first decides terminal graphics (lassi.present.settings,
+choose_graphics: the --graphics option, LASSI_GRAPHICS, off without an
+interactive terminal, the saved preset, the prompt, until a preset is
+saved, off). A --graphics value other than on or off is refused by the
+argument parser (argparse choices), which prints its usage message and
+exits 2. A bad LASSI_GRAPHICS value, a preset that load_preset refuses, a
+preset whose place cannot be checked, or, at the prompt, an answer that
+cannot be saved exits 2 with `lassi <command>: <message>` on stderr before
+the command starts, except that `lassi settings graphics on|off` takes a
+preset it cannot read or check as graphics off and replaces the preset. A
+preset place on the root filesystem of a POSIX host is no error here: the
+prompt applies its answer to that command only. With graphics on the
+command first prints the banner (lassi.present.banner) to stderr when
+stderr can take it (_banner), so a stderr whose reader has gone changes no
+exit status; with graphics off it prints exactly what it printed without
+them.
 
 `lassi run` runs the recipe with the stage runner (lassi.core.runner). The
 run tree goes under <runs root>/runs/<run id>; the runs root defaults to
@@ -10,6 +29,18 @@ suite's fetched sources under $LASSI_SCRATCH. The command prints one line per
 trial and the run directory. It exits 0 on success, and 2 with the message
 on stderr when the recipe does not load (RecipeError), the run cannot start
 (RunError), or the sandbox is not available (SandboxUnavailableError).
+With graphics on it also shows the live inference table on stderr
+(lassi.present.live): the runner gets a LiveTable as its progress observer
+(RunOptions.observer), as wide as stderr's terminal and one line less than
+its height (COLUMNS and LINES when they are set to whole numbers above 0;
+_table_size), with the Code column and in-place redraws only when stderr is
+an interactive terminal, and ticking() lets it redraw about once a second
+while the run goes on. With graphics off no observer is passed. The table
+writes no file, and a table that raises is dropped, with one line on stderr
+when stderr can take it, without changing the run or the exit status; when
+its write to stderr fails with OSError (a pipe whose reader has gone),
+stderr is first pointed at the null device (lassi.core.progress.mute_stderr),
+so the process's exit status is still the command's.
 
 `lassi score` scores the run tree at <run dir> with each registered
 ScoreProfile named, in the order given, and writes the review packet under
@@ -22,6 +53,18 @@ $LASSI_SCRATCH. It prints the score directory and exits 0, or exits 2 with
 Profile names are checked against the registry by the pass itself, never by
 argparse, so an unknown one is a refusal like any other.
 
+`lassi settings graphics on|off` saves the graphics preset and prints where;
+`lassi settings graphics` prints the setting that applies on a terminal and
+its source, never asking. Both exit 0, or 2 with `lassi settings: <message>`
+on stderr for a bad LASSI_GRAPHICS value or a preset error: with on or off,
+a preset place on the root filesystem of a POSIX host (ROOT_REFUSAL), one
+whose place cannot be checked, or a save that fails; with no value, a
+preset whose place cannot be checked or that load_preset refuses (a place
+on the root filesystem is shown as the source and exits 0). A value other
+than on or off, as in `lassi settings graphics maybe`, is refused by the
+argument parser (argparse choices) with its usage message and exit 2, like
+a bad --graphics value.
+
 Importing this module registers every component, since it imports the runner
 and the scoring package.
 """
@@ -29,19 +72,38 @@ and the scoring package.
 from __future__ import annotations
 
 import argparse
+import os
+import shutil
 import sys
 from collections.abc import Sequence
+from contextlib import nullcontext
 from pathlib import Path
 
+from lassi.core.progress import mute_stderr
 from lassi.core.recipe import RecipeError
 from lassi.core.runner import RunError, RunOptions, run_recipe
 from lassi.executors import SandboxUnavailableError
+from lassi.present.banner import print_banner
+from lassi.present.live import LiveTable, ticking
+from lassi.present.settings import (
+    ROOT_REFUSAL,
+    SettingsError,
+    choose_graphics,
+    preset_path,
+    resolve_graphics,
+    save_preset,
+)
 from lassi.scoring.score_run import ScoreError, score_run
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Return the argument parser: the `run` and `score` subcommands and their options."""
+    """Return the argument parser: the global --graphics option and the `run`, `score`, and `settings` commands."""
     parser = argparse.ArgumentParser(prog="lassi", description="Run LASSI recipes and score finished runs.")
+    parser.add_argument(
+        "--graphics", choices=("on", "off"),
+        help="terminal graphics for this command (default: $LASSI_GRAPHICS, then the saved preset; off without a "
+        "terminal)",
+    )
     commands = parser.add_subparsers(dest="command", required=True, metavar="command")
     run = commands.add_parser("run", help="run a recipe and write its run tree")
     run.add_argument("recipe", type=Path, help="the recipe file to run")
@@ -63,26 +125,134 @@ def build_parser() -> argparse.ArgumentParser:
         "--runs-root", type=Path,
         help="where scores/<score id> goes (default: $LASSI_RUNS_ROOT, then the run dir's grandparent)",
     )
+    settings = commands.add_parser("settings", help="show or change the user's lassi settings")
+    names = settings.add_subparsers(dest="setting", required=True, metavar="setting")
+    graphics = names.add_parser("graphics", help="show the graphics setting, or save the preset with on or off")
+    graphics.add_argument("value", nargs="?", choices=("on", "off"), help="the preset to save (default: show)")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line with `argv` (default: sys.argv[1:]) and return the exit status."""
     args = build_parser().parse_args(None if argv is None else list(argv))
+    try:
+        on = _decide_graphics(args)
+    except SettingsError as error:
+        print(f"lassi {args.command}: {error}", file=sys.stderr)
+        return 2
+    if on:
+        _banner()
+    if args.command == "settings":
+        return _settings(args)
     if args.command == "score":
         return _score(args)
-    return _run(args)
+    return _run(args, graphics=on)
 
 
-def _run(args: argparse.Namespace) -> int:
-    """Run `lassi run` and return its exit status: 0, or 2 with the message on stderr."""
-    options = RunOptions(runs_root=args.runs_root, run_id=args.run_id, bench_root=args.bench_root)
+def _banner() -> None:
+    """Print the banner to stderr when stderr can take it; never raise.
+
+    A missing stderr (None) gets nothing, and one that raises ValueError (a
+    closed stream) is passed over. One that raises OSError (a pipe whose
+    reader has gone) is pointed at the null device (mute_stderr), so the
+    unwritten bytes cannot fail Python's flush of stderr at exit and turn the
+    command's exit status into 120.
+    """
+    stream = sys.stderr
+    if stream is None:
+        return
     try:
-        run_recipe(args.recipe, options)
+        print_banner(stream)
+    except OSError:
+        mute_stderr(stream)
+    except ValueError:
+        pass
+
+
+def _decide_graphics(args: argparse.Namespace) -> bool:
+    """Decide graphics for this command with choose_graphics; the settings command never asks.
+
+    `lassi settings graphics on|off` replaces the preset, so there a preset
+    that cannot be read leaves graphics off rather than stopping its own
+    repair; a bad LASSI_GRAPHICS value is still a SettingsError (a bad
+    --graphics value never gets here: the argument parser refuses it).
+    """
+    stdin_isatty, stdout_isatty = _isatty(sys.stdin), _isatty(sys.stdout)
+    repair = args.command == "settings" and args.value is not None
+    if repair:
+        resolve_graphics(
+            option=args.graphics, env=os.environ, stdin_isatty=stdin_isatty, stdout_isatty=stdout_isatty, preset=None
+        )
+    try:
+        on, _ = choose_graphics(
+            option=args.graphics, env=os.environ, stdin=sys.stdin, out=sys.stdout, stdin_isatty=stdin_isatty,
+            stdout_isatty=stdout_isatty, home=Path.home(), prompt=args.command != "settings",
+        )
+    except SettingsError:
+        if not repair:
+            raise
+        return False
+    return on
+
+
+def _isatty(stream: object) -> bool:
+    """Return True when `stream` is an interactive terminal; False for None, a closed stream, or a non-stream."""
+    try:
+        return bool(stream.isatty())  # type: ignore[attr-defined]
+    except (AttributeError, ValueError, OSError):
+        return False
+
+
+def _run(args: argparse.Namespace, *, graphics: bool) -> int:
+    """Run `lassi run` and return its exit status: 0, or 2 with the message on stderr.
+
+    With `graphics` on, the runner gets a LiveTable on stderr as its
+    observer, ticked while the run goes on; with it off, no observer.
+    """
+    table = _live_table() if graphics else None
+    options = RunOptions(runs_root=args.runs_root, run_id=args.run_id, bench_root=args.bench_root, observer=table)
+    try:
+        with nullcontext() if table is None else ticking(table):
+            run_recipe(args.recipe, options)
     except (RecipeError, RunError, SandboxUnavailableError) as error:
         print(f"lassi {args.command}: {error}", file=sys.stderr)
         return 2
     return 0
+
+
+def _live_table() -> LiveTable:
+    """Return the live table for stderr, a terminal only when stderr is one, sized by _table_size.
+
+    Its height is one line less than the terminal's, since the cursor rests on
+    the line below a frame, so the in-place redraw can reach the frame's top.
+    """
+    columns, lines = _table_size(sys.stderr)
+    return LiveTable(sys.stderr, terminal=_isatty(sys.stderr), width=columns, height=max(lines - 1, 1))
+
+
+def _table_size(stream: object) -> tuple[int, int]:
+    """Return the table's (columns, lines).
+
+    Each is COLUMNS or LINES when that is set to a whole number above 0, else
+    the size of the terminal `stream` is on, else what
+    shutil.get_terminal_size() gives (stdout's terminal, else 80 by 24).
+    """
+    try:
+        size = os.get_terminal_size(stream.fileno())  # type: ignore[attr-defined]
+    except (AttributeError, ValueError, OSError):
+        size = shutil.get_terminal_size()
+    if size.columns <= 0 or size.lines <= 0:
+        size = shutil.get_terminal_size()
+    return _positive(os.environ.get("COLUMNS"), size.columns), _positive(os.environ.get("LINES"), size.lines)
+
+
+def _positive(text: str | None, default: int) -> int:
+    """Return `text` as a whole number when it is one above 0, else `default`."""
+    try:
+        value = int(text or "")
+    except ValueError:
+        return default
+    return value if value > 0 else default
 
 
 def _score(args: argparse.Namespace) -> int:
@@ -97,3 +267,40 @@ def _score(args: argparse.Namespace) -> int:
         return 2
     print(out)
     return 0
+
+
+def _settings(args: argparse.Namespace) -> int:
+    """Run `lassi settings graphics [on|off]` and return 0, or 2 with `lassi settings: <message>` on stderr."""
+    try:
+        lines = _show_graphics(args.graphics) if args.value is None else _save_graphics(args.value == "on")
+    except SettingsError as error:
+        print(f"lassi {args.command}: {error}", file=sys.stderr)
+        return 2
+    print("\n".join(lines))
+    return 0
+
+
+def _save_graphics(on: bool) -> list[str]:
+    """Save the graphics preset and return the line that says where; SettingsError when it cannot be saved."""
+    path = preset_path(os.environ, home=Path.home())
+    if path is None:
+        raise SettingsError(ROOT_REFUSAL)
+    save_preset(path, on)
+    return [f"graphics preset saved: {path} (graphics: {'on' if on else 'off'})"]
+
+
+def _show_graphics(option: str | None) -> list[str]:
+    """Return the setting that applies on a terminal, `graphics: on|off`, then its source; nothing is asked."""
+    home = Path.home()
+    on, source = choose_graphics(
+        option=option, env=os.environ, stdin=sys.stdin, out=sys.stdout, stdin_isatty=True, stdout_isatty=True,
+        home=home, prompt=False,
+    )
+    path = preset_path(os.environ, home=home) if source in ("preset", "default") else None
+    if source == "preset":
+        described = f"the preset {path}"
+    elif source == "default":
+        described = ROOT_REFUSAL if path is None else f"default; no preset at {path}, so a lassi command asks"
+    else:
+        described = f"the {'option' if source == '--graphics' else 'variable'} {source}"
+    return [f"graphics: {'on' if on else 'off'}", f"source: {described}"]
