@@ -1180,7 +1180,8 @@ def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
             try:
                 sources = bench.suite.source_files(item, direction, bench.root, purpose=PURPOSE)
                 bench.suite.reference_target(item, direction, bench.root, purpose=PURPOSE)
-                bench.suite.support_files(item, bench.root, purpose=PURPOSE)
+                for language in (direction.target, direction.source):
+                    bench.suite.support_files(item, bench.root, purpose=PURPOSE, language=language)
             except (OSError, ValueError) as error:
                 raise RunError(
                     f"cannot read {bench.suite.name}/{item} ({direction.name}) under {bench.root}: {error}; "

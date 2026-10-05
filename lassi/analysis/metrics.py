@@ -81,7 +81,8 @@ SIM_T_THRESHOLD = 0.6
 # The notebooks store Sim-T formatted to two decimals; the row compares that value with the threshold (OQ-030).
 SIM_T_FORMAT = ".2f"
 PASS_AT = (1, 3)
-# A trial whose provenance names no device (the runner records none for the native executor; PHASE-NOTES P2).
+# A trial whose provenance names no device: a run from before task P4.5, when the runner recorded none for the
+# native executor (PHASE-NOTES P2); since P4.5 every registered executor names its device.
 DEVICE_NOT_RECORDED = "not recorded"
 
 # The lassi profile components the rows read.

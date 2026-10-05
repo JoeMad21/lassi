@@ -44,7 +44,8 @@ not a refusal.
 Held-out inputs: generate_inputs(spec, seed, out_dir) writes one file per
 spec entry, <name>.lassiio, with PCG-XSH-RR 64/32 draws (Pcg32) on a stream of
 its own per input; the rules for turning draws into values are in its
-docstring.
+docstring. check_input_spec checks a spec as generate_inputs does, writing
+nothing.
 """
 
 from __future__ import annotations
@@ -561,6 +562,30 @@ def _integer_data(plan: _InputPlan, rng: Pcg32) -> bytes:
     return struct.pack(f"<{len(values)}{_INTS[plan.dtype.name][0]}", *values)
 
 
+def _input_plans(where: str, spec: Sequence[object]) -> list[_InputPlan]:
+    """Check every spec entry and that no name repeats; return their plans, or raise LassiIOError naming `where`."""
+    plans: list[_InputPlan] = []
+    for index, entry in enumerate(spec):
+        plan = _plan_entry(where, index, entry)
+        if any(other.name == plan.name for other in plans):
+            raise _refusal(where, f"input spec entry {index}: the name {plan.name!r} is used twice")
+        plans.append(plan)
+    return plans
+
+
+def check_input_spec(spec: Sequence[Mapping[str, Any]], where: str) -> None:
+    """Check `spec` as generate_inputs checks it, with no seed and no directory; LassiIOError names `where`.
+
+    It refuses what generate_inputs refuses of the spec itself (a spec that
+    is not a sequence of mappings, an entry that breaks its rules, a name
+    used twice), each message starting with `where`, and writes nothing.
+    The suite manifest loader calls it (lassi.bench.registry, task P4.13).
+    """
+    if isinstance(spec, (str, bytes, Mapping)) or not isinstance(spec, Sequence):
+        raise _refusal(where, "the input spec must be a sequence of mappings")
+    _input_plans(where, spec)
+
+
 def generate_inputs(spec: Sequence[Mapping[str, Any]], seed: int, out_dir: str | os.PathLike[str]) -> dict[str, Path]:
     """Write one lassi_io file per spec entry into the existing directory `out_dir`; return name -> path.
 
@@ -603,12 +628,7 @@ def generate_inputs(spec: Sequence[Mapping[str, Any]], seed: int, out_dir: str |
         raise _refusal(where, "the input spec must be a sequence of mappings")
     if not os.path.isdir(where):
         raise _refusal(where, "the output directory does not exist")
-    plans: list[_InputPlan] = []
-    for index, entry in enumerate(spec):
-        plan = _plan_entry(where, index, entry)
-        if any(other.name == plan.name for other in plans):
-            raise _refusal(where, f"input spec entry {index}: the name {plan.name!r} is used twice")
-        plans.append(plan)
+    plans = _input_plans(where, spec)
     paths = {plan.name: Path(where) / f"{plan.name}{SUFFIX}" for plan in plans}
     existing = sorted(str(path) for path in paths.values() if os.path.lexists(path))
     if existing:

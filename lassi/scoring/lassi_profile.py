@@ -340,7 +340,8 @@ class LassiProfile:
 
         Raises ValueError when the suite, item, or direction is unknown or the
         target language has more or fewer than one file, and FileNotFoundError
-        naming the path when the file is missing under the bench root.
+        naming the path when the file is missing: under the bench root, or in
+        this repository for a tracked language (LanguageSources.base).
         """
         bench = trial.bench_item
         suite = self._suite(bench.suite)
@@ -349,7 +350,7 @@ class LassiProfile:
         where = f"{suite.name}/{bench.item} ({direction.name})"
         if len(spec.files) != 1:
             raise ValueError(f"{where}: the lassi profile compares one target file; the manifest has {len(spec.files)}")
-        path = self.bench_root / spec.dir / spec.files[0]
+        path = spec.base(self.bench_root) / spec.files[0]
         if not path.is_file():
             raise FileNotFoundError(f"the reference target of {where} is missing: {path.as_posix()}")
         files = suite.reference_target(bench.item, direction, self.bench_root, purpose=PURPOSE)

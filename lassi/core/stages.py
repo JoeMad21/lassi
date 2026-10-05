@@ -22,9 +22,15 @@ The runner checks either kind before any model is asked.
 - baseline builds the item's target reference program in a fresh
   directory under the trial's directory (<trial>/baseline-<language>/build,
   never an attempt's), with the target language's toolchain and the item's
-  support files as harness files, and runs it when that language's
-  executor (executor_for) runs programs (capability `runs_code`), with the
-  item's run arguments and reference_limits. The target's run is kept in
+  support files for that language as harness files (Suite.support_files
+  with the language: the item-level ones and the language's own, task
+  P4.13), and runs it when that language's executor (executor_for) runs
+  programs (capability `runs_code`), with the item's program arguments
+  and reference_limits. The arguments come from
+  lassi.bench.registry.stage_inputs: an item that declares held-out inputs
+  has them written under the build directory's @inputs first, drawn with
+  its seed, and takes the input files, then the output files, as its
+  arguments; any other item takes its run_args. The target's run is kept in
   Trial.reference_run (exit code, hang flag, wall time, stdout in the text
   store, and the RunResult flags as bools); the source reference's run is
   never recorded. A cut
@@ -73,8 +79,8 @@ The runner checks either kind before any model is asked.
   (diagnostics_text). After every build that gave a program, the target
   language's toolchain, when it declares host_compute_guard
   (lassi.core.capabilities, task P4.12; found by capability, never by
-  name), reads the attempt's files with the item's support files: the
-  reading sets Attempt.guards.host_compute and adds its parse-stage
+  name), reads the attempt's files with the item's support files for the
+  target language: the reading sets Attempt.guards.host_compute and adds its parse-stage
   warnings or notes after the build's diagnostics. It never changes a
   stage or asks for a correction, and every later copy of the attempt
   keeps it. A guard's diagnostics (codes starting with "guard-") never
@@ -82,7 +88,8 @@ The runner checks either kind before any model is asked.
 - run_loop continues compile_loop's loop (it runs compile_loop first, which
   changes nothing when compile_loop already ran) and, when the executor runs
   programs (capability `runs_code`), runs each compiling attempt from its
-  build directory with the item's run arguments and attempt_limits. The run
+  build directory with the item's program arguments (stage_inputs, as the
+  baseline gets them) and attempt_limits. The run
   is kept in Attempt.run (exit code, hang flag, wall time, stdout in the text
   store, the RunResult flags as bools, and, when the recipe's Oracle compares
   output files, every output file in the binary store by hash; a failed
@@ -238,7 +245,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
-from lassi.bench import Direction, Suite
+from lassi.bench import Direction, Suite, stage_inputs
 from lassi.core import fragments as fragment_text
 from lassi.core.capabilities import (
     ALIGNS_OUTPUT_FILES,
@@ -642,9 +649,14 @@ def _toolchain_name(toolchain: Toolchain) -> str:
     return str(getattr(toolchain, "name", type(toolchain).__name__))
 
 
-def _support_files(context: RunContext) -> dict[str, str]:
-    """Return the item's support files (build-directory name -> text), the harness files of every build."""
-    return context.suite.support_files(context.item, context.sources_root, purpose=PURPOSE)
+def _support_files(context: RunContext, language: str) -> dict[str, str]:
+    """Return the harness files of a build in `language` (build-directory name -> text).
+
+    They are the item's support files for that language: the item-level
+    ones and the language's own (Suite.support_files with `language`, task
+    P4.13), so a TT build gets its kernels and a C++ build does not.
+    """
+    return context.suite.support_files(context.item, context.sources_root, purpose=PURPOSE, language=language)
 
 
 def prompt_diagnostics(diagnostics: Sequence[Diagnostic]) -> list[Diagnostic]:
@@ -656,9 +668,11 @@ def prompt_diagnostics(diagnostics: Sequence[Diagnostic]) -> list[Diagnostic]:
     return [item for item in diagnostics if not (item.code or "").startswith(GUARD_CODE_PREFIX)]
 
 
-def _harness_build(context: RunContext, toolchain: Toolchain, files: Mapping[str, str], workdir: Path) -> BuildResult:
-    """Build `files` in `workdir`, with the item's support files as the `harness` argument when it has any."""
-    harness = _support_files(context)
+def _harness_build(
+    context: RunContext, toolchain: Toolchain, files: Mapping[str, str], workdir: Path, language: str
+) -> BuildResult:
+    """Build `files` in `workdir`, with the item's support files for `language` as `harness` when there are any."""
+    harness = _support_files(context, language)
     if harness:
         return toolchain.build(files, workdir, harness=harness)
     return toolchain.build(files, workdir)
@@ -929,14 +943,15 @@ class BaselineStage:
         files = self._files(language)
         toolchain = _toolchain(context, language)
         workdir = _baseline_dir(context.build_root, trial.trial_id, language)
-        result = _harness_build(context, toolchain, files, workdir)
+        result = _harness_build(context, toolchain, files, workdir, language)
         if result.artifact is None:
             return _ended(trial, BASELINE_COMPILE, self._build_message(language, files, toolchain, result)), None
         executor = executor_for(context, language)
         if RUNS_CODE not in getattr(executor, "capabilities", ()):
             return trial, None
         item = context.suite.item(context.item, purpose=PURPOSE)
-        run = executor.run(result.artifact, list(item.run_args), reference_limits(context))
+        args = stage_inputs(item, result.artifact.parent)
+        run = executor.run(result.artifact, args, reference_limits(context))
         target = language == context.direction.target
         info = _run_info(context, run, keep_outputs=target and self.files_oracle is not None)
         if target:
@@ -1273,7 +1288,8 @@ class CompileLoopStage:
         """Return `attempt` with the target toolchain's host-compute reading (task P4.12); unchanged without one.
 
         The toolchain is found by capability (host_compute_reading), never by
-        name, and is given the attempt's files and the item's support files.
+        name, and is given the attempt's files and the item's support files
+        for the target language.
         The reading sets Attempt.guards.host_compute, and its diagnostics
         follow the parse and build diagnostics. A reading outside the guard
         contract raises ValueError, which stops the run before the attempt
@@ -1281,7 +1297,7 @@ class CompileLoopStage:
         """
         context = self.context
         toolchain = _toolchain(context, context.direction.target)
-        reading = host_compute_reading(toolchain, attempt.files, _support_files(context))
+        reading = host_compute_reading(toolchain, attempt.files, _support_files(context, context.direction.target))
         if reading is None:
             return attempt
         guards = dataclasses.replace(attempt.guards, host_compute=reading.host_compute)
@@ -1290,15 +1306,16 @@ class CompileLoopStage:
     def _build(self, files: Mapping[str, str], workdir: Path) -> BuildResult:
         """Build `files` in `workdir`; a file name the filesystem refuses becomes an "unwritable" error.
 
-        The item's support files from the suite manifest go into the build
-        directory as harness files, passed as the toolchain's `harness`
-        argument only when the item has some. Only a name error (too long, or
-        refused as invalid) is the model's to fix; any other OSError, such as
-        a full disk, propagates and stops the run.
+        The item's support files for the target language from the suite
+        manifest go into the build directory as harness files, passed as the
+        toolchain's `harness` argument only when there are some. Only a name
+        error (too long, or refused as invalid) is the model's to fix; any
+        other OSError, such as a full disk, propagates and stops the run.
         """
         context = self.context
         try:
-            return _harness_build(context, _toolchain(context, context.direction.target), files, workdir)
+            target = context.direction.target
+            return _harness_build(context, _toolchain(context, target), files, workdir, target)
         except UnicodeError as error:
             reason = f"a file is not valid Unicode text ({error.reason})"
         except OSError as error:
@@ -1433,7 +1450,7 @@ class RunLoopStage:
                 "list compile_loop or run_loop, which build the attempts, before any stage that appends one"
             )
         limits = attempt_limits(context, trial)
-        run_args = list(context.suite.item(context.item, purpose=PURPOSE).run_args)
+        run_args = stage_inputs(context.suite.item(context.item, purpose=PURPOSE), artifact.parent)
         unload_before_run(context.backend)
         run = context.executor.run(artifact, run_args, limits)
         info = _run_info(context, run, keep_outputs=self.keeps_outputs)

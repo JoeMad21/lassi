@@ -647,9 +647,32 @@ def _table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
     return "".join("| " + " | ".join(_cell(cell) for cell in line) + " |\n" for line in lines)
 
 
+def _source_rows(manifest: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Return the Source run rows: each _SOURCE_FIELDS value, with executors per language shown as run.md shows them.
+
+    A run with one executor records `executor` (a name) and `device`, shown
+    as they are. A run with executors per language (task P4.5) records
+    `executor` as a language -> name mapping and `devices` per language: its
+    executor row names each language's executor, "<language>: <name>"
+    joined by "; " in language order, and one "device (<language>)" row per
+    language takes the place of the device row.
+    """
+    rows: list[tuple[str, str]] = []
+    devices = manifest.get("devices")
+    for key in _SOURCE_FIELDS:
+        executors = manifest.get(key)
+        if isinstance(devices, Mapping) and key == "executor" and isinstance(executors, Mapping):
+            rows.append((key, "; ".join(f"{language}: {name}" for language, name in sorted(executors.items()))))
+        elif isinstance(devices, Mapping) and key == "device":
+            rows += [(f"device ({language})", fmt_provenance(device)) for language, device in sorted(devices.items())]
+        else:
+            rows.append((key, fmt_provenance(manifest.get(key))))
+    return rows
+
+
 def _head_blocks(count: int, manifest: Mapping[str, Any], files: Sequence[Mapping[str, Any]]) -> list[str]:
     """Return the page title, the source run's manifest fields, the profiles, and how to read the page."""
-    source = [(key, fmt_provenance(manifest.get(key))) for key in _SOURCE_FIELDS]
+    source = _source_rows(manifest)
     profiles = [(entry["name"], entry["file"] or "none", fmt_provenance(entry["sha256"])) for entry in files]
     legend = (
         f"Trials scored: {count}. One section per trial, in trial_id order: the trial's facts, one part per "

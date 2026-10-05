@@ -87,7 +87,7 @@ These are the declared tolerances P4.13 takes (plans/p4-ttsim.md, Tier A); local
 
 - loopback: a pass flag (loopback.cpp:30) cleared on a mismatch (:134, :141) after a size check (:127); prints "Test Passed" (:150), else throws "Test Failed" (:152). Exact equality.
 - eltwise_binary: a size check (eltwise_binary.cpp:164) and a per-element comparison with an absolute tolerance of 1e-2 (eps, :163; the comparison :169), which prints "Result mismatch at index ..." and clears the flag (:170-171); "Test Passed" (:186), else "Test Failed" (:188).
-- eltwise_sfpu: a per-element comparison with an absolute tolerance of 2e-2 (:145, :151-153); "Test Passed" (:168), else "Test Failed" (:170).
+- eltwise_sfpu: a per-element comparison with an absolute tolerance of 5e-2 (eps set to 5e-2 at :147, compared at :151-153); correction of 2026-10-05 (rx 20261005-111942-exec-4372): this line first gave 2e-2 from the comment at :145, which the code does not use; "Test Passed" (:168), else "Test Failed" (:170).
 - matmul_single_core and matmul_multi_core: the PCC of the bfloat16 result against a CPU golden (check_bfloat16_vector_pcc), printed as "Metalium vs Golden -- PCC = <value>" and required to exceed 0.97 (matmul_single_core.cpp:239-241, matmul_multi_core.cpp:332-334); "Test Passed" (:253, :346).
 - add_2_integers_in_riscv: it does check its result, which the phase-1 probe's pattern (pass, fail, mismatch, PCC, TT_FATAL, TT_THROW, EXIT_FAILURE, throw) missed: it prints "Error: Expected result vector size of 1, got ..." (:124) or "Error: Expected result of 21, got ..." (:129), else "Success: Result is <value>" (:134). Whether it exits nonzero after an Error line is not in the excerpt. So P4.11's smoke driver can require the line "Success: Result is 21" beside exit status 0. The batch's own check pattern did not know that line, so report/runs.tsv says "none printed" for every run of this example; the logs hold the line (local/logs).
 
@@ -284,7 +284,7 @@ Firm from the reading and the run:
 - P4.11: `rx job kill` stops only the gate's runner, so any long batch that runs ttsim programs needs its own stop mechanism, as this one had.
 - P4.11 smoke driver (tools/ttsim_smoke.py): add_2_integers_in_riscv passes when it exits 0 and prints "Success: Result is 21".
 - P4.12: the JIT cache holds the kernel ELFs and the generated descriptors under `<TT_METAL_CACHE>/tt-metal-cache/`; the descriptor lines (DST_ACCUM_MODE and the unpack format arrays) are where a kernel's dest-accumulation mode can be read.
-- P4.13: declared tolerances from the examples' own checks: loopback exact; eltwise_binary absolute 1e-2; eltwise_sfpu absolute 2e-2; matmul_single_core and matmul_multi_core PCC above 0.97 against a CPU golden; add_2_integers_in_riscv exact (21). Each Tier A item's unpack_to_dest note: none takes the path at the pin (above).
+- P4.13: declared tolerances from the examples' own checks: loopback exact; eltwise_binary absolute 1e-2; eltwise_sfpu absolute 5e-2 (corrected 2026-10-05, above); matmul_single_core and matmul_multi_core PCC above 0.97 against a CPU golden; add_2_integers_in_riscv exact (21). Each Tier A item's unpack_to_dest note: none takes the path at the pin (above).
 - Rule 7: a tt-metal abort must run with a 1-byte core limit (prlimit --core=1:1), as here; the sandbox's own core handling is P0.16's.
 
 ## Proposed bible edit
