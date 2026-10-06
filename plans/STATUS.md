@@ -101,10 +101,10 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.2 | DONE | Device layer: selection, probes, provenance | - | device sections {kind, indices} by takes_device; probes in lassi/executors/devices.py (lstat and access(2) on the node, procfs and sysfs text otherwise; no node opened); provenance device_records and driver; files beyond the plan's list: lassi/executors and tests/executors (Design Principle 9) |
 | P17.3 | DONE | Served backends: recipe keys and serving provenance | P17.1,P17.2 | model.base_url and model.timeout_s reach openai_compat and ollama, model.api_key_env openai_compat only; model id checked before any directory; provenance serving record (stable entry fields, version from the server root, never a key); stubs for vLLM, SGLang, llama.cpp; also lassi/core/capabilities.py (MODEL_CHECK) and a registry docstring |
 | P17.4 | DONE | hf_local on Transformers and PyTorch | P17.1,P17.2,P17.3 | hf_local on Transformers 5.18.0 and torch 2.14.1 (extras cpu, cuda, rocm); model.revision and model.seed; offline load from HF_HOME with the hub library set offline; ContextExceeded ends a trial (context-exceeded); also lassi/core interfaces, record, runner, stages, lassi/llm/_serving, tests/core, tests/tiny_hf.py |
-| P17.5 | ACTIVE | gpu executor and the sandbox's device access | P17.2 | change committed; remote stand-in test on alpha01 pending (tests/executors/test_gpu_remote.py) |
+| P17.5 | DONE | gpu executor and the sandbox's device access | P17.2 | change bf98a81; alpha01 remote tests 48 passed (stand-in nodes visible only when listed; no GPU node opened), rx 20261006-082332-desktop-8r113ei-detached-bf98a813-c6b6, clean; results/p17-gpu-sandbox |
 | P17.6 | READY | hipcc toolchain, compile-only on alpha01 | P17.1 | AMD work with no GPU device allowed (OQ-043 entry 15); BLOCKED on OQ-040 if hipcc needs a GPU |
 | P17.7 | READY | Profilers: timing, nvml, rocm_smi | P17.2,P17.5 |  |
-| P17.8 | READY | Trainer interface and the train recipe | P17.2 | Trainer Protocol confirmed (OQ-043 entry 14) |
+| P17.8 | ACTIVE | Trainer interface and the train recipe | P17.2 | Trainer Protocol confirmed (OQ-043 entry 14) |
 | P17.9 | READY | TRL backend: sft, dpo, and grpo on PyTorch | P17.1,P17.8 |  |
 | P17.10 | READY | CI on the CPU | P17.4,P17.9 |  |
 | P17.14 | READY | Guard not-run reasons and not-checked rates | - | owner's OQ-028 conditions (2026-10-05) |
