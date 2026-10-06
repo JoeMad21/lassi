@@ -73,6 +73,10 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    another device. A framework() result that is neither a FrameworkBuild
    nor None is refused too, and so is any error framework() raises (a
    framework extra that is not installed among them), naming the key.
+   Right after the probes it refuses a run in which model.device and any
+   executor's device section (single or per language) name the same kind
+   and share an index, unless the backend declares `unload_before_run`
+   (one GPU, one role, task P17.5; _check_one_role).
    A stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id, **config), whose
    config holds the model section's keys other than backend and id (its
@@ -85,7 +89,9 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    RunError before any directory exists and before any unload or chat
    request (task P17.3); each toolchain
    with its pinned compiler and a clean environment (below), each executor
-   as factory(**config) (one, or one per language), asking each for its
+   as factory(**config) (one, or one per language; a DeviceUnavailable it
+   raises, as the gpu executor does for a node or an index this host lacks,
+   is a RunError naming the device key, task P17.5), asking each for its
    device() and reading the pins it declares, and the ScoreProfiles
    `score` and `metrics` need
    (lassi.scoring.profiles.build_profile, with the bench root for a profile
@@ -566,6 +572,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     bench = _bench(recipe, settings, options)
     _check_plan(recipe, registry, settings, bench)
     devices = _devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
+    _check_one_role(recipe, registry, devices)
     _check_oracle(recipe, registry, bench)
     scoring = _scoring(recipe, registry, bench)
     backend = _backend(recipe, registry, settings)
@@ -628,6 +635,39 @@ def _devices(recipe: Recipe, registry: Registry, probes: Mapping[str, DeviceProb
                 "a run never falls back to another device"
             ) from None
     return tuple(records)
+
+
+def _check_one_role(recipe: Recipe, registry: Registry, devices: Sequence[DeviceRecord]) -> None:
+    """Refuse a run in which the model's GPU is also an executor's, unless the backend unloads before each run.
+
+    One GPU, one role (task P17.5; Agent Rule 13's intent for GPUs): the
+    LLMBackend binding's device record (model.device) and the record of
+    any Executor binding, single or per language, that name the same kind
+    and share an index are a RunError naming both keys, the kind, and the
+    shared indices. A model without a device section or on kind cpu, and a
+    backend that declares unload_before_run (the runner unloads it before
+    each run of generated code), pass. The records are compared as
+    written, kind and indices. It runs after every probe and before any
+    component is built.
+    """
+    records = {record.key: record for record in devices}
+    model = next(binding for binding in recipe.bindings if binding.interface == "LLMBackend")
+    held = records.get(device_path(model))
+    if held is None or held.kind == "cpu":
+        return
+    if UNLOAD_BEFORE_RUN in registry.get(model.interface, model.name).capabilities:
+        return
+    for binding in recipe.bindings:
+        record = records.get(device_path(binding)) if binding.interface == "Executor" else None
+        if record is None or record.kind != held.kind:
+            continue
+        shared = sorted(set(held.indices) & set(record.indices))
+        if shared:
+            named = ", ".join(str(index) for index in shared)
+            raise RunError(
+                f"{recipe.path}: {held.key} and {record.key} both name {held.kind} index {named}; a model's GPU "
+                f"never runs candidates unless its backend declares {UNLOAD_BEFORE_RUN!r} (one GPU, one role)"
+            )
 
 
 def _framework(recipe: Recipe, binding: Binding, entry: Entry) -> FrameworkBuild | None:
@@ -1066,7 +1106,7 @@ def _executors(recipe: Recipe, registry: Registry, settings: _Settings) -> _Exec
     for binding, entry in zip(bindings, entries, strict=True):
         if RUNS_CODE in entry.capabilities:
             _check_sandboxed(recipe, registry, binding, entry.capabilities)
-    built = [entry.factory(**binding.config) for binding, entry in zip(bindings, entries, strict=True)]
+    built = [_built_executor(recipe, binding, entry) for binding, entry in zip(bindings, entries, strict=True)]
     devices = [_checked_device(_device(executor), binding) for executor, binding in zip(built, bindings, strict=True)]
     # The single form's one executor serves every language (None); each per-language executor serves its own.
     served: list[tuple[str, ...] | None] = [(language,) for language in languages] if languages else [None]
@@ -1083,6 +1123,23 @@ def _executors(recipe: Recipe, registry: Registry, settings: _Settings) -> _Exec
     }
     by_language = dict(zip(languages, built, strict=True))
     return _Executors(single=None, by_language=by_language, record=record, declared=declared)
+
+
+def _built_executor(recipe: Recipe, binding: Binding, entry: Entry) -> Executor:
+    """Return factory(**config) for an Executor binding; a DeviceUnavailable it raises becomes a RunError.
+
+    The gpu executor raises DeviceUnavailable at construction for a node or
+    an index this host lacks (task P17.5); the RunError names the device
+    key, the executor, and the reason. Any other error propagates as it is,
+    so a refused setting stays a ValueError.
+    """
+    try:
+        return entry.factory(**binding.config)
+    except DeviceUnavailable as error:
+        raise RunError(
+            f"{recipe.path}: {device_path(binding)}: Executor {entry.name!r} ({binding.where}) cannot use its device "
+            f"on this host: {error}; a run never falls back to another device"
+        ) from None
 
 
 def _check_executor_languages(recipe: Recipe, registry: Registry, settings: _Settings, bound: set[str]) -> None:

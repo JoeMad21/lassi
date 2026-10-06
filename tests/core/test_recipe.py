@@ -469,14 +469,17 @@ def binding_tuples(bindings: Iterable[Any]) -> list[tuple[str, str, str, dict[st
 
 
 def bound_components(data: Mapping[str, Any]) -> dict[tuple[str, str], set[str]]:
-    """Return each (interface, name) the loader's binding rules bind in data, with each kind section's extra keys."""
+    """Return each (interface, name) the loader's binding rules bind in data, with each kind section's extra keys.
+
+    The extra keys include `device` where the section holds a device section.
+    """
     found: dict[tuple[str, str], set[str]] = {}
 
     def bind(interface: str, name: str, keys: Iterable[str] = ()) -> None:
         found.setdefault((interface, name), set()).update(keys)
 
     if "model" in data:
-        bind("LLMBackend", data["model"]["backend"], set(data["model"]) - {"backend", "id", "device"})
+        bind("LLMBackend", data["model"]["backend"], set(data["model"]) - {"backend", "id"})
     for name in data.get("toolchain", {}).values():
         bind("Toolchain", name)
     for section, interface in KIND_SECTIONS.items():
@@ -494,14 +497,19 @@ def bound_components(data: Mapping[str, Any]) -> dict[tuple[str, str], set[str]]
 
 
 def permissive_registry(registry_module: ModuleType, *datas: Mapping[str, Any]) -> Any:
-    """Return a Registry holding a fake for every component the given recipe data binds, requiring nothing."""
+    """Return a Registry holding a fake for every component the given recipe data binds, requiring nothing.
+
+    A fake whose section holds a device section declares takes_device and
+    leaves `device` out of its config keys, as the registry requires (task P17.2).
+    """
     found: dict[tuple[str, str], set[str]] = {}
     for data in datas:
         for key, keys in bound_components(data).items():
             found.setdefault(key, set()).update(keys)
     registry = registry_module.Registry()
     for (interface, name), keys in sorted(found.items()):
-        registry.register(interface, name, fake(name, config_keys=keys))
+        capabilities = {"takes_device"} if "device" in keys else set()
+        registry.register(interface, name, fake(name, capabilities, config_keys=keys - {"device"}))
     return registry
 
 

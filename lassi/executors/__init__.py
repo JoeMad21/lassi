@@ -7,12 +7,16 @@ lassi.core.registry.DEFAULT_REGISTRY:
 - "native" (native.NativeExecutor): runs a CPU artifact.
 - "ttsim" (ttsim.TtsimExecutor): runs a TT host program on ttsim, the
   pinned Wormhole simulator (task P4.11).
+- "gpu" (gpu.GpuExecutor): runs a built GPU artifact on the GPUs its
+  device section names, with only their nodes exposed in the sandbox
+  (task P17.5).
 
 Each executor names the device its programs run on with device(), one
 non-empty line of printable ASCII with no leading or trailing blank, which
-starts no process (task P4.5): "none (compile only)" for none, the host
-CPU with its model for native, and ttsim with its pin and the pinned
-tt-metal, as a simulator, for ttsim.
+starts no process (task P4.5): "none (compile only)" for none; the host
+CPU with its model for native; ttsim with its pin and the pinned
+tt-metal, as a simulator, for ttsim; and the kind, each GPU's index and
+name, and the driver, read at construction, for gpu.
 
 Importing it also registers the host device probes (devices.CpuProbe,
 RocmProbe, and CudaProbe; task P17.2) in lassi.core.devices.DEFAULT_PROBES
@@ -26,7 +30,8 @@ sandbox_command, and classify. lassi.executors.workdir gives each attempt
 its build directory under the runs root.
 """
 
-from lassi.executors import devices, native, none, sandbox, ttsim
+from lassi.executors import devices, gpu, native, none, sandbox, ttsim
+from lassi.executors.gpu import GpuExecutor
 from lassi.executors.native import NativeExecutor
 from lassi.executors.none import NoneExecutor
 from lassi.executors.sandbox import (
@@ -40,6 +45,7 @@ from lassi.executors.sandbox import (
 from lassi.executors.ttsim import TtsimExecutor
 
 __all__ = [
+    "GpuExecutor",
     "NativeExecutor",
     "NoneExecutor",
     "Sandbox",
@@ -49,6 +55,7 @@ __all__ = [
     "TtsimExecutor",
     "classify",
     "devices",
+    "gpu",
     "native",
     "none",
     "sandbox",

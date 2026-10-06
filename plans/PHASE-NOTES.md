@@ -198,8 +198,8 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - P17.6, the bible: its Execution Backends edit also updates the gpu (AMD) row, which still makes the compile-only tier wait on whether hipcc builds gfx942 code without a GPU (the bible's Execution Backends table, gpu (AMD) row); P17.1 answered that in Host Facts (spike, Consequences for the plan, P17.6).
 - P17.2's device layer (bible Component Interfaces, contract rules, takes_device; Result Record, Storage; Project Recipes, Notes). Points later tasks act on:
   - P17.4: done (bible Component Interfaces, contract rules, takes_device).
-  - P17.5: compare DeviceRecord kind and indices for the one-GPU-one-role check, and have the gpu executor, which has no framework, report its runtime through HostFacts.runtime.
-  - P17.5 and P17.12: add per-index access checks of the /dev/dri render nodes and the nvidia<N> nodes from the measured index-to-node mapping; CUDA's default device order is not PCI order.
+  - P17.5: the one-GPU-one-role check is done (bible Sandbox, One GPU, one role); the gpu executor's runtime through HostFacts.runtime is not, and stays null (candidate in the P17.5 bullet below).
+  - P17.5 and P17.12: P17.5's per-index access checks are done, from an unverified index-to-node mapping (bible Component Interfaces, contract rules); P17.12 measures the mapping. CUDA's default device order is not PCI order.
   - P17.12: measure the GPU name and memory readings, confirm the probe paths that lassi/executors/devices.py marks unverified, and record the probe fixture. The rocm probe counts nodes under sys/class/kfd/kfd/topology/nodes, while the spike read the runtime's sys/devices/virtual/kfd/kfd/topology from source (spike, Results 1): confirm the first leads to the second, or switch to it.
   - P17.11: weigh the rocm probe's refusal on alpha01 (bible Component Interfaces, contract rules, takes_device) against the gate-wording note above before proposing "without a usable one".
   - Later, not P17: a run.md Devices table and review.md device fields; analysis and live grouping by the model's device; per-language filtering of a trial's device records; a CPU driver value (kernel release) for Agent Rule 1; GPUs of different models in one section (spike, Results 7, rows 13 to 15).
@@ -233,3 +233,14 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - hf_local: refuse an id that also names a directory under the working directory, which from_pretrained would load; the <owner>/<name> rule leaves only that case.
   - hf_local: turn a load's RuntimeError or safetensors read error, and model.to on an unusable device, into a ServingError, so the run is refused with a RunError instead of a traceback (both come before any directory).
   - P17.9: set the hub library offline in lassi/train before any load, as hf_local's _hub_offline does; local_files_only alone still lets huggingface_hub reach the Hub (bible Serving Rules).
+- P17.5's gpu executor and device exposure (bible Execution Backends, gpu rows; Sandbox, gpu program runs; Component Interfaces, contract rules). Candidates not built:
+  - P17.12: measure every node, /sys path, and /proc path each runtime opens in the sandbox (PCI sysfs under /sys/devices/pci*, /sys/class/drm, /sys/dev/char, which libdrm and CUDA may read), and confirm the index order, drm_render_minor, the gfx_target_version decoding, the information file's fields, and whether hiding a node renumbers the runtime's devices (the 0,...,n-1 values); then fix the tables in lassi/executors/gpu.py.
+  - Move the per-index node checks into the rocm and cuda probes (a HostFacts field of unusable indices), so hf_local gets them and a refusal comes before any component is built.
+  - The gpu executor's runtime: declare the pin it runs with, as ttsim does, or have the rocm probe read the pinned tree's version file once P17.6 and P17.12 name it.
+  - P17.6 and P17.13: a hipcc-built program loads libamdhip64 at run time and the sandbox allows no LD_LIBRARY_PATH; check its RUNPATH, or pin the library path.
+  - P17.13 and Agent Rule 7: keep the GPU JIT caches (CUDA_CACHE_PATH, the ROCm kernel caches) in the workdir; an allowlist edit.
+  - Refuse at load a device kind a component cannot take (a capability naming its kinds), for the gpu executor's cpu.
+  - Lock a GPU across concurrent runs (rx slots, LASSI_JOBS); nothing locks one between processes now.
+  - Bound a run's GPU memory, which the cgroup limits do not cover, or record why a run needs no bound.
+  - Bind /dev/udmabuf (HSA_USE_UDMABUF), nvidia-modeset, or the MIG nvidia-caps nodes only when a measured need appears.
+  - device(): memory per GPU (KFD mem_banks, the NVIDIA information file) once P17.12 confirms the files.

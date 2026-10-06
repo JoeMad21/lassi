@@ -36,6 +36,18 @@ The contract these tests fix:
   OQ-002), the run is refused from the framework build and file metadata:
   the ROCm probe in lassi/executors stats the node, asks access(2), and
   opens nothing.
+- One GPU, one role (task P17.5; Agent Rule 13's intent for GPUs): right
+  after the probes, before any component is built or any directory exists,
+  a run whose model.device and any executor's device section (single or per
+  language) name the same kind and a shared index is refused, naming both
+  keys, the kind, the shared index, and unload_before_run, unless the
+  backend declares unload_before_run. Another index, another kind, a cpu
+  model, or a model or executor without a device section is allowed.
+- An executor whose construction raises DeviceUnavailable (the gpu
+  executor's node checks) is a RunError naming its device key, the
+  executor, and the reason, before any directory exists; a ValueError from
+  construction stays a ValueError, as before. The real gpu executor, built
+  on a SYNTHETIC host root, names its GPU in provenance.json's device.
 
 Every component is a fake in a test Registry beside the real generate and
 compile_loop stages; the fake toolchain writes a PLACEHOLDER artifact and
@@ -711,3 +723,236 @@ def test_the_cpu_build_refuses_a_gpu_kind_on_that_root_before_any_metadata(
     message = refused(tmp_path, bench, make_registry(log), recipe_data(ROCM_0), probes)
     assert "model.device" in message, message
     assert (asked, opened) == ([], []), "the CPU build refuses kind rocm before the probe stats or reads anything"
+
+
+# ---------------------------------------------------------------------------
+# One GPU, one role, and an executor's device refusal at construction (task P17.5)
+
+ROCM_1 = {"kind": "rocm", "indices": [1]}
+CUDA_0 = {"kind": "cuda", "indices": [0]}
+# A SYNTHETIC refusal of the kind the gpu executor's node checks raise at construction.
+NO_RENDER_NODE = "SYNTHETIC: /dev/dri/renderD129 does not exist on this host"
+# The SYNTHETIC driver version of the host root the real gpu executor reads below.
+AMDGPU_VERSION = "SYNTHETIC-amdgpu-6.12.12"
+
+
+def unloading_backend(log: Log, framework: Callable[[], Any]) -> type:
+    """Return an LLMBackend class "unloadllm" that takes a device and declares unload_before_run."""
+
+    class UnloadingBackend:
+        """A scripted backend whose model the runner unloads before each run of generated code."""
+
+        name = "unloadllm"
+        capabilities = frozenset({"chat", TAKES_DEVICE, "unload_before_run"})
+
+        def __init__(self, model_id: str, *, device: Mapping[str, Any]) -> None:
+            """Record the build and the device section it was given."""
+            log.events.append("build unloadllm")
+            log.sections["unloadllm"] = device
+            self.model_id = model_id
+
+        @staticmethod
+        def framework() -> Any:
+            """Return the configured build metadata."""
+            return framework()
+
+        def unload(self) -> None:
+            """Record the unload."""
+            log.events.append("unload unloadllm")
+
+        def complete(self, messages: Sequence[Message], sampling: Sampling) -> Completion:
+            """Return the SYNTHETIC reply that the fake toolchain builds."""
+            return Completion(text=GOOD_REPLY, prompt_tokens=0, completion_tokens=0)
+
+    return UnloadingBackend
+
+
+def refusing_executor(log: Log, error: Exception) -> type:
+    """Return a compile-only Executor class "gpuexec" that takes a device and raises `error` when built."""
+
+    class Refusing:
+        """Raises its error at construction, as the gpu executor does for a node this host lacks."""
+
+        name = "gpuexec"
+        capabilities = frozenset({"compile_only", TAKES_DEVICE})
+
+        def __init__(self, **config: Any) -> None:
+            """Record the attempt and raise the configured error."""
+            log.events.append("build gpuexec")
+            raise error
+
+        def device(self) -> str:
+            """Fail the test: the executor is never built."""
+            raise AssertionError("device() of an executor that was never built")
+
+        def run(self, artifact: Path, inputs: Sequence[str], limits: Limits) -> RunResult:
+            """Fail the test: nothing runs."""
+            raise AssertionError("an executor that was never built ran")
+
+    return Refusing
+
+
+@pytest.mark.parametrize(
+    ("model_device", "executor", "key", "shared"),
+    [
+        pytest.param(ROCM_0, {"kind": "devexec", "device": ROCM_0}, "executor.device", "0", id="single"),
+        pytest.param(
+            ROCM_1,
+            {"kind": "devexec", "device": {"kind": "rocm", "indices": [0, 1]}},
+            "executor.device",
+            "1",
+            id="one-shared-index",
+        ),
+        pytest.param(
+            ROCM_0,
+            {"cuda": {"kind": "devexec", "device": ROCM_0}, "omp": "none"},
+            "executor.cuda.device",
+            "0",
+            id="per-language-target",
+        ),
+        pytest.param(
+            ROCM_1,
+            {"cuda": {"kind": "devexec", "device": ROCM_0}, "omp": {"kind": "devexec", "device": ROCM_1}},
+            "executor.omp.device",
+            "1",
+            id="per-language-other",
+        ),
+    ],
+)
+def test_one_gpu_named_by_the_model_and_an_executor_is_refused(
+    tmp_path: Path, bench: Path, model_device: dict, executor: dict, key: str, shared: str
+) -> None:
+    log = Log()
+    registry = make_registry(log, framework=lambda: framework_build(HIP_BUILD))
+    probes = fake_probes(log)
+    message = refused(tmp_path, bench, registry, recipe_data(model_device, executor), probes)
+    for text in ("model.device", key, "rocm", shared, "unload_before_run"):
+        assert text in message, (text, message)
+    assert log.builds() == [], "the check comes before any component is built"
+    assert probes["rocm"].calls >= 2, "after every named device was probed"
+
+
+@pytest.mark.parametrize(
+    ("backend", "model_device", "build", "executor"),
+    [
+        pytest.param("devllm", ROCM_0, HIP_BUILD, {"kind": "devexec", "device": ROCM_1}, id="another-index"),
+        pytest.param("devllm", ROCM_0, HIP_BUILD, {"kind": "devexec", "device": CUDA_0}, id="another-kind"),
+        pytest.param("devllm", CPU, CPU_BUILD, {"kind": "devexec", "device": ROCM_0}, id="cpu-model"),
+        pytest.param("plainllm", None, CPU_BUILD, {"kind": "devexec", "device": ROCM_0}, id="no-model-device"),
+        pytest.param("devllm", ROCM_0, HIP_BUILD, {"kind": "none"}, id="no-executor-device"),
+        pytest.param(
+            "devllm",
+            ROCM_0,
+            HIP_BUILD,
+            {"cuda": {"kind": "devexec", "device": ROCM_1}, "omp": "none"},
+            id="per-language-another-index",
+        ),
+    ],
+)
+def test_one_role_allows_another_index_another_kind_or_a_cpu_model(
+    tmp_path: Path, bench: Path, backend: str, model_device: dict | None, build: tuple, executor: dict
+) -> None:
+    log = Log()
+    registry = make_registry(log, framework=lambda: framework_build(build))
+    data = recipe_data(model_device, executor, backend=backend)
+    run_dir = run(tmp_path, bench, registry, data, fake_probes(log), "allowed")
+    assert manifest(run_dir)["status"] == "complete"
+
+
+def test_a_backend_that_unloads_before_runs_may_share_its_gpu(tmp_path: Path, bench: Path) -> None:
+    log = Log()
+    registry = make_registry(log, framework=lambda: framework_build(HIP_BUILD))
+    registry.register("LLMBackend", "unloadllm", unloading_backend(log, lambda: framework_build(HIP_BUILD)))
+    data = recipe_data(ROCM_0, {"kind": "devexec", "device": ROCM_0}, backend="unloadllm")
+    run_dir = run(tmp_path, bench, registry, data, fake_probes(log), "unloads")
+    records = manifest(run_dir)["device_records"]
+    assert [(item["key"], item["kind"], item["indices"]) for item in records] == [
+        ("model.device", "rocm", [0]),
+        ("executor.device", "rocm", [0]),
+    ]
+    assert "unload unloadllm" in log.events
+
+
+@pytest.mark.parametrize(
+    ("executor", "key"),
+    [
+        pytest.param({"kind": "gpuexec", "device": ROCM_0}, "executor.device", id="single"),
+        pytest.param(
+            {"cuda": {"kind": "gpuexec", "device": ROCM_0}, "omp": "none"}, "executor.cuda.device", id="per-language"
+        ),
+    ],
+)
+def test_an_executor_device_refusal_at_construction_is_a_run_error_before_any_directory(
+    tmp_path: Path, bench: Path, executor: dict, key: str
+) -> None:
+    log = Log()
+    registry = make_registry(log)
+    registry.register("Executor", "gpuexec", refusing_executor(log, core_devices().DeviceUnavailable(NO_RENDER_NODE)))
+    message = refused(tmp_path, bench, registry, recipe_data(backend="plainllm", executor=executor), fake_probes(log))
+    for text in (key, "gpuexec", NO_RENDER_NODE, "falls back"):
+        assert text in message, (text, message)
+    assert "build gpuexec" in log.events
+
+
+def test_any_other_construction_error_stays_what_it_was(tmp_path: Path, bench: Path) -> None:
+    # Only DeviceUnavailable becomes a RunError, so a refused setting of native or ttsim keeps its ValueError.
+    log = Log()
+    registry = make_registry(log)
+    registry.register("Executor", "gpuexec", refusing_executor(log, ValueError("SYNTHETIC: a refused setting")))
+    data = recipe_data(backend="plainllm", executor={"kind": "gpuexec", "device": ROCM_0})
+    with pytest.raises(ValueError, match="SYNTHETIC: a refused setting"):
+        run(tmp_path, bench, registry, data, fake_probes(log), "value-error")
+    assert not (tmp_path / "runs-root").exists()
+
+
+def gpu_host_root(root: Path) -> Path:
+    """Write a SYNTHETIC AMD host root with one GPU: dev/kfd, its render node, its KFD topology node, and amdgpu."""
+    files = {
+        "dev/kfd": "",
+        "dev/dri/renderD128": "",
+        "sys/class/kfd/kfd/topology/nodes/0/gpu_id": "0\n",
+        "sys/class/kfd/kfd/topology/nodes/0/properties": "cpu_cores_count 8\ndrm_render_minor 0\n",
+        "sys/class/kfd/kfd/topology/nodes/1/gpu_id": "11111\n",
+        "sys/class/kfd/kfd/topology/nodes/1/properties": "gfx_target_version 90402\ndrm_render_minor 128\n",
+        "sys/module/amdgpu/version": f"{AMDGPU_VERSION}\n",
+    }
+    for relative, text in files.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(text.encode("ascii"))
+    return root
+
+
+def rooted_gpu(root: Path) -> type:
+    """Return a subclass of the real gpu executor that reads the SYNTHETIC host `root`, with an allowing access."""
+    try:
+        gpu = importlib.import_module("lassi.executors.gpu")
+    except ModuleNotFoundError as error:
+        pytest.fail(f"lassi.executors.gpu does not exist yet (task P17.5): {error}")
+
+    class RootedGpu(gpu.GpuExecutor):
+        """The gpu executor reading a SYNTHETIC host root; nothing here opens a node."""
+
+        def __init__(self, **config: Any) -> None:
+            """Build the gpu executor with the SYNTHETIC root and an access check that allows."""
+            super().__init__(root=root, access=lambda path: True, **config)
+
+    return RootedGpu
+
+
+def test_the_gpu_executor_names_its_gpu_or_refuses_a_missing_node_before_any_directory(
+    tmp_path: Path, bench: Path
+) -> None:
+    root = gpu_host_root(tmp_path / "host")
+    log = Log()
+    registry = make_registry(log)
+    registry.register("Executor", "gpu", rooted_gpu(root))
+    data = recipe_data(backend="plainllm", executor={"kind": "gpu", "device": ROCM_0})
+    run_dir = run(tmp_path, bench, registry, data, fake_probes(log), "gpu-named")
+    assert manifest(run_dir)["device"] == f"gpu (rocm): index 0 gfx942; amdgpu driver {AMDGPU_VERSION}"
+    (root / "dev" / "dri" / "renderD128").unlink()
+    other = tmp_path / "second"
+    other.mkdir()
+    message = refused(other, bench, registry, data, fake_probes(log))
+    assert "executor.device" in message and "/dev/dri/renderD128" in message, message
+    assert str(root) not in message and root.as_posix() not in message, message

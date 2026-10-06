@@ -11,9 +11,10 @@ caller's environment. The interface these tests pin:
   frozenset allowlist that holds PATH, LANG, LC_ALL, TMPDIR, and every
   variable a pin names (NVHPC_CUDA_HOME), and never HOME, a loader or
   compiler-flag variable, or a credential. Since task P4.11 it is exactly
-  those, OMP_NUM_THREADS, and the TT_METAL_* names the ttsim executor sets
+  those, OMP_NUM_THREADS, the TT_METAL_* names the ttsim executor sets
   (the bible's ttsim row, and TT_METAL_WATCHER for its rerun of a hang),
-  with a comment above it saying why. Its values are strings without
+  and, since task P17.5, the gpu executor's visibility names, with a
+  comment above it saying why. Its values are strings without
   NUL. Anything else raises ValueError. Each variable reaches the command as
   one NAME=value element after the constant setup script, so no shell parses
   it, and the command otherwise stays the P0.16 command.
@@ -117,6 +118,8 @@ TTSIM_NAMES = (
     "TT_METAL_THREADCOUNT",
     "TT_METAL_WATCHER",
 )
+# The names only the gpu executor sets, with a device exposure (task P17.5; the bible's gpu rows).
+GPU_NAMES = ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES")
 # Compiler stderr as an EDG error prints it (capture nvcc_undefined_identifier holds one such line).
 STDERR_TEXT = 'main.cu(7): error: identifier "undefined_var" is undefined\n'
 READY_LINE = "lassi-sandbox-ready\n"
@@ -358,10 +361,12 @@ def test_environment_names_are_a_fixed_allowlist_without_home_loader_flag_or_sec
     assert all(re.fullmatch(r"[A-Z][A-Z0-9_]*", name) for name in names), sorted(names)
 
 
-def test_environment_names_are_exactly_the_compile_program_and_ttsim_names(sandbox: ModuleType) -> None:
+def test_environment_names_are_exactly_the_compile_program_ttsim_and_gpu_names(sandbox: ModuleType) -> None:
     # Task P4.11: the names the ttsim executor sets (the bible's ttsim row) and TT_METAL_WATCHER, which its rerun
-    # of a hang adds, join the fixed allowlist; nothing else does.
+    # of a hang adds, join the fixed allowlist. Task P17.5: so do the gpu executor's visibility names, which a spec
+    # holds only with a device exposure (tests/executors/test_sandbox.py). Nothing else does.
     expected = {"PATH", "LANG", "LC_ALL", "TMPDIR", "OMP_NUM_THREADS", *PREFIX_VARIABLES.values(), *TTSIM_NAMES}
+    expected |= set(GPU_NAMES)
     assert sandbox.ENVIRONMENT_NAMES == frozenset(expected), sorted(sandbox.ENVIRONMENT_NAMES ^ expected)
 
 
@@ -540,6 +545,13 @@ def test_a2_the_compile_runner_refuses_home_and_every_variable_outside_the_allow
     with pytest.raises(ValueError):
         runner = compile_runner(sandbox, environment={**COMPILE_ENV, name: "/value"})
         runner.spec(WORK)
+
+
+@pytest.mark.parametrize("name", GPU_NAMES)
+def test_the_compile_runner_refuses_a_gpu_visibility_name_when_it_is_made(sandbox: ModuleType, name: str) -> None:
+    # Task P17.5: a compile has no device exposure, so the runner refuses the name before any spec is built.
+    with pytest.raises(ValueError, match=name):
+        compile_runner(sandbox, environment={**COMPILE_ENV, name: "0"})
 
 
 @pytest.mark.parametrize("timeout_s", [600.0, 12.5])

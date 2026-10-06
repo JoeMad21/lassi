@@ -74,7 +74,11 @@ tests pass from a clean commit. One command runs each program:
   6. builds a private /dev: a tmpfs holding binds of the host's null, zero,
      full, random, urandom, and tty, a new devpts instance, a private shm
      tmpfs, and the links fd, stdin, stdout, stderr, and ptmx; it is
-     remounted read-only and moved onto /dev (probe C);
+     remounted read-only and moved onto /dev (probe C). Only with a
+     device exposure (DEVICE_SETUP_SCRIPT, below) are the listed nodes
+     bound there too, right after the six, and each listed /sys directory
+     bound to a staging directory under /tmp while the host's /sys is
+     still in view;
   7. hides each hidden root under a tmpfs, makes the path skeleton to the
      workdir, the harness, and the toolchains root, moves the overlay onto
      the workdir and the harness and toolchains binds back to their paths,
@@ -83,7 +87,9 @@ tests pass from a clean commit. One command runs each program:
      of /sys/devices but system, and every entry of /var but tmp (symbolic
      links skipped), so device attribute files and the daemon sockets under
      /var (snap and container runtimes) are out of view (observed,
-     probe L, exploratory);
+     probe L, exploratory). Only with a device exposure is each staged
+     /sys directory then bound at its target below its cover, which is
+     reopened for the mkdir and the bind and made read-only again;
   9. mounts a private tmpfs on /var/tmp and /run when they exist, and on
      /tmp last. The /run mount hides the user and system bus sockets, so
      the program cannot ask a service manager to start anything outside;
@@ -214,6 +220,31 @@ is lost silently. Its wall limit is the toolchain's timeout, and its disk
 and memory limits are COMPILE_DISK_MB and COMPILE_MEMORY_MB (see
 SandboxedCompileRunner for why).
 
+Device access (task P17.5; bible Sandbox, the gpu program runs bullet). A
+spec without SandboxSpec.devices runs SETUP_SCRIPT, byte for byte the
+script every earlier remote test measured, with the layout above, so
+native, ttsim, and compile runs see the six nodes of the private /dev and
+no more. Only the gpu executor (lassi.executors.gpu) sets devices, a
+DeviceExposure: device nodes, each a DeviceBind of a host node under /dev
+and a path inside the private /dev, and /sys directories, each a host
+directory under /sys and a path strictly below an entry step 8 covers
+(sys_cover). Such a spec runs DEVICE_SETUP_SCRIPT, which is SETUP_SCRIPT
+with DEVICE_NODES_STEP (step 6) and DEVICE_SYS_STEP (step 8) added, and its
+layout adds three blocks, each a count and then its values: the nodes
+(source and target pairs) and the /sys sources after N, and the /sys
+targets with the cover each lies under after the hidden roots. Nodes are
+bound, never opened, by the setup; every bind stays read-only, since the
+host is read-only from step 3 on. GPU_VISIBILITY_NAMES are on
+ENVIRONMENT_NAMES, and a spec holds one only with an exposure. Each cover
+is reopened and closed with `mount -t tmpfs -o remount,rw lassi-sys
+<cover>` (and remount,ro): given the mount point alone, mount reads the
+cover's options back from mountinfo, where tmpfs prints uid= and gid= in
+the host's ids, which the user namespace cannot map, so the remount fails
+(util-linux v2.37.2 libmount/src/context.c:2526-2535 and :2385; Linux
+v5.15 mm/shmem.c:3572-3577 and :3398-3405; with a source and a point,
+context.c:2498 reads no table). This was seen in WSL, not measured on
+alpha01.
+
 Setup took 88 to 107 ms in the composite probes (I1, J2b, J3). Not measured:
 the backstop, TasksMax, the IPC and UTS namespaces, and the kernel warning
 lines that each crash stopped by --core=1 prints (the user cannot read the
@@ -292,6 +323,13 @@ Known limits:
   show empty inside, so every tool a compiler starts (the host compiler,
   the linker) must come from the toolchains root or from elsewhere on the
   host (on alpha01, /usr/bin). Program runs get SANDBOX_PATH.
+- Device access (known cases, not complete): a read-only mount does not
+  stop I/O on a character device, so a bound node opens as its own
+  permissions allow (intended, as for /dev/null); the private /dev tmpfs
+  (64 KiB, 64 inodes) and each /sys cover (4 KiB, 8 inodes) bound how many
+  nodes and how deep a /sys target may be; a missing source, a cover that
+  does not exist, or a source with mounts beneath it fails the setup
+  before the ready marker, so nothing runs.
 """
 
 from __future__ import annotations
@@ -361,17 +399,37 @@ TT_METAL_NAMES = (
     "TT_METAL_THREADCOUNT",
     "TT_METAL_WATCHER",
 )
+# The GPU runtimes' device lists and CUDA's device order, which only the gpu executor sets (lassi.executors.gpu,
+# task P17.5), to the in-sandbox indices 0,...,n-1; SandboxSpec refuses each without a device exposure.
+GPU_VISIBILITY_NAMES = ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES")
 # The only names SandboxSpec.environment may hold (P0.20), by group: PATH, the locale (LANG, LC_ALL), and TMPDIR,
 # which programs and compiles get; each variable a pin names (lassi.toolchains.pins PREFIX_VARIABLES,
 # NVHPC_CUDA_HOME), for compiles; OMP_NUM_THREADS, the OpenMP runtime's default thread count, which the native
-# executor sets to Limits.cpus (DEMO.2); and TT_METAL_NAMES, which the ttsim executor sets (task P4.11), so a
-# program on ttsim finds the pinned simulator and tree and keeps its JIT cache in its own workdir. HOME, loader
+# executor sets to Limits.cpus (DEMO.2); TT_METAL_NAMES, which the ttsim executor sets (task P4.11), so a
+# program on ttsim finds the pinned simulator and tree and keeps its JIT cache in its own workdir; and
+# GPU_VISIBILITY_NAMES, which the gpu executor sets (task P17.5), only with a device exposure. HOME, loader
 # variables (LD_PRELOAD, LD_LIBRARY_PATH), variables that change a compile silently (NVCC_PREPEND_FLAGS, CPATH), any
 # other TT_METAL_* name (such as TT_METAL_KERNEL_PATH or TT_METAL_HOME), and credentials are never on it (Agent
 # Rule 12). It is fixed: nothing adds a name at run time.
 ENVIRONMENT_NAMES = frozenset(
-    {"PATH", "LANG", "LC_ALL", "TMPDIR", "OMP_NUM_THREADS", *PREFIX_VARIABLES.values(), *TT_METAL_NAMES}
+    {
+        "PATH",
+        "LANG",
+        "LC_ALL",
+        "TMPDIR",
+        "OMP_NUM_THREADS",
+        *PREFIX_VARIABLES.values(),
+        *TT_METAL_NAMES,
+        *GPU_VISIBILITY_NAMES,
+    }
 )
+# The names the private /dev already holds: the six bound nodes, pts and shm, and the five links. No device node
+# may be bound on one of them, or under it.
+RESERVED_DEV_NAMES = frozenset(
+    {"null", "zero", "full", "random", "urandom", "tty", "pts", "shm", "fd", "stdin", "stdout", "stderr", "ptmx"}
+)
+# One segment of a device bind's path: no blank, no shell character, no leading dot, so no "." or "..".
+_DEVICE_SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*")
 # The positional element that tells SETUP_SCRIPT that the program's environment follows it, one NAME=value
 # element per variable, right before the program argv. sandbox_command refuses a program argv that starts with it.
 ENVIRONMENT_MARKER = "lassi-sandbox-environment"
@@ -618,7 +676,9 @@ END {
 # workdir bind), harness, toolchains, layer (the capped tmpfs with upper and work), workdir (the overlay), dev,
 # and target (the copy-back bind). The root loops count with a string's length, since the script holds no
 # command or arithmetic substitution, and the clock readings for the done line come from the read builtin; the
-# private /tmp covers the staging tmpfs until the copy-back unmounts it.
+# private /tmp covers the staging tmpfs until the copy-back unmounts it. The slot lines @DEVICE_NODES@ and
+# @DEVICE_SYS@ are removed for SETUP_SCRIPT and filled with the device steps for DEVICE_SETUP_SCRIPT, whose
+# layout adds the device blocks (module docstring, Device access; _device_layout).
 _SETUP_TEMPLATE = r"""set -eu
 for tool in env nice setpriv prlimit timeout python3 awk unshare; do
   command -v "$tool" > /dev/null
@@ -655,6 +715,7 @@ for node in null zero full random urandom tty; do
   touch "/tmp/dev/$node"
   mount --bind "/dev/$node" "/tmp/dev/$node"
 done
+@DEVICE_NODES@
 mkdir /tmp/dev/pts /tmp/dev/shm
 mount -t devpts -o newinstance,ptmxmode=0666,mode=0620 lassi-devpts /tmp/dev/pts
 mount -t tmpfs -o size=64m,mode=1777,nosuid,nodev lassi-shm /tmp/dev/shm
@@ -702,6 +763,7 @@ for dir in /sys/class /sys/bus /sys/devices/* /var/*; do
       ;;
   esac
 done
+@DEVICE_SYS@
 for dir in /var/tmp /run; do
   if [ -d "$dir" ]; then
     mount -t tmpfs -o size=64m,mode=1777 lassi-private "$dir"
@@ -761,16 +823,86 @@ def _embed(template: str, programs: dict[str, str]) -> str:
     return template
 
 
-SETUP_SCRIPT = _embed(
-    _SETUP_TEMPLATE,
-    {
-        "READONLY_PROGRAM": READONLY_PROGRAM,
-        "MOUNT_CHECK": MOUNT_CHECK,
-        "CONFINE_PROGRAM": CONFINE_PROGRAM,
-        "COPY_BACK_PROGRAM": COPY_BACK_PROGRAM,
-        "ENVIRONMENT_MARKER": ENVIRONMENT_MARKER,
-    },
-)
+# DEVICE_SETUP_SCRIPT's step after the private /dev's six binds, while the host's /dev and /sys are in view: it
+# reads the nodes block (a count, then source and target pairs) and binds each source on an empty file at its
+# target under the private /dev (making the target's parent first when it is nested), then reads the /sys sources
+# block (a count, then the sources) and binds each source on its staging directory /tmp/expose/<x...>, named by a
+# string counter. A count that is empty, padded with a zero, or not digits exits 2 before that block's binds.
+DEVICE_NODES_STEP = r"""nodes=$1
+shift
+case $nodes in
+  '' | 0?* | *[!0-9]*) exit 2 ;;
+esac
+seen=
+while [ "${#seen}" -lt "$nodes" ]; do
+  name=${2#/dev/}
+  case $name in
+    */*) mkdir -p "/tmp/dev/${name%/*}" ;;
+  esac
+  touch "/tmp/dev/$name"
+  mount --bind "$1" "/tmp/dev/$name"
+  shift 2
+  seen="${seen}x"
+done
+sysdirs=$1
+shift
+case $sysdirs in
+  '' | 0?* | *[!0-9]*) exit 2 ;;
+esac
+seen=
+while [ "${#seen}" -lt "$sysdirs" ]; do
+  seen="${seen}x"
+  mkdir -p "/tmp/expose/$seen"
+  mount --bind "$1" "/tmp/expose/$seen"
+  shift
+done
+"""
+
+# DEVICE_SETUP_SCRIPT's step after the /sys and /var covers, before the private /tmp hides the staging
+# directories: it reads the /sys targets block (a count, then target and cover pairs, in the sources' order) and,
+# for each, reopens the cover read-write, makes the target, binds the staged source there, and makes the cover
+# read-only again. Each remount names its type and source, so mount reads no options back from mountinfo (module
+# docstring, Device access). A bad count exits 2 before any cover is reopened.
+DEVICE_SYS_STEP = r"""sysdirs=$1
+shift
+case $sysdirs in
+  '' | 0?* | *[!0-9]*) exit 2 ;;
+esac
+seen=
+while [ "${#seen}" -lt "$sysdirs" ]; do
+  seen="${seen}x"
+  mount -t tmpfs -o remount,rw lassi-sys "$2"
+  mkdir -p "$1"
+  mount --bind "/tmp/expose/$seen" "$1"
+  mount -t tmpfs -o remount,ro lassi-sys "$2"
+  shift 2
+done
+"""
+
+
+def _setup_script(device_steps: bool) -> str:
+    """Return the setup script: the template's slot lines removed, or filled with the device steps, then embedded."""
+    template = _SETUP_TEMPLATE
+    for slot, step in (("@DEVICE_NODES@\n", DEVICE_NODES_STEP), ("@DEVICE_SYS@\n", DEVICE_SYS_STEP)):
+        if template.count(slot) != 1:
+            raise AssertionError(f"the setup template must hold the slot line {slot.strip()} exactly once")
+        template = template.replace(slot, step if device_steps else "")
+    return _embed(
+        template,
+        {
+            "READONLY_PROGRAM": READONLY_PROGRAM,
+            "MOUNT_CHECK": MOUNT_CHECK,
+            "CONFINE_PROGRAM": CONFINE_PROGRAM,
+            "COPY_BACK_PROGRAM": COPY_BACK_PROGRAM,
+            "ENVIRONMENT_MARKER": ENVIRONMENT_MARKER,
+        },
+    )
+
+
+# The script of every run without a device exposure: byte for byte the script before task P17.5.
+SETUP_SCRIPT = _setup_script(device_steps=False)
+# The script of a run with a device exposure (only the gpu executor's): SETUP_SCRIPT with the two device steps.
+DEVICE_SETUP_SCRIPT = _setup_script(device_steps=True)
 
 
 class SandboxUnavailableError(RuntimeError):
@@ -856,6 +988,94 @@ def _checked_environment(environment: object) -> dict[str, str] | None:
 
 
 @dataclass(frozen=True)
+class DeviceBind:
+    """One bind of a device exposure: the host path `source`, bound at the path `target` inside the sandbox."""
+
+    source: PurePosixPath
+    target: PurePosixPath
+
+
+@dataclass(frozen=True)
+class DeviceExposure:
+    """What a run sees beyond the private /dev's six nodes (task P17.5; only the gpu executor sets one).
+
+    `nodes` are device nodes bound into the private /dev; `sys_dirs` are /sys
+    directories bound read-only below the entries the setup covers. Both
+    are kept as tuples; SandboxSpec checks every bind (_check_devices).
+    """
+
+    nodes: tuple[DeviceBind, ...]
+    sys_dirs: tuple[DeviceBind, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Keep both sequences as tuples."""
+        object.__setattr__(self, "nodes", tuple(self.nodes))
+        object.__setattr__(self, "sys_dirs", tuple(self.sys_dirs))
+
+
+def sys_cover(target: PurePosixPath) -> str:
+    """Return the entry SETUP_SCRIPT covers that a /sys path lies strictly below, as POSIX text.
+
+    The covered entries are /sys/class, /sys/bus, and each /sys/devices/<x>
+    but system; anything else under /sys is in view already. Raise
+    ValueError for a path below no covered entry, or equal to one.
+    """
+    parts = PurePosixPath(target).parts
+    if parts[:2] == ("/", "sys") and len(parts) > 3 and parts[2] in ("class", "bus"):
+        return f"/sys/{parts[2]}"
+    if parts[:3] == ("/", "sys", "devices") and len(parts) > 4 and parts[3] != "system":
+        return f"/sys/devices/{parts[3]}"
+    raise ValueError(
+        f"the /sys target {str(target)!r} must lie strictly below /sys/class, /sys/bus, or a /sys/devices entry "
+        "other than system, which the setup covers"
+    )
+
+
+def _bind_text(what: str, path: object, top: str) -> str:
+    """Return a device bind's path as POSIX text after checking it, or raise ValueError naming `what`.
+
+    It must be a PurePath, absolute, under /<top>/, and each segment must
+    match _DEVICE_SEGMENT (so no NUL, blank, shell character, "." or "..").
+    """
+    text = path.as_posix() if isinstance(path, PurePath) else ""
+    segments = text.split("/")
+    if not text.startswith(f"/{top}/") or not all(_DEVICE_SEGMENT.fullmatch(part) for part in segments[1:]):
+        raise ValueError(
+            f"the device {what} {path!r} must be an absolute path under /{top}/ whose segments match "
+            f"{_DEVICE_SEGMENT.pattern}"
+        )
+    return text
+
+
+def _check_devices(devices: object) -> None:
+    """Raise ValueError, naming the entry, unless `devices` is a DeviceExposure the setup can apply.
+
+    It needs at least one node. Node sources and targets lie under /dev,
+    and a target's first segment is not one of RESERVED_DEV_NAMES; /sys
+    sources lie under /sys, and targets strictly below a covered entry
+    (sys_cover). No target appears twice.
+    """
+    if not isinstance(devices, DeviceExposure):
+        raise ValueError(f"devices must be a DeviceExposure or None, got {devices!r}")
+    if not devices.nodes:
+        raise ValueError("a device exposure needs at least one device node")
+    targets: list[str] = []
+    for kind, top, binds in (("node", "dev", devices.nodes), ("/sys", "sys", devices.sys_dirs)):
+        for bind in binds:
+            if not isinstance(bind, DeviceBind):
+                raise ValueError(f"a device exposure holds DeviceBinds, got {bind!r}")
+            _bind_text(f"{kind} source", bind.source, top)
+            target = _bind_text(f"{kind} target", bind.target, top)
+            if top == "dev" and target.split("/")[2] in RESERVED_DEV_NAMES:
+                raise ValueError(f"the device node target {target!r} is a name the private /dev already holds")
+            if top == "sys":
+                sys_cover(PurePosixPath(target))
+            if target in targets:
+                raise ValueError(f"the device target {target!r} is named twice")
+            targets.append(target)
+
+
+@dataclass(frozen=True)
 class SandboxSpec:
     """Where a sandboxed run may write, what it sees, and its disk cap.
 
@@ -873,7 +1093,12 @@ class SandboxSpec:
     SANDBOX_PATH, HOME=<workdir>, LANG=C.UTF-8, TMPDIR=/tmp) and the P0.16
     command; a mapping gives the program exactly those variables, with
     names from ENVIRONMENT_NAMES and string values without NUL, and is kept
-    as a read-only copy. ValueError is raised
+    as a read-only copy. `devices` is the gpu executor's DeviceExposure
+    (task P17.5): None, the default, exposes nothing beyond the private
+    /dev's six nodes and runs SETUP_SCRIPT; an exposure runs
+    DEVICE_SETUP_SCRIPT, and only then may the environment hold any of
+    GPU_VISIBILITY_NAMES. ValueError is raised for an exposure
+    _check_devices refuses, for a visibility name without an exposure,
     when a path is relative or lies under one of PRIVATE_DIRS (the private
     tmpfs would hide it), when the workdir, the harness, or the toolchains
     root lies under one of SYSTEM_DIRS, when a hidden root is a filesystem
@@ -893,6 +1118,7 @@ class SandboxSpec:
     tasks_max: int = 256
     disk_mb: int = WORKDIR_DISK_MB
     environment: Mapping[str, str] | None = None
+    devices: DeviceExposure | None = None
 
     def __post_init__(self) -> None:
         """Normalize the paths to Path, copy the environment, and check every field; ValueError on the first problem."""
@@ -923,6 +1149,12 @@ class SandboxSpec:
         _check_int("tasks_max", self.tasks_max)
         _check_int("disk_mb", self.disk_mb)
         environment = _checked_environment(self.environment)
+        if self.devices is not None:
+            _check_devices(self.devices)
+        else:
+            for name in GPU_VISIBILITY_NAMES:
+                if name in (environment or {}):
+                    raise ValueError(f"the sandbox environment may set {name} only with a device exposure")
         object.__setattr__(self, "environment", None if environment is None else MappingProxyType(environment))
 
 
@@ -1050,7 +1282,11 @@ def sandbox_command(spec: SandboxSpec, argv: Sequence[str], limits: Limits) -> l
     positional layout. When spec.environment is set, ENVIRONMENT_MARKER and
     one NAME=value element per variable, in name order, come right before
     argv, which stays the command's tail; with None the command is the
-    P0.16 command. Raise ValueError when argv is empty or names the program
+    P0.16 command. With spec.devices set the script is
+    DEVICE_SETUP_SCRIPT and the device blocks (_device_layout) go into the
+    layout: the nodes and the /sys sources after the root count, the /sys
+    targets after the hidden roots; without it the command is exactly the
+    one before task P17.5. Raise ValueError when argv is empty or names the program
     as _check_request refuses, or wall_s is not > 0, or memory_mb or cpus
     is below 1.
     """
@@ -1064,12 +1300,34 @@ def sandbox_command(spec: SandboxSpec, argv: Sequence[str], limits: Limits) -> l
     scope += ["-p", f"MemoryMax={limits.memory_mb}M", "-p", "MemorySwapMax=0", "-p", f"TasksMax={spec.tasks_max}"]
     scope += ["-p", f"RuntimeMaxSec={wall + KILL_AFTER_S + OUTER_MARGIN_S}", "-p", "TimeoutStopSec=1"]
     namespaces = ["unshare", "-rinmpfu", "--mount-proc", "--kill-child"]
-    layout = [str(spec.workdir), *optional, str(workdir_cap_bytes(spec, limits)), str(len(roots)), *roots]
+    layout = [str(spec.workdir), *optional, str(workdir_cap_bytes(spec, limits)), str(len(roots))]
+    if spec.devices is None:
+        script, layout = SETUP_SCRIPT, [*layout, *roots]
+    else:
+        nodes, sources, targets = _device_layout(spec.devices)
+        script, layout = DEVICE_SETUP_SCRIPT, [*layout, *nodes, *sources, *roots, *targets]
     layout += [str(cpu), str(wall), str(KILL_AFTER_S)]
     if spec.environment is not None:
         layout += [ENVIRONMENT_MARKER, *(f"{name}={spec.environment[name]}" for name in sorted(spec.environment))]
-    setup = ["sh", "-c", SETUP_SCRIPT, "sh", *layout]
+    setup = ["sh", "-c", script, "sh", *layout]
     return ["prlimit", "--core=1", "--", *environment, *scope, *namespaces, *setup, *argv]
+
+
+def _device_layout(devices: DeviceExposure) -> tuple[list[str], list[str], list[str]]:
+    """Return DEVICE_SETUP_SCRIPT's three blocks for `devices`, each a count and then its values.
+
+    The nodes block holds each node's source and target; the sources block
+    each /sys directory's source; the targets block each /sys directory's
+    target and the cover it lies under (sys_cover), in the same order, so
+    the staging names the two device steps count match.
+    """
+    pairs = ((bind.source.as_posix(), bind.target.as_posix()) for bind in devices.nodes)
+    nodes = [str(len(devices.nodes)), *(part for pair in pairs for part in pair)]
+    sources = [str(len(devices.sys_dirs)), *(bind.source.as_posix() for bind in devices.sys_dirs)]
+    targets = [str(len(devices.sys_dirs))]
+    for bind in devices.sys_dirs:
+        targets += [bind.target.as_posix(), sys_cover(bind.target)]
+    return nodes, sources, targets
 
 
 def classify(returncode: int, wall_s: float, limit_wall_s: float) -> tuple[bool, bool]:
@@ -1384,12 +1642,16 @@ class SandboxedCompileRunner:
         `runner` None means CappedRunner(COMPILE_OUTPUT_CAP_BYTES), read
         when the runner is made. Raise ValueError when the environment holds
         a name outside ENVIRONMENT_NAMES, a value that is not a string
-        without NUL, or TMPDIR (each compile gets its own), or when no hidden
-        root is given.
+        without NUL, TMPDIR (each compile gets its own), or one of
+        GPU_VISIBILITY_NAMES (a compile has no device exposure), or when no
+        hidden root is given.
         """
         checked = _checked_environment(environment)
         if checked is None or "TMPDIR" in checked:
             raise ValueError("a compile environment is a mapping without TMPDIR; each compile gets its own TMPDIR")
+        visible = sorted(set(checked) & set(GPU_VISIBILITY_NAMES))
+        if visible:
+            raise ValueError(f"a compile environment may not set {', '.join(visible)}; a compile sees no device")
         if isinstance(hidden_roots, (str, os.PathLike)) or not hidden_roots:
             raise ValueError(f"a compile needs a sequence of hidden roots, got {hidden_roots!r}")
         self.environment: dict[str, str] = checked
