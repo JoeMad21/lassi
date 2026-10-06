@@ -1,0 +1,104 @@
+{
+ "all_imported": true,
+ "expected_matmul_sum": 83.0,
+ "result": {
+  "executable": "/mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-detached-e805c6d4/build/p17-venv-cpu-20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2/bin/python",
+  "modules": {
+   "accelerate": {
+    "import_s": 0.0,
+    "version": "1.15.0"
+   },
+   "datasets": {
+    "import_s": 1.24,
+    "version": "5.1.0"
+   },
+   "huggingface_hub": {
+    "import_s": 0.0,
+    "version": "1.33.0"
+   },
+   "numpy": {
+    "import_s": 0.0,
+    "version": "2.2.6"
+   },
+   "pandas": {
+    "import_s": 0.0,
+    "version": "2.3.3"
+   },
+   "peft": {
+    "import_s": 4.24,
+    "version": "0.21.2"
+   },
+   "safetensors": {
+    "import_s": 0.0,
+    "version": "0.8.0"
+   },
+   "tokenizers": {
+    "import_s": 0.0,
+    "version": "0.23.2"
+   },
+   "torch": {
+    "import_s": 2.71,
+    "version": "2.14.1+cpu"
+   },
+   "transformers": {
+    "import_s": 0.96,
+    "version": "5.18.0"
+   },
+   "trl": {
+    "import_s": 0.02,
+    "version": "1.14.1"
+   }
+  },
+  "prefix": "/mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-detached-e805c6d4/build/p17-venv-cpu-20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2",
+  "python": "3.10.12",
+  "torch": {
+   "cpu_capability": "AVX512",
+   "cuda": null,
+   "git": "5c4886908584029761b579af026dcfb627c84070",
+   "hip": null,
+   "matmul_sum": 83.0
+  }
+ },
+ "sandbox": {
+  "argv": [
+   "/mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-detached-e805c6d4/build/p17-venv-cpu-20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2/bin/python",
+   "-I",
+   "-c",
+   "\nimport json, os, sys, time\nhome = os.getcwd()\nos.environ.update(HOME=home, HF_HOME=os.path.join(home, \"hf\"), XDG_CACHE_HOME=os.path.join(home, \"cache\"),\n                  HF_HUB_OFFLINE=\"1\", TRANSFORMERS_OFFLINE=\"1\", HF_DATASETS_OFFLINE=\"1\",\n                  OMP_NUM_THREADS=\"4\", MKL_NUM_THREADS=\"4\", TOKENIZERS_PARALLELISM=\"false\")\nout = {\"python\": sys.version.split()[0], \"executable\": sys.executable, \"prefix\": sys.prefix, \"modules\": {}}\nfor name in sys.argv[1:]:\n    start = time.monotonic()\n    try:\n        module = __import__(name)\n        out[\"modules\"][name] = {\"version\": str(getattr(module, \"__version__\", None)),\n                                \"import_s\": round(time.monotonic() - start, 2)}\n    except Exception as exc:\n        out[\"modules\"][name] = {\"error\": (\"%s: %s\" % (type(exc).__name__, exc))[:300]}\nif \"torch\" in sys.modules:\n    import torch\n    facts = {\"cuda\": torch.version.cuda, \"hip\": getattr(torch.version, \"hip\", None),\n             \"git\": torch.version.git_version, \"cpu_capability\": torch.backends.cpu.get_cpu_capability()}\n    torch.set_num_threads(4)\n    a = torch.arange(6, dtype=torch.float32).reshape(2, 3)\n    facts[\"matmul_sum\"] = float((a @ a.T).sum())\n    out[\"torch\"] = facts\nprint(json.dumps(out, sort_keys=True))\n",
+   "torch",
+   "transformers",
+   "trl",
+   "peft",
+   "accelerate",
+   "datasets",
+   "huggingface_hub",
+   "tokenizers",
+   "safetensors",
+   "numpy",
+   "pandas"
+  ],
+  "environment": "sandbox defaults",
+  "exposed": "/mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-detached-e805c6d4/build/p17-venv-cpu-20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2",
+  "hang": false,
+  "killed": false,
+  "limits": {
+   "cpus": 4,
+   "disk_mb": 1024,
+   "memory_mb": 8192,
+   "wall_s": 600
+  },
+  "name": "imports",
+  "program_s": 10.4,
+  "rc": 0,
+  "stderr_head": [],
+  "stderr_truncated": false,
+  "stdout_head": [
+   "{\"executable\": \"/mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-detached-e805c6d4/build/p17-venv-cpu-20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2/bin/python\", \"modules\": {\"accelerate\": {\"import_s\": 0.0, \"version\": \"1.15.0\"}, \"datasets\": {\"import_s\": 1.24, \"version\": \"5.1.0\"}, \"huggingface_hub\": {\"import_s\": 0.0, \"version\": \"1.33.0\"}, \"numpy\": {\"import_s\": 0.0, \"version\": \"2.2.6\"}, \"pandas\": {\"import_s\": 0.0, \"version\": \"2.3.3\"}, \"peft\": {\"import_s\": 4.24, \"version\": \"0.21.2\"}, \"safetensors\": {\"import_s\": 0.0, \"version\": \"0.8.0\"}, \"tokenizers\": {\"import_s\": 0.0, \"version\": \"0.23.2\"}, \"torch\": {\"import_s\": 2.71, \"version\": \"2.14.1+cpu\"}, \"transformers\": {\"import_s\": 0.96, \"version\": \"5.18.0\"}, \"trl\": {\"import_s\": 0.02, \"version\": \"1.14.1\"}}, \"prefix\": \"/mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-detached-e805c6d4/build/p17-venv-cpu-20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2\", \"python\": \"3.10.12\", \"torch\": {\"cpu_capability\": \"AVX512\", \"cuda\": null, \"git\": \"5c4886908584029761b579af026dcfb627c84070\", \"hip\": null, \"matmul_sum\": 83.0}}"
+  ],
+  "stdout_truncated": false,
+  "unavailable": null,
+  "wall_s": 10.74,
+  "workdir": "/mnt/nvme10/joseph_ufl/lassi-runs/p17-frameworks/20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2/raw/imports-work",
+  "workdir_incomplete": false
+ }
+}

@@ -1,0 +1,40 @@
+mode: real
+rx id 20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2; run /mnt/nvme10/joseph_ufl/lassi-runs/p17-frameworks/20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2
+date (UTC): 2026-10-06T03:41:43Z; host alpha01; kernel 6.6.29+main+3.0.0r1-amd64-gio-epilmore-dev+; nproc 256
+commit e805c6d4af0a16e6458c4971362659b836112c50; tree clean
+python3: /usr/bin/python3 Python 3.10.12
+uv: /mnt/nvme10/joseph_ufl/bin/uv uv 0.12.17 (x86_64-unknown-linux-gnu)
+uv cache before: 201824 KiB at /mnt/nvme10/joseph_ufl/.cache/uv; scratch root 101570812 KiB (stop line 120586240 KiB)
+core limit: 1 byte (prlimit --core=1:1, checked with getrlimit); variables unset: none
+UV_LINK_MODE=unset (uv default); TMPDIR=/mnt/nvme10/joseph_ufl/tmp
+venv: rc=0 at /mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-detached-e805c6d4/build/p17-venv-cpu-20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2; python 3.10.12 /usr
+resolve (uv pip compile, index annotations): rc=0; 59 pins
+install: rc=0 in 6 s (1200 s limit); Resolved 59 packages in 773ms;Prepared 50 packages in 3.83s;Installed 59 packages in 396ms;
+freeze: 59 packages; expected pins matching: 11 of 11
+  indexes (uv pip compile annotations): https://download.pytorch.org/whl/cpu: 1 (torch), https://pypi.org/simple: 58
+  freeze vs resolution: identical
+pip check: rc=0; All installed packages are compatible
+size: venv 1174712 KiB (apparent 1117109 KiB; 24503 of 24734 files hard-linked to the uv cache)
+  uv cache 201824 -> 1231436 KiB; disk added (cache growth + venv-only blocks) 1042400 KiB
+  largest site-packages entries (KiB): 727236=torch 154924=pyarrow 56592=transformers 45944=pandas 32384=numpy 
+imports (sandbox, venv read-only, no network): rc=0 in 10.74 s; python 3.10.12; all imported: yes
+  versions: accelerate 1.15.0, datasets 5.1.0, huggingface_hub 1.33.0, numpy 2.2.6, pandas 2.3.3, peft 0.21.2, safetensors 0.8.0, tokenizers 0.23.2,
+  torch 2.14.1+cpu, transformers 5.18.0, trl 1.14.1
+  torch.version.cuda=None torch.version.hip=None cpu_capability=AVX512 matmul_sum=83.0 (expected 83.0)
+hipcc: /opt/rocm/core-7.12/bin/hipcc (ROCm root /opt/rocm/core-7.12 -> /opt/rocm/core-7.12); env -i LANG LC_ALL PATH TMPDIR only
+  hipcc --version: rc=0 in 0.48 s
+    HIP version: 7.12.60610-2bd1678d3d
+    AMD clang version 22.0.0git (https://github.com/ROCm/llvm-project.git c849bc16b0e49951d313756f20b73c2b28d321d7+PATCHED:9a6ac45c97a1e511db838c5b46257324d2de1
+    Target: x86_64-unknown-linux-gnu
+  compile (--offload-arch=gfx942 -O2 -c probe.hip -o probe.o): rc=0 in 1.84 s; probe.o 16952 bytes
+  sections: none named hip/offload; fatbin None bytes; tools missing: llvm-readelf
+  bundle targets: none
+  gfx942 code object: None bytes; n/a
+    objdump --offloading: probe.o: file format elf64-x86-64
+  trace (strace -f -e trace=%file in the sandbox): rc=0 in 2.3 s; log 4079 lines
+    programs started: /bin/sh x3, <rocm>/bin/hipcc x1, <rocm>/lib/llvm/bin/clang++ x2, <rocm>/lib/llvm/bin/clang-22 x2, <rocm>/lib/llvm/bin/lld x1,
+  <rocm>/lib/llvm/bin/clang-offload-bundler x1
+    failed exec attempts: 0; device-query programs: none; /dev and /sys paths: 3, GPU-related: none
+hip verdict: hipcc built gfx942 device code with no GPU device in view: NO (bundle False, code object False, offloading False)
+close: slot tree clean after the batch; run directory 768 KiB; report 80 KiB
+ascii: 0 file(s) had non-ASCII bytes replaced

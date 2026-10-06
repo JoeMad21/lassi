@@ -1,0 +1,9 @@
+mode: real
+rx id 20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2; run /mnt/nvme10/joseph_ufl/lassi-runs/p17-frameworks/20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2
+date (UTC): 2026-10-06T03:41:43Z; host alpha01; kernel 6.6.29+main+3.0.0r1-amd64-gio-epilmore-dev+; nproc 256
+commit e805c6d4af0a16e6458c4971362659b836112c50; tree clean
+python3: /usr/bin/python3 Python 3.10.12
+uv: /mnt/nvme10/joseph_ufl/bin/uv uv 0.12.17 (x86_64-unknown-linux-gnu)
+uv cache before: 201824 KiB at /mnt/nvme10/joseph_ufl/.cache/uv; scratch root 101570812 KiB (stop line 120586240 KiB)
+core limit: 1 byte (prlimit --core=1:1, checked with getrlimit); variables unset: none
+UV_LINK_MODE=unset (uv default); TMPDIR=/mnt/nvme10/joseph_ufl/tmp

@@ -1,0 +1,230 @@
+{
+ "compile_argv": [
+  "/opt/rocm/core-7.12/bin/hipcc",
+  "--offload-arch=gfx942",
+  "-O2",
+  "-c",
+  "probe.hip",
+  "-o",
+  "probe.o"
+ ],
+ "environment": {
+  "LANG": "C",
+  "LC_ALL": "C",
+  "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
+  "TMPDIR": "/tmp"
+ },
+ "hipcc": "/opt/rocm/core-7.12/bin/hipcc",
+ "inspection": {
+  "bundle_targets": [],
+  "code_object": [],
+  "gfx942_in_bundle": false,
+  "gfx942_in_code_object": false,
+  "gfx942_in_offloading": false,
+  "notes": [],
+  "offloading": [
+   "probe.o: file format elf64-x86-64",
+   "Extracting offload bundle: probe.o.0.host-x86_64-unknown-linux-gnu-",
+   "Extracting offload bundle: probe.o.0.hipv4-amdgcn-amd-amdhsa--gfx942"
+  ],
+  "offloading_kind_elf": false,
+  "sections": [],
+  "tools_missing": [
+   "llvm-readelf"
+  ]
+ },
+ "object_bytes": 16952,
+ "rocm": "/opt/rocm/core-7.12",
+ "rocm_realpath": "/opt/rocm/core-7.12",
+ "steps": [
+  {
+   "argv": [
+    "/opt/rocm/core-7.12/bin/hipcc",
+    "--version"
+   ],
+   "environment": {
+    "LANG": "C",
+    "LC_ALL": "C",
+    "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
+    "TMPDIR": "/tmp"
+   },
+   "exposed": "/opt/rocm/core-7.12",
+   "hang": false,
+   "killed": false,
+   "limits": {
+    "cpus": 2,
+    "disk_mb": 2048,
+    "memory_mb": 8192,
+    "wall_s": 60
+   },
+   "name": "hip-version",
+   "program_s": 0.13,
+   "rc": 0,
+   "stderr_head": [],
+   "stderr_truncated": false,
+   "stdout_head": [
+    "HIP version: 7.12.60610-2bd1678d3d",
+    "AMD clang version 22.0.0git (https://github.com/ROCm/llvm-project.git c849bc16b0e49951d313756f20b73c2b28d321d7+PATCHED:9a6ac45c97a1e511db838c5b46257324d2de1780)",
+    "Target: x86_64-unknown-linux-gnu",
+    "Thread model: posix",
+    "InstalledDir: /opt/rocm/core-7.12/lib/llvm/bin"
+   ],
+   "stdout_truncated": false,
+   "unavailable": null,
+   "wall_s": 0.48,
+   "workdir": "/mnt/nvme10/joseph_ufl/lassi-runs/p17-frameworks/20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2/raw/hip-version-work",
+   "workdir_incomplete": false
+  },
+  {
+   "argv": [
+    "/opt/rocm/core-7.12/bin/hipcc",
+    "--offload-arch=gfx942",
+    "-O2",
+    "-c",
+    "probe.hip",
+    "-o",
+    "probe.o"
+   ],
+   "environment": {
+    "LANG": "C",
+    "LC_ALL": "C",
+    "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
+    "TMPDIR": "/tmp"
+   },
+   "exposed": "/opt/rocm/core-7.12",
+   "hang": false,
+   "killed": false,
+   "limits": {
+    "cpus": 2,
+    "disk_mb": 2048,
+    "memory_mb": 8192,
+    "wall_s": 300
+   },
+   "name": "hip-compile",
+   "program_s": 1.56,
+   "rc": 0,
+   "stderr_head": [],
+   "stderr_truncated": false,
+   "stdout_head": [],
+   "stdout_truncated": false,
+   "unavailable": null,
+   "wall_s": 1.84,
+   "workdir": "/mnt/nvme10/joseph_ufl/lassi-runs/p17-frameworks/20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2/raw/hip-compile-work",
+   "workdir_incomplete": false
+  },
+  {
+   "argv": [
+    "/opt/rocm/core-7.12/lib/llvm/bin/llvm-objdump",
+    "--offloading",
+    "probe.o"
+   ],
+   "environment": {
+    "LANG": "C",
+    "LC_ALL": "C",
+    "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
+    "TMPDIR": "/tmp"
+   },
+   "exposed": "/opt/rocm/core-7.12",
+   "hang": false,
+   "killed": false,
+   "limits": {
+    "cpus": 2,
+    "disk_mb": 2048,
+    "memory_mb": 8192,
+    "wall_s": 60
+   },
+   "name": "inspect-offloading",
+   "program_s": 0.03,
+   "rc": 0,
+   "stderr_head": [],
+   "stderr_truncated": false,
+   "stdout_head": [
+    "probe.o: file format elf64-x86-64",
+    "Extracting offload bundle: probe.o.0.host-x86_64-unknown-linux-gnu-",
+    "Extracting offload bundle: probe.o.0.hipv4-amdgcn-amd-amdhsa--gfx942"
+   ],
+   "stdout_truncated": false,
+   "unavailable": null,
+   "wall_s": 0.32,
+   "workdir": "/mnt/nvme10/joseph_ufl/lassi-runs/p17-frameworks/20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2/raw/hip-inspect-work",
+   "workdir_incomplete": false
+  },
+  {
+   "argv": [
+    "/usr/bin/strace",
+    "-f",
+    "-qq",
+    "-s",
+    "256",
+    "-e",
+    "trace=%file",
+    "-e",
+    "signal=none",
+    "-o",
+    "trace.txt",
+    "--",
+    "/bin/sh",
+    "-c",
+    "\"$@\"; exit \"$?\"",
+    "sh",
+    "/opt/rocm/core-7.12/bin/hipcc",
+    "--offload-arch=gfx942",
+    "-O2",
+    "-c",
+    "probe.hip",
+    "-o",
+    "probe-trace.o"
+   ],
+   "environment": {
+    "LANG": "C",
+    "LC_ALL": "C",
+    "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
+    "TMPDIR": "/tmp"
+   },
+   "exposed": "/opt/rocm/core-7.12",
+   "hang": false,
+   "killed": false,
+   "limits": {
+    "cpus": 2,
+    "disk_mb": 2048,
+    "memory_mb": 8192,
+    "wall_s": 300
+   },
+   "name": "hip-trace",
+   "program_s": 1.92,
+   "rc": 0,
+   "stderr_head": [],
+   "stderr_truncated": false,
+   "stdout_head": [],
+   "stdout_truncated": false,
+   "unavailable": null,
+   "wall_s": 2.3,
+   "workdir": "/mnt/nvme10/joseph_ufl/lassi-runs/p17-frameworks/20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2/raw/hip-trace-work",
+   "workdir_incomplete": false
+  }
+ ],
+ "target": "gfx942",
+ "trace": {
+  "dev_sys_count": 3,
+  "dev_sys_paths": {
+   "/dev/null": "openat ok",
+   "/dev/urandom": "openat ok",
+   "/sys/devices/system/cpu/online": "openat ok"
+  },
+  "failed_exec": {},
+  "gpu_paths": {},
+  "lines": 4079,
+  "probe_programs": [],
+  "record": "hip-trace",
+  "started": {
+   "/bin/sh": 3,
+   "/opt/rocm/core-7.12/bin/hipcc": 1,
+   "/opt/rocm/core-7.12/lib/llvm/bin/clang++": 2,
+   "/opt/rocm/core-7.12/lib/llvm/bin/clang-22": 2,
+   "/opt/rocm/core-7.12/lib/llvm/bin/clang-offload-bundler": 1,
+   "/opt/rocm/core-7.12/lib/llvm/bin/lld": 1
+  },
+  "strace": "/usr/bin/strace"
+ },
+ "verdict": false
+}

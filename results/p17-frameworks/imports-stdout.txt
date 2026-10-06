@@ -1,0 +1,4 @@
+imports (sandbox, venv read-only, no network): rc=0 in 10.74 s; python 3.10.12; all imported: yes
+  versions: accelerate 1.15.0, datasets 5.1.0, huggingface_hub 1.33.0, numpy 2.2.6, pandas 2.3.3, peft 0.21.2, safetensors 0.8.0, tokenizers 0.23.2,
+  torch 2.14.1+cpu, transformers 5.18.0, trl 1.14.1
+  torch.version.cuda=None torch.version.hip=None cpu_capability=AVX512 matmul_sum=83.0 (expected 83.0)
