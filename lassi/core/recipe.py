@@ -6,13 +6,16 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
 2. refuses any key the schema below does not list, naming the file and dotted path;
 3. follows `extends` to the root ancestor;
 4. merges from the root down, the child winning (mappings merge, anything else is replaced, a
-   kind section that names a new kind replaces the inherited one, and an executor section that
-   switches between its two forms replaces the inherited one);
+   kind section that names a new kind replaces the inherited one, an executor section that
+   switches between its two forms replaces the inherited one, and a `device` mapping replaces the
+   inherited one whole, since a device is one choice);
 5. materializes the defaults (`project`: the loaded file's recipe name; `faithful: false`; every fix on);
 6. applies the faithful overrides (bible, Project Recipes Notes; Design Principle 4);
 7. checks types and required choices, never picking a value for a choice left open;
-8. binds components and checks their capabilities without constructing any (Component Interfaces), and
-   refuses a faithful recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES);
+8. binds components and checks their capabilities without constructing any (Component Interfaces),
+   refuses a faithful recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES),
+   and reads the device section of every component that declares `takes_device` (task P17.2): one is
+   required, never picked, and lassi.core.devices.parse_device refuses a bad one naming the key;
 9. serializes the resolved mapping to canonical YAML and hashes it.
 
 `executor` has two forms (task P4.5). The single form is a kind section, `{kind: <name>, <config>...}`,
@@ -41,7 +44,9 @@ from typing import Any, Callable, Mapping, Sequence
 
 import yaml
 
-from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry, RegistryError, check_bindings
+from lassi.core.capabilities import DEVICE_KEY, TAKES_DEVICE
+from lassi.core.devices import DeviceSectionError, parse_device
+from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry, RegistryError, check_bindings, device_path
 
 # The value of loop.max_corrections that means no cap (upstream LASSI's loop; bible LASSI quirk table).
 UNCAPPED = "uncapped"
@@ -403,7 +408,7 @@ SCHEMA = _Fields(
         "oracle": _KIND,
         "profiler": _KIND,
         "adversary": _KIND,
-        "model": _Fields({"backend": _STR, "id": _STR}),
+        "model": _Fields({"backend": _STR, "id": _STR, "device": _KIND}),  # device: a device section (P17.2)
         "arms": _STRINGS,
         "metrics": _STRINGS,
         "refine": _Fields({"counter_start": _NUMBER, "counter_step": _NUMBER, "max_iters": _INT}),
@@ -474,6 +479,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     except RegistryError as exc:
         raise RecipeError(f"{path}: {exc}") from exc
     _check_faithful_toolchains(path, data, bindings, registry)
+    _check_devices(path, bindings, registry)
     canonical = yaml.safe_dump(data, sort_keys=True, default_flow_style=False, allow_unicode=False, width=4096)
     return Recipe(
         name=_recipe_name(path),
@@ -842,11 +848,15 @@ def _names_other_kind(inherited: Any, value: Any) -> bool:
 
 
 def _merge(parent: Mapping[str, Any], child: Mapping[str, Any]) -> dict[str, Any]:
-    """Return `parent` overlaid by `child`: two mappings merge recursively, and anything else from the child wins."""
+    """Return `parent` overlaid by `child`: two mappings merge recursively, and anything else from the child wins.
+
+    A `device` value is one choice, so the child's replaces the inherited one
+    whole at any depth, never merged key by key.
+    """
     merged = dict(parent)
     for key, value in child.items():
         inherited = merged.get(key)
-        both_maps = isinstance(inherited, dict) and isinstance(value, dict)
+        both_maps = isinstance(inherited, dict) and isinstance(value, dict) and key != DEVICE_KEY
         merged[key] = _merge(inherited, value) if both_maps else value
     return merged
 
@@ -901,12 +911,38 @@ def _check_faithful_toolchains(
             )
 
 
+def _check_devices(path: Path, bindings: Sequence[Binding], registry: Registry) -> None:
+    """Refuse a component that declares takes_device without a device section, and any section parse_device refuses.
+
+    Runs after check_bindings, so every name is registered and a device key
+    sits only under a component that takes one. The loader never picks a
+    device; a per-language entry written as a bare name cannot carry one.
+    """
+    for binding in bindings:
+        entry = registry.get(binding.interface, binding.name)
+        if TAKES_DEVICE not in entry.capabilities:
+            continue
+        where = device_path(binding)
+        if DEVICE_KEY not in binding.config:
+            bare = binding.where.startswith("executor.") and not binding.where.endswith(".kind")
+            hint = "; a bare executor name cannot carry one, so write a kind section {kind, device}" if bare else ""
+            raise RecipeError(
+                f"{path}: {where} is a required choice with no value; {entry.interface} {entry.name!r} "
+                f"({binding.where}) takes a device section {{kind, indices}} and the loader never picks one{hint}"
+            )
+        try:
+            parse_device(binding.config[DEVICE_KEY], where)
+        except DeviceSectionError as error:
+            raise RecipeError(f"{path}: {error}") from None
+
+
 def _bindings(data: Mapping[str, Any]) -> list[Binding]:
     """Return the components the resolved mapping binds, in the order below; absent sections bind nothing.
 
     A per-language executor section binds one Executor per language, in
     executor_languages order, at executor.<language> for a name and
-    executor.<language>.kind for a kind section.
+    executor.<language>.kind for a kind section. The LLMBackend's config holds
+    the model section's device section, when it has one, under `device`.
     """
     found: list[Binding] = []
 
@@ -914,7 +950,9 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
         found.append(Binding(interface=interface, name=name, where=where, config=_fresh(dict(config or {}))))
 
     if "backend" in data.get("model", {}):
-        bind("LLMBackend", data["model"]["backend"], "model.backend")
+        model = data["model"]
+        model_config = {DEVICE_KEY: model[DEVICE_KEY]} if DEVICE_KEY in model else None
+        bind("LLMBackend", model["backend"], "model.backend", model_config)
     for key in sorted(data.get("toolchain", {})):
         bind("Toolchain", data["toolchain"][key], f"toolchain.{key}")
     for section, interface in _KIND_SECTIONS:

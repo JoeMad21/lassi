@@ -37,6 +37,8 @@ SEVERITIES = ("error", "warning", "note")
 TOOLCHAIN_PIN_NAMES = (
     "llvm", "polygeist", "tt_mlir", "tt_metal", "ttsim", "furiosa_sdk", "cuda", "nvhpc", "rocm", "gcc"
 )
+# The device kinds a device section may name and a DeviceRecord records (task P17.2; lassi.core.devices).
+DEVICE_KINDS = ("cpu", "cuda", "rocm")
 # The run flags RunInfo records, named as the RunResult flags they copy, in field order.
 RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # The fixed codes of Final.end_reason: why a trial ended early. baseline-compile and baseline-run end a trial
@@ -470,6 +472,52 @@ class ToolchainPins:
 
 
 @dataclass(frozen=True, kw_only=True)
+class DeviceRecord:
+    """One device a recipe's device section named, as the run probed it (task P17.2; lassi.core.devices).
+
+    `key` is the section's recipe path (such as model.device), `kind` one of
+    DEVICE_KINDS, and `indices` the indices as written ([] exactly for cpu,
+    otherwise distinct integers of at least 0). name, count, memory_bytes,
+    driver, and runtime are what the host probe read and the framework build
+    gave; framework and framework_version name the framework the component
+    runs on. None means not read, never a guess. A known count is at least 1,
+    a known memory_bytes at least 0, a known string is non-empty, and
+    framework and framework_version are both set or both None. Every field is
+    required.
+    """
+
+    key: str
+    kind: str
+    indices: list[int]
+    name: str | None
+    count: int | None
+    memory_bytes: int | None
+    driver: str | None
+    runtime: str | None
+    framework: str | None
+    framework_version: str | None
+
+    def __post_init__(self) -> None:
+        """Check the field types, the key, the kind, the indices, the known values, and the framework pair."""
+        _check_fields(self)
+        _check_non_empty("DeviceRecord", "key", self.key)
+        _check_choice("DeviceRecord", "kind", self.kind, DEVICE_KINDS)
+        if (self.kind == "cpu") != (not self.indices):
+            _fail("DeviceRecord", "indices", self.indices, "must be [] for cpu and non-empty for any other kind")
+        if len(set(self.indices)) != len(self.indices) or any(index < 0 for index in self.indices):
+            _fail("DeviceRecord", "indices", self.indices, "must be distinct integers of at least 0")
+        if self.count is not None and self.count < 1:
+            _fail("DeviceRecord", "count", self.count, "must be >= 1 when known")
+        if self.memory_bytes is not None:
+            _check_non_negative("DeviceRecord", "memory_bytes", self.memory_bytes)
+        for name in ("name", "driver", "runtime", "framework", "framework_version"):
+            if getattr(self, name) is not None:
+                _check_non_empty("DeviceRecord", name, getattr(self, name))
+        if (self.framework is None) != (self.framework_version is None):
+            _fail("DeviceRecord", "framework", self.framework, "and framework_version must be both set or both None")
+
+
+@dataclass(frozen=True, kw_only=True)
 class Provenance:
     """A trial's copy of its run manifest, so a trial read outside its run tree still says where it came from.
 
@@ -479,12 +527,18 @@ class Provenance:
     executors per language, from "devices" at the trial's target language,
     sdk from "driver", and date from "started_utc". The types are what the
     manifest holds: commit and dirty are None when git is unavailable, device
-    is None when the executor names no device, sdk is None until an executor
-    reports an SDK or driver version, and date (the run's start, ISO 8601 UTC
-    with seconds) is always set. A known commit is a full git object id (40 or 64
+    is None when the executor names no device, sdk is the manifest's driver
+    (the distinct drivers of its device records, task P17.2) and None when
+    none names one, and date (the run's start, ISO 8601 UTC with seconds) is
+    always set. A known commit is a full git object id (40 or 64
     lowercase hex characters), a known device or sdk is a non-empty string,
-    and date must parse as an ISO 8601 time in UTC. Every field is required,
-    so a missing value is never read as unknown.
+    and date must parse as an ISO 8601 time in UTC. The five manifest fields
+    are required, so a missing value is never read as unknown.
+
+    device_records (task P17.2) copies the manifest's "device_records": one
+    DeviceRecord per device section the recipe names, in binding order, and
+    [] when it names none. It is the one field with a default: None means not
+    recorded, so a trial.json written before the field loads with None.
     """
 
     commit: str | None
@@ -492,6 +546,7 @@ class Provenance:
     device: str | None
     sdk: str | None
     date: str
+    device_records: list[DeviceRecord] | None = None
 
     def __post_init__(self) -> None:
         """Check the field types the run manifest gives, a known commit, device, and sdk, and the date."""

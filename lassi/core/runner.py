@@ -62,8 +62,19 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    are not pin name -> pairs with a VERSION, that name a pin with no Trial
    toolchain_pins field, or that give a pin other pairs than a toolchain or
    an earlier executor gives the same pin name.
+   Right after the stage plan is checked, before any component is built
+   (the Oracle and the ScoreProfiles included), it probes the device of
+   every binding whose component declares `takes_device` (task P17.2;
+   lassi.core.devices), in binding order: the component class's optional
+   framework() (build metadata only) and then the kind's probe from
+   RunOptions.probes, and it refuses a device the host lacks (no probe for
+   the kind, a framework build that cannot reach it, a probe's refusal, or
+   an index past the host's count), naming the key; no run falls back to
+   another device. A framework() result that is neither a FrameworkBuild
+   nor None is refused too.
    A stage it does not implement already fails at load, unregistered;
-3. builds the components: the backend as factory(model.id), each toolchain
+3. builds the components: the backend as factory(model.id, **config), whose
+   config holds the model's device section when it has one, each toolchain
    with its pinned compiler and a clean environment (below), each executor
    as factory(**config) (one, or one per language), asking each for its
    device() and reading the pins it declares, and the ScoreProfiles
@@ -120,13 +131,16 @@ host), resolve inside it (Agent Rule 7). The tree holds:
   single executor form records `executor` (its name) and
   `device` (its device(), null for an executor that names none); executors
   per language record `executor` and `devices`, each a mapping from language
-  to that language's executor name and device. It is
+  to that language's executor name and device. `device_records` holds
+  the record of each device section in binding order ([] without one), and
+  `driver` the distinct drivers they name, joined by "; " (null when none
+  does). It is
   written before the first trial with status "running", and again at the
   end with "complete", or with "failed" when a trial or a write raised, so
   every trial.json in the tree has a commit and a date beside it. Each
   trial's provenance copies the commit, dirty flag, device (the device of
   its target language with executors per language), driver (as sdk),
-  and started_utc (as date) of the manifest written first, and the final
+  started_utc (as date), and device_records of the manifest written first, and the final
   manifest is that same manifest with only its status and finish time
   changed, so a trial and its manifest never disagree;
 - run.md: the page a person reads (Readability Standards, Run row). Its
@@ -222,7 +236,16 @@ from typing import Any
 
 from lassi.bench import Direction, Suite, load_suite, sources_dir
 from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
-from lassi.core.capabilities import SIMULATOR, UNLOAD_BEFORE_RUN, declares, unload_before_run
+from lassi.core.capabilities import DEVICE_KEY, SIMULATOR, TAKES_DEVICE, UNLOAD_BEFORE_RUN, declares, unload_before_run
+from lassi.core.devices import (
+    DEFAULT_PROBES,
+    DeviceProbe,
+    DeviceUnavailable,
+    FrameworkBuild,
+    device_driver,
+    parse_device,
+    probe_device,
+)
 from lassi.core.fragments import fragment_key, pack_language
 from lassi.core.interfaces import Executor, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
@@ -238,16 +261,18 @@ from lassi.core.recipe import (
 )
 from lassi.core.record import (
     TOOLCHAIN_PIN_NAMES,
+    DeviceRecord,
     Final,
     Provenance,
     ToolchainPins,
     Trial,
     arm_segment,
+    from_dict,
     json_text,
     make_trial_id,
     standing_attempt,
 )
-from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry
+from lassi.core.registry import DEFAULT_REGISTRY, Binding, Entry, Registry, device_path
 from lassi.core.stages import BASELINE_X10, PURPOSE, RUNS_CODE, SANDBOXED, RunContext
 from lassi.core.store import TextStore, write_trial
 from lassi.core.trial_md import fenced, fmt, fmt_provenance
@@ -324,6 +349,9 @@ class RunOptions:
       means lassi.core.recipe.default_roots().
     - observer: gets the run's progress events (lassi.core.progress); None
       means none are sent. Nothing the run writes or returns depends on it.
+    - probes: the device probes by kind (lassi.core.devices, task P17.2);
+      None means lassi.core.devices.DEFAULT_PROBES, the host probes that
+      lassi.executors registers.
     """
 
     runs_root: Path | None = None
@@ -333,6 +361,7 @@ class RunOptions:
     registry: Registry | None = None
     roots: Sequence[Path] | None = None
     observer: Observer | None = None
+    probes: Mapping[str, DeviceProbe] | None = None
 
 
 # The options run_recipe uses when none are given: every field falls back as RunOptions says.
@@ -440,6 +469,8 @@ class _Run:
     (_run_pins). `scoring` holds the
     built ScoreProfiles of `score` and `metrics` (lassi.scoring.run_scoring).
     `observer` is RunOptions.observer in a GuardedObserver, or None.
+    `devices` holds the record of each device section, in binding order
+    (_devices).
     """
 
     recipe: Recipe
@@ -458,6 +489,7 @@ class _Run:
     dirty: bool | None
     scoring: ScoringPlan
     observer: GuardedObserver | None = None
+    devices: tuple[DeviceRecord, ...] = ()
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -508,9 +540,10 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         raise RunError(f"the run directory {run_dir} already exists; choose another run id")
     bench = _bench(recipe, settings, options)
     _check_plan(recipe, registry, settings, bench)
+    devices = _devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
     _check_oracle(recipe, registry, bench)
     scoring = _scoring(recipe, registry, bench)
-    backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id)
+    backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id, **_backend_config(recipe))
     _check_backend(recipe, settings, backend)
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
     executors = _executors(recipe, registry, settings)
@@ -537,7 +570,61 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         dirty=dirty,
         scoring=scoring,
         observer=None if options.observer is None else GuardedObserver(options.observer),
+        devices=devices,
     )
+
+
+def _devices(recipe: Recipe, registry: Registry, probes: Mapping[str, DeviceProbe]) -> tuple[DeviceRecord, ...]:
+    """Probe the device of every binding whose component declares takes_device; RunError for one the host lacks.
+
+    Bindings go in recipe order (the model's first). For each, the section is
+    read (lassi.core.devices.parse_device), the component class's framework
+    build is asked for (_framework), and then the kind's probe runs
+    (probe_device). It runs before any component is built and before any
+    directory exists, and builds the records in memory. A refusal names the
+    key, the kind, and the reason; no run falls back to another device.
+    """
+    records: list[DeviceRecord] = []
+    for binding in recipe.bindings:
+        entry = registry.get(binding.interface, binding.name)
+        if TAKES_DEVICE not in entry.capabilities:
+            continue
+        key = device_path(binding)
+        spec = parse_device(binding.config[DEVICE_KEY], key)
+        framework = _framework(recipe, binding, entry)
+        try:
+            records.append(probe_device(key, spec, framework, probes))
+        except DeviceUnavailable as error:
+            named = " ".join([spec.kind, *(str(index) for index in spec.indices)])
+            raise RunError(
+                f"{recipe.path}: {key} names {named}, which this host cannot provide: {error}; "
+                "a run never falls back to another device"
+            ) from None
+    return tuple(records)
+
+
+def _framework(recipe: Recipe, binding: Binding, entry: Entry) -> FrameworkBuild | None:
+    """Return the framework build a component class names with framework(), or None when it defines none.
+
+    framework() is called on the class, before anything is built, and reads
+    build metadata only. A result that is neither a FrameworkBuild nor None
+    is a RunError naming the component.
+    """
+    method = getattr(entry.factory, "framework", None)
+    if not callable(method):
+        return None
+    build = method()
+    if build is not None and not isinstance(build, FrameworkBuild):
+        raise RunError(
+            f"{recipe.path}: {entry.interface} {entry.name!r} ({binding.where}) framework() returned {build!r}; "
+            "it must return a FrameworkBuild or None"
+        )
+    return build
+
+
+def _backend_config(recipe: Recipe) -> Mapping[str, Any]:
+    """Return the config of the recipe's LLMBackend binding: its device section, when the model section has one."""
+    return next(binding.config for binding in recipe.bindings if binding.interface == "LLMBackend")
 
 
 def _scoring(recipe: Recipe, registry: Registry, bench: _Bench) -> ScoringPlan:
@@ -1945,8 +2032,11 @@ def _provenance(run: _Run) -> dict[str, Any]:
     Its status is "running" and `finished_utc` is null until
     _final_provenance closes it. The executor keys are the run's
     (_Executors.record): executor and device, or, with executors per
-    language, executor and devices by language. `driver` (an SDK or driver
-    version) stays null until an executor that runs programs reports one.
+    language, executor and devices by language. `device_records` holds the
+    record of each device section in binding order ([] when the recipe names
+    none; task P17.2), and `driver` the distinct drivers those records name,
+    joined by "; " (lassi.core.devices.device_driver), null when none names
+    one.
     """
     pins = dataclasses.asdict(run.pins)
     return {
@@ -1962,7 +2052,8 @@ def _provenance(run: _Run) -> dict[str, Any]:
         "platform": platform.platform(),
         "python": platform.python_version(),
         **run.executors.record,
-        "driver": None,
+        "driver": device_driver(run.devices),
+        "device_records": [dataclasses.asdict(item) for item in run.devices],
         "started_utc": _utc(run.started),
         "finished_utc": None,
         "pins": {name: version for name, version in pins.items() if version is not None},
@@ -1985,9 +2076,10 @@ def _trial_provenance(manifest: Mapping[str, Any], language: str) -> Provenance:
     Every trial carries a copy of provenance.json: commit and dirty keep
     their manifest keys; device is the manifest's "device", or, with
     executors per language, its "devices" entry for `language`; sdk is the
-    manifest's "driver" and date its "started_utc". A key the manifest lacks
-    raises KeyError, and a value of the wrong type raises ValueError: the
-    copy never fills in a value the manifest does not hold.
+    manifest's "driver", date its "started_utc", and device_records its
+    "device_records", the whole list. A key the manifest lacks raises
+    KeyError, and a value of the wrong type raises ValueError: the copy never
+    fills in a value the manifest does not hold.
     """
     device = manifest["devices"][language] if "devices" in manifest else manifest["device"]
     return Provenance(
@@ -1996,6 +2088,7 @@ def _trial_provenance(manifest: Mapping[str, Any], language: str) -> Provenance:
         device=device,
         sdk=manifest["driver"],
         date=manifest["started_utc"],
+        device_records=[from_dict(DeviceRecord, item) for item in manifest["device_records"]],
     )
 
 

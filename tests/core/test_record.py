@@ -22,6 +22,21 @@ RequestMessage after Trial and before Attempt, and requests sits between
 context and attempts. None means not recorded: a trial.json without the key
 loads with None. A request's index is its position, and its attempt_index,
 when set, names an attempt of the trial.
+
+Provenance.device_records (P17.2) holds the run's device records, copied
+from provenance.json's device_records: one DeviceRecord per device section,
+in binding order (key, kind, indices, name, count, memory_bytes, driver,
+runtime, framework, framework_version). It is the one Provenance field with
+a default: None means not recorded, so a trial.json written before the field
+loads with None, and the runner always writes a list ([] when the recipe
+names no device section). A DeviceRecord's kind is one of DEVICE_KINDS (the
+bible's DeviceRecord block), its indices are [] exactly for cpu and
+otherwise distinct integers of at least 0, a known count is at least 1, a
+known memory_bytes at least 0, a known string is non-empty, and framework
+and framework_version are both set or both None. Every DeviceRecord field is
+required. The bible's Result Record block names device_records last in
+provenance, as [DeviceRecord], and defines the DeviceRecord block after
+OutputStats.
 """
 
 from __future__ import annotations
@@ -59,7 +74,12 @@ VALID_SHA = "a" * 64
 # format the runner writes started_utc (ISO 8601, seconds, UTC offset).
 FIXTURE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
 FIXTURE_DATE = "2026-09-23T12:34:56+00:00"
-PROVENANCE_FIELDS = ("commit", "dirty", "device", "sdk", "date")
+# The manifest fields (each required) and device_records (P17.2; None means not recorded), in field order.
+MANIFEST_FIELDS = ("commit", "dirty", "device", "sdk", "date")
+PROVENANCE_FIELDS = (*MANIFEST_FIELDS, "device_records")
+DEVICE_RECORD_FIELDS = (
+    "key", "kind", "indices", "name", "count", "memory_bytes", "driver", "runtime", "framework", "framework_version"
+)
 
 # Bible mappings whose keys are data (paths, component names), not record fields.
 DICT_VALUED = frozenset({"Attempt.files", "Attempt.score.components"})
@@ -91,9 +111,10 @@ NESTED_RECORDS = {
     "RequestMessage": ["RequestMessage", "RequestMessage.ref"],
     "Diagnostic": ["Diagnostic"],
     "OutputStats": ["OutputStats"],
+    "DeviceRecord": ["DeviceRecord"],
 }
 # The top-level blocks of the bible's Result Record yaml block, in order, and the record class of each.
-BIBLE_BLOCKS = ("Trial", "Request", "RequestMessage", "Attempt", "Diagnostic", "OutputStats")
+BIBLE_BLOCKS = ("Trial", "Request", "RequestMessage", "Attempt", "Diagnostic", "OutputStats", "DeviceRecord")
 
 CORE_MODULES = ("lassi.core.record", "lassi.core.store", "lassi.core.trial_md", "lassi.core.parquet")
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
@@ -498,6 +519,8 @@ def test_bible_block_names_every_record_block() -> None:
     assert trial[trial.index("context") :][:3] == ["context", "requests", "attempts"]
     assert fields["Trial"]["requests"] == "[Request]"
     assert fields["Request"]["messages"] == "[RequestMessage]"
+    provenance = inline_keys(fields["Trial"]["provenance"])
+    assert provenance is not None and provenance["device_records"] == "[DeviceRecord]"
 
 
 @pytest.mark.parametrize("name", BIBLE_BLOCKS)
@@ -554,17 +577,23 @@ def test_provenance_fields_are_the_bible_fields_in_order() -> None:
     assert [f.name for f in dataclasses.fields(record.Provenance)] == list(PROVENANCE_FIELDS)
 
 
-def test_provenance_is_frozen_keyword_only_and_every_field_is_required() -> None:
+def test_provenance_is_frozen_keyword_only_and_every_manifest_field_is_required() -> None:
     cls = record.Provenance
     assert dataclasses.is_dataclass(cls)
     assert cls.__dataclass_params__.frozen, "Provenance is not frozen"
     assert all(f.kw_only for f in dataclasses.fields(cls)), "Provenance has positional fields"
-    for spec in dataclasses.fields(cls):
-        assert spec.default is dataclasses.MISSING, f"Provenance.{spec.name} has a default"
-        assert spec.default_factory is dataclasses.MISSING, f"Provenance.{spec.name} has a default factory"
+    specs = {spec.name: spec for spec in dataclasses.fields(cls)}
+    for name in MANIFEST_FIELDS:
+        assert specs[name].default is dataclasses.MISSING, f"Provenance.{name} has a default"
+        assert specs[name].default_factory is dataclasses.MISSING, f"Provenance.{name} has a default factory"
+    # device_records (P17.2) is the one field with a default: None means not recorded, as in an older trial.json.
+    assert specs["device_records"].default is None
+    hint = typing.get_type_hints(cls)["device_records"]
+    assert unwrap_optional(hint) == list[record.DeviceRecord], hint
+    assert example_provenance().device_records is None
 
 
-@pytest.mark.parametrize("name", PROVENANCE_FIELDS)
+@pytest.mark.parametrize("name", MANIFEST_FIELDS)
 def test_provenance_without_a_field_is_refused_naming_it(name: str) -> None:
     fields = record.to_dict(example_provenance())
     del fields[name]
@@ -600,6 +629,146 @@ def test_provenance_takes_a_sha1_or_sha256_commit_and_the_runner_date_format() -
     assert example_provenance(commit="ab" * 32).commit == "ab" * 32
     date = datetime(2026, 9, 23, 12, 34, 56, tzinfo=timezone.utc).isoformat(timespec="seconds")
     assert example_provenance(date=date).date == date == FIXTURE_DATE
+
+
+# ---------------------------------------------------------------------------
+# Device records (P17.2)
+
+
+def cpu_device_record(**changes: Any) -> Any:
+    """Return a SYNTHETIC cpu DeviceRecord of the model's section, with the given fields changed."""
+    fields: dict[str, Any] = {
+        "key": "model.device",
+        "kind": "cpu",
+        "indices": [],
+        "name": "SYNTHETIC CPU model 9000",
+        "count": 8,
+        "memory_bytes": 4096,
+        "driver": None,
+        "runtime": None,
+        "framework": "torch",
+        "framework_version": "2.99.0+synthetic-cpu",
+    }
+    fields.update(changes)
+    return record.DeviceRecord(**fields)
+
+
+def rocm_device_record(**changes: Any) -> Any:
+    """Return a SYNTHETIC rocm DeviceRecord of an executor's section, with the given fields changed."""
+    fields: dict[str, Any] = {
+        "key": "executor.device",
+        "kind": "rocm",
+        "indices": [1, 0],
+        "name": None,
+        "count": 2,
+        "memory_bytes": None,
+        "driver": "SYNTHETIC-driver-6.8.5",
+        "runtime": "SYNTHETIC-runtime-9.9",
+        "framework": None,
+        "framework_version": None,
+    }
+    fields.update(changes)
+    return record.DeviceRecord(**fields)
+
+
+def test_device_kinds_match_bible() -> None:
+    assert record.DEVICE_KINDS == ("cpu", "cuda", "rocm")
+    assert record.DEVICE_KINDS == bible_choices("DeviceRecord", "kind")
+
+
+def test_device_record_is_frozen_keyword_only_and_every_field_is_required() -> None:
+    cls = record.DeviceRecord
+    assert [f.name for f in dataclasses.fields(cls)] == list(DEVICE_RECORD_FIELDS)
+    assert cls.__dataclass_params__.frozen, "DeviceRecord is not frozen"
+    assert all(f.kw_only for f in dataclasses.fields(cls)), "DeviceRecord has positional fields"
+    for spec in dataclasses.fields(cls):
+        assert spec.default is dataclasses.MISSING, f"DeviceRecord.{spec.name} has a default"
+        assert spec.default_factory is dataclasses.MISSING, f"DeviceRecord.{spec.name} has a default factory"
+    fields = record.to_dict(cpu_device_record())
+    for name in DEVICE_RECORD_FIELDS:
+        partial = {key: value for key, value in fields.items() if key != name}
+        with pytest.raises((TypeError, ValueError)) as info:
+            record.DeviceRecord(**partial)
+        assert name in str(info.value)
+
+
+def test_device_records_hold_known_and_unknown_values() -> None:
+    cpu, rocm = cpu_device_record(), rocm_device_record()
+    assert (cpu.kind, cpu.indices, cpu.count, cpu.runtime) == ("cpu", [], 8, None)
+    assert (rocm.kind, rocm.indices, rocm.name, rocm.memory_bytes) == ("rocm", [1, 0], None, None)
+    assert rocm_device_record(kind="cuda", indices=[0]).kind == "cuda"
+    assert cpu_device_record(count=None, name=None, memory_bytes=0).memory_bytes == 0
+
+
+@pytest.mark.parametrize(
+    ("make", "changes", "name"),
+    [
+        pytest.param(cpu_device_record, {"key": ""}, "key", id="empty-key"),
+        pytest.param(cpu_device_record, {"kind": "xpu"}, "kind", id="unknown-kind"),
+        pytest.param(rocm_device_record, {"kind": "ROCM"}, "kind", id="kind-case"),
+        pytest.param(cpu_device_record, {"indices": [0]}, "indices", id="cpu-with-indices"),
+        pytest.param(rocm_device_record, {"indices": []}, "indices", id="gpu-without-indices"),
+        pytest.param(rocm_device_record, {"indices": [0, 0]}, "indices", id="repeated-index"),
+        pytest.param(rocm_device_record, {"indices": [-1]}, "indices", id="negative-index"),
+        pytest.param(rocm_device_record, {"indices": [True]}, "indices", id="bool-index"),
+        pytest.param(cpu_device_record, {"name": ""}, "name", id="empty-name"),
+        pytest.param(cpu_device_record, {"count": 0}, "count", id="zero-count"),
+        pytest.param(cpu_device_record, {"count": True}, "count", id="bool-count"),
+        pytest.param(cpu_device_record, {"memory_bytes": -1}, "memory_bytes", id="negative-memory"),
+        pytest.param(rocm_device_record, {"driver": ""}, "driver", id="empty-driver"),
+        pytest.param(rocm_device_record, {"runtime": ""}, "runtime", id="empty-runtime"),
+        pytest.param(cpu_device_record, {"framework_version": None}, "framework", id="framework-without-version"),
+        pytest.param(rocm_device_record, {"framework": "torch"}, "framework", id="version-without-framework"),
+        pytest.param(cpu_device_record, {"framework": ""}, "framework", id="empty-framework"),
+        pytest.param(cpu_device_record, {"framework_version": ""}, "framework_version", id="empty-version"),
+    ],
+)
+def test_device_record_checks_its_fields(make: Callable[..., Any], changes: dict[str, Any], name: str) -> None:
+    with pytest.raises(ValueError) as info:
+        make(**changes)
+    assert f"DeviceRecord.{name}" in str(info.value)
+
+
+def test_provenance_round_trips_device_records() -> None:
+    provenance = example_provenance(device_records=[cpu_device_record(), rocm_device_record()])
+    trial = trial_with(provenance=provenance)
+    data = record.to_dict(trial)
+    assert list(data["provenance"]) == list(PROVENANCE_FIELDS)
+    assert [list(item) for item in data["provenance"]["device_records"]] == [list(DEVICE_RECORD_FIELDS)] * 2
+    assert data["provenance"]["device_records"][1]["indices"] == [1, 0], "indices keep their order"
+    back = record.from_json(record.Trial, record.to_json(trial))
+    assert back == trial
+    assert all(isinstance(item, record.DeviceRecord) for item in back.provenance.device_records)
+    assert example_provenance(device_records=[]).device_records == []
+
+
+def test_an_older_trial_json_loads_with_device_records_not_recorded() -> None:
+    data = record.to_dict(minimal_trial())
+    del data["provenance"]["device_records"]
+    assert list(data["provenance"]) == list(MANIFEST_FIELDS), "the provenance block a P0.18 trial.json holds"
+    loaded = record.from_dict(record.Trial, data)
+    assert loaded.provenance.device_records is None
+    data["provenance"]["device_records"] = []
+    assert record.from_dict(record.Trial, data).provenance.device_records == []
+
+
+def test_from_dict_checks_device_records() -> None:
+    data = record.to_dict(minimal_trial())
+    data["provenance"]["device_records"] = "rocm"
+    with pytest.raises(ValueError) as info:
+        record.from_dict(record.Trial, data)
+    assert "provenance.device_records" in str(info.value)
+    good = record.to_dict(rocm_device_record())
+    for broken, key in (({**good, "kind": "xpu"}, "kind"), ({**good, "serial": "x"}, "serial")):
+        data["provenance"]["device_records"] = [broken]
+        with pytest.raises(ValueError) as info:
+            record.from_dict(record.Trial, data)
+        assert "device_records[0]" in str(info.value) and key in str(info.value)
+    del good["count"]
+    data["provenance"]["device_records"] = [good]
+    with pytest.raises(ValueError) as info:
+        record.from_dict(record.Trial, data)
+    assert "count" in str(info.value) and "DeviceRecord" in str(info.value)
 
 
 def test_trial_provenance_is_a_required_provenance_record() -> None:
@@ -1401,6 +1570,7 @@ def test_trial_json_carries_the_provenance_as_the_bible_names_it() -> None:
         "device": "none (compile only)",
         "sdk": None,
         "date": FIXTURE_DATE,
+        "device_records": None,
     }
     assert list(data["provenance"]) == list(PROVENANCE_FIELDS)
     text = record.to_json(trial_with(provenance=unknown_provenance()))
@@ -1817,11 +1987,15 @@ def test_trial_json_round_trips_the_provenance(tmp_path: Path, text_store: store
         "device": "fixture-device",
         "sdk": "fixture-sdk",
         "date": FIXTURE_DATE,
+        "device_records": None,
     }
     assert store.read_trial(out, text_store).provenance == full_provenance()
     unknown = trial_with(provenance=unknown_provenance())
     other = store.write_trial(unknown, tmp_path / "other-runs", text_store)
     assert store.read_trial(other, text_store).provenance == unknown_provenance()
+    devices = example_provenance(device_records=[cpu_device_record(), rocm_device_record()])
+    third = store.write_trial(trial_with(provenance=devices), tmp_path / "device-runs", text_store)
+    assert store.read_trial(third, text_store).provenance == devices
 
 
 @pytest.mark.parametrize(

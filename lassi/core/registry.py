@@ -8,7 +8,10 @@ check a recipe without building anything (bible, Component Interfaces):
 - `requires`: interface name -> capabilities it needs from every component
   bound to that interface (optional).
 - `config_keys`: extra keys it accepts in its recipe section besides `kind`
-  (optional).
+  (optional). It may not list `device`: a component takes a device section
+  only by declaring the capability `takes_device` (lassi.core.capabilities
+  TAKES_DEVICE; task P17.2), and the registry accepts the key `device` from
+  such a component alone.
 
 The registry reads these attributes and never calls the class, so a recipe
 whose components do not fit together fails before any backend is constructed.
@@ -16,8 +19,10 @@ whose components do not fit together fails before any backend is constructed.
 The runner, never the registry, constructs components. A component bound by a
 kind section is built as `factory(**binding.config)`; an LLM backend as
 `factory(model_id)`, with keyword settings left at their defaults unless the
-caller passes them. A stage is built as `factory(context=<RunContext>)`, one
-stage object per trial (lassi.core.stages). A toolchain that declares a pin
+caller passes them. The runner passes the model section's device section,
+when it has one, as `device=<mapping>` (task P17.2). A stage is built as
+`factory(context=<RunContext>)`, one stage object per trial
+(lassi.core.stages). A toolchain that declares a pin
 (PIN, with PIN_BIN for a compiler under the toolchains root, or without it
 for a host compiler named by the pin's EXECUTABLE) is built as
 `factory(executable=<pinned path>, runner=SandboxedCompileRunner(<clean
@@ -31,6 +36,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping, Sequence, TypeVar
+
+from lassi.core.capabilities import DEVICE_KEY, TAKES_DEVICE
 
 # The twelve interface names, as the Protocol classes in lassi/core/interfaces.py, in the bible's table order.
 INTERFACES: tuple[str, ...] = (
@@ -94,13 +101,19 @@ class Registry:
             raise RegistryError(f"{where}: the factory must be a class, not {factory!r}")
         if name in self._entries[interface]:
             raise RegistryError(f"{where} is already registered")
+        config_keys = _string_set(getattr(factory, "config_keys", ()), f"{where} config_keys")
+        if DEVICE_KEY in config_keys:
+            raise RegistryError(
+                f"{where}: config_keys may not list {DEVICE_KEY!r}; a component takes a device section only by "
+                f"declaring the capability {TAKES_DEVICE!r}"
+            )
         entry = Entry(
             interface=interface,
             name=name,
             factory=factory,
             capabilities=_declared_capabilities(factory, where),
             requires=_declared_requires(factory, where),
-            config_keys=_string_set(getattr(factory, "config_keys", ()), f"{where} config_keys"),
+            config_keys=config_keys,
         )
         self._entries[interface][name] = entry
         return entry
@@ -155,8 +168,14 @@ def check_bindings(bindings: Sequence[Binding], registry: Registry) -> None:
 
 
 def _check_config(binding: Binding, entry: Entry) -> None:
-    """Raise RegistryError when the binding carries a config key its component does not accept."""
+    """Raise RegistryError when the binding carries a config key its component does not accept.
+
+    The key `device` is accepted exactly when the component declares
+    `takes_device`.
+    """
     for key in binding.config:
+        if key == DEVICE_KEY and TAKES_DEVICE in entry.capabilities:
+            continue
         if key not in entry.config_keys:
             keys = sorted(entry.config_keys)
             accepted = f"accepted keys: {', '.join(keys)}" if keys else "it accepts no config keys"
@@ -193,6 +212,8 @@ def _capability_phrase(interface: str, needed: frozenset[str]) -> str:
 
 
 _KIND_SUFFIX = ".kind"
+# The binding path of the model's backend, whose config keys sit in the model section beside it.
+_MODEL_BACKEND = "model.backend"
 
 
 def _config_path(where: str, key: str) -> str:
@@ -200,10 +221,19 @@ def _config_path(where: str, key: str) -> str:
 
     In a kind section the key sits beside `kind`, so where `executor.kind` and
     key `hots` give `executor.hots`. Any other where is kept whole, so
-    `agents.generator` and `x` give `agents.generator.x`.
+    `agents.generator` and `x` give `agents.generator.x`. The backend's keys
+    sit in the model section beside `backend`, so `model.backend` and key
+    `device` give `model.device`.
     """
+    if where == _MODEL_BACKEND:
+        return f"model.{key}"
     section = where[: -len(_KIND_SUFFIX)] if where.endswith(_KIND_SUFFIX) else where
     return f"{section}.{key}"
+
+
+def device_path(binding: Binding) -> str:
+    """Return the recipe path of the device section `binding` reads, such as executor.cuda.device or model.device."""
+    return _config_path(binding.where, DEVICE_KEY)
 
 
 def _require_interface(interface: str, where: str) -> None:

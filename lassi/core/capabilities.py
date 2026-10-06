@@ -61,6 +61,16 @@ GUARD_CODE_PREFIX = "guard-"
 GUARD_STAGE = "parse"
 GUARD_SEVERITIES = frozenset({"warning", "note"})
 
+# The capability of a component that takes a device section (task P17.2; lassi.core.devices): its recipe section
+# must hold the key DEVICE_KEY, a mapping {kind, indices} that lassi.core.devices.parse_device reads at load, and
+# the loader never fills one in. The registry accepts DEVICE_KEY from such a component only, and refuses any
+# component that lists it among its config_keys. Before anything is built, the runner probes the named device and
+# records it in provenance; the component class may define framework(), a staticmethod or classmethod that returns
+# the lassi.core.devices.FrameworkBuild it runs on (or None), read from build metadata only.
+TAKES_DEVICE = "takes_device"
+# The key of a device section inside a component's recipe section.
+DEVICE_KEY = "device"
+
 
 @runtime_checkable
 class Component(Protocol):

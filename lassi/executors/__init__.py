@@ -14,6 +14,11 @@ starts no process (task P4.5): "none (compile only)" for none, the host
 CPU with its model for native, and ttsim with its pin and the pinned
 tt-metal, as a simulator, for ttsim.
 
+Importing it also registers the host device probes (devices.CpuProbe,
+RocmProbe, and CudaProbe; task P17.2) in lassi.core.devices.DEFAULT_PROBES
+by kind. They read file metadata and procfs or sysfs text only and never
+open a device node.
+
 Every executor that runs generated code runs it only through
 lassi.executors.sandbox (Agent Rule 6), whose names are re-exported here:
 Sandbox, SandboxSpec, SandboxResult, SandboxUnavailableError,
@@ -21,7 +26,7 @@ sandbox_command, and classify. lassi.executors.workdir gives each attempt
 its build directory under the runs root.
 """
 
-from lassi.executors import native, none, sandbox, ttsim
+from lassi.executors import devices, native, none, sandbox, ttsim
 from lassi.executors.native import NativeExecutor
 from lassi.executors.none import NoneExecutor
 from lassi.executors.sandbox import (
@@ -43,6 +48,7 @@ __all__ = [
     "SandboxUnavailableError",
     "TtsimExecutor",
     "classify",
+    "devices",
     "native",
     "none",
     "sandbox",

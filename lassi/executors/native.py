@@ -66,8 +66,12 @@ def _program_environment(limits: Limits) -> dict[str, str]:
     return {**_PROGRAM_ENVIRONMENT, "OMP_NUM_THREADS": str(limits.cpus)}
 
 
-def _cpu_model() -> str:
-    """Return the value of the first "model name" line of CPUINFO as one line of printable ASCII, or "" for none.
+def _cpu_model(path: Path) -> str:
+    """Return the value of the first "model name" line of `path` as one line of printable ASCII, or "" for none.
+
+    device() passes CPUINFO, read at call time, and the cpu device probe
+    (lassi.executors.devices) passes proc/cpuinfo under its host root, so
+    both name the CPU model alike.
 
     The whitespace is collapsed: surrounding whitespace is dropped and each
     inner run of whitespace becomes one space. Any other character that is
@@ -77,7 +81,7 @@ def _cpu_model() -> str:
     Only the file is read; no process starts.
     """
     try:
-        with CPUINFO.open("rb") as handle:
+        with path.open("rb") as handle:
             for raw in handle:
                 key, colon, value = raw.decode("utf-8", errors="replace").partition(":")
                 if colon and key.strip() == _MODEL_FIELD:
@@ -197,7 +201,7 @@ class NativeExecutor:
         line of printable ASCII with no leading or trailing blank. It reads
         that file only: it starts no process and never uses the sandbox.
         """
-        model = _cpu_model()
+        model = _cpu_model(CPUINFO)
         return f"{HOST_CPU}: {model}" if model else HOST_CPU
 
     def run(self, artifact: Path, inputs: Sequence[str], limits: Limits) -> RunResult:

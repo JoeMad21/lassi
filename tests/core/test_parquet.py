@@ -21,7 +21,12 @@ provenance_date, named like the other nested fields (<field>_<key>), placed
 after the toolchain pins as the bible's Trial block orders them, and typed
 string, bool, string, string, string. Like every column they are nullable
 in the Arrow schema; a value is null where the trial's provenance is unknown,
-and date is never null because the record always sets it.
+and date is never null because the record always sets it. P17.2 adds
+provenance_device_records after provenance_date, a string column holding
+Provenance.device_records as JSON text with sorted keys (as
+reference_run_outputs holds RunInfo.outputs): "[]" for a run whose recipe
+names no device section, and null where the records were not recorded (a
+trial.json written before the field). The filled trial records one device.
 
 The requests table (P2.1) has one row per Trial.requests entry, sorted by
 trial_id and index: the key columns, index, stage, attempt_index (null for
@@ -39,6 +44,7 @@ stderr_truncated, and workdir_incomplete, null where not recorded.
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -63,6 +69,7 @@ PROVENANCE_COLUMNS = (
     "provenance_device",
     "provenance_sdk",
     "provenance_date",
+    "provenance_device_records",
 )
 # The target reference's baseline run (Trial.reference_run) and the end reason (Final.end_reason), task P1.5.
 REFERENCE_RUN_COLUMNS = (
@@ -258,6 +265,25 @@ FIXTURE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
 FILLED_COMMIT = "fedcba9876543210fedcba9876543210fedcba98"
 FIXTURE_DATE = "2026-09-23T12:34:56+00:00"
 FILLED_DATE = "2026-09-24T01:02:03+00:00"
+# The filled trial's one SYNTHETIC device record (P17.2), and its trials-table cell written out by hand: JSON text
+# with sorted keys and json.dumps's default separators.
+FILLED_DEVICE_RECORD: dict[str, Any] = {
+    "key": "executor.device",
+    "kind": "rocm",
+    "indices": [1, 0],
+    "name": "SYNTHETIC device b",
+    "count": 2,
+    "memory_bytes": 65536,
+    "driver": "SYNTHETIC-driver-b",
+    "runtime": "SYNTHETIC-runtime-b",
+    "framework": "torch",
+    "framework_version": "2.99.0+synthetic-b",
+}
+FILLED_DEVICE_RECORDS_CELL = (
+    '[{"count": 2, "driver": "SYNTHETIC-driver-b", "framework": "torch", "framework_version": "2.99.0+synthetic-b",'
+    ' "indices": [1, 0], "key": "executor.device", "kind": "rocm", "memory_bytes": 65536,'
+    ' "name": "SYNTHETIC device b", "runtime": "SYNTHETIC-runtime-b"}]'
+)
 
 
 # ---------------------------------------------------------------------------
@@ -511,7 +537,12 @@ def trial_b_omp_filled() -> record.Trial:
         filled_attempts(),
         toolchain_pins=record.ToolchainPins(**{name: f"pin-{name}" for name in record.TOOLCHAIN_PIN_NAMES}),
         provenance=record.Provenance(
-            commit=FILLED_COMMIT, dirty=True, device="fixture-device", sdk="fixture-sdk", date=FILLED_DATE
+            commit=FILLED_COMMIT,
+            dirty=True,
+            device="fixture-device",
+            sdk="fixture-sdk",
+            date=FILLED_DATE,
+            device_records=[record.DeviceRecord(**FILLED_DEVICE_RECORD)],
         ),
         model=record.ModelInfo(backend="mock", id="mock-filled", sampling=sampling),
         reference_run=filled_reference_run(),
@@ -603,6 +634,7 @@ def expected_trial_row_a_omp_entropy() -> dict[str, Any]:
         "provenance_device": "none (compile only)",
         "provenance_sdk": None,
         "provenance_date": FIXTURE_DATE,
+        "provenance_device_records": None,
         "bench_item_suite": SUITE,
         "bench_item_item": "entropy",
         "bench_item_split": "eval",
@@ -785,6 +817,7 @@ def expected_trial_row_b_omp_filled() -> dict[str, Any]:
         "provenance_device": "fixture-device",
         "provenance_sdk": "fixture-sdk",
         "provenance_date": FILLED_DATE,
+        "provenance_device_records": FILLED_DEVICE_RECORDS_CELL,
         "bench_item_suite": SUITE,
         "bench_item_item": "layout",
         "bench_item_split": "eval",
@@ -965,7 +998,7 @@ def test_trial_rows_for_trial_without_attempts() -> None:
     unset = [*PIN_COLUMNS, "final_stage_reached", "final_alignment", "final_score", "final_wall_s"]
     assert all(row[column] is None for column in unset)
     provenance = [row[column] for column in PROVENANCE_COLUMNS]
-    assert provenance == [None, None, "none (compile only)", None, FIXTURE_DATE]
+    assert provenance == [None, None, "none (compile only)", None, FIXTURE_DATE, None]
 
 
 def test_trials_schema_types_the_provenance_columns_explicitly() -> None:
@@ -976,7 +1009,7 @@ def test_trials_schema_types_the_provenance_columns_explicitly() -> None:
     assert tuple(schema.names[start:end]) == PROVENANCE_COLUMNS
     assert (schema.names[start - 1], schema.names[end]) == (PIN_COLUMNS[-1], "bench_item_suite")
     types = [schema.field(name).type for name in PROVENANCE_COLUMNS]
-    assert types == [pa.string(), pa.bool_(), pa.string(), pa.string(), pa.string()]
+    assert types == [pa.string(), pa.bool_(), pa.string(), pa.string(), pa.string(), pa.string()]
 
 
 def test_provenance_columns_hold_each_trials_provenance_and_read_back(tmp_path: Path) -> None:
@@ -985,7 +1018,8 @@ def test_provenance_columns_hold_each_trials_provenance_and_read_back(tmp_path: 
     by_id = {trial.trial_id: trial.provenance for trial in trials}
     for row in rows["trials"]:
         provenance = by_id[row["trial_id"]]
-        expected = [provenance.commit, provenance.dirty, provenance.device, provenance.sdk, provenance.date]
+        records = None if provenance.device_records is None else device_records_cell(provenance.device_records)
+        expected = [provenance.commit, provenance.dirty, provenance.device, provenance.sdk, provenance.date, records]
         assert [row[column] for column in PROVENANCE_COLUMNS] == expected, row["trial_id"]
     out = tmp_path / "parquet"
     parquet.write_run_parquet(trials, out)
@@ -993,6 +1027,45 @@ def test_provenance_columns_hold_each_trials_provenance_and_read_back(tmp_path: 
     assert_rows_identical(back, rows)
     dirty = {row["trial_id"]: row["provenance_dirty"] for row in back["trials"]}
     assert (dirty[ID_A_CUDA_ENTROPY], dirty[ID_A_OMP_ENTROPY], dirty[ID_B_OMP_FILLED]) == (None, False, True)
+
+
+def device_records_cell(records: list[Any]) -> str:
+    """Return the provenance_device_records cell of `records`: their JSON with sorted keys."""
+    return json.dumps([record.to_dict(item) for item in records], sort_keys=True, ensure_ascii=True)
+
+
+def test_device_records_column_is_json_or_null(tmp_path: Path) -> None:
+    cpu = record.DeviceRecord(
+        key="model.device",
+        kind="cpu",
+        indices=[],
+        name=None,
+        count=8,
+        memory_bytes=None,
+        driver=None,
+        runtime=None,
+        framework=None,
+        framework_version=None,
+    )
+    trials = [
+        make_trial(ID_A_OMP_ENTROPY, [], provenance=fixture_provenance(device_records=None)),
+        make_trial(ID_A_OMP_LAYOUT, [], provenance=fixture_provenance(device_records=[])),
+        make_trial(ID_B_OMP_FILLED, [], provenance=fixture_provenance(device_records=[cpu])),
+    ]
+    rows = {row["trial_id"]: row["provenance_device_records"] for row in parquet.trial_rows(trials)["trials"]}
+    assert rows[ID_A_OMP_ENTROPY] is None, "not recorded"
+    assert rows[ID_A_OMP_LAYOUT] == "[]", "a run without a device section records an empty list"
+    assert rows[ID_B_OMP_FILLED] == device_records_cell([cpu])
+    assert json.loads(rows[ID_B_OMP_FILLED]) == [record.to_dict(cpu)]
+    out = tmp_path / "parquet"
+    parquet.write_run_parquet(trials, out)
+    back = {row["trial_id"]: row["provenance_device_records"] for row in parquet.read_run_parquet(out)["trials"]}
+    assert back == rows
+    assert parquet.SCHEMAS["trials"].field("provenance_device_records").type == pa.string()
+
+
+def test_the_filled_cell_is_the_sorted_json_of_its_record() -> None:
+    assert FILLED_DEVICE_RECORDS_CELL == json.dumps([FILLED_DEVICE_RECORD], sort_keys=True, ensure_ascii=True)
 
 
 def test_trial_rows_sorted() -> None:

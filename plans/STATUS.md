@@ -98,7 +98,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.G | DONE | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 | gate passed: smoke rx 20261005-123001-desktop-8r113ei-detached-ec1c9a2b-2979; Tier A job 20261005-123023-p4-tier-a-c247; ec1c9a2 clean; results/p4-gate |
 | P17.0 | DONE | Plan phase P17 into plans/p17-portable.md and add its tasks here | - | plan plans/p17-portable.md; base main 0dcc261; owner answers OQ-027 to OQ-044 recorded; retrospective plans/runs/p4-retrospective.md |
 | P17.1 | DONE | Spike: framework pins, environments, and device assumptions | - | spike plans/spikes/p17-frameworks.md; batch rx 20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2 (clean e805c6d); CPU set 59 pkgs, venv 1,174,712 KiB; hipcc builds gfx942 without a GPU |
-| P17.2 | READY | Device layer: selection, probes, provenance | - |  |
+| P17.2 | DONE | Device layer: selection, probes, provenance | - | device sections {kind, indices} by takes_device; probes in lassi/executors/devices.py (lstat and access(2) on the node, procfs and sysfs text otherwise; no node opened); provenance device_records and driver; files beyond the plan's list: lassi/executors and tests/executors (Design Principle 9) |
 | P17.3 | READY | Served backends: recipe keys and serving provenance | P17.1,P17.2 |  |
 | P17.4 | READY | hf_local on Transformers and PyTorch | P17.1,P17.2,P17.3 |  |
 | P17.5 | READY | gpu executor and the sandbox's device access | P17.2 |  |

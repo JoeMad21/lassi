@@ -34,6 +34,15 @@ run flags (stdout_truncated, stderr_truncated, workdir_incomplete) after
 outputs_ref: true or false when recorded, PLACEHOLDER when not. The golden
 trial's attempt 1 ran and records every flag False; its reference run and
 attempt 0 record none.
+
+Since P17.2 the Provenance table keeps one row per manifest field and leaves
+out Provenance.device_records. When the trial records devices (a non-empty
+list), a "### Device records" table follows the Provenance table, before the
+toolchain pins: one row per record in order, one column per DeviceRecord
+field named as the field, each value formatted as provenance values are
+(fmt_provenance: an unknown one reads "-", indices as the list prints). Not
+recorded (None) and no devices ([]) add nothing, so the golden trial, whose
+provenance records none, renders as before.
 """
 
 from __future__ import annotations
@@ -375,6 +384,66 @@ def test_golden_shows_the_provenance_before_the_pins_and_the_attempts() -> None:
     assert summary_end + PROVENANCE_BLOCK + "\n## Toolchain pins\n" in golden
     assert golden.count("## Provenance\n") == 1
     assert golden.index(PROVENANCE_BLOCK) < golden.index("## Attempt 0\n")
+
+
+DEVICE_RECORDS_HEADER = (
+    "| key | kind | indices | name | count | memory_bytes | driver | runtime | framework | framework_version |\n"
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+)
+
+
+def device_records() -> list[record.DeviceRecord]:
+    """Return two SYNTHETIC device records: the model's cpu and an executor's rocm with unknown values."""
+    return [
+        record.DeviceRecord(
+            key="model.device",
+            kind="cpu",
+            indices=[],
+            name="SYNTHETIC CPU model 9000",
+            count=8,
+            memory_bytes=4096,
+            driver=None,
+            runtime=None,
+            framework="torch",
+            framework_version="2.99.0+synthetic-cpu",
+        ),
+        record.DeviceRecord(
+            key="executor.device",
+            kind="rocm",
+            indices=[1, 0],
+            name=None,
+            count=2,
+            memory_bytes=None,
+            driver="SYNTHETIC-driver-6.8.5",
+            runtime="SYNTHETIC-runtime-9.9",
+            framework=None,
+            framework_version=None,
+        ),
+    ]
+
+
+def test_trial_md_shows_device_records(text_store: store.TextStore) -> None:
+    trial = base_trial([], provenance=fixture_provenance(device_records=device_records()))
+    md = trial_md.render_trial_md(trial, text_store)
+    table = (
+        DEVICE_RECORDS_HEADER
+        + "| model.device | cpu | [] | SYNTHETIC CPU model 9000 | 8 | 4096 | - | - | torch | 2.99.0+synthetic-cpu |\n"
+        + "| executor.device | rocm | [1, 0] | - | 2 | - | SYNTHETIC-driver-6.8.5 | SYNTHETIC-runtime-9.9 | - | - |\n"
+    )
+    assert PROVENANCE_BLOCK + "\n### Device records\n\n" + table + "\n## Toolchain pins\n" in md
+    assert "device_records" not in md, "the Provenance table keeps one row per manifest field"
+    assert md.count("### Device records\n") == 1
+    assert_layout(md)
+
+
+@pytest.mark.parametrize("records", [None, []], ids=["not-recorded", "none"])
+def test_trial_md_without_device_records_is_unchanged(text_store: store.TextStore, records: list | None) -> None:
+    before = trial_md.render_trial_md(base_trial([]), text_store)
+    trial = base_trial([], provenance=fixture_provenance(device_records=records))
+    md = trial_md.render_trial_md(trial, text_store)
+    assert md == before
+    assert "Device records" not in md and "device_records" not in md
+    assert PROVENANCE_BLOCK + "\n## Toolchain pins\n" in md
 
 
 def test_golden_contains_each_prompt() -> None:

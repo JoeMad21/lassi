@@ -46,9 +46,13 @@ command's spec by wrapping sandbox_command.
 
 Every trial carries a copy of the run manifest in Trial.provenance (P0.18):
 commit, dirty, and device as provenance.json records them, sdk from its
-driver, and date from its started_utc. The tests check that copy against
-provenance.json in each trial's record, trial.json, trial.md, and Parquet row,
-so the two can never disagree, and that the stages never change it.
+driver, and date from its started_utc, and, since P17.2, device_records as
+provenance.json records them ([] for a recipe without a device section;
+tests/core/test_runner_devices.py covers the records). The tests check that
+copy against provenance.json in each trial's record, trial.json, trial.md,
+and Parquet row (whose provenance_device_records column holds the records as
+JSON text), so the two can never disagree, and that the stages never change
+it.
 """
 
 from __future__ import annotations
@@ -1193,26 +1197,36 @@ def test_a_trial_that_raises_leaves_provenance_with_status_failed(
 
 
 def manifest_copy(manifest: Mapping[str, Any]) -> dict[str, Any]:
-    """Return the Trial provenance a manifest gives: commit, dirty, device, driver as sdk, started_utc as date."""
+    """Return the Trial provenance a manifest gives: commit, dirty, device, driver as sdk, started_utc as date.
+
+    device_records (P17.2) is the manifest's list as written.
+    """
     return {
         "commit": manifest["commit"],
         "dirty": manifest["dirty"],
         "device": manifest["device"],
         "sdk": manifest["driver"],
         "date": manifest["started_utc"],
+        "device_records": manifest["device_records"],
     }
 
 
 def assert_trials_carry_the_manifest(run_dir: Path, trial_ids: Sequence[str]) -> dict[str, Any]:
-    """Assert that each trial's record, trial.json, and Parquet row hold the manifest's copy; return the copy."""
+    """Assert that each trial's record, trial.json, and Parquet row hold the manifest's copy; return the copy.
+
+    The Parquet row holds device_records as JSON text, so it is decoded before the comparison.
+    """
     expected = manifest_copy(json.loads(read_ascii(run_dir / "provenance.json")))
     rows = {row["trial_id"]: row for row in read_run_parquet(run_dir / "parquet")["trials"]}
     assert sorted(rows) == sorted(trial_ids)
     for trial_id in trial_ids:
-        assert load_trial(run_dir, trial_id).provenance == record_module.Provenance(**expected), trial_id
+        provenance = record_module.from_dict(record_module.Provenance, expected)
+        assert load_trial(run_dir, trial_id).provenance == provenance, trial_id
         raw = json.loads(read_ascii(trial_dir(run_dir, trial_id) / "trial.json"))
         assert raw["provenance"] == expected, trial_id
-        assert {key: rows[trial_id][f"provenance_{key}"] for key in expected} == expected, trial_id
+        row = {key: rows[trial_id][f"provenance_{key}"] for key in expected}
+        row["device_records"] = json.loads(row["device_records"])
+        assert row == expected, trial_id
     return expected
 
 
@@ -1233,7 +1247,13 @@ def test_every_trial_carries_a_copy_of_the_run_manifest(
     ]
     expected = assert_trials_carry_the_manifest(run_dir, ids)
     date = expected.pop("date")
-    assert expected == {"commit": FAKE_COMMIT, "dirty": True, "device": "none (compile only)", "sdk": None}
+    assert expected == {
+        "commit": FAKE_COMMIT,
+        "dirty": True,
+        "device": "none (compile only)",
+        "sdk": None,
+        "device_records": [],
+    }
     assert datetime.fromisoformat(date).utcoffset() == timedelta(0), "the date is the run's start time in UTC"
 
 
