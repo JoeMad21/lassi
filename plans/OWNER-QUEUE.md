@@ -480,7 +480,7 @@ Owner's choice (asked in the working session, 2026-10-05; recorded by the agent)
 Applied: 2026-10-05. P17 builds option (a) (plans/p17-portable.md), and P17.6 is READY.
 
 ## OQ-040 A GPU Host For P17's GPU Half
-State: OPEN
+State: CLOSED
 Kind: access
 Blocks: P17.12, P17.13, P17.G
 Evidence: docs/BIBLE.md, Environment State (AMD MI300X: /dev/kfd refuses open and the render group is not granted; NVIDIA GPU: none on I/ONX) and Risks And Questions (AMD Developer Cloud credit, about 50 hours on one MI300X); plans/OWNER-QUEUE.md, OQ-002 and OQ-003; AGENTS.md, Remote Execution (agents reach only alpha01, through tools/rx.py and the gate); plans/p17-portable.md (draft)
@@ -492,6 +492,8 @@ Owner's direction (working session, 2026-09-27; recorded by the agent on 2026-09
 Review in the next phase: yes. The owner has not answered this item personally.
 Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a): the MI300X on alpha01 for now; the owner obtains the render group grant and sets rocm_gpu enabled in the gate. Other GPUs stay in the device layer (OQ-039 (a)).
 Pending the owner's grant (2026-10-05). P17.12, P17.13, and P17.G stay BLOCKED until rx doctor shows rocm_gpu enabled; a later session checks it and closes this item.
+Owner's choice (asked in the working session, 2026-10-06; recorded by the agent): "You're not getting the MI300X's, focus on Tenstorrent and CPU." That is option (d): no GPU host is planned.
+Applied: 2026-10-06. P17.12, P17.13, and P17.G stay BLOCKED with no host planned, so P17 stalls after gate part (a) and its pull request, and P5 starts (OQ-038). The code built for GPUs (the device layer, the gpu executor, the nvml and rocm_smi profilers, the cuda and rocm extras) stays, tested on the CPU and with fakes only. P8 and P9 stay BLOCKED on MI300X access. Recorded in the bible's Environment State, Build Roadmap, and Risks And Questions, with a Decision Log entry. Closed: the owner reopens it if a GPU host is granted.
 
 ## OQ-041 Whether The CPU -> TT Guard's Outcomes Reach The Model
 State: CLOSED
@@ -557,6 +559,7 @@ Answer:
 Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): the card: skip for 2026-10-05 (no run); prompts: draft a TT set first; metric: two runs, per metric; trials: 5.
 Owner's choice (asked in the working session, 2026-10-06; recorded by the agent): kernels: "Yeah, document everything in all tiers. So, yes."; the per-attempt CSV: "Create a separate CSV documenting how the code changes between attempts."
 Applied: 2026-10-06. The set is tt-host-v0 (the drafting session's name; the bible's lassi-df-v0 stays the MLIR-level set, and the owner may rename it); the field kernel_files shows every support file under a directory named kernels, for every TT tier (the session's reading of "all tiers"); the TT tiers are documented in the bible's Benchmark Suites; the two recipes hold 30 and 20 trials. The per-attempt CSV keeps no file text, and a separate CSV holds attempt-to-attempt diffs of model-written files, kernel paths left out (the session's reading of the CSV answer). The item stays OPEN until the run is done; the owner says when to launch it.
+Owner's choice (asked in the working session, 2026-10-06; recorded by the agent): not yet, although every RNGD card read 0.00 GiB in `furiosa-smi status` (rx 20261006-142503-exec-a889). The session's estimate in that question, about 3 to 5 hours with both recipes at once, was lower than this item's projection of 7 to 10 hours for the 50 trials in sequence (PHASE-NOTES, All Phases), and was corrected to the owner: running both at once, the 30-trial max_abs run sets the length, about 4 to 6 hours.
 
 ## OQ-046 hipcc --version Without A Target On alpha01: A Possible OQ-002 Event (2026-10-05)
 State: OPEN

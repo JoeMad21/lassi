@@ -16,8 +16,8 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
 | P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
-| P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23) |
-| P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23) |
+| P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); the owner said 2026-10-06 the MI300Xs will not be granted (OQ-040) |
+| P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); the owner said 2026-10-06 the MI300Xs will not be granted (OQ-040) |
 | P10 Full LASSI | p10-full | BLOCKED | no NVIDIA host (OQ-003, 2026-09-23); compile-only tier and -mp=multicore proxy meanwhile |
 | P11 Dataflow Dialect | p11-df | NOT-STARTED | full scope needs P5; design notes may start earlier |
 | P12 Language Frontends | p12-frontends | NOT-STARTED | - |
@@ -25,7 +25,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
 | P16 Adversarial | p16-adversarial | BLOCKED | P4, P8 for training |
-| P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; GPU half blocked until the MI300X render group grant (OQ-040); part (a) opens a PR, then P5 may start (OQ-038) |
+| P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; GPU half has no host: the owner said 2026-10-06 the MI300Xs will not be granted, focus on Tenstorrent and CPU (OQ-040); part (a) opens a PR, then P5 may start (OQ-038) |
 
 ## Tasks
 
@@ -109,6 +109,6 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.10 | READY | CI on the CPU | P17.4,P17.9 |  |
 | P17.14 | READY | Guard not-run reasons and not-checked rates | - | owner's OQ-028 conditions (2026-10-05) |
 | P17.11 | READY | Gate part (a): recipes and the hardware-free evidence | P17.3,P17.4,P17.5,P17.7,P17.9,P17.10,P17.14 |  |
-| P17.12 | BLOCKED | Spike on the first GPU host | P17.5 | MI300X on alpha01 after the owner's render group grant, rocm_gpu enabled (OQ-040) |
-| P17.13 | BLOCKED | GPU runs: executor, profilers, hf_local, training | P17.4,P17.7,P17.9,P17.12 | MI300X render group grant (OQ-040) |
-| P17.G | BLOCKED | Phase gate: part (a) rerun and part (b) on a GPU host | P17.11,P17.13 | MI300X render group grant (OQ-040); part (a) runs as P17.11 |
+| P17.12 | BLOCKED | Spike on the first GPU host | P17.5 | no GPU host: the owner will not grant the MI300Xs (OQ-040, 2026-10-06) |
+| P17.13 | BLOCKED | GPU runs: executor, profilers, hf_local, training | P17.4,P17.7,P17.9,P17.12 | no GPU host: the owner will not grant the MI300Xs (OQ-040, 2026-10-06) |
+| P17.G | BLOCKED | Phase gate: part (a) rerun and part (b) on a GPU host | P17.11,P17.13 | no GPU host for part (b) (OQ-040, 2026-10-06); part (a) runs as P17.11 |

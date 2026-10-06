@@ -12,7 +12,7 @@ Relation to other phases: P17 builds the layer that P7 to P10 use and takes none
 
 Constraints for every task:
 
-- Hardware: no GPU is reachable. The MI300Xs refuse /dev/kfd (OQ-002), and there is no NVIDIA host (OQ-003); see Environment State. P17.12, P17.13, and P17.G start BLOCKED on OQ-040: the owner chose the MI300X on alpha01 (2026-10-05) and obtains the render group grant, and they unblock when rx doctor shows the gate's rocm_gpu class enabled. Nothing on alpha01 opens /dev/kfd or a /dev/dri node, a probe included: alpha01's MI300X nodes exist, so a GPU device is refused there from the framework build and file metadata alone, and sandbox device tests use a harmless stand-in node. No RNGD card is used.
+- Hardware: no GPU is reachable. The MI300Xs refuse /dev/kfd (OQ-002), and there is no NVIDIA host (OQ-003); see Environment State. P17.12, P17.13, and P17.G are BLOCKED on OQ-040 with no host planned: the owner chose the MI300X on alpha01 (2026-10-05), then said on 2026-10-06 that the MI300Xs will not be granted and to focus on Tenstorrent and CPU, so the phase stalls after gate part (a) and its pull request (OQ-038). Nothing on alpha01 opens /dev/kfd or a /dev/dri node, a probe included: alpha01's MI300X nodes exist, so a GPU device is refused there from the framework build and file metadata alone, and sandbox device tests use a harmless stand-in node. No RNGD card is used.
 - The scope is fixed at planning. [MEASURED] needs a clean-commit rx id, with clean or dirty read from the rx record, never from the run tree's own provenance; rx output stays under 120 lines, and every rx call sets PYTHONIOENCODING=utf-8 (plans/runs/p0-retrospective.md; PHASE-NOTES, All Phases). A later finding goes into PHASE-NOTES or the owner queue.
 - Frameworks stay out of the default environment. They are optional extras (P17.1 names them), imported only when a component is built. A plain `uv sync` keeps today's control plane, and lassi.llm still registers hf_local (PHASE-NOTES P0, registration rule).
 - Agent Rule 5: training data is synthetic fixtures, never a bench item, and `lassi train` reads a bench item only through the bench registry for purpose train, which refuses eval and unassigned items (lassi/bench/registry.py, Suite.item; OQ-025). Agent Rule 6: generated code runs only in the sandbox; the grpo smoke reads a fixture reward and executes nothing. Agent Rule 7: HF_HOME, the torch and Triton caches, downloads, and checkpoints live under the scratch root or the runs root; run `rx doctor` and du before any install. Agent Rule 12: API keys and HF tokens are named only by environment variable.
@@ -155,7 +155,7 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 
 ### P17.12 Spike on the first GPU host (BLOCKED: GPU host, OQ-040)
 - Bible: Execution Backends (gpu rows), Sandbox, Environment State, Host Facts, Agent Rules 6 and 7.
-- Accept: `plans/spikes/p17-gpu-host.md`, from a clean commit on the host OQ-040 names (the MI300X on alpha01, once the render group grant and the gate's rocm_gpu class are in place), gives:
+- Accept: `plans/spikes/p17-gpu-host.md`, from a clean commit on a GPU host, if one is ever granted (OQ-040: none is planned), gives:
   - the GPU inventory: model, count, driver, runtime, and any other tenant's use;
   - the device nodes, /sys and /proc paths, and variables that the CUDA or HIP runtime and PyTorch need inside the sandbox, measured, not read from docs;
   - the probe's record as a fixture;
