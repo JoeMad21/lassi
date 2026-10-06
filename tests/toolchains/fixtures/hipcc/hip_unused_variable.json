@@ -1,0 +1,23 @@
+{
+  "derivation": "Eight lines, two passes of four. 'main.hip:6:9: warning: unused variable 'unused' [-Wunused-variable]' is one warning: file main.hip and line 6 as printed; main.hip is a built file, so the column 9 is kept (line 6 is four blanks and 'int ' before 'unused', which starts at column 9); the trailing ' [-Wunused-variable]' starts with '-', so it is the code and is not part of the message, which is the text after 'warning: ' up to it. Its source echo, caret line, and '1 warning generated when compiling for gfx942.' give nothing. The same three lines then appear again, followed by '1 warning generated when compiling for host.': the host pass prints the same warning, so it is a second, equal warning, kept as stderr shows it. The build exited 0 and hipcc printed no line of its own: without -Werror the warning does not fail it.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "warning",
+      "code": "-Wunused-variable",
+      "file": "main.hip",
+      "line": 6,
+      "column": 9,
+      "message": "unused variable 'unused'"
+    },
+    {
+      "stage": "compile",
+      "severity": "warning",
+      "code": "-Wunused-variable",
+      "file": "main.hip",
+      "line": 6,
+      "column": 9,
+      "message": "unused variable 'unused'"
+    }
+  ]
+}

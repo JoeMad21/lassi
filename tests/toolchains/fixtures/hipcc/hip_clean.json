@@ -1,0 +1,4 @@
+{
+  "derivation": "The capture's stderr is empty (0 bytes) and hipcc exited 0: the clean build of the saxpy program printed nothing, so there is no diagnostic. Neither the gfx942 pass nor the host pass printed a summary line, and hipcc printed no line of its own.",
+  "diagnostics": []
+}

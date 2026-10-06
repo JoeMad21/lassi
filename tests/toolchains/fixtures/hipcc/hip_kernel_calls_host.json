@@ -1,0 +1,23 @@
+{
+  "derivation": "Eight lines. 'main.hip:11:16: error: no matching function for call to 'host_scale'' is one error: file main.hip and line 11 as printed; main.hip is a built file, so the column 16 is kept (line 11 is eight blanks and 'y[i] = ' before 'host_scale', which starts at column 16); no trailing [option], so the code is null; the message is the text after 'error: '. 'main.hip:4:7: note: candidate function not viable: call to __host__ function from __global__ function' is one note: file main.hip, line 4, and column 7 kept (line 4 is 'float ' before 'host_scale', which starts at column 7), code null, the message the text after 'note: '. The two source echoes, the two caret lines, and '1 error generated when compiling for gfx942.' give nothing; no host pass printed. The last line, 'failed to execute:' and the clang++ command hipcc ran, is hipcc's own report of the failed clang call, so nothing.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.hip",
+      "line": 11,
+      "column": 16,
+      "message": "no matching function for call to 'host_scale'"
+    },
+    {
+      "stage": "compile",
+      "severity": "note",
+      "code": null,
+      "file": "main.hip",
+      "line": 4,
+      "column": 7,
+      "message": "candidate function not viable: call to __host__ function from __global__ function"
+    }
+  ]
+}

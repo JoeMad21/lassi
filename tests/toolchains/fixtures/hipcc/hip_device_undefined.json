@@ -1,0 +1,23 @@
+{
+  "derivation": "Five lines. 'lld: error: undefined hidden symbol: device_helper(int)' is the gfx942 device link's lld line, which names the linker 'lld' without the 'ld.' of the host link: one error with no place (file, line, and column null), code null, the message the text after 'lld: error: '. The two lines that start with '>>> referenced by ' are lld's context (the device object under the capture's workdir, @lassi-tmp/main-gfx942-72a9c2.o, and the kernel apply(int, int*) that refers to the symbol; the line is printed twice), so no diagnostic. 'clang++: error: amdgcn-link command failed with exit code 1 (use -v to see invocation)' is a clang driver line with no place: one error, the message the text after 'clang++: error: '. The last line, 'failed to execute:' and the clang++ command hipcc ran, is hipcc's own report of the failed clang call, not a compiler diagnostic, so nothing.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": null,
+      "line": null,
+      "column": null,
+      "message": "undefined hidden symbol: device_helper(int)"
+    },
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": null,
+      "line": null,
+      "column": null,
+      "message": "amdgcn-link command failed with exit code 1 (use -v to see invocation)"
+    }
+  ]
+}

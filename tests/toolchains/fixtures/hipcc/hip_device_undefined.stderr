@@ -1,0 +1,5 @@
+lld: error: undefined hidden symbol: device_helper(int)
+>>> referenced by /mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20261006-121638-desktop-8r113ei-detached-f03fa62a-961a/work/hip_device_undefined/@lassi-tmp/main-gfx942-72a9c2.o:(apply(int, int*))
+>>> referenced by /mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20261006-121638-desktop-8r113ei-detached-f03fa62a-961a/work/hip_device_undefined/@lassi-tmp/main-gfx942-72a9c2.o:(apply(int, int*))
+clang++: error: amdgcn-link command failed with exit code 1 (use -v to see invocation)
+failed to execute:/opt/rocm/core-7.12/lib/llvm/bin/clang++  --offload-arch=gfx942 --driver-mode=g++ --hip-link  -Wall -O3 -o "main" -x hip main.hip

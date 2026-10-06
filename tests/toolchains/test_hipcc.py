@@ -1,4 +1,4 @@
-"""Tests for the HIP toolchain `hipcc-gfx942` and its pin toolchains/hipcc.pin (task P17.6, part 1).
+"""Tests for the HIP toolchain `hipcc-gfx942`, its pin toolchains/hipcc.pin, and its captured fixtures (task P17.6).
 
 Bible: Toolchain Pins (a host compiler pinned by version and path; the
 --version check against EXPECT_VERSION in the compile sandbox before the
@@ -47,13 +47,26 @@ Toolchain Pins, the HIP build):
   after gcc.
 - parse_diagnostics reads clang's stderr with the patterns ttmetal-host
   uses, moved unchanged into lassi.toolchains._stderr as CLANG_DRIVER and
-  CLANG_PLACE, plus the shared GNU ld UNDEFINED_REFERENCE pattern. The
-  parser rules here are pinned on SYNTHETIC lines hand-written in clang's
-  and GNU ld's formats; the captured fixtures and their tests follow in part
-  2 (tests/toolchains/fixtures/hipcc).
+  CLANG_PLACE, hipcc's own DEVICE_LLD for the device link's `lld:` line,
+  and the shared GNU ld UNDEFINED_REFERENCE pattern. Part 1 pinned the rules
+  on SYNTHETIC lines hand-written in clang's and GNU ld's formats; part 2
+  checks them against the captured fixtures.
 - tests/toolchains/fixtures/hipcc holds the capture scenarios, CASES, each a
   small main.hip written for the fixtures; hip_clean is also the program the
   remote test keeps (test_hipcc_remote.py).
+- Part 2: the same directory holds each case's stderr, captured on alpha01
+  from the clean part 1 commit f03fa62 (rx run
+  20261006-121638-desktop-8r113ei-detached-f03fa62a-961a) and copied byte
+  for byte as <case>.stderr; captures.json,
+  the capture's manifest.json copied byte for byte; <case>.json, the
+  Diagnostic list derived by hand from the stderr (never from the parser's
+  output), with a `derivation` field; and README.md. The tests check the
+  parse against each list and the design's eight points: the clean case's
+  empty stderr; a warning printed by both passes and an error printed once;
+  the summary lines; the host and device target errors with their notes;
+  the host link's ld.lld lines and the per-run text in lld's context lines;
+  the device link's `lld:` prefix; hipcc's own "failed to execute:" line;
+  and plain ASCII with LF.
 
 No compiler runs here. The build tests give the toolchain a fake command
 runner; the build_toolchain tests replace lassi.core.runner's
@@ -63,11 +76,14 @@ temporary copy of hipcc.pin whose EXECUTABLE is an empty stand-in file. The
 real check and a real build run on the build host in test_hipcc_remote.py.
 No value in this module is a measurement: the version and the banner line
 are what P17.1 read on the build host (plans/spikes/p17-frameworks.md, Host
-state and Results 5).
+state and Results 5), and the fixtures record compiler output, not
+performance.
 """
 
 from __future__ import annotations
 
+import dataclasses
+import hashlib
 import importlib
 import inspect
 import json
@@ -709,7 +725,7 @@ def test_the_clang_patterns_are_shared_with_ttmetal_host_unchanged() -> None:
 
 
 # ---------------------------------------------------------------------------
-# The capture scenarios (tests/toolchains/fixtures/hipcc; the captures follow in part 2)
+# The capture scenarios (tests/toolchains/fixtures/hipcc; the captures are checked in the next section)
 
 
 def scenarios() -> dict[str, Any]:
@@ -755,6 +771,354 @@ def test_the_capture_tool_reads_the_set_with_no_override() -> None:
     for name, scenario in loaded.items():
         assert (scenario.toolchain, dict(scenario.overrides)) == (NAME, {}), name
         assert list(scenario.files) == ["main.hip"], name
+
+
+# ---------------------------------------------------------------------------
+# The captured fixtures (part 2): tests/toolchains/fixtures/hipcc, from the clean capture on alpha01
+
+CAPTURES = FIXTURES / "captures.json"
+README = FIXTURES / "README.md"
+DIAGNOSTIC_KEYS = frozenset({"stage", "severity", "code", "file", "line", "column", "message"})
+# The capture's run, from the clean part 1 commit f03fa62.
+CAPTURE_RX_ID = "20261006-121638-desktop-8r113ei-detached-f03fa62a-961a"
+# The line hipcc itself prints after a failed clang call, before the clang++ command it ran (every failed case).
+HIPCC_FAILED_PREFIX = "failed to execute:"
+# The capture's workdir root on the build host: per-run text, which changes on a recapture.
+CAPTURE_WORKDIR = f"/mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/{CAPTURE_RX_ID}/work/"
+# The clang summary line each pass prints after its diagnostics, for example "1 warning generated when compiling for
+# gfx942." (capture hip_unused_variable); group 1 is the pass.
+SUMMARY = re.compile(r"[0-9]+ (?:warnings?|errors?)(?: and [0-9]+ errors?)? generated when compiling for (\S+)\.")
+# The case the part 1 parser read short: its manifest count is that parser's, which read no "lld:" line.
+PART_1_COUNTS = {"hip_device_undefined": 1}
+# The failed compiles (not links): each stops after the gfx942 pass.
+COMPILE_ERROR_CASES = (
+    "hip_host_calls_device",
+    "hip_kernel_calls_host",
+    "hip_missing_header",
+    "hip_undeclared_identifier",
+)
+
+
+def load_json(path: Path) -> Any:
+    """Return a plain ASCII JSON file's value; fail the test clearly while the file is missing."""
+    if not path.is_file():
+        pytest.fail(f"{path} does not exist; task P17.6 part 2 copies the capture from the build host")
+    raw = path.read_bytes()
+    assert raw.isascii(), f"{path} is not plain ASCII"
+    assert b"\r" not in raw, f"{path} has a CR"
+    return json.loads(raw.decode("ascii"))
+
+
+def stderr_bytes(case: str) -> bytes:
+    """Return the captured stderr of `case` as stored; fail the test clearly while it is missing."""
+    path = FIXTURES / f"{case}.stderr"
+    if not path.is_file():
+        pytest.fail(f"{path} does not exist; task P17.6 part 2 copies it byte for byte from the capture")
+    return path.read_bytes()
+
+
+def stderr_lines(case: str) -> list[str]:
+    """Return the non-empty lines of the captured stderr of `case`, split on "\\n" only."""
+    return [line for line in stderr_bytes(case).decode("ascii").split("\n") if line]
+
+
+def source_files(case: str) -> dict[str, str]:
+    """Return the files `case` compiled: relative POSIX path -> text, with no newline translation."""
+    tree = SOURCES / case
+    paths = sorted(path for path in tree.rglob("*") if path.is_file())
+    return {path.relative_to(tree).as_posix(): path.read_bytes().decode("ascii") for path in paths}
+
+
+def expected(case: str) -> list[Diagnostic]:
+    """Return the Diagnostic list <case>.json holds, after checking its form."""
+    data = load_json(FIXTURES / f"{case}.json")
+    assert isinstance(data, dict) and set(data) == {"derivation", "diagnostics"}, f"{case}.json: object form"
+    assert isinstance(data["derivation"], str) and data["derivation"].strip(), f"{case}.json: say how it was read"
+    items = data["diagnostics"]
+    assert isinstance(items, list)
+    for item in items:
+        assert isinstance(item, dict) and set(item) == DIAGNOSTIC_KEYS, f"{case}.json: {item!r}"
+    return [Diagnostic(**item) for item in items]
+
+
+def captured(case: str) -> list[Diagnostic]:
+    """Return what the parser reads from the captured stderr of `case` with its source tree as the built files."""
+    return parse(stderr_bytes(case).decode("ascii"), source_files(case))
+
+
+def entry(case: str) -> dict[str, Any]:
+    """Return the capture manifest's entry for `case`."""
+    cases = load_json(CAPTURES)["scenarios"]
+    assert case in cases, f"captures.json has no entry for {case}"
+    return cases[case]
+
+
+def summaries(case: str) -> list[str]:
+    """Return the pass each clang summary line in the captured stderr of `case` names, in order."""
+    return [match[1] for line in stderr_lines(case) if (match := SUMMARY.fullmatch(line))]
+
+
+def line_of(case: str, text: str) -> int:
+    """Return the 1-based number of the one line of main.hip in the source tree of `case` that holds `text`."""
+    lines = source_files(case)["main.hip"].split("\n")
+    numbers = [number for number, line in enumerate(lines, start=1) if text in line]
+    assert len(numbers) == 1, f"{case}/main.hip: {text!r} must be on exactly one line"
+    return numbers[0]
+
+
+def points_at(case: str, diagnostic: Diagnostic, text: str) -> bool:
+    """Return True when the diagnostic's column, in main.hip of the source tree, starts `text`."""
+    if diagnostic.file != "main.hip" or diagnostic.line is None or diagnostic.column is None:
+        return False
+    line = source_files(case)["main.hip"].split("\n")[diagnostic.line - 1]
+    return line[diagnostic.column - 1 :].startswith(text)
+
+
+def test_every_captured_file_belongs_to_a_case() -> None:
+    stems = sorted(path.stem for path in FIXTURES.glob("*.stderr"))
+    assert stems == list(CASES), "one <case>.stderr per case, and no other"
+    manifests = {SCENARIOS.name, CAPTURES.name}
+    lists = sorted(path.stem for path in FIXTURES.glob("*.json") if path.name not in manifests)
+    assert lists == list(CASES), "one <case>.json per case, and no other"
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_the_fixture_is_raw_ascii_stderr_with_lf(case: str) -> None:
+    # Check 8: the capture ran with LANG=C and LC_ALL=C, so clang's quotes are plain ASCII.
+    raw = stderr_bytes(case)
+    assert raw.isascii(), case
+    assert b"\r" not in raw, f"{case} must be stored with LF line endings"
+    if raw:
+        assert raw.endswith(b"\n"), case
+        assert not raw.startswith((b"#", b"//")), f"{case} starts with a comment; fixtures are raw stderr"
+
+
+def test_the_capture_ran_from_a_clean_commit_on_the_build_host_with_the_pinned_hipcc() -> None:
+    captures = load_json(CAPTURES)
+    assert captures["dirty"] is False
+    assert captures["snapshot_of"] is None
+    assert re.fullmatch(r"[0-9a-f]{40}", captures["commit"]), captures["commit"]
+    assert captures["rx_run_id"] == CAPTURE_RX_ID
+    assert captures["host"] == "alpha01"
+    assert sorted(captures["scenarios"]) == list(CASES)
+    assert sorted(captures["toolchains"]) == [NAME]
+    record = captures["toolchains"][NAME]
+    pin = hipcc_pin()
+    assert record["pins"] == {PIN_NAME: pin["VERSION"]}
+    assert record["pin_files"] == {PIN_NAME: pin}, "the capture used the pin as it is now"
+    assert record["executable"] == pin["EXECUTABLE"]
+    assert record["version_exit_status"] == 0
+    assert record["version"][0] == pin["EXPECT_VERSION"]
+    assert record["locale"] == {"LANG": "C", "LC_ALL": "C"}
+    assert record["environment"] == ["LANG", "LC_ALL", "PATH"], "no ROCm or loader variable reaches a compile"
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_the_fixture_is_the_captured_stderr_byte_for_byte(case: str) -> None:
+    raw = stderr_bytes(case)
+    assert hashlib.sha256(raw).hexdigest() == entry(case)["stderr_sha256"], case
+    assert len(raw) == entry(case)["stderr_bytes"], case
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_the_capture_built_the_case_source_with_the_adapter_command(case: str) -> None:
+    record = entry(case)
+    assert record["toolchain"] == NAME and record["overrides"] == {}
+    assert record["argv"] == make_toolchain(refuse_to_run, executable=hipcc_pin()["EXECUTABLE"]).command(["main.hip"])
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_the_captured_stderr_parses_into_the_hand_derived_list(case: str) -> None:
+    assert captured(case) == expected(case)
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_the_manifest_counts_are_the_part_1_parsers(case: str) -> None:
+    # The capture counted with the part 1 parser, which read no "lld:" line; every other count is the hand list's.
+    lld_lines = [line for line in stderr_lines(case) if line.startswith("lld: ")]
+    assert entry(case)["diagnostics"] == PART_1_COUNTS.get(case, len(expected(case)))
+    assert entry(case)["diagnostics"] == len(expected(case)) - len(lld_lines), case
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_without_the_built_files_only_the_columns_change(case: str) -> None:
+    bare = parse(stderr_bytes(case).decode("ascii"))
+    assert bare == [dataclasses.replace(item, column=None) for item in expected(case)]
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_a_failed_capture_parses_into_an_error_and_a_clean_one_into_none(case: str) -> None:
+    status = entry(case)["exit_status"]
+    errors = [item for item in expected(case) if item.severity == "error"]
+    assert bool(errors) == (status != 0), (case, status)
+
+
+def test_the_clean_case_has_empty_stderr_and_exit_status_zero() -> None:
+    # Check 1: no driver warning, no summary line, and no hipcc line on a clean build.
+    assert stderr_bytes("hip_clean") == b""
+    assert entry("hip_clean")["exit_status"] == 0
+    assert expected("hip_clean") == []
+
+
+def test_the_warning_case_exits_0_with_the_warning_printed_by_both_passes() -> None:
+    # Checks 2 and 3: a warning in a kernel is printed by the gfx942 pass and again by the host pass, each followed
+    # by its summary line; the parse keeps both, as stderr shows them, and the summaries give nothing.
+    case = "hip_unused_variable"
+    assert entry(case)["exit_status"] == 0, "without -Werror the warning does not fail the build"
+    assert summaries(case) == [TARGET, "host"]
+    found = captured(case)
+    assert len(found) == 2 and found[0] == found[1], "the same warning, once per pass"
+    item = found[0]
+    assert (item.severity, item.code, item.file) == ("warning", "-Wunused-variable", "main.hip")
+    assert item.line == line_of(case, "int unused = 0;")
+    assert points_at(case, item, "unused")
+
+
+@pytest.mark.parametrize("case", COMPILE_ERROR_CASES)
+def test_a_compile_error_is_printed_once_by_the_gfx942_pass_and_no_host_pass_prints(case: str) -> None:
+    # Check 2: the build stops after the gfx942 pass, so an error is printed once, even in code both passes compile.
+    assert summaries(case) == [TARGET]
+    errors = [item for item in captured(case) if item.severity == "error"]
+    assert len(errors) == 1, case
+
+
+def test_every_summary_line_parses_to_nothing() -> None:
+    # Check 3: "N warning(s)/error(s) generated when compiling for gfx942." and "... for host." match no pattern.
+    lines = [line for case in CASES for line in stderr_lines(case) if "generated when compiling for" in line]
+    assert lines, "the captures hold summary lines"
+    for line in lines:
+        assert SUMMARY.fullmatch(line), line
+        assert parse(line + "\n", BUILT) == [], line
+
+
+def test_the_host_calls_device_error_and_its_note_point_at_the_call_and_the_declaration() -> None:
+    # Check 4: a host function calling a __device__ function; clang's one summary names the gfx942 pass.
+    case = "hip_host_calls_device"
+    error, note = captured(case)
+    assert (error.severity, error.file, error.code) == ("error", "main.hip", None)
+    assert error.line == line_of(case, "float value = device_scale(1.0f);")
+    assert points_at(case, error, "device_scale")
+    assert (note.severity, note.file) == ("note", "main.hip")
+    assert note.line == line_of(case, "__device__ float device_scale")
+    assert points_at(case, note, "device_scale")
+    assert "call to __device__ function from __host__ function" in note.message
+
+
+def test_the_kernel_calls_host_error_and_its_note_point_at_the_call_and_the_declaration() -> None:
+    # Check 4: a kernel calling a plain host function.
+    case = "hip_kernel_calls_host"
+    error, note = captured(case)
+    assert (error.severity, error.file, error.code) == ("error", "main.hip", None)
+    assert error.line == line_of(case, "y[i] = host_scale(y[i]);")
+    assert points_at(case, error, "host_scale")
+    assert (note.severity, note.file) == ("note", "main.hip")
+    assert note.line == line_of(case, "float host_scale(float x)")
+    assert points_at(case, note, "host_scale")
+    assert "call to __host__ function from __global__ function" in note.message
+
+
+def test_the_undeclared_identifier_and_the_missing_header_point_at_the_name() -> None:
+    (undeclared,) = captured("hip_undeclared_identifier")
+    assert undeclared.line == line_of("hip_undeclared_identifier", "undefined_var;")
+    assert points_at("hip_undeclared_identifier", undeclared, "undefined_var")
+    (missing,) = captured("hip_missing_header")
+    assert missing.severity == "error", "a fatal error is an error"
+    assert missing.line == line_of("hip_missing_header", '#include "p176_no_such_header.h"')
+    assert points_at("hip_missing_header", missing, '"p176_no_such_header.h"')
+
+
+def test_the_host_link_is_ld_lld_and_the_driver_names_the_linker_command() -> None:
+    # Check 5: the host link's linker is ld.lld, never GNU ld; the driver line is clang++'s.
+    case = "hip_linker_error"
+    lines = stderr_lines(case)
+    assert lines[0] == "ld.lld: error: undefined symbol: helper(int)"
+    assert "clang++: error: linker command failed with exit code 1 (use -v to see invocation)" in lines
+    assert not [line for line in lines if "undefined reference to" in line or line.startswith("/usr/bin/ld")]
+    symbol, driver = captured(case)
+    assert symbol == diag("error", None, None, None, None, "undefined symbol: helper(int)")
+    assert driver.message.startswith("linker command failed")
+
+
+def test_the_device_link_is_reported_by_lld_without_the_ld_prefix() -> None:
+    # Check 6: the gfx942 device link fails in lld, which names itself "lld:", not "ld.lld:"; the part 1 parser
+    # missed that line, and DEVICE_LLD reads it. The clang++ driver calls the step amdgcn-link.
+    case = "hip_device_undefined"
+    lines = stderr_lines(case)
+    assert lines[0] == "lld: error: undefined hidden symbol: device_helper(int)"
+    assert "clang++: error: amdgcn-link command failed with exit code 1 (use -v to see invocation)" in lines
+    assert entry(case)["exit_status"] == 1, "the build fails, so there is no program"
+    symbol, driver = captured(case)
+    assert symbol == diag("error", None, None, None, None, "undefined hidden symbol: device_helper(int)")
+    assert driver.message.startswith("amdgcn-link command failed")
+    assert hipcc_module().DEVICE_LLD in hipcc_module()._PATTERNS
+
+
+def test_ttmetal_hosts_parse_of_lld_lines_is_unchanged() -> None:
+    # DEVICE_LLD is hipcc's own: ttmetal-host still reads no "lld:" line, and both read an "ld.lld:" line alike.
+    device = "lld: error: undefined hidden symbol: device_helper(int)\n"
+    host = "ld.lld: error: undefined symbol: helper(int)\n"
+    assert ttmetal_build.parse_diagnostics(device) == []
+    assert ttmetal_build.parse_diagnostics(host) == parse(host)
+    assert hipcc_module().DEVICE_LLD not in ttmetal_build._PATTERNS
+
+
+@pytest.mark.parametrize(
+    ("line", "severity", "message"),
+    [
+        ("lld: warning: SYNTHETIC device link warning", "warning", "SYNTHETIC device link warning"),
+        (
+            "lld: error: main.hip:1:2: error: SYNTHETIC quoted place",
+            "error",
+            "main.hip:1:2: error: SYNTHETIC quoted place",
+        ),
+    ],
+)
+def test_a_device_lld_line_parses_with_no_place(line: str, severity: str, message: str) -> None:
+    # SYNTHETIC lines in the captured lld format; the second shows the lld pattern is tried before the place pattern.
+    assert parse(line + "\n", BUILT) == [diag(severity, None, None, None, None, message)]
+
+
+def test_only_the_linker_cases_name_the_capture_workdir_and_only_in_lld_context_lines() -> None:
+    # Check 5: the per-run text, the workdir (it holds the rx id) and clang's random temporary object, is in the
+    # ">>> " lines of the two linker cases and gives no diagnostic.
+    naming = {case: [line for line in stderr_lines(case) if CAPTURE_WORKDIR in line] for case in CASES}
+    assert sorted(case for case, lines in naming.items() if lines) == ["hip_device_undefined", "hip_linker_error"]
+    for case, lines in naming.items():
+        for line in lines:
+            assert line.startswith(">>> ") and "/@lassi-tmp/main-" in line, (case, line)
+            assert parse(line + "\n", source_files(case)) == []
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_hipcc_prints_one_line_of_its_own_after_a_failed_clang_call(case: str) -> None:
+    # Check 7: every failed build ends with hipcc's "failed to execute:<clang++ command>", which parses to nothing;
+    # no line starts with "hipcc" or names clang-offload-bundler.
+    lines = stderr_lines(case)
+    own = [line for line in lines if line.startswith(HIPCC_FAILED_PREFIX)]
+    assert not [line for line in lines if line.startswith("hipcc") or "clang-offload-bundler" in line], case
+    if entry(case)["exit_status"] == 0:
+        assert own == [], case
+        return
+    assert own == [lines[-1]], f"{case}: hipcc's line is the last one"
+    command = own[0][len(HIPCC_FAILED_PREFIX) :].split()
+    assert command[0] == "/opt/rocm/core-7.12/lib/llvm/bin/clang++"
+    assert f"--offload-arch={TARGET}" in command and command[-1] == "main.hip"
+    assert parse(own[0] + "\n", source_files(case)) == []
+
+
+def test_the_readme_records_the_capture_without_placeholder() -> None:
+    if not README.is_file():
+        pytest.fail(f"{README} does not exist; task P17.6 part 2 records the capture's provenance there")
+    text = README.read_text(encoding="ascii")
+    captures = load_json(CAPTURES)
+    assert "PLACEHOLDER" not in text
+    assert captures["commit"][:7] in text and captures["rx_run_id"] in text
+    assert "captures.json" in text
+    rows = [line for line in text.splitlines() if line.startswith("|")]
+    for case in CASES:
+        row = [line for line in rows if f"`{case}.stderr`" in line]
+        assert len(row) == 1, f"README has one table row for {case}"
+        assert f"| {entry(case)['exit_status']} |" in row[0], f"the row of {case} gives its exit status"
 
 
 # ---------------------------------------------------------------------------

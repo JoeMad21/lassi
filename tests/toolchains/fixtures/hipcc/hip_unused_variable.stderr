@@ -1,0 +1,8 @@
+main.hip:6:9: warning: unused variable 'unused' [-Wunused-variable]
+    6 |     int unused = 0;
+      |         ^~~~~~
+1 warning generated when compiling for gfx942.
+main.hip:6:9: warning: unused variable 'unused' [-Wunused-variable]
+    6 |     int unused = 0;
+      |         ^~~~~~
+1 warning generated when compiling for host.
