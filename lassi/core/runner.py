@@ -218,9 +218,12 @@ compile layout is checked as the sandbox checks it, and `<executable>
 --version` runs once through the toolchain's own compile runner (so in the
 sandbox, with the builds' environment and view, in a fresh directory under
 TMPDIR) and must print the pin's EXPECT_VERSION; that also proves the
-compiler reachable in the compile's view. Every refusal comes before the
-run directory exists, and so does a SandboxUnavailableError from the
---version check. A class without PIN (a test fake) is built as factory().
+compiler reachable in the compile's view. A class may declare VERSION_ARGS,
+the check's arguments after the executable (hipcc-gfx942 names its target
+before --version); without it they are --version alone. Every refusal
+comes before the run directory exists, and so does a
+SandboxUnavailableError from the --version check. A class without PIN (a
+test fake) is built as factory().
 build_toolchain is that construction for one registry name, public so that
 a tool compiles exactly as a run does; the runner builds every bound
 toolchain with it. An executor may declare pins too (task P4.11; Agent
@@ -348,6 +351,9 @@ _GIT_TIMEOUT_S = 60.0
 # TMPDIR it runs in.
 _VERSION_TIMEOUT_S = 120.0
 _VERSION_PROBE_PREFIX = "lassi-version-check."
+# The --version check's arguments after the executable, for a class that declares no VERSION_ARGS (hipcc-gfx942
+# declares its target before --version, since hipcc without one starts a program that asks for a GPU; OQ-002).
+_VERSION_ARGS = ("--version",)
 # The build dir, under the runs root, against which the compile layout is checked before a run (never created).
 _LAYOUT_PROBE = "lassi-layout-check"
 # The environment variables that name the roots every compile hides (P0.20), in order.
@@ -1579,7 +1585,8 @@ def _pinned_toolchain(name: str, factory: type, root: Path | None, build_root: P
     the pin file, the root, the executable, the tree (or check_tree refuses
     it), TMPDIR (unset, or outside $LASSI_SCRATCH), a hidden root, a linked
     prefix, or a compile layout the sandbox refuses. Then
-    `<executable> --version` must print the pin's EXPECT_VERSION in the
+    `<executable> --version`, with the class's VERSION_ARGS if it declares
+    them (_version_argv), must print the pin's EXPECT_VERSION in the
     compile sandbox.
     """
     pin_name = factory.PIN
@@ -1596,7 +1603,7 @@ def _pinned_toolchain(name: str, factory: type, root: Path | None, build_root: P
     environment = _compile_environment()
     pins = {pin_name: pin, **_linked_pins(name, pin_name, pin, resolved, environment)}
     runner = _compile_runner(name, environment, resolved, hidden_roots, build_root)
-    version, status = _checked_version(name, executable, runner, Path(tmpdir), pin_name, pin)
+    version, status = _checked_version(name, _version_argv(factory, executable), runner, Path(tmpdir), pin_name, pin)
     toolchain = factory(executable=str(executable), runner=runner, **keywords)
     return BuiltToolchain(name, (), toolchain, str(executable), environment, pins, version, status)
 
@@ -1829,15 +1836,20 @@ def _compile_runner(
     return runner
 
 
+def _version_argv(factory: type, executable: Path | str) -> list[str]:
+    """Return the --version check's command: `executable`, then the class's VERSION_ARGS, else --version alone."""
+    return [str(executable), *getattr(factory, "VERSION_ARGS", _VERSION_ARGS)]
+
+
 def _checked_version(
     name: str,
-    executable: Path | str,
+    argv: Sequence[str],
     runner: SandboxedCompileRunner,
     tmpdir: Path,
     pin_name: str,
     pin: Mapping[str, str],
 ) -> tuple[tuple[str, ...], int]:
-    """Run `<executable> --version` once through `runner`; return its non-blank lines and its status.
+    """Run the --version check `argv` (_version_argv) once through `runner`; return its non-blank lines and status.
 
     It runs through the toolchain's own compile runner, so it runs the same
     executable with the same environment in the same view as every build,
@@ -1853,14 +1865,14 @@ def _checked_version(
     if not expected:
         raise RunError(
             f"toolchains/{pin_name}.pin has no EXPECT_VERSION, so toolchain {name!r} cannot check that "
-            f"{executable} is the pinned compiler (Agent Rule 10); add the --version text it must print"
+            f"{argv[0]} is the pinned compiler (Agent Rule 10); add the --version text it must print"
         )
     try:
         probe = Path(tempfile.mkdtemp(prefix=_VERSION_PROBE_PREFIX, dir=tmpdir))
     except OSError as error:
         raise RunError(f"toolchain {name!r}: cannot make the --version check's directory in TMPDIR: {error}") from error
     try:
-        result = runner([str(executable), "--version"], probe, _VERSION_TIMEOUT_S)
+        result = runner(list(argv), probe, _VERSION_TIMEOUT_S)
     except ValueError as error:
         raise RunError(
             f"toolchain {name!r}: the compile sandbox refuses the --version check's build dir {probe} under TMPDIR "
@@ -1871,7 +1883,7 @@ def _checked_version(
     output = result.stdout + result.stderr
     if result.returncode != 0 or expected not in output:
         raise RunError(
-            f"toolchain {name!r}: {executable} --version exited {result.returncode} and must print the "
+            f"toolchain {name!r}: {' '.join(argv)} exited {result.returncode} and must print the "
             f"EXPECT_VERSION of toolchains/{pin_name}.pin ({expected!r}); the compiler is not the pinned one, "
             "so the run would be labeled with a pin it does not use (Agent Rule 10)"
         )

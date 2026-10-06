@@ -53,8 +53,8 @@ called on the class without a tree, so a later check of a TT reference
 needs none (plans/p4-ttsim.md, P4.13: each TT reference passes the guard).
 
 parse_diagnostics reads the stderr of clang and of ld.lld, which links
-through -fuse-ld=lld, with the patterns shared with the other adapters
-(lassi.toolchains._stderr):
+through -fuse-ld=lld, with the clang patterns shared with hipcc-gfx942
+(lassi.toolchains._stderr CLANG_DRIVER and CLANG_PLACE):
 
 - A driver line, `<tool>: <severity>: <message>` from clang, clang++, or
   ld.lld with an optional version suffix (such as "clang++-20: error:
@@ -78,8 +78,6 @@ through -fuse-ld=lld, with the patterns shared with the other adapters
 
 from __future__ import annotations
 
-import dataclasses
-import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePath, PurePosixPath
 
@@ -88,14 +86,7 @@ from lassi.core.record import Diagnostic
 from lassi.core.registry import register
 from lassi.toolchains import pins
 from lassi.toolchains._base import OUTPUT, CommandRunner, CompilerToolchain
-from lassi.toolchains._stderr import (
-    GCC,
-    NO_FILES,
-    LinePattern,
-    compile_diagnostic,
-    fold_built_column,
-    parse_stderr,
-)
+from lassi.toolchains._stderr import CLANG_DRIVER, CLANG_PLACE, NO_FILES, compile_diagnostic, parse_stderr
 
 # The pin file stem, and the pin keys that hold the host build line, in the order the command uses them.
 PIN_NAME = "tt-metal"
@@ -212,37 +203,9 @@ def _first_difference(listed: Sequence[str], tracked: Sequence[str]) -> str:
     return f"the tree lists {len(listed)} packages and the tracked list {len(tracked)}"
 
 
-# A driver line with no place, for example (SYNTHETIC, in clang's and lld's formats)
-#   clang++-20: error: linker command failed with exit code 1 (use -v to see invocation)
-#   ld.lld: error: undefined symbol: helper(int)
-# The tool may carry a version suffix (clang++-20, clang-20). A place line on a built file reads
-# "<file>:<line>:<column>: ...", so a file named like a tool never matches this pattern.
-_DRIVER = re.compile(
-    r"(?:clang\+\+|clang|ld\.lld)(?:-[0-9]+(?:\.[0-9]+)*)?: "
-    r"(?P<severity>fatal error|error|warning|note): (?P<message>.*)"
-)
-_DRIVER_SEVERITY = {"fatal error": "error", "error": "error", "warning": "warning", "note": "note"}
-
-
-def _driver(match: re.Match[str]) -> Diagnostic:
-    """Return the Diagnostic for a driver line, which names no file; a fatal error is an error."""
-    return compile_diagnostic(_DRIVER_SEVERITY[match["severity"]], match["message"])
-
-
-def _fold_place(
-    diagnostic: Diagnostic, lines: list[str], index: int, files: Mapping[str, str], patterns: Sequence[LinePattern]
-) -> tuple[Diagnostic, int]:
-    """Drop a leading "./" from the file, then keep the column only on a built file (fold_built_column)."""
-    if diagnostic.file is not None and diagnostic.file.startswith("./"):
-        diagnostic = dataclasses.replace(diagnostic, file=diagnostic.file[2:])
-    return fold_built_column(diagnostic, lines, index, files, patterns)
-
-
-# Tried in this order on each line: the driver pattern before the place pattern (see _DRIVER).
-_PATTERNS = (
-    LinePattern(_DRIVER, _driver),
-    dataclasses.replace(GCC, fold=_fold_place),
-)
+# Tried in this order on each line: the driver pattern before the place pattern, since a driver message may quote
+# a name the model chose (lassi.toolchains._stderr, CLANG_DRIVER).
+_PATTERNS = (CLANG_DRIVER, CLANG_PLACE)
 
 
 def parse_diagnostics(stderr: str, files: Mapping[str, str] = NO_FILES) -> list[Diagnostic]:

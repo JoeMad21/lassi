@@ -259,3 +259,12 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - A train.md beside provenance.json (Readability Standards), when P7 trains.
   - Lock a GPU across processes for lassi train, with P17.5's lock candidate.
   - Episode semantics: whether grpo without episode means single_turn (the bible's default) or a required choice.
+- P17.6's hipcc toolchain (bible Toolchain Pins, the HIP build; Execution Backends, gpu (AMD) row; Host Facts, ROCm). Part 2 reads the captures in tests/toolchains/fixtures/hipcc and adds only the patterns they need. Candidates not built:
+  - `.cu` and `.cpp` HIP sources (HeCBench's HIP versions name `main.cu`): measure how this hipcc treats each suffix before widening SOURCE_SUFFIXES.
+  - A `.hip` entry in lassi/core/files.py's fence map, with a HIP prompt set and a recipe binding `hip: hipcc-gfx942` with the executor none.
+  - P9: read LASSI-EE's own hipcc flags (a `-std` level among them) from its source for faithful runs; P17.6's flags are [DESIGN].
+  - Drop exact repeats of a diagnostic printed by both the host and device passes, if part 2 shows repeats and correction prompts lose budget to them.
+  - P17.13: the gpu executor's HIP runtime declares the hipcc pin (the same /opt/rocm/core-7.12 tree) or a rocm pin; the `rocm` toolchain_pins field stays unused until then. Use part 2's readelf RUNPATH reading to choose between the program's RUNPATH and a pinned library path for libamdhip64.
+  - Relocatable device code (`-fgpu-rdc`) for programs whose device functions span files.
+  - A shared offload-bundle reader in lassi/, from the remote test's copy, if a stage or target ever checks an artifact's device code.
+  - Sandbox: a compile covers /sys/class and /sys/bus but leaves /proc/bus/pci readable (lassi/executors/sandbox.py), so a program a compile starts can still list PCI devices, as rocm_agent_enumerator's lspci step would (ROCm/rocm-systems tag therock-7.12, projects/rocminfo/rocm_agent_enumerator:184-189); hiding it in compiles is a Sandbox edit with a Decision Log entry.

@@ -567,6 +567,17 @@ def test_toolchain_pin_names_match_bible() -> None:
     assert [f.name for f in dataclasses.fields(record.ToolchainPins)] == list(record.TOOLCHAIN_PIN_NAMES)
 
 
+def test_an_older_trial_json_loads_with_the_hipcc_pin_not_used() -> None:
+    # Task P17.6 adds the field hipcc after gcc; a trial.json written before it has no such key.
+    assert record.TOOLCHAIN_PIN_NAMES[-2:] == ("gcc", "hipcc"), "hipcc is appended after gcc"
+    data = record.to_dict(trial_with(toolchain_pins=record.ToolchainPins(cuda="fixture-cuda")))
+    del data["toolchain_pins"]["hipcc"]
+    loaded = record.from_dict(record.Trial, data)
+    assert loaded.toolchain_pins.hipcc is None
+    assert loaded.toolchain_pins == record.ToolchainPins(cuda="fixture-cuda")
+    assert record.ToolchainPins(hipcc="fixture-hipcc").hipcc == "fixture-hipcc"
+
+
 # ---------------------------------------------------------------------------
 # Provenance (P0.18)
 

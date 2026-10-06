@@ -1,4 +1,4 @@
-"""Shared pieces of the compiler stderr parsers in lassi.toolchains.nvcc, nvcpp, and gcc.
+"""Shared pieces of the compiler stderr parsers in lassi.toolchains.nvcc, nvcpp, gcc, ttmetal_build, and hipcc.
 
 A parser reads stderr line by line (split on "\\n" only) and tries each
 LinePattern in order against the line with trailing whitespace removed; the
@@ -29,7 +29,9 @@ This module also holds what the adapters share: the EDG severity words
 and the severity words of the CUDA tools (ptxas under nvcc, nvlink under
 nvc++), which nvcc and nvcpp use, and the patterns for GCC style lines and
 the linker lines with the built-file column fold (fold_built_column), which
-gcc uses too.
+gcc uses too. The two clang patterns, CLANG_DRIVER and CLANG_PLACE, are
+ttmetal-host's (task P4.10), moved here unchanged for hipcc-gfx942, whose
+hipcc drives a clang too (task P17.6).
 """
 
 from __future__ import annotations
@@ -342,3 +344,38 @@ def fold_built_column(
 GCC = LinePattern(_GCC, _gcc)
 COLLECT2 = LinePattern(_COLLECT2, error_from_message)
 UNDEFINED_REFERENCE = LinePattern(_UNDEFINED_REFERENCE, _undefined_reference, fold=_fold_linker_place)
+
+
+# A clang driver or lld line with no place, for example (SYNTHETIC, in clang's and lld's formats)
+#   clang++-20: error: linker command failed with exit code 1 (use -v to see invocation)
+#   ld.lld: error: undefined symbol: helper(int)
+# The tool may carry a version suffix (clang++-20, clang-20). A place line on a built file reads
+# "<file>:<line>:<column>: ...", so a file named like a tool never matches this pattern. An adapter tries it before
+# CLANG_PLACE, since its message may quote a name the model chose.
+_CLANG_DRIVER = re.compile(
+    r"(?:clang\+\+|clang|ld\.lld)(?:-[0-9]+(?:\.[0-9]+)*)?: "
+    r"(?P<severity>fatal error|error|warning|note): (?P<message>.*)"
+)
+
+
+def _clang_driver(match: re.Match[str]) -> Diagnostic:
+    """Return the Diagnostic for a clang driver or lld line, which names no file; a fatal error is an error."""
+    return compile_diagnostic(_GCC_SEVERITY[match["severity"]], match["message"])
+
+
+def _fold_clang_place(
+    diagnostic: Diagnostic, lines: list[str], index: int, files: Mapping[str, str], patterns: Sequence[LinePattern]
+) -> tuple[Diagnostic, int]:
+    """Drop a leading "./" from the file, then keep the column only on a built file (fold_built_column).
+
+    clang may name a header it found beside the including file as "./<name>".
+    """
+    if diagnostic.file is not None and diagnostic.file.startswith("./"):
+        diagnostic = dataclasses.replace(diagnostic, file=diagnostic.file[2:])
+    return fold_built_column(diagnostic, lines, index, files, patterns)
+
+
+# clang's two line formats: the driver or lld line with no place, and the GCC style place line, read as GCC reads it
+# but with a leading "./" dropped from the file and the column kept only on a built file.
+CLANG_DRIVER = LinePattern(_CLANG_DRIVER, _clang_driver)
+CLANG_PLACE = LinePattern(_GCC, _gcc, fold=_fold_clang_place)

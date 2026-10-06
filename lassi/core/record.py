@@ -35,7 +35,17 @@ STAGES = ("S0", "S1", "S2", "S3", "S4", "S5")
 DIAGNOSTIC_STAGES = ("parse", "verify", "lower", "compile", "jit", "run")
 SEVERITIES = ("error", "warning", "note")
 TOOLCHAIN_PIN_NAMES = (
-    "llvm", "polygeist", "tt_mlir", "tt_metal", "ttsim", "furiosa_sdk", "cuda", "nvhpc", "rocm", "gcc"
+    "llvm",
+    "polygeist",
+    "tt_mlir",
+    "tt_metal",
+    "ttsim",
+    "furiosa_sdk",
+    "cuda",
+    "nvhpc",
+    "rocm",
+    "gcc",
+    "hipcc",
 )
 # The device kinds a device section may name and a DeviceRecord records (task P17.2; lassi.core.devices).
 DEVICE_KINDS = ("cpu", "cuda", "rocm")
@@ -475,6 +485,7 @@ class ToolchainPins:
     nvhpc: str | None = None
     rocm: str | None = None
     gcc: str | None = None
+    hipcc: str | None = None
 
     def __post_init__(self) -> None:
         """Check that every pin is a string or None."""

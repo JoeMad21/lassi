@@ -1,0 +1,34 @@
+{
+  "hip_clean": {
+    "scenario": "Clean build: main.hip holds a saxpy __global__ kernel, and main allocates two device arrays with hipMalloc, launches the kernel, synchronizes, and frees both, checking every hipError_t; the remote test builds the same program",
+    "toolchain": "hipcc-gfx942"
+  },
+  "hip_device_undefined": {
+    "scenario": "Device-side link: the kernel apply calls device_helper, declared __device__ and never defined, so the gfx942 device code refers to a function no translation unit defines",
+    "toolchain": "hipcc-gfx942"
+  },
+  "hip_host_calls_device": {
+    "scenario": "Host-side target error: main, a host function, calls device_scale, which is declared __device__ only",
+    "toolchain": "hipcc-gfx942"
+  },
+  "hip_kernel_calls_host": {
+    "scenario": "Device-side target error: the kernel scale calls host_scale, a plain host function with no __device__ attribute",
+    "toolchain": "hipcc-gfx942"
+  },
+  "hip_linker_error": {
+    "scenario": "Host linker error: main calls helper, which is declared and never defined, so the host link of the program fails",
+    "toolchain": "hipcc-gfx942"
+  },
+  "hip_missing_header": {
+    "scenario": "Missing header: main.hip includes p176_no_such_header.h, which neither the build directory nor any include directory holds, a fatal error at the include line",
+    "toolchain": "hipcc-gfx942"
+  },
+  "hip_undeclared_identifier": {
+    "scenario": "Undeclared identifier: the body of the kernel scale uses undefined_var, which is never declared",
+    "toolchain": "hipcc-gfx942"
+  },
+  "hip_unused_variable": {
+    "scenario": "Warning that stays a warning: the kernel scale declares unused and never reads it, so -Wall warns (-Wunused-variable) and the build succeeds, exit status 0",
+    "toolchain": "hipcc-gfx942"
+  }
+}
