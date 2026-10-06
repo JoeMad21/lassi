@@ -97,7 +97,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.15 | DONE | Carry the P2 review questions (OQ-024) | - | P2 review questions closed (f0c4a85); OQ-028 to OQ-033 applied for review; sim_t_tiktoken; scoring pass rx 20260927-204249; bible rev 233 |
 | P4.G | DONE | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 | gate passed: smoke rx 20261005-123001-desktop-8r113ei-detached-ec1c9a2b-2979; Tier A job 20261005-123023-p4-tier-a-c247; ec1c9a2 clean; results/p4-gate |
 | P17.0 | DONE | Plan phase P17 into plans/p17-portable.md and add its tasks here | - | plan plans/p17-portable.md; base main 0dcc261; owner answers OQ-027 to OQ-044 recorded; retrospective plans/runs/p4-retrospective.md |
-| P17.1 | READY | Spike: framework pins, environments, and device assumptions | - |  |
+| P17.1 | ACTIVE | Spike: framework pins, environments, and device assumptions | - |  |
 | P17.2 | READY | Device layer: selection, probes, provenance | - |  |
 | P17.3 | READY | Served backends: recipe keys and serving provenance | P17.1,P17.2 |  |
 | P17.4 | READY | hf_local on Transformers and PyTorch | P17.1,P17.2,P17.3 |  |
