@@ -22,6 +22,11 @@ if TYPE_CHECKING:
 # the backend's type.
 UNLOAD_BEFORE_RUN = "unload_before_run"
 
+# The capability of an LLM backend that confirms its model id on its server before any chat request (task P17.3;
+# bible Serving Rules). A backend that declares it provides check() and serving(); the runner calls serving() before
+# any directory exists and writes the record it returns to provenance.json as `serving`.
+MODEL_CHECK = "model_check"
+
 # The capability of a ScoreProfile that also scores each attempt: it provides score_attempts(trial), one Score per
 # attempt in attempt order. A scoring pass writes attempt scores only for a profile that declares it.
 SCORES_ATTEMPTS = "scores_attempts"

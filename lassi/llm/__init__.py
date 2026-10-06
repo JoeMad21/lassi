@@ -22,6 +22,16 @@ kind section is built as `factory(**binding.config)`; an LLM backend as
 caller passes them. The keyword settings of the HTTP backends are base_url,
 timeout_s, and, for openai_compat, api_key_env; the replay backend's is
 recording, a file it reads when built. Construction sends no request.
+A recipe sets an HTTP backend's keyword settings in its model section
+(model.base_url, model.timeout_s, model.api_key_env), each accepted only
+by a backend that lists it in `config_keys`, and the runner passes them as
+`factory(model_id, **config)` (task P17.3).
+
+The HTTP backends declare `model_check` (lassi.core.capabilities
+MODEL_CHECK): check() confirms the model id on the server, and serving()
+returns the record a run writes to provenance.json as `serving`
+(lassi.llm._serving); serving_line(record) is its one-line summary for
+run.md.
 
 model_info(backend, sampling) returns the Trial `model` field (bible Result
 Record); it is how the sampling parameters land in the record.
@@ -35,6 +45,7 @@ from lassi.core.interfaces import LLMBackend, Sampling
 from lassi.core.record import ModelInfo
 from lassi.llm import mock, ollama, openai_compat, replay
 from lassi.llm._http import ServingError
+from lassi.llm._serving import serving_line
 from lassi.llm.mock import MockBackend
 from lassi.llm.ollama import OllamaBackend
 from lassi.llm.openai_compat import OpenAICompatBackend
@@ -52,6 +63,7 @@ __all__ = [
     "ollama",
     "openai_compat",
     "replay",
+    "serving_line",
 ]
 
 

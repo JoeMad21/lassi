@@ -5,7 +5,9 @@ vLLM. Before the first chat request, check() confirms that `<base_url>/models`
 lists the exact model id (bible Serving Rules: port 8123, confirm /v1/models
 returns the expected id before the first request). Messages and sampling are
 sent unchanged, never truncated, and the token counts are the server's, never
-estimated.
+estimated. serving() returns what a run records about the server
+(lassi.llm._serving): the entry check() found and the version the server
+reports at its root, never a key (task P17.3).
 
 API keys (Agent Rule 12): api_key_env names an environment variable, and the
 key is read from os.environ each time a request is made and sent as
@@ -25,6 +27,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
+from lassi.core.capabilities import MODEL_CHECK
 from lassi.core.interfaces import Completion, Message, Sampling
 from lassi.core.registry import register
 from lassi.llm._http import (
@@ -37,6 +40,7 @@ from lassi.llm._http import (
     served_entry,
     token_count,
 )
+from lassi.llm._serving import server_root, serving_record, version_endpoint
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8123/v1"
 
@@ -55,7 +59,9 @@ class OpenAICompatBackend:
     """
 
     name = "openai_compat"
-    capabilities = frozenset({"chat", "model_check"})
+    capabilities = frozenset({"chat", MODEL_CHECK})
+    # The model-section keys a recipe may set; the runner passes them as keyword settings (task P17.3).
+    config_keys = frozenset({"base_url", "timeout_s", "api_key_env"})
 
     def __init__(
         self,
@@ -125,12 +131,56 @@ class OpenAICompatBackend:
             completion_tokens=token_count(reply, "usage", "completion_tokens"),
         )
 
+    def serving(self) -> dict[str, Any]:
+        """Return the serving record: check()'s entry, less its volatile fields, and the version the server reports.
+
+        Calls check() first, so it raises ServingError for a model the server
+        does not list. When the entry's owned_by names a version route
+        (lassi.llm._serving.VERSION_ENDPOINTS) and base_url ends in /v1, it
+        sends one GET to that route at the server root, with the same
+        Authorization header as the /v1 requests, and reads only the named
+        field; a failed request gives version null. A record that would hold
+        the API key raises ServingError (lassi.llm._serving.serving_record).
+        Each call returns a fresh record.
+        """
+        entry = self.check()
+        asked = version_endpoint(entry)
+        root = server_root(self.base_url)
+        version = None
+        if asked is not None and root is not None:
+            version = self._version(root + asked[0], asked[1])
+        else:
+            asked = None
+        key = self._key()
+        return serving_record(self.base_url, entry, asked, version, () if key is None else (key,))
+
+    def _version(self, url: str, field: str) -> str | None:
+        """Return the string at `field` of GET <url>'s JSON reply, or None for any failure, which is never raised.
+
+        The reply (SGLang's /server_info holds the server's API keys and launch
+        command) is read for that one field only; a ServingError, whose message
+        could quote the body, is dropped outside the handler, never logged or
+        chained.
+        """
+        failed = False
+        try:
+            reply = self._send("GET", url)
+        except ServingError:
+            failed = True
+        if failed:
+            return None
+        value = reply.data.get(field) if isinstance(reply.data, dict) else None
+        return value if isinstance(value, str) else None
+
     def _request(self, method: str, path: str, body: Any = None) -> JSONReply:
-        """Send one request to <base_url><path>, with the API key when api_key_env is set, redacted from errors."""
+        """Send one request to <base_url><path>; see _send."""
+        return self._send(method, self.base_url + path, body)
+
+    def _send(self, method: str, url: str, body: Any = None) -> JSONReply:
+        """Send one request to `url`, with the API key when api_key_env is set, redacted from errors."""
         key = self._key()
         headers = {} if key is None else {"Authorization": "Bearer " + key}
         secrets = () if key is None else (key,)
-        url = self.base_url + path
         return request_json(method, url, body=body, headers=headers, secrets=secrets, timeout_s=self.timeout_s)
 
     def _key(self) -> str | None:

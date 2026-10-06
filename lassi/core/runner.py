@@ -74,7 +74,14 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    nor None is refused too.
    A stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id, **config), whose
-   config holds the model's device section when it has one, each toolchain
+   config holds the model section's keys other than backend and id (its
+   device section and server settings such as model.base_url), a setting
+   the backend refuses being a RunError; then, for a backend that declares
+   `model_check` (lassi.core.capabilities MODEL_CHECK), it reads the serving
+   record with serving(), so a model the server does not list, a server
+   that does not answer, or a record that would hold the API key is a
+   RunError before any directory exists and before any unload or chat
+   request (task P17.3); each toolchain
    with its pinned compiler and a clean environment (below), each executor
    as factory(**config) (one, or one per language), asking each for its
    device() and reading the pins it declares, and the ScoreProfiles
@@ -142,11 +149,15 @@ host), resolve inside it (Agent Rule 7). The tree holds:
   its target language with executors per language), driver (as sdk),
   started_utc (as date), and device_records of the manifest written first, and the final
   manifest is that same manifest with only its status and finish time
-  changed, so a trial and its manifest never disagree;
+  changed, so a trial and its manifest never disagree. For a backend that
+  declares `model_check`, `serving` holds its serving record
+  (lassi.llm._serving: base_url, the model entry less its volatile fields,
+  version, and version_from), which the trials do not copy;
 - run.md: the page a person reads (Readability Standards, Run row). Its
   summary shows the manifest's provenance, with an unknown value (null) as
   "-" as trial.md shows it, since provenance is not a measurement; with
-  executors per language, one Device row per language. When a direction's
+  executors per language, one Device row per language; with `serving`, a
+  Server row after the Driver row (lassi.llm.serving_line). When a direction's
   target language, or its source language when the baseline runs the
   source reference too, runs on an executor that declares `simulator`
   (lassi.core.capabilities SIMULATOR), its Trials section opens with a
@@ -236,7 +247,15 @@ from typing import Any
 
 from lassi.bench import Direction, Suite, load_suite, sources_dir
 from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
-from lassi.core.capabilities import DEVICE_KEY, SIMULATOR, TAKES_DEVICE, UNLOAD_BEFORE_RUN, declares, unload_before_run
+from lassi.core.capabilities import (
+    DEVICE_KEY,
+    MODEL_CHECK,
+    SIMULATOR,
+    TAKES_DEVICE,
+    UNLOAD_BEFORE_RUN,
+    declares,
+    unload_before_run,
+)
 from lassi.core.devices import (
     DEFAULT_PROBES,
     DeviceProbe,
@@ -278,7 +297,7 @@ from lassi.core.store import TextStore, write_trial
 from lassi.core.trial_md import fenced, fmt, fmt_provenance
 from lassi.executors import workdir
 from lassi.executors.sandbox import SandboxedCompileRunner
-from lassi.llm import model_info
+from lassi.llm import ServingError, model_info, serving_line
 from lassi.prompts import assets as prompt_assets
 from lassi.prompts import load_recipe_assets, render
 from lassi.scoring.run_scoring import (
@@ -470,7 +489,8 @@ class _Run:
     built ScoreProfiles of `score` and `metrics` (lassi.scoring.run_scoring).
     `observer` is RunOptions.observer in a GuardedObserver, or None.
     `devices` holds the record of each device section, in binding order
-    (_devices).
+    (_devices). `serving` is the backend's serving record when it declares
+    model_check, else None (_served_model).
     """
 
     recipe: Recipe
@@ -490,6 +510,7 @@ class _Run:
     scoring: ScoringPlan
     observer: GuardedObserver | None = None
     devices: tuple[DeviceRecord, ...] = ()
+    serving: Mapping[str, Any] | None = None
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -497,7 +518,9 @@ def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
 
     Raises RecipeError when the recipe does not load and RunError when the
     run cannot start (see the module docstring); both come before any
-    directory is created or any model is asked. A component's own errors,
+    directory is created or any chat request is sent. A backend that
+    declares model_check has its model list and version read then
+    (_served_model). A component's own errors,
     such as SandboxUnavailableError from an executor or a sandboxed compile,
     propagate; one raised during the trials leaves provenance.json with
     status "failed", and so does a RunError from a ScoreProfile that cannot
@@ -543,8 +566,9 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     devices = _devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
     _check_oracle(recipe, registry, bench)
     scoring = _scoring(recipe, registry, bench)
-    backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id, **_backend_config(recipe))
+    backend = _backend(recipe, registry, settings)
     _check_backend(recipe, settings, backend)
+    serving = _served_model(recipe, settings, backend)
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
     executors = _executors(recipe, registry, settings)
     pins, target_pins = _run_pins(recipe, settings, toolchains, executors)
@@ -571,6 +595,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         scoring=scoring,
         observer=None if options.observer is None else GuardedObserver(options.observer),
         devices=devices,
+        serving=serving,
     )
 
 
@@ -623,8 +648,46 @@ def _framework(recipe: Recipe, binding: Binding, entry: Entry) -> FrameworkBuild
 
 
 def _backend_config(recipe: Recipe) -> Mapping[str, Any]:
-    """Return the config of the recipe's LLMBackend binding: its device section, when the model section has one."""
+    """Return the config of the recipe's LLMBackend binding: the model section's keys other than backend and id."""
     return next(binding.config for binding in recipe.bindings if binding.interface == "LLMBackend")
+
+
+def _backend(recipe: Recipe, registry: Registry, settings: _Settings) -> Any:
+    """Build the backend as factory(model.id, **config); a setting it refuses (ValueError) is a RunError.
+
+    The backends' ValueError messages name the setting and never quote its
+    value (lassi.llm._http.checked_base_url), so the RunError quotes them.
+    Construction sends no request.
+    """
+    factory = registry.get("LLMBackend", settings.backend).factory
+    try:
+        return factory(settings.model_id, **_backend_config(recipe))
+    except ValueError as error:
+        raise RunError(f"{recipe.path}: model: LLMBackend {settings.backend!r} refused its settings: {error}") from None
+
+
+def _served_model(recipe: Recipe, settings: _Settings, backend: Any) -> Mapping[str, Any] | None:
+    """Return the backend's serving record when it declares model_check, else None; RunError when it cannot.
+
+    serving() confirms the model id on the server and reads the record
+    (lassi.llm._serving) before any directory exists; the trials reuse the
+    entry it checked. Its ServingError (a model the server does not list, an
+    unreachable server, a timeout, an unset key variable, a record that would
+    hold the key) quotes no key and no base_url value. The record is rendered
+    as provenance.json writes it once here, so one that JSON cannot hold
+    (NaN) is refused before any directory too (plans/LESSONS.md, Audits).
+    """
+    if not declares(backend, MODEL_CHECK):
+        return None
+    try:
+        record = backend.serving()
+        json_text(record)
+    except (ServingError, ValueError) as error:
+        raise RunError(
+            f"{recipe.path}: model.id: LLMBackend {settings.backend!r} could not confirm its model at "
+            f"model.base_url: {error}"
+        ) from None
+    return record
 
 
 def _scoring(recipe: Recipe, registry: Registry, bench: _Bench) -> ScoringPlan:
@@ -646,7 +709,8 @@ def _check_backend(recipe: Recipe, settings: _Settings, backend: Any) -> None:
     A backend that declares `needs_reference` gets each item's reference
     target through with_reference(), and, with fixes.fence_tag off, is asked
     for its faithful reply form, one untagged fence, through
-    with_untagged_fence(). One that declares `unload_before_run` needs unload().
+    with_untagged_fence(). One that declares `unload_before_run` needs unload(),
+    and one that declares `model_check` needs serving().
     """
     if "needs_reference" in backend.capabilities:
         if not hasattr(backend, "with_reference"):
@@ -656,6 +720,8 @@ def _check_backend(recipe: Recipe, settings: _Settings, backend: Any) -> None:
                 f"LLMBackend {settings.backend!r} needs the reference target, but fixes.fence_tag is off and it has "
                 "no with_untagged_fence() to answer in the one untagged fence that faithful extraction reads"
             )
+    if declares(backend, MODEL_CHECK) and not callable(getattr(backend, "serving", None)):
+        raise RunError(f"LLMBackend {settings.backend!r} declares {MODEL_CHECK!r} but has no serving()")
     if declares(backend, UNLOAD_BEFORE_RUN) and not callable(getattr(backend, "unload", None)):
         raise RunError(f"LLMBackend {settings.backend!r} declares {UNLOAD_BEFORE_RUN!r} but has no unload()")
 
@@ -2036,7 +2102,8 @@ def _provenance(run: _Run) -> dict[str, Any]:
     record of each device section in binding order ([] when the recipe names
     none; task P17.2), and `driver` the distinct drivers those records name,
     joined by "; " (lassi.core.devices.device_driver), null when none names
-    one.
+    one. `serving` holds the backend's serving record when it declares
+    model_check (task P17.3; _served_model) and is absent otherwise.
     """
     pins = dataclasses.asdict(run.pins)
     return {
@@ -2054,6 +2121,7 @@ def _provenance(run: _Run) -> dict[str, Any]:
         **run.executors.record,
         "driver": device_driver(run.devices),
         "device_records": [dataclasses.asdict(item) for item in run.devices],
+        **({} if run.serving is None else {"serving": dict(run.serving)}),
         "started_utc": _utc(run.started),
         "finished_utc": None,
         "pins": {name: version for name, version in pins.items() if version is not None},
@@ -2185,6 +2253,13 @@ def _executor_rows(provenance: Mapping[str, Any]) -> list[tuple[str, str]]:
     return [("Executor", names), *((f"Device ({language})", fmt_provenance(device)) for language, device in devices)]
 
 
+def _serving_rows(provenance: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Return run.md's Server row (lassi.llm.serving_line) when provenance has `serving`, else no row."""
+    if "serving" not in provenance:
+        return []
+    return [("Server", serving_line(provenance["serving"]))]
+
+
 def _run_md(
     run: _Run, provenance: Mapping[str, Any], trials: Sequence[Trial], metrics: RunMetrics | None = None
 ) -> str:
@@ -2204,6 +2279,7 @@ def _run_md(
         ("Dirty", fmt_provenance(provenance["dirty"])),
         *_executor_rows(provenance),
         ("Driver", fmt_provenance(provenance["driver"])),
+        *_serving_rows(provenance),
         ("Started (UTC)", provenance["started_utc"]),
         ("Finished (UTC)", fmt(provenance["finished_utc"])),
         ("Trials", str(len(trials))),

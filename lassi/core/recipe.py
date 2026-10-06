@@ -38,6 +38,7 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Callable, Mapping, Sequence
@@ -50,6 +51,9 @@ from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry, RegistryErr
 
 # The value of loop.max_corrections that means no cap (upstream LASSI's loop; bible LASSI quirk table).
 UNCAPPED = "uncapped"
+
+# The text of model.api_key_env: a variable name (task P17.3), stricter than a backend's own check for direct callers.
+_ENV_NAME_TEXT = re.compile(r"[A-Z_][A-Z0-9_]{0,63}")
 
 # Every named fix toggle and what turning it on changes. Fixes default to on; faithful: true turns them all off.
 FIXES: dict[str, str] = {
@@ -144,18 +148,27 @@ def _expect(value: Any, kind: type, expected: str, path: str) -> None:
 
 @dataclass(frozen=True)
 class _Leaf:
-    """A single value: `accepts` tests it and `expected` says in words what fits."""
+    """A single value: `accepts` tests it and `expected` says in words what fits.
+
+    With `shown` false, a refusal never quotes the value, since it may be a
+    key (Agent Rule 12): the message says what fits and that the value is not
+    shown.
+    """
 
     expected: str
     accepts: Callable[[Any], bool]
+    shown: bool = True
 
     def keys(self, value: Any, path: str) -> None:
         """A leaf holds no keys."""
 
     def check(self, value: Any, path: str) -> None:
         """Raise a type problem unless the value fits."""
-        if not self.accepts(value):
-            raise _SchemaError(f"{path} must be {self.expected}, not {_describe(value)}")
+        if self.accepts(value):
+            return
+        if not self.shown:
+            raise _SchemaError(f"{path} must be {self.expected}; the value is not shown, since it may be a key")
+        raise _SchemaError(f"{path} must be {self.expected}, not {_describe(value)}")
 
 
 @dataclass(frozen=True)
@@ -362,6 +375,11 @@ def _is_number(value: Any) -> bool:
     return _is_int(value)
 
 
+def _is_env_name(value: Any) -> bool:
+    """Return True for an environment variable name: uppercase letters, digits, and '_', no leading digit, <= 64."""
+    return isinstance(value, str) and _ENV_NAME_TEXT.fullmatch(value) is not None
+
+
 def _is_corrections(value: Any) -> bool:
     """Return True for a correction cap: an int of at least 0, or UNCAPPED."""
     if isinstance(value, str):
@@ -376,6 +394,15 @@ _NUMBER = _Leaf("a finite number", _is_number)
 _NUMBER_OR_STR = _Leaf("a finite number or a string", lambda value: _is_number(value) or isinstance(value, str))
 _AT_LEAST_ONE = _Leaf("an integer of at least 1", lambda value: _is_int(value) and value >= 1)
 _CORRECTIONS = _Leaf(f"an integer of at least 0 or {UNCAPPED!r}", _is_corrections)
+_POSITIVE = _Leaf("a finite number above zero", lambda value: _is_number(value) and value > 0)
+# model.api_key_env names the variable that holds a key, never the key (Agent Rule 12; task P17.3). A value that does
+# not fit is not shown, since it may be a key pasted in by mistake.
+_ENV_NAME = _Leaf(
+    "an environment variable name: uppercase letters, digits, and '_', not starting with a digit, "
+    "at most 64 characters",
+    _is_env_name,
+    shown=False,
+)
 _STRINGS = _ListOf(_STR)
 _KIND = _KindSection()
 _EXECUTOR = _ExecutorSection()
@@ -408,7 +435,17 @@ SCHEMA = _Fields(
         "oracle": _KIND,
         "profiler": _KIND,
         "adversary": _KIND,
-        "model": _Fields({"backend": _STR, "id": _STR, "device": _KIND}),  # device: a device section (P17.2)
+        # device: a device section (P17.2); base_url, timeout_s, api_key_env: a served backend's settings (P17.3)
+        "model": _Fields(
+            {
+                "backend": _STR,
+                "id": _STR,
+                "device": _KIND,
+                "base_url": _STR,
+                "timeout_s": _POSITIVE,
+                "api_key_env": _ENV_NAME,
+            }
+        ),
         "arms": _STRINGS,
         "metrics": _STRINGS,
         "refine": _Fields({"counter_start": _NUMBER, "counter_step": _NUMBER, "max_iters": _INT}),
@@ -441,6 +478,9 @@ REQUIRED: tuple[str, ...] = (
     "stages",
     "executor.kind",  # in the single form; the per-language form names a kind in each entry instead
 )
+
+# The model section's own keys; every other model key is the backend's config (_bindings).
+_MODEL_OWN = ("backend", "id")
 
 # Kind sections in binding order, with the interface each binds.
 _KIND_SECTIONS: tuple[tuple[str, str], ...] = (
@@ -942,7 +982,9 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
     A per-language executor section binds one Executor per language, in
     executor_languages order, at executor.<language> for a name and
     executor.<language>.kind for a kind section. The LLMBackend's config holds
-    the model section's device section, when it has one, under `device`.
+    every key of the model section but backend and id: its device section,
+    when it has one, under `device`, and any server setting (base_url,
+    timeout_s, api_key_env; task P17.3).
     """
     found: list[Binding] = []
 
@@ -951,7 +993,7 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
 
     if "backend" in data.get("model", {}):
         model = data["model"]
-        model_config = {DEVICE_KEY: model[DEVICE_KEY]} if DEVICE_KEY in model else None
+        model_config = {key: value for key, value in model.items() if key not in _MODEL_OWN}
         bind("LLMBackend", model["backend"], "model.backend", model_config)
     for key in sorted(data.get("toolchain", {})):
         bind("Toolchain", data["toolchain"][key], f"toolchain.{key}")

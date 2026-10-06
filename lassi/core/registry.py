@@ -19,8 +19,10 @@ whose components do not fit together fails before any backend is constructed.
 The runner, never the registry, constructs components. A component bound by a
 kind section is built as `factory(**binding.config)`; an LLM backend as
 `factory(model_id)`, with keyword settings left at their defaults unless the
-caller passes them. The runner passes the model section's device section,
-when it has one, as `device=<mapping>` (task P17.2). A stage is built as
+caller passes them. The runner passes the model section's keys other than
+backend and id as keyword settings: its device section, when it has one, as
+`device=<mapping>` (task P17.2), and server settings such as base_url, each
+a key the backend lists in `config_keys` (task P17.3). A stage is built as
 `factory(context=<RunContext>)`, one stage object per trial
 (lassi.core.stages). A toolchain that declares a pin
 (PIN, with PIN_BIN for a compiler under the toolchains root, or without it

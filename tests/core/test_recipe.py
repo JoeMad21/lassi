@@ -476,7 +476,7 @@ def bound_components(data: Mapping[str, Any]) -> dict[tuple[str, str], set[str]]
         found.setdefault((interface, name), set()).update(keys)
 
     if "model" in data:
-        bind("LLMBackend", data["model"]["backend"])
+        bind("LLMBackend", data["model"]["backend"], set(data["model"]) - {"backend", "id", "device"})
     for name in data.get("toolchain", {}).values():
         bind("Toolchain", name)
     for section, interface in KIND_SECTIONS.items():
