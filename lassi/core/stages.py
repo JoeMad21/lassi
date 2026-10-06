@@ -161,6 +161,15 @@ attempt's own `invalid-text` warning stays on the attempt; Trial.context
 carries no diagnostics, so a context reply that held a lone surrogate gives
 its request one parse-stage `invalid-text` warning.
 
+A request the backend refuses as past the model's context
+(lassi.core.interfaces ContextExceeded, task P17.4) ends the trial with
+`context-exceeded` (_context_end), the message naming the stage: generate,
+summarize_context, describe_source, and the correction of compile_loop and
+run_loop each catch it around their one model call. Every earlier attempt
+and request stays, no attempt or request is added for the refused call, and
+nothing is built or run again; the runner then runs no later stage and goes
+on to the next trial.
+
 Progress events (lassi.core.progress, task P4.8) go to RunContext.observer
 when there is one, and nothing a stage does depends on them: before each
 model call, once its messages are stored, a request-sent event with the
@@ -261,7 +270,17 @@ from lassi.core.capabilities import (
     unload_before_run,
 )
 from lassi.core.files import parse_file_blocks, render_file_blocks
-from lassi.core.interfaces import BuildResult, Executor, Limits, LLMBackend, Message, RunResult, Sampling, Toolchain
+from lassi.core.interfaces import (
+    BuildResult,
+    ContextExceeded,
+    Executor,
+    Limits,
+    LLMBackend,
+    Message,
+    RunResult,
+    Sampling,
+    Toolchain,
+)
 from lassi.core.progress import ATTEMPT, REQUEST_SENT, Observer, notify
 from lassi.core.recipe import Recipe
 from lassi.core.record import (
@@ -300,6 +319,7 @@ BASELINE_DISAGREE = "baseline-disagree"
 CORRECTION_CAP = "correction-cap"
 UPSTREAM_CRASH = "upstream-crash"
 SIM_GAP = "sim-gap"
+CONTEXT_EXCEEDED = "context-exceeded"
 
 # The Diagnostic stage of kernel JIT messages, which an executor parses from a run (RunResult.diagnostics). A jit-stage
 # error means the program's kernels did not compile, so the attempt reached no more than S1 (see the module docstring).
@@ -609,6 +629,15 @@ def _ended(trial: Trial, code: str, message: str) -> Trial:
     """Return `trial` with final.end_reason set to `code` and `message`; the runner then runs no later stage."""
     reason = EndReason(code=code, message=message)
     return dataclasses.replace(trial, final=dataclasses.replace(trial.final, end_reason=reason))
+
+
+def _context_end(trial: Trial, stage: str, error: ContextExceeded) -> Trial:
+    """Return `trial` ended at CONTEXT_EXCEEDED: the backend refused `stage`'s request as past its context.
+
+    Every earlier attempt and request stays; the refused request adds none,
+    since no reply exists (task P17.4).
+    """
+    return _ended(trial, CONTEXT_EXCEEDED, f"{stage}: the request was refused: {error}")
 
 
 def _reference_run_end(run: RunResult, language: str) -> tuple[str, str] | None:
@@ -1082,7 +1111,10 @@ class GenerateStage:
         system, prompt = self._prompt(trial, expected)
         if not fix_on(context, "prompt_spaces"):
             prompt = fragment_text.collapse_spaces(prompt)
-        messages, reply = _send(context, trial, self.name, prompt, system)
+        try:
+            messages, reply = _send(context, trial, self.name, prompt, system)
+        except ContextExceeded as error:
+            return _context_end(trial, self.name, error)
         attempt = _reply_attempt(context, 0, messages[-1].ref, reply, expected)
         trial = _recorded(context, trial.with_attempt(attempt), self.name, 0, messages, attempt.response_text)
         notify(context.observer, ATTEMPT, trial, self.name)
@@ -1159,7 +1191,10 @@ class SummarizeContextStage:
         context = self.context
         pack = context.packs[context.direction.target]
         prompt = fragment_text.summary_request(context.fragments, context.direction, pack)
-        messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        try:
+            messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        except ContextExceeded as error:
+            return _context_end(trial, self.name, error)
         return _context_reply(context, trial, self.name, "knowledge_summary", messages, reply)
 
     def describe(self) -> str:
@@ -1192,7 +1227,10 @@ class DescribeSourceStage:
         """
         context = self.context
         prompt = fragment_text.description_request(context.fragments, source_as_read(context))
-        messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        try:
+            messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        except ContextExceeded as error:
+            return _context_end(trial, self.name, error)
         return _context_reply(context, trial, self.name, "source_description", messages, reply)
 
     def describe(self) -> str:
@@ -1241,7 +1279,10 @@ class CompileLoopStage:
             if cap is not None and len(trial.attempts) - 1 >= cap:
                 message = f"an error remained after {cap} correction(s), the cap loop.max_corrections sets"
                 return _ended(trial, CORRECTION_CAP, message)
-            trial, stderr = self._build_last(self._correction(trial, expected, stderr))
+            corrected = self._correction(trial, expected, stderr)
+            if corrected.final.end_reason is not None:
+                return corrected
+            trial, stderr = self._build_last(corrected)
         return trial
 
     def describe(self) -> str:
@@ -1443,7 +1484,10 @@ class RunLoopStage:
                 message = f"a run error remained after {cap} correction(s), the cap loop.max_corrections sets"
                 return _ended(trial, CORRECTION_CAP, message)
             errors = run_error_text(run, limits, context.fragments, simulator=simulator)
-            trial = compile_loop(_corrected(context, trial, self.name, target_files(context), errors, run_error=True))
+            corrected = _corrected(context, trial, self.name, target_files(context), errors, run_error=True)
+            if corrected.final.end_reason is not None:
+                return corrected
+            trial = compile_loop(corrected)
         return trial
 
     def describe(self) -> str:
@@ -1667,13 +1711,18 @@ def _corrected(
     _correction_messages. With fixes.prompt_newlines off every line feed is
     removed from it before it is stored and sent. The reply is read as
     generate reads attempt 0 (_reply_attempt), and the attempt keeps its diff
-    from the last attempt's files.
+    from the last attempt's files. A request the backend refuses as past its
+    context (ContextExceeded) ends the trial at CONTEXT_EXCEEDED instead, with
+    no attempt appended (_context_end).
     """
     previous = trial.attempts[-1]
     system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error)
     if not fix_on(context, "prompt_newlines"):
         prompt = prompt.replace("\n", "")
-    messages, reply = _send(context, trial, stage, prompt, system)
+    try:
+        messages, reply = _send(context, trial, stage, prompt, system)
+    except ContextExceeded as error:
+        return _context_end(trial, stage, error)
     attempt = _reply_attempt(context, previous.index + 1, messages[-1].ref, reply, expected)
     attempt = dataclasses.replace(attempt, diff_from_previous=unified_diff(previous.files, attempt.files))
     trial = _recorded(context, trial.with_attempt(attempt), stage, attempt.index, messages, attempt.response_text)

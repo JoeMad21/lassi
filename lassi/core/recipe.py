@@ -54,6 +54,10 @@ UNCAPPED = "uncapped"
 
 # The text of model.api_key_env: a variable name (task P17.3), stricter than a backend's own check for direct callers.
 _ENV_NAME_TEXT = re.compile(r"[A-Z_][A-Z0-9_]{0,63}")
+# The text of model.revision: a full commit id, the only pin (Agent Rule 10; task P17.4). A branch or tag is not one.
+_REVISION_TEXT = re.compile(r"[0-9a-f]{40}")
+# model.seed's bound: the seed of call k is seed + k (bible Serving Rules), far inside torch.manual_seed's range.
+_SEED_LIMIT = 2**32
 
 # Every named fix toggle and what turning it on changes. Fixes default to on; faithful: true turns them all off.
 FIXES: dict[str, str] = {
@@ -380,6 +384,16 @@ def _is_env_name(value: Any) -> bool:
     return isinstance(value, str) and _ENV_NAME_TEXT.fullmatch(value) is not None
 
 
+def _is_revision(value: Any) -> bool:
+    """Return True for a full commit id: 40 lowercase hexadecimal characters."""
+    return isinstance(value, str) and _REVISION_TEXT.fullmatch(value) is not None
+
+
+def _is_seed(value: Any) -> bool:
+    """Return True for an int that is not a bool, from 0 to 2**32 - 1."""
+    return _is_int(value) and 0 <= value < _SEED_LIMIT
+
+
 def _is_corrections(value: Any) -> bool:
     """Return True for a correction cap: an int of at least 0, or UNCAPPED."""
     if isinstance(value, str):
@@ -403,6 +417,9 @@ _ENV_NAME = _Leaf(
     _is_env_name,
     shown=False,
 )
+# model.revision and model.seed: an in-process model's pin and sampling seed (task P17.4).
+_REVISION = _Leaf("a full commit id: 40 lowercase hexadecimal characters", _is_revision)
+_SEED = _Leaf(f"an integer from 0 to {_SEED_LIMIT - 1}", _is_seed)
 _STRINGS = _ListOf(_STR)
 _KIND = _KindSection()
 _EXECUTOR = _ExecutorSection()
@@ -435,7 +452,8 @@ SCHEMA = _Fields(
         "oracle": _KIND,
         "profiler": _KIND,
         "adversary": _KIND,
-        # device: a device section (P17.2); base_url, timeout_s, api_key_env: a served backend's settings (P17.3)
+        # device: a device section (P17.2); base_url, timeout_s, api_key_env: a served backend's settings (P17.3);
+        # revision, seed: an in-process model's settings (P17.4)
         "model": _Fields(
             {
                 "backend": _STR,
@@ -444,6 +462,8 @@ SCHEMA = _Fields(
                 "base_url": _STR,
                 "timeout_s": _POSITIVE,
                 "api_key_env": _ENV_NAME,
+                "revision": _REVISION,
+                "seed": _SEED,
             }
         ),
         "arms": _STRINGS,
@@ -983,8 +1003,9 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
     executor_languages order, at executor.<language> for a name and
     executor.<language>.kind for a kind section. The LLMBackend's config holds
     every key of the model section but backend and id: its device section,
-    when it has one, under `device`, and any server setting (base_url,
-    timeout_s, api_key_env; task P17.3).
+    when it has one, under `device`, any server setting (base_url,
+    timeout_s, api_key_env; task P17.3), and any in-process model setting
+    (revision, seed; task P17.4).
     """
     found: list[Binding] = []
 

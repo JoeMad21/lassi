@@ -50,8 +50,18 @@ RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # sim-gap (task P4.6) means a run stopped at a simulator gap (RunResult.sim_gap), a program the simulator cannot run:
 # a reference run's gap ends the trial before any model call, and an attempt run's gap ends it right after that
 # attempt, unless the same run reported a kernel JIT error, which is corrected first (lassi.core.stages run_stage).
+# context-exceeded (task P17.4) means the backend refused a model request whose prompt tokens plus max_tokens pass
+# the model's context (lassi.core.interfaces ContextExceeded); nothing was truncated, and every earlier attempt stays.
 # Every code is spelled with hyphens; RunResult.sim_gap is a field, not a code.
-END_REASONS = ("baseline-compile", "baseline-run", "baseline-disagree", "correction-cap", "upstream-crash", "sim-gap")
+END_REASONS = (
+    "baseline-compile",
+    "baseline-run",
+    "baseline-disagree",
+    "correction-cap",
+    "upstream-crash",
+    "sim-gap",
+    "context-exceeded",
+)
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")

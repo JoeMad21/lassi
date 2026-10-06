@@ -71,11 +71,13 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    the kind, a framework build that cannot reach it, a probe's refusal, or
    an index past the host's count), naming the key; no run falls back to
    another device. A framework() result that is neither a FrameworkBuild
-   nor None is refused too.
+   nor None is refused too, and so is any error framework() raises (a
+   framework extra that is not installed among them), naming the key.
    A stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id, **config), whose
    config holds the model section's keys other than backend and id (its
-   device section and server settings such as model.base_url), a setting
+   device section, server settings such as model.base_url, and an
+   in-process model's model.revision and model.seed), a setting
    the backend refuses being a RunError; then, for a backend that declares
    `model_check` (lassi.core.capabilities MODEL_CHECK), it reads the serving
    record with serving(), so a model the server does not list, a server
@@ -633,12 +635,20 @@ def _framework(recipe: Recipe, binding: Binding, entry: Entry) -> FrameworkBuild
 
     framework() is called on the class, before anything is built, and reads
     build metadata only. A result that is neither a FrameworkBuild nor None
-    is a RunError naming the component.
+    is a RunError naming the component, and so is any error it raises (a
+    framework that is not installed, or a framework() the class cannot
+    call), naming the device key too.
     """
     method = getattr(entry.factory, "framework", None)
     if not callable(method):
         return None
-    build = method()
+    try:
+        build = method()
+    except Exception as error:
+        raise RunError(
+            f"{recipe.path}: {device_path(binding)}: {entry.interface} {entry.name!r} ({binding.where}) could not "
+            f"report its framework build: {type(error).__name__}: {error}"
+        ) from None
     if build is not None and not isinstance(build, FrameworkBuild):
         raise RunError(
             f"{recipe.path}: {entry.interface} {entry.name!r} ({binding.where}) framework() returned {build!r}; "
@@ -655,9 +665,10 @@ def _backend_config(recipe: Recipe) -> Mapping[str, Any]:
 def _backend(recipe: Recipe, registry: Registry, settings: _Settings) -> Any:
     """Build the backend as factory(model.id, **config); a setting it refuses (ValueError) is a RunError.
 
-    The backends' ValueError messages name the setting and never quote its
-    value (lassi.llm._http.checked_base_url), so the RunError quotes them.
-    Construction sends no request.
+    The HTTP backends' ValueError messages name the setting and never quote its
+    value (lassi.llm._http.checked_base_url), and hf_local's quote only a
+    model.id, model.revision, model.seed, or model.device value, none a
+    secret, so the RunError quotes them. Construction sends no request.
     """
     factory = registry.get("LLMBackend", settings.backend).factory
     try:
@@ -676,6 +687,8 @@ def _served_model(recipe: Recipe, settings: _Settings, backend: Any) -> Mapping[
     hold the key) quotes no key and no base_url value. The record is rendered
     as provenance.json writes it once here, so one that JSON cannot hold
     (NaN) is refused before any directory too (plans/LESSONS.md, Audits).
+    The message names model.base_url only for a backend that takes it, so an
+    in-process backend's failed load (task P17.4) names model.id alone.
     """
     if not declares(backend, MODEL_CHECK):
         return None
@@ -683,9 +696,9 @@ def _served_model(recipe: Recipe, settings: _Settings, backend: Any) -> Mapping[
         record = backend.serving()
         json_text(record)
     except (ServingError, ValueError) as error:
+        where = " at model.base_url" if "base_url" in getattr(backend, "config_keys", ()) else ""
         raise RunError(
-            f"{recipe.path}: model.id: LLMBackend {settings.backend!r} could not confirm its model at "
-            f"model.base_url: {error}"
+            f"{recipe.path}: model.id: LLMBackend {settings.backend!r} could not confirm its model{where}: {error}"
         ) from None
     return record
 

@@ -8,7 +8,9 @@ the entry's owned_by names (VERSION_ENDPOINTS), at the server root (base_url
 without a final /v1 segment); version_from is null when no request was sent
 and set when one was, so a null version beside it means asked, not reported.
 A record that would hold the API key, as sent or escaped, is refused (Agent
-Rule 12). serving_line gives run.md's one-line Server summary.
+Rule 12). serving_line gives run.md's one-line Server summary, of a served
+record or of an in-process model's (lassi.llm.hf_local, task P17.4), which
+has no base_url.
 """
 
 from __future__ import annotations
@@ -99,12 +101,35 @@ def serving_line(record: Mapping[str, Any]) -> str:
     has, then meta.n_ctx when the entry's meta holds it. A missing or null
     value shows as "-", any other as str(value); for example "owned_by vllm;
     version 0.31.0; max_model_len 32768". The labels keep an owned_by that
-    is a model namespace (Ollama's) from reading as a server name.
+    is a model namespace (Ollama's) from reading as a server name. A record
+    without base_url is an in-process model's (_in_process_line).
     """
+    if "base_url" not in record:
+        return _in_process_line(record)
     model = record["model"]
     pairs = [("owned_by", model.get("owned_by")), ("version", record.get("version"))]
     pairs += [(name, model[name]) for name in CONTEXT_FIELDS if name in model]
     meta = model.get("meta")
     if isinstance(meta, Mapping) and "n_ctx" in meta:
         pairs.append(("meta.n_ctx", meta["n_ctx"]))
+    return "; ".join(f"{label} {'-' if value is None else value}" for label, value in pairs)
+
+
+def _in_process_line(record: Mapping[str, Any]) -> str:
+    """Return run.md's Server text for an in-process model's record (no base_url): labeled pairs joined by "; ".
+
+    For example "transformers 5.18.0; torch 2.14.1+cpu; revision <first 12
+    characters>; max_position_embeddings 32768; device cpu; seed 7"; a
+    missing or null value shows as "-".
+    """
+    versions = record.get("versions") or {}
+    revision = record.get("revision")
+    pairs = [
+        ("transformers", versions.get("transformers")),
+        ("torch", versions.get("torch")),
+        ("revision", None if revision is None else str(revision)[:12]),
+        ("max_position_embeddings", record.get("max_position_embeddings")),
+        ("device", record.get("device")),
+        ("seed", record.get("seed")),
+    ]
     return "; ".join(f"{label} {'-' if value is None else value}" for label, value in pairs)

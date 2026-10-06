@@ -10,6 +10,8 @@ registry name. Contract rules (bible, Component Interfaces):
   when they report any (RunResult); each names the device its programs run
   on (device()).
 - Oracles never trust a program's self-reported PASS as the only signal.
+- LLM backends never truncate a request: one that knows its model's context
+  raises ContextExceeded, defined here, before generating (task P17.4).
 - Stages are pure over the trial record: read fields, append an attempt or
   annotation, return. Side effects go through components.
 - Every component declares its capabilities (see `capabilities.Component`).
@@ -143,11 +145,36 @@ class Score:
     notes: Mapping[str, str] = field(default_factory=dict)
 
 
+class ContextExceeded(Exception):
+    """A model request whose prompt tokens plus max_tokens pass the model's context; nothing was truncated.
+
+    An LLMBackend raises it before generating anything (task P17.4), and
+    the stages end the trial at the end reason context-exceeded instead of
+    failing the run. It keeps prompt_tokens, max_tokens, and context. It is
+    neither a ValueError nor a ServingError, so no handler written for those
+    catches it by accident.
+    """
+
+    def __init__(self, prompt_tokens: int, max_tokens: int, context: int) -> None:
+        """Keep the three numbers; the message names them."""
+        super().__init__(
+            f"the prompt holds {prompt_tokens} tokens and max_tokens asks for {max_tokens} more, past the model's "
+            f"context of {context} tokens; nothing was truncated"
+        )
+        self.prompt_tokens = prompt_tokens
+        self.max_tokens = max_tokens
+        self.context = context
+
+
 class LLMBackend(Component, Protocol):
     """Serves a model: messages plus sampling in, text plus token counts out."""
 
     def complete(self, messages: Sequence[Message], sampling: Sampling) -> Completion:
-        """Return the model's completion for `messages` under `sampling`."""
+        """Return the model's completion for `messages` under `sampling`.
+
+        A request past the model's context is never truncated: a backend that
+        knows its context raises ContextExceeded before generating.
+        """
         ...
 
 

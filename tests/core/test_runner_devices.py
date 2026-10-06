@@ -21,7 +21,8 @@ The contract these tests fix:
   at or past the host's count. Nothing falls back to the CPU: the cpu probe
   is never asked in place of another kind.
 - A framework() that returns neither a FrameworkBuild nor None is a RunError
-  naming the binding.
+  naming the binding. So is any error framework() raises, or a framework()
+  the runner cannot call on the class, naming the device key (task P17.4).
 - A component that takes a device is built with its section as given, a
   mapping: the backend as factory(model_id, device=<mapping>) and an executor
   as factory(**config).
@@ -571,6 +572,54 @@ def test_a_framework_of_none_is_no_framework(tmp_path: Path, bench: Path) -> Non
     run_dir = run(tmp_path, bench, registry, recipe_data(ROCM_0), fake_probes(log), "no-framework")
     (written,) = manifest(run_dir)["device_records"]
     assert (written["framework"], written["framework_version"], written["runtime"]) == (None, None, ROCM_RUNTIME)
+
+
+# A failing framework()'s SYNTHETIC message (task P17.4: hf_local's raises FrameworkMissing without the extra).
+FRAMEWORK_FAILURE = "SYNTHETIC: the framework build could not be read"
+
+
+def raise_framework_failure() -> Any:
+    """Raise the SYNTHETIC RuntimeError of a framework() that fails."""
+    raise RuntimeError(FRAMEWORK_FAILURE)
+
+
+class InstanceFramework:
+    """An LLMBackend "devllm" that takes a device but defines framework() as an instance method; never built."""
+
+    name = "devllm"
+    capabilities = frozenset({"chat", TAKES_DEVICE})
+
+    def __init__(self, model_id: str, *, device: Mapping[str, Any]) -> None:
+        """Fail the test: the run is refused before any component is built."""
+        raise AssertionError("the backend was built although the runner could not call its framework()")
+
+    def framework(self) -> Any:
+        """Return no framework; the runner calls framework() on the class, where this needs an instance."""
+        return None
+
+    def complete(self, messages: Sequence[Message], sampling: Sampling) -> Completion:
+        """Fail the test: no request is sent."""
+        raise AssertionError("a request was sent")
+
+
+def test_a_framework_that_raises_is_a_run_error_naming_the_key(tmp_path: Path, bench: Path) -> None:
+    # Any error framework() raises, a missing framework's among them, is a RunError naming the device key, before
+    # any component is built or any directory exists (PHASE-NOTES P17, P17.2's note for P17.4).
+    log = Log()
+    probes = fake_probes(log)
+    message = refused(tmp_path, bench, make_registry(log, framework=raise_framework_failure), recipe_data(CPU), probes)
+    assert "model.device" in message and "devllm" in message and FRAMEWORK_FAILURE in message, message
+    assert log.builds() == [] and probes["cpu"].calls == 0
+    log = Log()
+    registry = Registry()
+    registry.register("LLMBackend", "devllm", InstanceFramework)
+    registry.register("Executor", "none", compile_only_executor(log, takes_device=False))
+    registry.register("Toolchain", "nvcc-sm80", fake_toolchain(log))
+    registry.register("Stage", "generate", GenerateStage)
+    registry.register("Stage", "compile_loop", CompileLoopStage)
+    message = refused(tmp_path, bench, registry, recipe_data(CPU), fake_probes(log))
+    assert "model.device" in message and "devllm" in message, message
+    assert log.builds() == []
 
 
 # ---------------------------------------------------------------------------
