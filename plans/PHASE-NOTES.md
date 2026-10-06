@@ -166,11 +166,12 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - Owner review first: with P17 next after P4, the review the P5 notes schedule for "the next phase's planning" (OQ-027 to OQ-033, OQ-036, OQ-037, OQ-038, OQ-039, OQ-041, and OQ-042) happens at P17's planning, before P17.1. It also takes two choices the draft plan makes: the Trainer Protocol as a thirteenth interface (P17.8; Component Interfaces names twelve, and Agent Rule 3 puts new behavior behind an existing interface), and whether P17.1's AMD probe and P17.6 go ahead under OQ-039 (a) while the bible records OQ-002's answer as "no agent action on AMD for now".
 - Seams that do not exist yet (at d35b0a4):
   - hf_local: done in P17.4 (bible Model Serving, Serving Rules).
-  - lassi/profilers/, lassi/train/, and a Trainer Protocol. The Profiler Protocol is at lassi/core/interfaces.py:227-236, and the twelve interface names are at lassi/core/registry.py:37-48.
+  - lassi/profilers/; the Profiler Protocol is at lassi/core/interfaces.py:227-236.
+  - lassi/train/ and the Trainer Protocol: done in P17.8 (bible Component Interfaces, Trainer; Project Recipes, Notes, train recipes).
   - Profiler binding: the runner refuses the `profiler` key (lassi/core/runner.py:270, _NOT_CARRIED_OUT), although Attempt.profile exists (lassi/core/record.py:344-354, 441).
-  - Recipe HTTP settings: done in P17.3 (model.base_url, model.timeout_s, model.api_key_env; bible Project Recipes, Notes). A YAML syntax error in a recipe quotes the offending line in the loader's message (lassi/core/recipe.py, the yaml error path), which could show a mistyped api_key_env value: drop the snippet for that key when the loader is next touched (P17.3 commit audit).
+  - Recipe HTTP settings: done in P17.3 (model.base_url, model.timeout_s, model.api_key_env; bible Project Recipes, Notes). A YAML syntax error in a recipe quotes the offending line in the loader's message (lassi/core/recipe.py, the yaml error path), which could show a mistyped api_key_env value: drop the snippet for that key in task P17.11, whose gate recipes are the next recipe-loader work, or earlier if a task changes the loader's error path (P17.3 commit audit).
   - A driver version in provenance: `driver` stays null (lassi/core/runner.py:1789).
-- Registration rule (PHASE-NOTES P0): lassi.llm is imported eagerly so that every backend registers. hf_local's module must therefore import without torch, load the framework only when it is built, and refuse with a message naming the extra when the extra is missing. Done for hf_local in P17.4 (bible Serving Rules; tests/llm/test_package.py checks the imports). The same holds for lassi/train and the profilers' vendor libraries.
+- Registration rule (PHASE-NOTES P0): lassi.llm is imported eagerly so that every backend registers. hf_local's module must therefore import without torch, load the framework only when it is built, and refuse with a message naming the extra when the extra is missing. Done for hf_local in P17.4 (bible Serving Rules; tests/llm/test_package.py checks the imports). The same holds for lassi/train and the profilers' vendor libraries; lassi/train follows it since P17.8 (tests/train/test_train_package.py checks the imports).
 - The sandbox hides GPUs today (lassi/executors/sandbox.py at d35b0a4):
   - The private /dev binds only null, zero, full, random, urandom, and tty (lines 626-640).
   - /sys/class, /sys/bus, and most of /sys/devices are covered (lines 82-83).
@@ -244,3 +245,17 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - Bound a run's GPU memory, which the cgroup limits do not cover, or record why a run needs no bound.
   - Bind /dev/udmabuf (HSA_USE_UDMABUF), nvidia-modeset, or the MIG nvidia-caps nodes only when a measured need appears.
   - device(): memory per GPU (KFD mem_banks, the NVIDIA information file) once P17.12 confirms the files.
+- P17.8's train layer (bible Component Interfaces, Trainer; Project Recipes, Notes, train recipes). Points later tasks act on:
+  - P17.9: give the Trainer a train-only view of the suite in TrainData (eval and unassigned names refused with EvalSplitError) instead of the whole Suite, so Agent Rule 5 does not rest on each backend reading through bench_item (P17.8 commit audit).
+  - P17.9: register the Trainer with methods, weight_modes, data_sources, packages, and framework(), and remove each key it carries out from lassi.train.run NOT_CARRIED_OUT, with the test that pins the tuple.
+  - P17.11: the smoke recipes name data.synthetic files under tests/fixtures/train/ and a trainer section with device {kind: cpu}.
+  Candidates not built:
+  - A base model pin: a train key such as revision (40 hex, as model.revision), required by a trainer that loads from the Hub (Agent Rule 10); P17.9 decides with its tiny config-built model.
+  - A training seed key, recorded in provenance.
+  - A progress hook for training (a TrainJob observer, like RunOptions.observer), for P7's training table.
+  - A helper that copies the resolved recipe, device record, pins, and split hash into each checkpoint directory, if P17.9 and later backends would otherwise repeat it.
+  - One hub-offline helper shared by hf_local and lassi/train, not a second copy (P17.9).
+  - P7 and P8: bench items as training examples, read through TrainData.bench_item, with directions and a bench root option. The RL loader's alignment_missing exclusion and df-v0's null rewards (P7 notes) belong to that data, not to this layer.
+  - A train.md beside provenance.json (Readability Standards), when P7 trains.
+  - Lock a GPU across processes for lassi train, with P17.5's lock candidate.
+  - Episode semantics: whether grpo without episode means single_turn (the bible's default) or a required choice.

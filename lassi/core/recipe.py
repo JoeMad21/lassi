@@ -31,6 +31,14 @@ and any other child entry replaces it.
 The canonical YAML, with a two-line header, is the resolved recipe every run saves
 and can be rerun from (Design Principle 5). It always holds `project`, the first
 trial id segment, so a rerun from it writes the same trial ids.
+
+Train recipes (task P17.8; bible Project Recipes, Notes, train recipes) load with
+load_train_recipe: steps 1 to 4, 7, 8, and 9 as above, against TRAIN_SCHEMA, with no
+default materialized and no faithful override, so each file of the chain must be a train
+recipe. A train recipe binds one Trainer at trainer.kind, whose section holds its device
+and config keys; it names exactly one data source, bench or data.synthetic; bench.split
+must be train (Agent Rule 5); and its method, weights, and data source must be among the
+names its Trainer declares (methods, weight_modes, data_sources), read without building it.
 """
 
 from __future__ import annotations
@@ -45,6 +53,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 import yaml
 
+from lassi.bench.registry import FORBIDDEN_PURPOSES, HELD_SPLITS
 from lassi.core.capabilities import DEVICE_KEY, TAKES_DEVICE
 from lassi.core.devices import DeviceSectionError, parse_device
 from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry, RegistryError, check_bindings, device_path
@@ -425,7 +434,8 @@ _KIND = _KindSection()
 _EXECUTOR = _ExecutorSection()
 
 # Every key a run recipe may hold and its type. Inside a fixed mapping every key is optional unless REQUIRED
-# names it, and any other key is unknown. Train recipes are not run recipes; their keys are unknown here.
+# names it, and any other key is unknown. A train-only key (TRAIN_SCHEMA's base_model, method, trainer, data, and
+# the rest) is unknown here; bench, adversary, runs_root, and extends are in both schemas.
 # Entries of lists and open maps state every key they need: a direction both ends, an agent its model, and a judge
 # its model, rubric, and use (an agent's enabled and a judge's mode are optional).
 SCHEMA = _Fields(
@@ -510,6 +520,62 @@ _KIND_SECTIONS: tuple[tuple[str, str], ...] = (
     ("adversary", "Agent"),
 )
 
+# The train recipe's names (bible Training Module, Algorithms and Weight Modes; the train.yaml block's comments),
+# and its two data sources: synthetic fixtures (data.synthetic) and bench items (bench).
+METHODS: tuple[str, ...] = ("sft", "rft", "dpo", "grpo", "gspo", "ppo", "adversarial")
+WEIGHT_MODES: tuple[str, ...] = ("full", "lora", "qlora", "dora")
+EPISODES: tuple[str, ...] = ("single_turn", "multi_turn")
+DATA_SOURCES: tuple[str, ...] = ("synthetic", "bench")
+# The one split a train recipe may read (Agent Rule 5).
+TRAIN_SPLIT = "train"
+# A synthetic fixture's file name: one plain name ending in .jsonl, read from the fixture directory.
+_SYNTHETIC_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.jsonl")
+# The Trainer's declarations the loader reads: the recipe key whose value must be among them, the attribute, and
+# what the value is called in a refusal.
+_DECLARATIONS = (("method", "methods", "method"), ("weights", "weight_modes", "weight mode"))
+
+
+def _one_of(names: Sequence[str]) -> _Leaf:
+    """Return a leaf that accepts exactly one of `names` as written."""
+    return _Leaf(f"one of {', '.join(names)}", lambda value: isinstance(value, str) and value in names)
+
+
+def _is_synthetic_name(value: Any) -> bool:
+    """Return True for a fixture file name: one plain name ending in .jsonl."""
+    return isinstance(value, str) and _SYNTHETIC_TEXT.fullmatch(value) is not None
+
+
+# Every key a train recipe may hold: the bible's train.yaml block, plus extends, runs_root (where the train tree
+# goes), trainer (a kind section binding the Trainer, with its device and config keys), and data (the synthetic
+# fixture). A run-only key (llm, stages, model, and the rest) is unknown here, as a train-only key is in SCHEMA.
+TRAIN_SCHEMA = _Fields(
+    {
+        "extends": _STR,  # recipe files only; never kept in the resolved mapping
+        "runs_root": _STR,
+        "base_model": _STR,
+        "method": _one_of(METHODS),
+        "episode": _one_of(EPISODES),
+        "weights": _one_of(WEIGHT_MODES),
+        "lora": _Fields({"r": _AT_LEAST_ONE, "targets": _STR}),
+        "bench": _Fields(
+            {"suite": _STR, "split": _STR, "items": _ListOf(_STR, non_empty=True)},
+            required=frozenset({"suite", "split"}),
+        ),
+        "reward": _Fields({"profile": _STR, "executor": _STR, "cache": _BOOL}),
+        "rollout": _Fields({"engine": _STR, "group_size": _AT_LEAST_ONE}),
+        "adversary": _KIND,
+        "export": _Fields({"merge": _BOOL, "fxb": _STR, "register_as": _STR}),
+        "trainer": _KIND,
+        "data": _Fields(
+            {"synthetic": _Leaf("a fixture file name: one plain name ending in .jsonl", _is_synthetic_name)},
+            required=frozenset({"synthetic"}),
+        ),
+    }
+)
+
+# Choices every resolved train recipe must state with a value; the loader never picks one.
+TRAIN_REQUIRED: tuple[str, ...] = ("base_model", "method", "weights", "trainer.kind")
+
 
 def default_roots() -> tuple[Path, ...]:
     """Return the directories searched for a recipe named in `extends`: the repository's projects/ directory."""
@@ -552,6 +618,55 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     )
 
 
+def load_train_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Registry | None = None) -> Recipe:
+    """Load, resolve, and check the train recipe at `path`; construct no component and ask no framework.
+
+    Each file of the extends chain is read against TRAIN_SCHEMA and merged as
+    load_recipe merges; nothing is materialized. The checks, in order: types
+    and TRAIN_REQUIRED; one data source (_check_train_source); bench.split
+    (_check_train_split); the Trainer binding (check_bindings); the Trainer's
+    declarations (_check_trainer_declares); and its device section
+    (_check_devices). The hash is load_recipe's. `roots` and `registry`
+    default as for load_recipe. Every failure raises RecipeError.
+    """
+    path = Path(path)
+    search = tuple(Path(root) for root in (default_roots() if roots is None else roots))
+    chain = _load_chain(path, search, TRAIN_SCHEMA)
+    data = _fresh(_merged(chain))
+    try:
+        TRAIN_SCHEMA.check(data, "")
+        _check_required(data, TRAIN_REQUIRED)
+    except _SchemaError as exc:
+        raise RecipeError(f"{path}: {exc}") from None
+    _check_train_source(path, data)
+    _check_train_split(path, data)
+    trainer = data["trainer"]
+    config = {key: value for key, value in trainer.items() if key != "kind"}
+    bindings = [Binding(interface="Trainer", name=trainer["kind"], where="trainer.kind", config=_fresh(config))]
+    registry = DEFAULT_REGISTRY if registry is None else registry
+    try:
+        check_bindings(bindings, registry)
+    except RegistryError as exc:
+        raise RecipeError(f"{path}: {exc}") from exc
+    _check_trainer_declares(path, data, bindings[0], registry)
+    _check_devices(path, bindings, registry)
+    canonical = yaml.safe_dump(data, sort_keys=True, default_flow_style=False, allow_unicode=False, width=4096)
+    return Recipe(
+        name=_recipe_name(path),
+        path=path,
+        chain=tuple(_recipe_name(file) for file, _ in chain),
+        data=data,
+        canonical_yaml=canonical,
+        recipe_hash=hashlib.sha256(canonical.encode("ascii")).hexdigest(),
+        bindings=tuple(bindings),
+    )
+
+
+def train_data_source(data: Mapping[str, Any]) -> str:
+    """Return the data source of a loaded train recipe's mapping: "bench" or "synthetic" (DATA_SOURCES)."""
+    return "bench" if "bench" in data else "synthetic"
+
+
 def resolved_data(path: Path, *, roots: Sequence[Path] | None = None) -> dict[str, Any]:
     """Return the resolved mapping of the recipe at `path` (steps 1 to 6) without the type or binding checks.
 
@@ -591,8 +706,8 @@ def _recipe_name(path: Path) -> str:
 # Reading files and following extends (steps 1 to 3)
 
 
-def _load_chain(path: Path, roots: Sequence[Path]) -> list[tuple[Path, dict[str, Any]]]:
-    """Read `path` and every recipe it extends; return (file, own mapping) from the root ancestor down."""
+def _load_chain(path: Path, roots: Sequence[Path], schema: _Fields = SCHEMA) -> list[tuple[Path, dict[str, Any]]]:
+    """Read `path` and every recipe it extends against `schema`; return (file, own mapping) from the root down."""
     chain: list[tuple[Path, dict[str, Any]]] = []
     seen: set[str] = set()
     current: Path | None = path
@@ -605,15 +720,15 @@ def _load_chain(path: Path, roots: Sequence[Path]) -> list[tuple[Path, dict[str,
             names = " -> ".join([*(_recipe_name(file) for file, _ in chain), _recipe_name(current)])
             raise RecipeError(f"{chain[-1][0]}: extends makes a cycle: {names}")
         seen.add(identity)
-        data = _read_recipe_file(current)
+        data = _read_recipe_file(current, schema)
         chain.append((current, data))
         current = _parent_path(current, data, roots)
     chain.reverse()
     return chain
 
 
-def _read_recipe_file(path: Path) -> dict[str, Any]:
-    """Read one recipe file as UTF-8, parse it strictly, and refuse keys the schema does not list."""
+def _read_recipe_file(path: Path, schema: _Fields = SCHEMA) -> dict[str, Any]:
+    """Read one recipe file as UTF-8, parse it strictly, and refuse keys `schema` does not list."""
     try:
         text = path.read_bytes().decode("utf-8")
     except OSError as exc:
@@ -626,7 +741,7 @@ def _read_recipe_file(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise RecipeError(f"{path}: the top level must be a mapping of keys, not {_describe(data)}")
     try:
-        SCHEMA.keys(data, "")
+        schema.keys(data, "")
     except _SchemaError as exc:
         raise RecipeError(f"{path}: {exc}") from None
     return data
@@ -820,13 +935,18 @@ def _is_file_as_spelled(base: Path, relative: str) -> bool:
 
 def _resolve(chain: Sequence[tuple[Path, Mapping[str, Any]]]) -> dict[str, Any]:
     """Merge the chain from the root ancestor down, then materialize defaults and apply faithful (steps 4 to 6)."""
-    merged: dict[str, Any] = {}
-    for _, own in chain:
-        merged = _overlay(merged, {key: value for key, value in own.items() if key != "extends"})
-    data = _fresh(merged)
+    data = _fresh(_merged(chain))
     _materialize_defaults(data, _recipe_name(chain[-1][0]))
     _apply_faithful(data)
     return data
+
+
+def _merged(chain: Sequence[tuple[Path, Mapping[str, Any]]]) -> dict[str, Any]:
+    """Merge each file's own keys but extends over the chain so far, from the root ancestor down (step 4)."""
+    merged: dict[str, Any] = {}
+    for _, own in chain:
+        merged = _overlay(merged, {key: value for key, value in own.items() if key != "extends"})
+    return merged
 
 
 def _materialize_defaults(data: dict[str, Any], name: str) -> None:
@@ -868,11 +988,13 @@ def _overlay(merged: Mapping[str, Any], child: Mapping[str, Any]) -> dict[str, A
     section instead of merging with it: the old component's config keys do not
     apply to the new one (the bible's tier-1 compile-only executor, `{kind: none}`,
     in place of a GPU executor with a host). Restating the same kind merges as usual.
-    An executor section that switches between the single and the per-language
-    form replaces the inherited one too, and two per-language sections merge
-    entry by entry (_merge_executors).
+    A train recipe's trainer section follows the same rule (task P17.8); run
+    recipes never hold one. An executor section that switches between the
+    single and the per-language form replaces the inherited one too, and two
+    per-language sections merge entry by entry (_merge_executors).
     """
-    switched = {section for section, _ in _KIND_SECTIONS if _names_other_kind(merged.get(section), child.get(section))}
+    sections = [section for section, _ in _KIND_SECTIONS] + ["trainer"]
+    switched = {section for section in sections if _names_other_kind(merged.get(section), child.get(section))}
     inherited, own = merged.get("executor"), child.get("executor")
     forms = (_executor_form(inherited), _executor_form(own))
     if None not in forms and forms[0] != forms[1]:
@@ -930,13 +1052,13 @@ def _fresh(value: Any) -> Any:
     return value
 
 
-def _check_required(data: Mapping[str, Any]) -> None:
-    """Raise a required-choice problem for the first REQUIRED key the resolved mapping does not state.
+def _check_required(data: Mapping[str, Any], required: Sequence[str] = REQUIRED) -> None:
+    """Raise a required-choice problem for the first `required` key the resolved mapping does not state.
 
     executor.kind is required of the single form only: the per-language form
     names a kind in each entry, which the schema check already required.
     """
-    for dotted in REQUIRED:
+    for dotted in required:
         if dotted == "executor.kind" and executor_languages(data):
             continue
         value: Any = data
@@ -994,6 +1116,71 @@ def _check_devices(path: Path, bindings: Sequence[Binding], registry: Registry) 
             parse_device(binding.config[DEVICE_KEY], where)
         except DeviceSectionError as error:
             raise RecipeError(f"{path}: {error}") from None
+
+
+def _check_train_source(path: Path, data: Mapping[str, Any]) -> None:
+    """Refuse a train recipe that names both data sources, bench and data.synthetic, or neither."""
+    named = [key for key in ("bench", "data") if key in data]
+    if len(named) != 1:
+        found = "both" if named else "neither"
+        raise RecipeError(
+            f"{path}: a train recipe names exactly one data source, bench or data.synthetic; this one names {found}"
+        )
+
+
+def _check_train_split(path: Path, data: Mapping[str, Any]) -> None:
+    """Refuse a bench.split other than train; eval and unassigned with Agent Rule 5's words (lassi.bench.registry)."""
+    if "bench" not in data:
+        return
+    split = data["bench"]["split"]
+    if split in HELD_SPLITS:
+        raise RecipeError(
+            f"{path}: bench.split is {split!r}; the {split} split may never be used for "
+            f"{FORBIDDEN_PURPOSES['train']} (Agent Rule 5), so a train recipe reads only the split {TRAIN_SPLIT!r}"
+        )
+    if split != TRAIN_SPLIT:
+        raise RecipeError(f"{path}: bench.split is {split!r}; a train recipe reads only the split {TRAIN_SPLIT!r}")
+
+
+def _check_trainer_declares(path: Path, data: Mapping[str, Any], binding: Binding, registry: Registry) -> None:
+    """Refuse a Trainer without takes_device, a malformed declaration, or a recipe value it does not declare.
+
+    The Trainer must declare takes_device, since a train recipe names its
+    device with no default (bible Training Module, Compute). methods,
+    weight_modes, and data_sources must be collections of strings; the
+    recipe's method, weights, and data source must be among them. Each
+    refusal names the Trainer, and the key or the attribute. Runs after
+    check_bindings, so the Trainer is registered; nothing is built.
+    """
+    entry = registry.get(binding.interface, binding.name)
+    who = f"{entry.interface} {entry.name!r} ({binding.where})"
+    if TAKES_DEVICE not in entry.capabilities:
+        raise RecipeError(
+            f"{path}: {who} does not declare {TAKES_DEVICE!r}; a train recipe names its device at trainer.device "
+            "with no default, so its Trainer must take one"
+        )
+    source = train_data_source(data)
+    checks = [(key, data[key], attribute, noun) for key, attribute, noun in _DECLARATIONS]
+    checks.append(("bench" if source == "bench" else "data.synthetic", source, "data_sources", "data source"))
+    for key, value, attribute, noun in checks:
+        declared = _declared_names(path, who, entry.factory, attribute)
+        if value not in declared:
+            carried = ", ".join(sorted(declared)) or "nothing"
+            raise RecipeError(
+                f"{path}: {key}: {who} does not carry out the {noun} {value!r}; it carries out: {carried}"
+            )
+
+
+def _declared_names(path: Path, who: str, factory: type, attribute: str) -> frozenset[str]:
+    """Return a Trainer class's declared `attribute` as a frozenset; refuse one that is not a collection of strings."""
+    value = getattr(factory, attribute, None)
+    is_collection = isinstance(value, (list, tuple, set, frozenset))
+    if not is_collection or not all(isinstance(item, str) for item in value):
+        raise RecipeError(
+            f"{path}: {who} declares {attribute} as {value!r}; it must be a collection of strings, the names it "
+            "carries out"
+        )
+    return frozenset(value)
 
 
 def _bindings(data: Mapping[str, Any]) -> list[Binding]:

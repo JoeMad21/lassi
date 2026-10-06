@@ -1,4 +1,4 @@
-"""The twelve component interfaces that carry every project difference.
+"""The thirteen component interfaces that carry every project difference.
 
 Each interface is a Protocol; recipes bind concrete components to them by
 registry name. Contract rules (bible, Component Interfaces):
@@ -14,22 +14,29 @@ registry name. Contract rules (bible, Component Interfaces):
   raises ContextExceeded, defined here, before generating (task P17.4).
 - Stages are pure over the trial record: read fields, append an attempt or
   annotation, return. Side effects go through components.
+- A Trainer writes only under the output directory it is given and reads a
+  bench item only through TrainData.bench_item, which asks the bench
+  registry for purpose train (Agent Rule 5; task P17.8).
 - Every component declares its capabilities (see `capabilities.Component`).
 
-Trial, Attempt, and Diagnostic are the Result Record types in
-`lassi.core.record`; they are referenced here by name only.
+Trial, Attempt, Diagnostic, and DeviceRecord are Result Record types in
+`lassi.core.record`, FrameworkBuild is in `lassi.core.devices`, and Suite
+and SuiteItem are in `lassi.bench.registry`; they are referenced here by
+name only.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Mapping, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Protocol, Sequence
 
 from lassi.core.capabilities import Component
 
 if TYPE_CHECKING:
-    from lassi.core.record import Attempt, Diagnostic, Trial
+    from lassi.bench.registry import Suite, SuiteItem
+    from lassi.core.devices import FrameworkBuild
+    from lassi.core.record import Attempt, DeviceRecord, Diagnostic, Trial
 
 
 @dataclass(frozen=True)
@@ -309,4 +316,93 @@ class Stage(Component, Protocol):
 
     def describe(self) -> str:
         """Return a one-line description of the stage for run.md."""
+        ...
+
+
+@dataclass(frozen=True)
+class TrainData:
+    """The data a Trainer trains on, with its data split hash (task P17.8; lassi.train.data).
+
+    `source` is "synthetic" or "bench". `split_hash` is the sha256 the train
+    layer took over the data's identity. `records` holds the synthetic
+    records in file order (() for bench). `suite` and `items` hold the bench
+    suite and the names of the selected items, each of which already passed
+    Suite.item for purpose train (None and () for synthetic data). A Trainer
+    reads a bench item only through bench_item (Agent Rule 5); that is its
+    contract, since `suite` itself answers any purpose.
+    """
+
+    source: str
+    split_hash: str
+    records: tuple[Mapping[str, Any], ...]
+    suite: Suite | None
+    items: tuple[str, ...]
+
+    def bench_item(self, name: str) -> SuiteItem:
+        """Return bench item `name` through Suite.item for purpose train.
+
+        An eval or unassigned item raises EvalSplitError (Agent Rule 5); a
+        train item outside `items`, which the split hash does not cover, and
+        synthetic data, which has no suite, raise ValueError.
+        """
+        if self.suite is None:
+            raise ValueError(f"the train data is {self.source}, not bench, so it has no bench item {name!r}")
+        found = self.suite.item(name, purpose="train")
+        if name not in self.items:
+            raise ValueError(f"bench item {name!r} is not among the selected items {list(self.items)}")
+        return found
+
+
+@dataclass(frozen=True)
+class TrainJob:
+    """What a Trainer is given (task P17.8).
+
+    `recipe` is the resolved train recipe (treat it as read-only) and
+    `recipe_yaml` the text of recipe.resolved.yaml; `data` the TrainData;
+    `device` the DeviceRecord of trainer.device as probed; `provenance` the
+    train directory's provenance.json as first written; and `out_dir` the
+    train directory's output/, created empty, the only place the Trainer
+    writes.
+    """
+
+    recipe: Mapping[str, Any]
+    recipe_yaml: str
+    data: TrainData
+    device: DeviceRecord
+    provenance: Mapping[str, Any]
+    out_dir: Path
+
+
+@dataclass(frozen=True)
+class TrainResult:
+    """What a Trainer returns: the steps it ran and its checkpoint directories.
+
+    `checkpoints` are paths relative to the job's out_dir with "/"
+    separators, each an existing directory strictly inside it.
+    """
+
+    steps: int
+    checkpoints: tuple[str, ...]
+
+
+class Trainer(Component, Protocol):
+    """Trains a model from a train recipe on one device and writes its checkpoints (bible Training Module).
+
+    Declared class attributes, read by the loader and the train layer without
+    building anything: `methods`, `weight_modes`, and `data_sources`,
+    collections of the names it carries out (the Training Module's methods
+    and weight modes; synthetic and bench), and `packages`, the distribution
+    names whose installed versions are recorded as its framework pins. It
+    declares the capability takes_device and is built as factory(**config)
+    from its trainer section, device included; building it writes nothing
+    and loads no model.
+    """
+
+    @staticmethod
+    def framework() -> FrameworkBuild:
+        """Return the framework build it trains on, read from build metadata only; called on the class."""
+        ...
+
+    def train(self, job: TrainJob) -> TrainResult:
+        """Run the steps, writing every output under job.out_dir only; return the steps run and the checkpoints."""
         ...

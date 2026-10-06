@@ -104,7 +104,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.5 | DONE | gpu executor and the sandbox's device access | P17.2 | change bf98a81; alpha01 remote tests 48 passed (stand-in nodes visible only when listed; no GPU node opened), rx 20261006-082332-desktop-8r113ei-detached-bf98a813-c6b6, clean; results/p17-gpu-sandbox |
 | P17.6 | READY | hipcc toolchain, compile-only on alpha01 | P17.1 | AMD work with no GPU device allowed (OQ-043 entry 15); BLOCKED on OQ-040 if hipcc needs a GPU |
 | P17.7 | READY | Profilers: timing, nvml, rocm_smi | P17.2,P17.5 |  |
-| P17.8 | ACTIVE | Trainer interface and the train recipe | P17.2 | Trainer Protocol confirmed (OQ-043 entry 14) |
+| P17.8 | DONE | Trainer interface and the train recipe | P17.2 | Trainer Protocol, the thirteenth interface; train recipes (load_train_recipe, TRAIN_SCHEMA in lassi/core/recipe.py) and lassi train with a train tree under the runs root; refusals before any directory; also public runner helpers, tests/fixtures/train/layer-smoke.jsonl, tests/replay/notebook_replay.py |
 | P17.9 | READY | TRL backend: sft, dpo, and grpo on PyTorch | P17.1,P17.8 |  |
 | P17.10 | READY | CI on the CPU | P17.4,P17.9 |  |
 | P17.14 | READY | Guard not-run reasons and not-checked rates | - | owner's OQ-028 conditions (2026-10-05) |

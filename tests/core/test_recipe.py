@@ -685,9 +685,11 @@ def test_bible_recipe_blocks_are_found() -> None:
     assert list(bible_recipe_blocks()) == list(BIBLE_BLOCK_KEYS)
 
 
-def test_bible_names_twelve_interfaces() -> None:
+def test_bible_names_thirteen_interfaces() -> None:
+    # Task P17.8 adds Trainer, the thirteenth, as the table's last row (OQ-043, entry 14).
     names = bible_interface_names()
-    assert len(names) == 12 and len(set(names)) == 12, names
+    assert len(names) == 13 and len(set(names)) == 13, names
+    assert names[-1] == "Trainer", names
 
 
 def test_comment_scanner_flags_uncommented_values() -> None:

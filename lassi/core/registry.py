@@ -30,7 +30,9 @@ for a host compiler named by the pin's EXECUTABLE) is built as
 `factory(executable=<pinned path>, runner=SandboxedCompileRunner(<clean
 environment>, ...))`, and one without as `factory()` (lassi.core.runner). A ScoreProfile that declares
 `reads_bench_sources` is built as `factory(bench_root=<suite sources>)`, and
-one without as `factory()` (lassi.scoring.profiles.build_profile).
+one without as `factory()` (lassi.scoring.profiles.build_profile). A Trainer
+is built as `factory(**binding.config)` from its trainer section
+(lassi.train.run; task P17.8).
 """
 
 from __future__ import annotations
@@ -41,7 +43,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence, TypeVar
 
 from lassi.core.capabilities import DEVICE_KEY, TAKES_DEVICE
 
-# The twelve interface names, as the Protocol classes in lassi/core/interfaces.py, in the bible's table order.
+# The thirteen interface names, as the Protocol classes in lassi/core/interfaces.py, in the bible's table order.
 INTERFACES: tuple[str, ...] = (
     "LLMBackend",
     "Frontend",
@@ -55,6 +57,7 @@ INTERFACES: tuple[str, ...] = (
     "Judge",
     "ScoreProfile",
     "Stage",
+    "Trainer",
 )
 
 _Class = TypeVar("_Class", bound=type)
@@ -239,7 +242,7 @@ def device_path(binding: Binding) -> str:
 
 
 def _require_interface(interface: str, where: str) -> None:
-    """Raise RegistryError unless `interface` is one of the twelve interface names."""
+    """Raise RegistryError unless `interface` is one of the thirteen interface names."""
     if interface not in INTERFACES:
         raise RegistryError(f"{where}: unknown interface {interface!r}; interfaces: {', '.join(INTERFACES)}")
 

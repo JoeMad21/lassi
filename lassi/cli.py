@@ -1,9 +1,10 @@
-"""The `lassi` command line: `lassi run` runs a recipe, and `lassi score` scores a finished run.
+"""The `lassi` command line: `lassi run` runs a recipe, `lassi score` scores a finished run, and `lassi train` trains.
 
     lassi [--graphics on|off] run <recipe> [--runs-root P] [--run-id ID] [--bench-root P]
     lassi [--graphics on|off] score <run dir> --profile NAME [--profile NAME ...] [--score-id ID]
           [--bench-root P] [--runs-root P]
     lassi [--graphics on|off] settings graphics [on|off]
+    lassi [--graphics on|off] train <train.yaml> [--runs-root P] [--train-id ID]
 
 Every command first decides terminal graphics (lassi.present.settings,
 choose_graphics: the --graphics option, LASSI_GRAPHICS, off without an
@@ -65,8 +66,20 @@ than on or off, as in `lassi settings graphics maybe`, is refused by the
 argument parser (argparse choices) with its usage message and exit 2, like
 a bad --graphics value.
 
-Importing this module registers every component, since it imports the runner
-and the scoring package.
+`lassi train` runs a train recipe with the train layer (lassi.train.run,
+task P17.8). The train tree goes under <runs root>/train/<train id>; the
+runs root defaults to $LASSI_RUNS_ROOT, then the recipe's runs_root, and the
+train id to the UTC start time. It prints the plain line `train directory:
+<dir>` and exits 0, or exits 2 with `lassi train: <message>` on stderr when
+the recipe does not load (RecipeError) or the run cannot start (RunError),
+both before any directory exists, or when the Trainer returns a result
+outside its contract (RunError), which leaves provenance.json failed. An
+error the Trainer raises also leaves it failed and propagates, as a
+component's does under `lassi run`. With graphics on it prints the banner
+and nothing more: no live table, since the training table is P7's.
+
+Importing this module registers every component, since it imports the runner,
+the scoring package, and the train package.
 """
 
 from __future__ import annotations
@@ -94,11 +107,14 @@ from lassi.present.settings import (
     save_preset,
 )
 from lassi.scoring.score_run import ScoreError, score_run
+from lassi.train.run import TrainOptions, run_training
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Return the argument parser: the global --graphics option and the `run`, `score`, and `settings` commands."""
-    parser = argparse.ArgumentParser(prog="lassi", description="Run LASSI recipes and score finished runs.")
+    """Return the argument parser: the global --graphics option and the run, score, settings, and train commands."""
+    parser = argparse.ArgumentParser(
+        prog="lassi", description="Run LASSI recipes, score finished runs, and run train recipes."
+    )
     parser.add_argument(
         "--graphics", choices=("on", "off"),
         help="terminal graphics for this command (default: $LASSI_GRAPHICS, then the saved preset; off without a "
@@ -129,6 +145,10 @@ def build_parser() -> argparse.ArgumentParser:
     names = settings.add_subparsers(dest="setting", required=True, metavar="setting")
     graphics = names.add_parser("graphics", help="show the graphics setting, or save the preset with on or off")
     graphics.add_argument("value", nargs="?", choices=("on", "off"), help="the preset to save (default: show)")
+    train = commands.add_parser("train", help="run a train recipe and write its train tree")
+    train.add_argument("recipe", type=Path, help="the train recipe file to run")
+    train.add_argument("--runs-root", type=Path, help="the runs root (default: $LASSI_RUNS_ROOT, then the recipe's)")
+    train.add_argument("--train-id", help="the train directory's name (default: the UTC start time, YYYYMMDD-HHMMSS)")
     return parser
 
 
@@ -146,6 +166,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _settings(args)
     if args.command == "score":
         return _score(args)
+    if args.command == "train":
+        return _train(args)
     return _run(args, graphics=on)
 
 
@@ -253,6 +275,16 @@ def _positive(text: str | None, default: int) -> int:
     except ValueError:
         return default
     return value if value > 0 else default
+
+
+def _train(args: argparse.Namespace) -> int:
+    """Run `lassi train` and return 0, or 2 with `lassi train: <message>` on stderr; it prints plain lines only."""
+    try:
+        run_training(args.recipe, TrainOptions(runs_root=args.runs_root, train_id=args.train_id))
+    except (RecipeError, RunError) as error:
+        print(f"lassi {args.command}: {error}", file=sys.stderr)
+        return 2
+    return 0
 
 
 def _score(args: argparse.Namespace) -> int:

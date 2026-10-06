@@ -2929,7 +2929,8 @@ def test_cli_returns_two_and_prints_a_sandbox_error(
     assert "fixture: no isolation on this host" in captured.out + captured.err
 
 
-@pytest.mark.parametrize("command", ["train", "corpus", "export", "report"])
+# `lassi train` exists since task P17.8 (tests/train/test_cli_train.py); the other commands do not yet.
+@pytest.mark.parametrize("command", ["corpus", "export", "report"])
 def test_cli_adds_no_other_subcommand(command: str, capsys: pytest.CaptureFixture[str]) -> None:
     try:
         code = cli.main([command])

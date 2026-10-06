@@ -497,7 +497,7 @@ class _Run:
     built ScoreProfiles of `score` and `metrics` (lassi.scoring.run_scoring).
     `observer` is RunOptions.observer in a GuardedObserver, or None.
     `devices` holds the record of each device section, in binding order
-    (_devices). `serving` is the backend's serving record when it declares
+    (probe_devices). `serving` is the backend's serving record when it declares
     model_check, else None (_served_model).
     """
 
@@ -564,14 +564,14 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     registry = DEFAULT_REGISTRY if options.registry is None else options.registry
     recipe = _load(path, options, registry)
     settings = _settings(recipe)
-    runs_root = _runs_root(options, recipe)
-    run_dir = runs_root / RUNS_DIR / _run_id(options, started)
-    _check_location(run_dir, f"the run directory {run_dir}")
+    runs_root = resolve_runs_root(options.runs_root, recipe)
+    run_dir = runs_root / RUNS_DIR / run_id_for(options.run_id, started)
+    check_location(run_dir, f"the run directory {run_dir}")
     if run_dir.exists():
         raise RunError(f"the run directory {run_dir} already exists; choose another run id")
     bench = _bench(recipe, settings, options)
     _check_plan(recipe, registry, settings, bench)
-    devices = _devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
+    devices = probe_devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
     _check_one_role(recipe, registry, devices)
     _check_oracle(recipe, registry, bench)
     scoring = _scoring(recipe, registry, bench)
@@ -581,7 +581,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
     executors = _executors(recipe, registry, settings)
     pins, target_pins = _run_pins(recipe, settings, toolchains, executors)
-    commit, dirty = _git_state()
+    commit, dirty = git_state()
     try:
         run_dir.mkdir(parents=True)
     except FileExistsError:
@@ -608,12 +608,12 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     )
 
 
-def _devices(recipe: Recipe, registry: Registry, probes: Mapping[str, DeviceProbe]) -> tuple[DeviceRecord, ...]:
+def probe_devices(recipe: Recipe, registry: Registry, probes: Mapping[str, DeviceProbe]) -> tuple[DeviceRecord, ...]:
     """Probe the device of every binding whose component declares takes_device; RunError for one the host lacks.
 
     Bindings go in recipe order (the model's first). For each, the section is
     read (lassi.core.devices.parse_device), the component class's framework
-    build is asked for (_framework), and then the kind's probe runs
+    build is asked for (framework_build), and then the kind's probe runs
     (probe_device). It runs before any component is built and before any
     directory exists, and builds the records in memory. A refusal names the
     key, the kind, and the reason; no run falls back to another device.
@@ -625,7 +625,7 @@ def _devices(recipe: Recipe, registry: Registry, probes: Mapping[str, DeviceProb
             continue
         key = device_path(binding)
         spec = parse_device(binding.config[DEVICE_KEY], key)
-        framework = _framework(recipe, binding, entry)
+        framework = framework_build(recipe, binding, entry)
         try:
             records.append(probe_device(key, spec, framework, probes))
         except DeviceUnavailable as error:
@@ -670,7 +670,7 @@ def _check_one_role(recipe: Recipe, registry: Registry, devices: Sequence[Device
             )
 
 
-def _framework(recipe: Recipe, binding: Binding, entry: Entry) -> FrameworkBuild | None:
+def framework_build(recipe: Recipe, binding: Binding, entry: Entry) -> FrameworkBuild | None:
     """Return the framework build a component class names with framework(), or None when it defines none.
 
     framework() is called on the class, before anything is built, and reads
@@ -919,21 +919,30 @@ def _recipe_assets(recipe: Recipe) -> tuple[dict[str, str], dict[str, str]]:
     return dict(assets.fragments), packs
 
 
-def _runs_root(options: RunOptions, recipe: Recipe) -> Path:
-    """Return the runs root: the option, else $LASSI_RUNS_ROOT, else the recipe's; absolute and outside the repo."""
-    if options.runs_root is not None:
-        root, source = Path(options.runs_root), "the runs_root option"
+def resolve_runs_root(option: Path | None, recipe: Recipe) -> Path:
+    """Return the runs root: `option`, else $LASSI_RUNS_ROOT, else the recipe's runs_root; absolute, outside the repo.
+
+    The root is checked with check_location. A recipe without runs_root (a
+    train recipe may leave it out) and no other source is a RunError naming
+    the three sources. `lassi run` and `lassi train` share it (task P17.8).
+    """
+    if option is not None:
+        root, source = Path(option), "the runs_root option"
     elif os.environ.get("LASSI_RUNS_ROOT"):
         try:
             root = workdir.runs_root()
         except ValueError as error:
             raise RunError(str(error)) from error
         source = "$LASSI_RUNS_ROOT"
-    else:
+    elif "runs_root" in recipe.data:
         root, source = Path(recipe.data["runs_root"]), f"runs_root in {recipe.path}"
+    else:
+        raise RunError(
+            f"{recipe.path}: no runs root: pass --runs-root, set LASSI_RUNS_ROOT, or set runs_root in the recipe"
+        )
     if not root.is_absolute():
         raise RunError(f"the runs root {root} (from {source}) must be an absolute path")
-    _check_location(root, f"the runs root {root} (from {source})")
+    check_location(root, f"the runs root {root} (from {source})")
     return root
 
 
@@ -942,11 +951,12 @@ def _within(path: Path, root: Path) -> bool:
     return path == root or root in path.parents
 
 
-def _check_location(path: Path, what: str) -> None:
+def check_location(path: Path, what: str) -> None:
     """Refuse a run path that resolves inside the repository, or outside $LASSI_SCRATCH when that is set.
 
     The path is resolved, so a link into the repository is refused too;
-    `what` names the path in the message (Agent Rule 7).
+    `what` names the path in the message (Agent Rule 7). Run trees and
+    train trees (task P17.8) follow it.
     """
     resolved = path.resolve()
     if _within(resolved, REPO):
@@ -959,9 +969,9 @@ def _check_location(path: Path, what: str) -> None:
         )
 
 
-def _run_id(options: RunOptions, started: datetime) -> str:
-    """Return the run id: the option, else the UTC start time as YYYYMMDD-HHMMSS; it must be one plain name."""
-    run_id = started.strftime("%Y%m%d-%H%M%S") if options.run_id is None else options.run_id
+def run_id_for(option: str | None, started: datetime) -> str:
+    """Return a run or train id: `option`, else the UTC start time as YYYYMMDD-HHMMSS; it must be one plain name."""
+    run_id = started.strftime("%Y%m%d-%H%M%S") if option is None else option
     if not isinstance(run_id, str) or not _NAME.fullmatch(run_id):
         raise RunError(f"a run id must match {_NAME.pattern}, got {run_id!r}")
     return run_id
@@ -2127,7 +2137,7 @@ def _final(trial: Trial, wall_s: float) -> Final:
 # Provenance and run.md
 
 
-def _git_state() -> tuple[str | None, bool | None]:
+def git_state() -> tuple[str | None, bool | None]:
     """Return the repository's commit and whether `git status --porcelain` lists anything; None when git fails."""
     head = _git("rev-parse", "HEAD")
     status = _git("status", "--porcelain")
