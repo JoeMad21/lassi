@@ -410,7 +410,7 @@ Owner's choice (asked in the working session, 2026-10-05; recorded by the agent)
 Applied: 2026-10-05. A read-only check found /var/lib/systemd/coredump empty (rx 20261005-124428-exec-eb7a), so the cores have aged out and nothing is left to remove.
 
 ## OQ-035 TIKTOKEN_CACHE_DIR In The Gate Environment
-State: OPEN
+State: CLOSED
 Kind: access
 Blocks: none; until it is set, every rx command that builds the lassi score profile exports the variable itself
 Evidence: plans/spikes/p4-p2-review.md (question 6, Remote steps); lassi/scoring/lassi_profile.py (LassiProfile reads the encoding when it is built); lassi/scoring/run_scoring.py (plan_scoring builds every profile a recipe's metrics name); lassi/scoring/score_run.py (_build); tools/server/gate.py (the scratch-only environment: TMPDIR, XDG_CACHE_HOME, UV_CACHE_DIR, HF_HOME)
@@ -421,7 +421,7 @@ Answer:
 Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Option (a) needs the owner's own change to the gate, so this item stays OPEN for that.
 Review later: yes. The owner has not answered this item personally.
 Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a): the owner adds the TIKTOKEN_CACHE_DIR line to tools/server/gate.py and reinstalls the gate.
-Pending the owner's gate change (2026-10-05). Until it is installed, rx commands export the variable themselves; a later session checks the gate's environment and closes this item.
+Applied: 2026-10-05. The owner added the line to tools/server/gate.py (build_env, beside HF_HOME) and reinstalled the gate with `uv run tools/rx.py bootstrap`. Every rx command now gets TIKTOKEN_CACHE_DIR=/mnt/nvme10/joseph_ufl/.cache/tiktoken (rx 20261005-193837-exec-1eb5), and the cl100k_base file is there (rx 20261005-193355-exec-3854), so rx commands no longer export the variable.
 
 ## OQ-036 How The ttsim Executor Reads Finding Classes
 State: CLOSED
@@ -543,4 +543,4 @@ Options: (a) You delete the variable from the workstation (`gh variable delete T
 Recommendation: (a): delete the variable, and remove every slot except the current phase's (`rx doctor` lists them). The run trees hold no evidence that is not already pulled into results/.
 Answer:
 Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a): an agent removes the stale alpha01 slots; the owner deletes the TEXT_POLICY_PATTERNS Actions variable and the old run trees.
-Applied in part: 2026-10-05. 20 slots were removed with `rx slot-rm` (every desktop-8r113ei-* and p413-* slot); demo-live, demo-proxy, demo-run, and rngd-serve are kept, since they may back the owner's demo and RNGD serving setups. The variable and the run trees wait for the owner; a later session checks `gh variable list` and closes this item.
+Applied in part: 2026-10-05. 20 slots were removed with `rx slot-rm` (every desktop-8r113ei-* and p413-* slot); demo-live, demo-proxy, demo-run, and rngd-serve are kept, since they may back the owner's demo and RNGD serving setups. The owner deleted the variable the same day: `gh variable list -R JoeMad21/lassi` prints no variables, and `gh secret list` still shows the TEXT_POLICY_PATTERNS secret the workflow reads. Only the run trees wait for the owner (under $LASSI_RUNS_ROOT on 2026-10-05: fixture-captures, lassi-p413-eltwise_sfpu.25wa5td2, p020-measure, p411-smoke, p413-mmc-compile._7w0d01s, p49-ttsim-runtime, runs, scores, and ttsim-smoke; rx 20261005-194025-exec-4f38); a later session lists them and closes this item.

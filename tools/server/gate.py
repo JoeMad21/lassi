@@ -428,6 +428,7 @@ def build_env(cfg, extra):
         "UV_CACHE_DIR": os.path.join(SCRATCH, ".cache", "uv"),
         "PIP_CACHE_DIR": os.path.join(SCRATCH, ".cache", "pip"),
         "HF_HOME": os.path.join(SCRATCH, "hf"),
+        "TIKTOKEN_CACHE_DIR": os.path.join(SCRATCH, ".cache", "tiktoken"),
         "CCACHE_DIR": os.path.join(SCRATCH, ".cache", "ccache"),
         "CARGO_HOME": os.path.join(SCRATCH, ".cargo"),
         "RUSTUP_HOME": os.path.join(SCRATCH, ".rustup"),
