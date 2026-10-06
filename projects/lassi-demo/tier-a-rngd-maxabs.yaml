@@ -1,0 +1,33 @@
+# The owner's real-model Tier A run on RNGD, max_abs items (plans/PHASE-NOTES.md, the note "Real-model Tier A
+# run on RNGD"). Run it on the build host from one clean commit, with the model served as that note says, after
+# `uv run tools/fetch_bench.py assets/bench/tt-pairs-v0.yaml`:
+# `uv run lassi --graphics off run projects/lassi-demo/tier-a-rngd-maxabs.yaml --run-id <run id>`.
+# Score it after with `uv run lassi score <runs root>/runs/<run id> --profile df-v0 --profile lassi`.
+# Modeled on tests/fixtures/recipes/p4-tier-a-dry-run.yaml with the mock replaced by the demo model as
+# projects/lassi-demo/rngd-compile.yaml binds it. The three items here declare max_abs tolerances in
+# assets/bench/tt-pairs-v0.yaml; the two matmuls (pcc) are in tier-a-rngd-pcc.yaml. Exploratory: not faithful.
+extends: base  # projects/base.yaml: sampling, the correction cap of 10, runs root, sandbox, and report choices
+faithful: false  # base's correction cap stands; nothing here reproduces an upstream run
+model:
+  backend: openai_compat  # furiosa-llm's OpenAI-compatible server, as projects/lassi-demo/rngd-compile.yaml binds it
+  id: furiosa-ai/Llama-3.1-8B-Instruct  # served at revision v2026.2 on one RNGD card (plans/spikes/p3-rngd-demo.md)
+llm:
+  sampling:
+    max_tokens: 4096  # the bound projects/lassi-demo/rngd-compile.yaml sets; base.yaml leaves it open
+bench:
+  suite: tt-pairs-v0  # assets/bench/tt-pairs-v0.yaml: the five Tier A pairs
+  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  items: [eltwise_binary, eltwise_sfpu, loopback]  # the items that declare max_abs tolerances
+directions: [{source: cpp, target: tt}, {source: tt, target: cpp}]  # both directions
+prompts: tt-host-v0  # assets/prompts/tt-host-v0/: the C++ and TT host program template set
+toolchain:
+  cpp: gcc-native  # the pinned host g++ with the native row's flags (toolchains/gcc.pin)
+  tt: ttmetal-host  # the pinned clang++-20 against the pinned tt-metal tree (toolchains/tt-metal.pin)
+fixes:
+  baseline_both: true  # build and run both references, so the baseline records their agreement
+stages: [baseline, generate, compile_loop, run_loop, oracle]  # the references first; no context stage
+executor:
+  cpp: {kind: native}  # the C++ reference and every C++ candidate run in the sandbox on the host CPU
+  tt: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # TT programs run in the sandbox on ttsim, a simulator
+oracle: {kind: binary_io, metric: max_abs, threshold: from_baseline}  # each output's max_abs within the references' own
+trials: {n: 5}  # five trials per item and direction: 30 trials

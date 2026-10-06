@@ -105,7 +105,7 @@ TREE_WORD = "{TREE}"
 # The words added after the pinned include directories: the build directory, searched last.
 BUILD_DIR_INCLUDE = ("-idirafter", ".")
 # A directory of this name in a C++ file's path makes it a kernel source, which the host compiler never builds.
-KERNEL_DIR = "kernels"
+KERNEL_DIR = "kernels"  # lassi.core.stages KERNEL_DIR picks the kernels a prompt shows by the same rule
 # The install's record (toolchains/tt-metal.sh writes it once every check passed) and its CMake-fetched packages list.
 INSTALL_RECORD = "lassi-install.txt"
 TREE_CPM_SOURCES = "lassi-cpm-sources.txt"

@@ -1,0 +1,28 @@
+Your $target_language program failed. The files from your last answer are below, each in a
+fenced code block whose first line is // FILE: <path>. If there are none, your answer held no usable
+file block.
+
+$files
+What went wrong follows. Each problem the build or kernel compile reported is listed one per line
+(severity, file:line:column, [code], message). A failed run is one sentence on how the program ended,
+then the standard error it wrote, if any.
+$diagnostics
+
+Remember what the language ids mean:
+- cpp: a C++ program for the host CPU, built by g++ 12 with -O3 -fopenmp.
+- tt: a tt-metal host program in C++20 for tt-metal commit 5280a9cf, built by clang++-20. Every output
+  value must be computed by the device kernels, never by the host.
+Both kinds of program read inputs and write outputs only through "lassi_io.h", with the input files and
+then the output files as arguments. The harness provides lassi_io.h; never return it.
+
+The harness provides the kernel files below at these paths, read-only; never return a file at one of
+these paths. A tt program launches each kernel by its path here, and a cpp program must reproduce the
+math the kernels compute.
+
+$kernel_files
+Fix every error and return the complete corrected $target_language program as these files: $target_files.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

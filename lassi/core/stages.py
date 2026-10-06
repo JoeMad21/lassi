@@ -63,19 +63,21 @@ The runner checks either kind before any model is asked.
   request followed by the source. The reply fills
   Trial.context.source_description.
 - generate appends attempt 0. With a template set it sends generate.txt,
-  filled with the source files in FILE blocks, as the only message; with a
-  fragment set it sends the direction's system prompt and the generation
-  prompt (lassi.core.fragments.generation_prompt), the source read as text
-  mode reads it.
+  filled with the source files and the item's kernels (kernel_files) in
+  FILE blocks, as the only message; with a fragment set it sends the
+  direction's system prompt and the generation prompt
+  (lassi.core.fragments.generation_prompt), the source read as text mode
+  reads it.
 - compile_loop builds the last attempt and, while an error remains, asks
   for a correction and builds that, up to loop.max_corrections (none when
   uncapped). A cap hit with an error remaining ends the trial with
   final.end_reason `correction-cap`. With a template set the correction
-  prompt is correct.txt, sent as the only message; with a fragment set it
-  is upstream's (lassi.core.fragments.correction_prompt), sent after the
-  direction's system prompt. Its error text is the parsed diagnostics,
-  capped at DIAGNOSTIC_COUNT_CAP diagnostics and DIAGNOSTIC_BYTES_CAP bytes
-  of whole lines, with a line saying how many were left out when any were
+  prompt is correct.txt, with the item's kernels (kernel_files), sent as
+  the only message; with a fragment set it is upstream's
+  (lassi.core.fragments.correction_prompt), sent after the direction's
+  system prompt. Its error text is the parsed diagnostics, capped at
+  DIAGNOSTIC_COUNT_CAP diagnostics and DIAGNOSTIC_BYTES_CAP bytes of whole
+  lines, with a line saying how many were left out when any were
   (diagnostics_text). After every build that gave a program, the target
   language's toolchain, when it declares host_compute_guard
   (lassi.core.capabilities, task P4.12; found by capability, never by
@@ -242,7 +244,7 @@ import errno
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import cast
 
 from lassi.bench import Direction, Suite, stage_inputs
@@ -403,8 +405,11 @@ RUN_LOOP_KEYS = (
 )
 
 # The fields each prompt template gets; a template may use any of them and no other.
-GENERATE_FIELDS = ("source_language", "target_language", "source_files", "target_files")
-CORRECT_FIELDS = ("target_language", "files", "diagnostics", "target_files")
+GENERATE_FIELDS = ("source_language", "target_language", "source_files", "target_files", "kernel_files")
+CORRECT_FIELDS = ("target_language", "files", "diagnostics", "target_files", "kernel_files")
+# A support file is a kernel when its build path has a directory of this name, where the kernel JIT finds it.
+# The TT host toolchain's is_kernel_source applies the same rule to place a kernel; change the two together.
+KERNEL_DIR = "kernels"
 
 # A lone surrogate code point: JSON can decode one from a reply ("\ud83d"), but it is not Unicode text.
 _SURROGATE = re.compile("[\ud800-\udfff]")
@@ -657,6 +662,29 @@ def _support_files(context: RunContext, language: str) -> dict[str, str]:
     P4.13), so a TT build gets its kernels and a C++ build does not.
     """
     return context.suite.support_files(context.item, context.sources_root, purpose=PURPOSE, language=language)
+
+
+def kernel_files(context: RunContext) -> str:
+    """Return the template field kernel_files: the item's kernels as FILE blocks, or "" when it has none.
+
+    A kernel is a support file of the direction's source or target language
+    (_support_files, so item-level ones count) whose build path has a
+    directory named KERNEL_DIR, tracked or upstream alike: the rule the TT
+    host toolchain's is_kernel_source applies to place a kernel for the
+    kernel JIT (Design Principle 8 keeps core from importing it). Each is
+    shown once, in path order (render_file_blocks); a path both languages
+    declare shows the target language's text. A prompt shows a kernel
+    read-only (the owner's decision of 2026-10-06): a model file at its
+    path is refused at any build whose harness files hold it (_unwritable
+    in lassi.toolchains._base), which every TT build does for its own
+    language's kernels and a C++ build only for item-level ones, so the
+    tt-host-v0 prompts ask never to return one.
+    """
+    kernels: dict[str, str] = {}
+    for language in (context.direction.source, context.direction.target):
+        files = _support_files(context, language)
+        kernels.update({path: text for path, text in files.items() if KERNEL_DIR in PurePosixPath(path).parts[:-1]})
+    return render_file_blocks(kernels) if kernels else ""
 
 
 def prompt_diagnostics(diagnostics: Sequence[Diagnostic]) -> list[Diagnostic]:
@@ -1064,11 +1092,12 @@ class GenerateStage:
         """Return the system prompt (None for a template set) and the user prompt.
 
         A template set gives generate.txt, filled with the direction's
-        languages, the item's source files in FILE blocks, and the expected
-        target file names. A fragment set gives the direction's system prompt
-        and the generation prompt from the source (as text mode reads it),
-        the target language's context pack when the recipe has one, and the
-        trial's summary and description.
+        languages, the item's source files in FILE blocks, the expected
+        target file names, and the item's kernels (kernel_files). A fragment
+        set gives the direction's system prompt and the generation prompt
+        from the source (as text mode reads it), the target language's
+        context pack when the recipe has one, and the trial's summary and
+        description.
         """
         context = self.context
         if not context.fragments:
@@ -1080,6 +1109,7 @@ class GenerateStage:
                 "target_language": context.direction.target,
                 "source_files": render_file_blocks(sources),
                 "target_files": ", ".join(expected),
+                "kernel_files": kernel_files(context),
             }
             return None, render(context.prompts, "generate", fields)
         direction = context.direction
@@ -1656,13 +1686,13 @@ def _correction_messages(
 ) -> tuple[str | None, str]:
     """Return the system prompt (None for a template set) and the correction prompt for `previous` with `errors`.
 
-    A template set gives correct.txt, with `errors` as its diagnostics. A
-    fragment set gives the direction's system prompt and upstream's
-    correction prompt, whose code is the previous target file (FILE blocks
-    when the target has more than one file): the compile-error form, or
-    with `run_error` the execute-error form, which joins the execute-error
-    lead (CORRECT_RUN_HEAD, CORRECT_RUN_TAIL) around the same compiler and
-    flag text.
+    A template set gives correct.txt, with `errors` as its diagnostics and
+    the item's kernels (kernel_files). A fragment set gives the direction's
+    system prompt and upstream's correction prompt, whose code is the
+    previous target file (FILE blocks when the target has more than one
+    file): the compile-error form, or with `run_error` the execute-error
+    form, which joins the execute-error lead (CORRECT_RUN_HEAD,
+    CORRECT_RUN_TAIL) around the same compiler and flag text.
     """
     if not context.fragments:
         fields = {
@@ -1670,6 +1700,7 @@ def _correction_messages(
             "files": render_file_blocks(previous.files) if previous.files else "",
             "diagnostics": errors,
             "target_files": ", ".join(expected),
+            "kernel_files": kernel_files(context),
         }
         return None, render(context.prompts, "correct", fields)
     direction, fragments = context.direction, context.fragments
