@@ -298,7 +298,7 @@ Owner's choice (asked in the working session, 2026-09-24; recorded by the agent)
 Applied: 2026-09-24. The joint pin is in the bible's Toolchain Pins and ttsim Facts with a Decision Log entry; P4.2 installs it under $LASSI_TOOLCHAINS.
 
 ## OQ-027 -Werror For TT Host Programs
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: none; option (b) applied under the owner's 2026-09-26 direction (P4.10 builds TT host programs without -Werror)
 Evidence: rx 20260925-223402-exec-32ce (the pinned gate example's compile line in build_Release/build.ninja, read by P4.10's test-writer); bible Reward Function (df-v0's W counts compile-stage warnings at S4 or S5); toolchains/gcc.pin (gcc-native builds with -O3 -fopenmp and no -Werror)
@@ -308,9 +308,11 @@ Recommendation: (b). It keeps one reading of warnings across toolchains (a warni
 Answer:
 Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Applied here: option (b).
 Review later: yes. The owner has not answered this item personally.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (b).
+Applied: 2026-10-05. Nothing changes: TT host programs keep building without -Werror (P4.10).
 
 ## OQ-028 P2 Review Question 3: df-v0's In-Task Readings
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: none; the recommendation is applied under the owner's 2026-09-26 direction (task P4.15)
 Evidence: plans/spikes/p4-p2-review.md (question 3); results/p2-gate/summary.md (review question 3); results/p2-gate/score/review.md; docs/BIBLE.md, Training Module > Reward Function (scoring decisions); lassi/scoring/df_v0.py; tests/scoring/test_df_v0.py (the probe test); tests/core/test_stage_reading.py
@@ -320,9 +322,11 @@ Recommendation: 1a, 2a, 3b, 4a. On 1a: the attempt's stage is measured and only 
 Answer:
 Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Applied here: 1a, 2a, 3b, and 4a.
 Review later: yes. The owner has not answered this item personally.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): 1a, 2a, 3b, and 4a, with three conditions: the RL training data loader excludes alignment_missing trials; the guard term is penalty-only, so a clear result adds nothing to R and a not-checked trial cannot earn credit a clear one would; and the reason is logged whenever the guard does not run, with the not-checked rate reported per run and per target.
+Applied: 2026-10-05. The four readings stand. The guard term is penalty-only today: df-v0's score_attempt sets R to guard_violation only when a guard is true, and otherwise takes R from the stage, W, and A, so a cleared attempt and a not-checked one score the same (lassi/scoring/df_v0.py). No training loader exists yet (lassi/train arrives with P17.8, and training on trial records with P7), so the loader rule is a P7 requirement (plans/PHASE-NOTES.md, P7). The not-run reasons and rates are task P17.14 (plans/p17-portable.md).
 
 ## OQ-029 P2 Review Question 4: Readings Beside The lassi Profile's Nulls
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: none; the recommendation is applied under the owner's 2026-09-26 direction (task P4.15)
 Evidence: plans/spikes/p4-p2-review.md (question 4); results/p2-gate/summary.md (review question 4); docs/BIBLE.md, Evaluation Protocol (LASSI Score Profile, Run Metrics, Acceptance Criteria); lassi/scoring/lassi_profile.py; lassi/analysis/metrics.py; lassi/core/stages.py (the generate stage); lassi/core/runner.py (_check_stages, _check_oracle)
@@ -332,9 +336,11 @@ Recommendation: 1a and 2a. 1a restores the Acceptance Criterion without changing
 Answer:
 Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Applied here: 1a and 2a.
 Review later: yes. The owner has not answered this item personally.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): 1a and 2a; name the two unreachable branches in the bible and say whether a planned recipe (the GPU execution tier, the MI300X HIP port) would reach them, reopening part 2 if one would.
+Applied: 2026-10-05. The bible's LASSI Score Profile names both branches and now says that no planned recipe reaches them: lassi-repro's GPU execution tier (P10) and P17's planned GPU recipes, modeled on projects/lassi-demo/rngd-cpu.yaml, list both baseline and generate, and lassi-ee's MI300X HIP port (P9) lists neither but scores with its ee profile, not the lassi profile (Decision Log 2026-10-05). Part 2 stays closed.
 
 ## OQ-030 P2 Review Question 5: Run Metric Readings
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: none; the recommendation is applied under the owner's 2026-09-26 direction (task P4.15)
 Evidence: plans/spikes/p4-p2-review.md (question 5); results/p2-gate/summary.md (review question 5); results/p2-gate/score/metrics.md; docs/BIBLE.md, Evaluation Protocol (LASSI Paper Metrics, LASSI Score Profile, Run Metrics, Acceptance Criteria); lassi/analysis/metrics.py, paper.py, and tables.py; tests/analysis/test_run_metrics.py; plans/spikes/p2-lassi-metrics.md (Recount; Findings 5)
@@ -344,9 +350,11 @@ Recommendation: 1b, 2c, 3b, 4a. 1b and 2c apply the rule the tables already foll
 Answer:
 Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Applied here: 1b, 2c, 3b, and 4a.
 Review later: yes. The owner has not answered this item personally.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): 1b, 2c, 3b, and 4a.
+Applied: 2026-10-05. The choice applied under the owner's direction stands; nothing changes.
 
 ## OQ-031 P2 Review Question 6: Which Similarity The Sim-T >= 0.6 Row Compares (OQ-022 Review)
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: none; the recommendation is applied under the owner's 2026-09-26 direction (task P4.15); the measured values of results/p4-p2-review/ come from a clean-commit pass on alpha01
 Evidence: plans/spikes/p4-p2-review.md (question 6); results/p2-gate/summary.md (review question 6); results/p4-p2-review/summary.md (rx 20260927-204249-desktop-8r113ei-detached-f0c4a852-bcbb, clean f0c4a85); plans/spikes/p2-lassi-metrics.md (Findings 5); docs/BIBLE.md, Evaluation Protocol (LASSI Paper Metrics, [OPEN]; LASSI Score Profile; Run Metrics); lassi/scoring/similarity.py
@@ -356,9 +364,11 @@ Recommendation: Part 1 (c), with (d) beside it if you are willing to write to th
 Answer:
 Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Applied here: part 1 (c), without (d), which is the owner's to take up; part 2 (a).
 Review later: yes. The owner has not answered this item personally.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): part 1 (c) and part 2 (a); (d) is not taken.
+Applied: 2026-10-05. The choice applied under the owner's direction stands; nothing changes.
 
 ## OQ-032 Which Test Marks A LASSI Headline Metric Reproduced
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: none in P4; the recommendation is applied under the owner's 2026-09-26 direction (task P4.15), and the P10 gate applies the test
 Evidence: plans/spikes/p4-p2-review.md (question 7); docs/BIBLE.md, Evaluation Protocol (LASSI Paper Metrics, Rules for the reproduction; Acceptance Criteria); plans/OWNER-QUEUE.md, OQ-021
@@ -368,9 +378,11 @@ Recommendation: (a), with the gap always reported beside it: it is the test the 
 Answer:
 Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Applied here: option (a).
 Review later: yes. The owner has not answered this item personally.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a); the OQ-021 note meant the recount.
+Applied: 2026-10-05. Nothing changes; OQ-021's reading as option (c), the recount, stands.
 
 ## OQ-033 P2 Review Question 8: df-v0 Weights
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: none; the recommendation is applied under the owner's 2026-09-26 direction (task P4.15)
 Evidence: plans/spikes/p4-p2-review.md (question 8); results/p2-gate/summary.md; results/p2-gate/score/review.md and provenance.json; results/p2-gate/load-check/; assets/scoring/df-v0.yaml; tests/scoring/test_df_v0.py
@@ -380,9 +392,11 @@ Recommendation: (c). Nothing in the review argues for a change, but six of the e
 Answer:
 Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Applied here: option (c).
 Review later: yes. The owner has not answered this item personally.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (c).
+Applied: 2026-10-05. The choice applied under the owner's direction stands; nothing changes.
 
 ## OQ-034 Root-Owned Core Files On alpha01's Root Filesystem
-State: OPEN
+State: CLOSED
 Kind: access
 Blocks: none
 Evidence: rx 20260926-142038-exec-5ccd (`ls -lt /var/lib/systemd/coredump`, read-only, after the P4.9 batch): the three newest files are root-owned zstd cores of VLLM::Worker processes from 2026-09-25 08:28, 10:43, and 11:33 (133061693, 136000817, and 558078702 bytes), on the root filesystem; none is from the P4.9 batch (rx job 20260926-140947-p49-ttsim-runtime-6f4c, 14:09 to 14:15 on 2026-09-26)
@@ -392,6 +406,8 @@ Recommendation: (a). They take root-filesystem space on a shared host (Agent Rul
 Answer:
 Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Option (a) needs the owner's own action on the host, so this item stays OPEN for that.
 Review later: yes. The owner has not answered this item personally.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (b): record as aged out and close.
+Applied: 2026-10-05. A read-only check found /var/lib/systemd/coredump empty (rx 20261005-124428-exec-eb7a), so the cores have aged out and nothing is left to remove.
 
 ## OQ-035 TIKTOKEN_CACHE_DIR In The Gate Environment
 State: OPEN
@@ -404,6 +420,8 @@ Recommendation: (a). The cache lives under the scratch root like the other cache
 Answer:
 Owner's direction (working session, 2026-09-26; recorded by the agent): take the recommendation of every item not answered personally and mark it for review later. Option (a) needs the owner's own change to the gate, so this item stays OPEN for that.
 Review later: yes. The owner has not answered this item personally.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a): the owner adds the TIKTOKEN_CACHE_DIR line to tools/server/gate.py and reinstalls the gate.
+Pending the owner's gate change (2026-10-05). Until it is installed, rx commands export the variable themselves; a later session checks the gate's environment and closes this item.
 
 ## OQ-036 How The ttsim Executor Reads Finding Classes
 State: CLOSED
@@ -416,6 +434,8 @@ Recommendation: (a) now, with (b) recorded as a follow-up for P7's reward work, 
 Answer:
 Owner's direction (working session, 2026-09-27; recorded by the agent): take the recommendation of every open item not answered personally, apply it, and flag it for review in the next phase. Applied here: option (a), which P4.11 builds; the item closes with that commit.
 Review in the next phase: yes. The owner has not answered this item personally. Closed with P4.11's commit, which builds option (a) (bible, ttsim Facts, the ttsim executor); option (b) is recorded for P7's planning (PHASE-NOTES P7). The review at P17's planning can reopen it.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a).
+Reviewed: 2026-10-05. Option (a) stands; nothing changes.
 
 ## OQ-037 When The ttsim Executor Runs Watcher
 State: CLOSED
@@ -428,6 +448,8 @@ Recommendation: (b). Only hangs pay, scored runs stay as specified, and the seed
 Answer:
 Owner's direction (working session, 2026-09-27; recorded by the agent): take the recommendation of every open item not answered personally, apply it, and flag it for review in the next phase. Applied here: option (b), which P4.11 builds; the item closes with that commit.
 Review in the next phase: yes. The owner has not answered this item personally. Closed with P4.11's commit, which builds option (b) (bible, Harness Contract and ttsim Facts). One extension beyond the option's words: the executor cannot tell a reference run from an attempt, so a hung reference run is rerun with Watcher too, at up to another 600 s on 16 CPUs (the reference's wall limit), and its note is not used. The review at P17's planning can reopen it.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (b), and the extension stands: a hung reference run is also rerun once with Watcher.
+Reviewed: 2026-10-05. Option (b) and its extension stand; nothing changes.
 
 ## OQ-038 Where P17 Portable Stack Goes In The Work Order
 State: CLOSED
@@ -440,9 +462,11 @@ Recommendation: (a). The owner asked for it now; most of it needs no hardware; i
 Answer:
 Owner's direction (working session, 2026-09-27; recorded by the agent on 2026-09-28): take the recommendation of every open item not answered personally, apply it, and flag it for review in the next phase. Applied here: option (a).
 Review in the next phase: yes. The owner has not answered this item personally. Closed with the commit that records P17 in the work order (the bible's Build Roadmap, AGENTS.md, plans/STATUS.md, and tools/status.py WORK_ORDER); the review at P17's planning can reopen it.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a).
+Reviewed: 2026-10-05. Option (a) stands; nothing changes.
 
 ## OQ-039 Which Frameworks And Devices P17 Builds First
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: P17.1's hipcc item and P17.6, until the owner's review (P17.3 to P17.9 build option (a) as applied); no P4 task
 Evidence: docs/BIBLE.md, Model Serving; Training Module (Algorithms, Weight Modes, Compute); Execution Backends (gpu rows); Environment State (AMD MI300X, NVIDIA GPU); Risks And Questions (row 1 names "a small CPU model through hf_local"; question 6); Decision Log 2026-09-23 (OQ-002: no agent action on AMD for now; OQ-003: no NVIDIA host). lassi/llm/__init__.py:3-11 (registered backends: mock, openai_compat, ollama, replay; no hf_local); lassi/llm/openai_compat.py:41 (default base_url on port 8123, the RNGD serving port); lassi/core/runner.py:465 at d35b0a4 (a backend is built from its model id alone); plans/p17-portable.md (draft)
@@ -452,6 +476,8 @@ Recommendation: (a). The CPU keeps the phase testable today. CUDA and ROCm share
 Answer:
 Owner's direction (working session, 2026-09-27; recorded by the agent on 2026-09-28): take the recommendation of every open item not answered personally, apply it, and flag it for review in the next phase. Applied here: option (a).
 Review in the next phase: yes. The owner has not answered this item personally. This commit records the choice in the bible; P17.3 to P17.9 build it, so the item stays OPEN until the commit of the last of them.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a): NVIDIA CUDA stays in P17's device layer so it runs once an NVIDIA host exists; no Apple MPS or Intel XPU now; AMD software work that opens no GPU device goes ahead (OQ-043, entry 15).
+Applied: 2026-10-05. P17 builds option (a) (plans/p17-portable.md), and P17.6 is READY.
 
 ## OQ-040 A GPU Host For P17's GPU Half
 State: OPEN
@@ -464,6 +490,8 @@ Recommendation: (a), since the hardware and the gate already exist and two more 
 Answer:
 Owner's direction (working session, 2026-09-27; recorded by the agent on 2026-09-28): take the recommendation of every open item not answered personally, apply it, and flag it for review in the next phase. Every option needs the owner's own action, so this item stays OPEN.
 Review in the next phase: yes. The owner has not answered this item personally.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a): the MI300X on alpha01 for now; the owner obtains the render group grant and sets rocm_gpu enabled in the gate. Other GPUs stay in the device layer (OQ-039 (a)).
+Pending the owner's grant (2026-10-05). P17.12, P17.13, and P17.G stay BLOCKED until rx doctor shows rocm_gpu enabled; a later session checks it and closes this item.
 
 ## OQ-041 Whether The CPU -> TT Guard's Outcomes Reach The Model
 State: CLOSED
@@ -476,6 +504,8 @@ Recommendation: (a). It changes nothing the model sees and leaves the loop as it
 Answer:
 Owner's direction (working session, 2026-09-27; recorded by the agent on 2026-10-04): take the recommendation of every open item not answered personally, apply it, and flag it for review in the next phase. Applied here: option (a), which P4.12 builds; the item closes with that commit.
 Review in the next phase: yes. The owner has not answered this item personally. Closed with P4.12's commit, which builds option (a) (bible, Component Interfaces and Harness Contract). The review at P17's planning can reopen it.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a); Design Principle 2's wording is amended to say the correction prompt withholds guard results.
+Reviewed: 2026-10-05. Option (a) stands, and Design Principles, 2, is amended (Decision Log 2026-10-05).
 
 ## OQ-042 Whether A TT Program That Creates No Kernel Is Host Compute
 State: CLOSED
@@ -488,3 +518,29 @@ Recommendation: (a). With no device kernel, no device work can produce any outpu
 Answer:
 Owner's direction (working session, 2026-09-27; recorded by the agent on 2026-10-04): take the recommendation of every open item not answered personally, apply it, and flag it for review in the next phase. Applied here: option (a), which P4.12 builds; the item closes with that commit.
 Review in the next phase: yes. The owner has not answered this item personally. Closed with P4.12's commit, which builds option (a) (bible, Harness Contract). The review at P17's planning can reopen it.
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a).
+Reviewed: 2026-10-05. Option (a) stands; nothing changes.
+
+## OQ-043 Review Of The Choices Applied Without Your Answer (P17 Planning)
+State: CLOSED
+Kind: review
+Blocks: P17.6 (entry 15) and P17.1's hipcc item, until the owner's answer
+Evidence: plans/OWNER-QUEUE.md (the Answer and review lines of OQ-027 to OQ-033, OQ-036 to OQ-039, OQ-041, and OQ-042); plans/p17-portable.md (planning decisions; P17.1, P17.6, P17.8); plans/PHASE-NOTES.md (P5 and P17, owner review first); plans/LESSONS.md (Owner directions, 2026-09-26 and 2026-09-27); docs/BIBLE.md (Design Principles, 2; Component Interfaces; Environment State, AMD MI300X; Decision Log)
+Question: Under the owner's directions of 2026-09-26 (take each recommendation, review later) and 2026-09-27 (take each recommendation, review in the next phase), agents applied the recommendation of every item the owner had not answered personally; this item brought those choices back at P17's planning, with three choices the P17 plan makes, and each item named here holds its options and recommendation: (1) OQ-027, applied (b); (2) OQ-028, applied 1a, 2a, 3b, and 4a; (3) OQ-029, applied 1a and 2a; (4) OQ-030, applied 1b, 2c, 3b, and 4a; (5) OQ-031, applied part 1 (c) and part 2 (a); (6) OQ-032, applied (a); (7) OQ-033, applied (c); (8) OQ-036, applied (a); (9) OQ-037, applied (b), with a hung reference run rerun too; (10) OQ-038, applied (a); (11) OQ-039, applied (a); (12) OQ-041, applied (a); (13) OQ-042, applied (a); (14) the Trainer Protocol as a thirteenth interface (P17.8), while Component Interfaces names twelve and Agent Rule 3 puts new behavior behind an existing interface; (15) AMD software work that opens no GPU device (P17.1's hipcc item, P17.6), while the bible records OQ-002's answer as "no agent action on AMD for now"; and (16) Design Principle 2's wording against OQ-041 (a), since the guard's reading enters the record and the reward but never the correction prompt. Do they stand? Not in this item: OQ-034, OQ-035, and OQ-040, which need the owner's own action.
+Options: (a) Ratify every entry as recommended: the applied choices stand, P17.6 goes READY (or BLOCKED on OQ-040 if hipcc needs a GPU), P17.8 builds the Trainer Protocol, and entry 16 amends Design Principle 2's wording, a bible edit with a Decision Log entry. (b) Ratify with changes: name each entry and its new option; a change to P17's work becomes a P17 task, and a change outside P17 a note for the phase that owns it or a Decision Log entry. For entry 15, a narrower hold is possible: keep OQ-039 (a) and hold only the hipcc work on alpha01 (P17.6 and P17.1's hipcc item); OQ-039 (b) would instead drop all of P17's ROCm work (the rocm device kind, the AMD gpu table, rocm_smi, and the ROCm wheels). (c) Hold entries: each stays as applied and returns at P5's planning.
+Recommendation: (a), with each entry's own recommendation: keep every applied choice, confirm the Trainer Protocol, allow the AMD work, and amend Design Principle 2's wording.
+Answer:
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a), every entry as recommended: entry 14 confirms the Trainer Protocol, entry 15 allows AMD software work that opens no GPU device, and entry 16 amends Design Principle 2's wording; with the conditions recorded on OQ-028 and OQ-029, and the answers to OQ-034, OQ-035, OQ-040, and OQ-044 given the same day.
+Applied: 2026-10-05. Recorded on each item above. The bible's Design Principles, LASSI Score Profile, and Decision Log carry the changes (Decision Log 2026-10-05); P17.6 is READY, and P17.14 joins the plan from OQ-028's conditions.
+
+## OQ-044 Owner Actions Left Over: The Old Actions Variable And Stale Host Slots
+State: OPEN
+Kind: access
+Blocks: none
+Evidence: plans/OWNER-QUEUE.md (OQ-013, CLOSED); `gh variable list -R JoeMad21/lassi` on 2026-10-05 still listed TEXT_POLICY_PATTERNS; rx doctor's slot list on 2026-10-05 (doctor output, no rx id); plans/PHASE-NOTES.md (P4, the slots and run trees P4.13 left); plans/runs/p4-retrospective.md (Causes, 7; Changes, 12)
+Question: Two owner actions outlived the items that named them. (1) OQ-013 moved the text-policy pattern list into an Actions secret, and the old repository variable TEXT_POLICY_PATTERNS, due for deletion after the P0 merge, still exists, holding the list outside the secret. (2) P4 left rx slots on alpha01 (the p413-* slots and older desktop-8r113ei-detached-* slots) and run trees (among them runs/p413-dry-check). AGENTS.md lets an agent remove a stale slot with `rx slot-rm`; agents never delete run trees or other files on the host.
+Options: (a) You delete the variable from the workstation (`gh variable delete TEXT_POLICY_PATTERNS -R JoeMad21/lassi`), an agent removes the slots you name with `uv run tools/rx.py slot-rm <slot>` from c:/dev/lassi, and you remove the run trees you no longer need on alpha01. (b) Keep the variable; nothing changes. (c) Keep the slots for reruns; scratch use was 98G of the 120G cap (du, rx 20261005-123454-exec-76c0).
+Recommendation: (a): delete the variable, and remove every slot except the current phase's (`rx doctor` lists them). The run trees hold no evidence that is not already pulled into results/.
+Answer:
+Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a): an agent removes the stale alpha01 slots; the owner deletes the TEXT_POLICY_PATTERNS Actions variable and the old run trees.
+Applied in part: 2026-10-05. 20 slots were removed with `rx slot-rm` (every desktop-8r113ei-* and p413-* slot); demo-live, demo-proxy, demo-run, and rngd-serve are kept, since they may back the owner's demo and RNGD serving setups. The variable and the run trees wait for the owner; a later session checks `gh variable list` and closes this item.

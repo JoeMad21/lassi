@@ -12,7 +12,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1 Faithful LASSI | p1-faithful | DONE | base: main at c3cf248 (P0 merged, PR 1); plan plans/p1-faithful.md; owner 2026-09-23: scope fixed at planning, P2 follows without pause; owner 2026-09-24: curated LASSI demo at 15:00 EDT |
 | P2 Scoring | p2-scoring | DONE | base: p1-faithful at 5d5fd0c; plan plans/p2-scoring.md; gate evidence results/p2-gate; owner review OQ-024 accepted with option (b), review questions moved to P4.15; PR 3 merged |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
-| P4 ttsim Execution | p4-ttsim | DONE | base: main at 75eceef (P2 DONE, PR 3 merged); plan plans/p4-ttsim.md; gate passed 2026-10-05 (results/p4-gate); PR P4 ttsim Execution open |
+| P4 ttsim Execution | p4-ttsim | DONE | base: main at 75eceef (P2 DONE, PR 3 merged); plan plans/p4-ttsim.md; gate passed 2026-10-05 (results/p4-gate); PR 4 merged at 0dcc261 |
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
 | P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
@@ -25,7 +25,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
 | P16 Adversarial | p16-adversarial | BLOCKED | P4, P8 for training |
-| P17 Portable Stack | p17-portable | NOT-STARTED | owner request 2026-09-27 (working session): GPUs and standard frameworks; after P4, before P5 (OQ-038, option (a)); GPU half blocked: GPU host (OQ-040); draft plan plans/p17-portable.md, re-read at advance |
+| P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; GPU half blocked until the MI300X render group grant (OQ-040); part (a) opens a PR, then P5 may start (OQ-038) |
 
 ## Tasks
 
@@ -96,3 +96,19 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.14 | DONE | Apply the owner's Tier A splits (OQ-025) | P4.13 | OQ-025 (d) confirmed: every tt-pairs-v0 item unassigned and refused to training, prompt tuning, and harvest (tests/bench/test_tt_pairs.py); recipe hashes at 184f130 equal bc4c132's for every committed recipe |
 | P4.15 | DONE | Carry the P2 review questions (OQ-024) | - | P2 review questions closed (f0c4a85); OQ-028 to OQ-033 applied for review; sim_t_tiktoken; scoring pass rx 20260927-204249; bible rev 233 |
 | P4.G | DONE | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 | gate passed: smoke rx 20261005-123001-desktop-8r113ei-detached-ec1c9a2b-2979; Tier A job 20261005-123023-p4-tier-a-c247; ec1c9a2 clean; results/p4-gate |
+| P17.0 | DONE | Plan phase P17 into plans/p17-portable.md and add its tasks here | - | plan plans/p17-portable.md; base main 0dcc261; owner answers OQ-027 to OQ-044 recorded; retrospective plans/runs/p4-retrospective.md |
+| P17.1 | READY | Spike: framework pins, environments, and device assumptions | - |  |
+| P17.2 | READY | Device layer: selection, probes, provenance | - |  |
+| P17.3 | READY | Served backends: recipe keys and serving provenance | P17.1,P17.2 |  |
+| P17.4 | READY | hf_local on Transformers and PyTorch | P17.1,P17.2,P17.3 |  |
+| P17.5 | READY | gpu executor and the sandbox's device access | P17.2 |  |
+| P17.6 | READY | hipcc toolchain, compile-only on alpha01 | P17.1 | AMD work with no GPU device allowed (OQ-043 entry 15); BLOCKED on OQ-040 if hipcc needs a GPU |
+| P17.7 | READY | Profilers: timing, nvml, rocm_smi | P17.2,P17.5 |  |
+| P17.8 | READY | Trainer interface and the train recipe | P17.2 | Trainer Protocol confirmed (OQ-043 entry 14) |
+| P17.9 | READY | TRL backend: sft, dpo, and grpo on PyTorch | P17.1,P17.8 |  |
+| P17.10 | READY | CI on the CPU | P17.4,P17.9 |  |
+| P17.14 | READY | Guard not-run reasons and not-checked rates | - | owner's OQ-028 conditions (2026-10-05) |
+| P17.11 | READY | Gate part (a): recipes and the hardware-free evidence | P17.3,P17.4,P17.5,P17.7,P17.9,P17.10,P17.14 |  |
+| P17.12 | BLOCKED | Spike on the first GPU host | P17.5 | MI300X on alpha01 after the owner's render group grant, rocm_gpu enabled (OQ-040) |
+| P17.13 | BLOCKED | GPU runs: executor, profilers, hf_local, training | P17.4,P17.7,P17.9,P17.12 | MI300X render group grant (OQ-040) |
+| P17.G | BLOCKED | Phase gate: part (a) rerun and part (b) on a GPU host | P17.11,P17.13 | MI300X render group grant (OQ-040); part (a) runs as P17.11 |

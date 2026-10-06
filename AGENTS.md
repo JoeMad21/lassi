@@ -63,7 +63,7 @@ A dirty tree at session start is unfinished work from an interrupted session: in
 3. Tests first (test-writer role): encode the acceptance criteria as tests; confirm they fail for the right reason.
 4. Implement the smallest change that passes. Follow the bible's Readability Standards: docstrings on public interfaces, type hints, functions under about 60 lines, plain ASCII.
 5. Check: `uv run pytest -q` (the fast suite; mark long tests `slow`, remote tests `remote`) and `uv run ruff check .`.
-6. Audit (rules-auditor role) over `git diff --cached`; it must end with `VERDICT: PASS`. On FAIL, fix and re-audit.
+6. Audit (rules-auditor role) over `git diff --cached`; it must end with `VERDICT: PASS`. On FAIL, fix and re-audit; a fix that changes only text or a label is committed without a re-audit, and the commit body lists it (plans/runs/p0-retrospective.md).
 7. Commit once per task: subject `P<N>.<k>: <imperative summary>` (72 characters or fewer), optional body describing the change. The message describes the change and nothing else: no trailers, footers, session links, or tool names.
 8. `uv run tools/status.py set <ID> DONE --note "<commit or one-line result>"`, include `plans/STATUS.md` in the task commit, and push the phase branch to origin.
 
