@@ -63,10 +63,11 @@ FORBIDDEN_IMPORTS = frozenset(
         "intel_extension_for_pytorch",
     }
 )
-# Host device paths that only lassi/executors and lassi/profilers may name in code (not in docstrings).
+# Host device and telemetry paths that only lassi/executors and lassi/profilers may name in code (not in
+# docstrings); the amdgpu hwmon power files sit under /sys/class/drm (task P17.7).
 DEVICE_PATHS = (
     "/dev/kfd", "/dev/dri", "/dev/nvidia", "/sys/class/kfd", "/sys/devices/virtual/kfd", "/sys/module/amdgpu",
-    "/proc/driver/nvidia", "/proc/cpuinfo", "/proc/meminfo",
+    "/proc/driver/nvidia", "/proc/cpuinfo", "/proc/meminfo", "/sys/class/drm", "/sys/class/hwmon",
 )
 # Calls that read a file or list a directory; lassi/core/devices.py makes none of them.
 FILE_CALLS = frozenset(

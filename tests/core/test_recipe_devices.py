@@ -28,16 +28,25 @@ takes one only by declaring the capability `takes_device`
   choice), so a child naming cpu under a parent's rocm with indices does not
   inherit the indices.
 
+A profiler takes a device section like any other component (task P17.7):
+the registered power profilers nvml and rocm_smi declare takes_device, so a
+recipe that binds one without profiler.device is refused at load, and their
+section enters the hash; timing takes none. Each power profiler accepts
+interval_ms and no other key, so idle_window_s (the LASSI-EE idle window,
+P9's) is refused at load naming profiler.idle_window_s. Loading builds no
+profiler.
+
 Recipes without a device section keep their resolved recipes and hashes:
 tests/core/test_recipe.py (CHILD_HASH, the golden resolved file) and
 tests/core/test_single_executor_golden.py pin them unchanged. Every component
-here is a fake that fails when constructed, since loading constructs nothing.
-No value in this module is a measurement.
+here is a fake that fails when constructed, or a registered profiler class,
+since loading constructs nothing. No value in this module is a measurement.
 """
 
 from __future__ import annotations
 
 import copy
+import importlib
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
@@ -47,7 +56,7 @@ import yaml
 
 from lassi.core import capabilities
 from lassi.core.recipe import RecipeError, load_recipe
-from lassi.core.registry import Binding, Registry, RegistryError
+from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry, RegistryError
 
 # The capability literal, so these tests collect before lassi.core.capabilities defines TAKES_DEVICE.
 TAKES_DEVICE = "takes_device"
@@ -397,3 +406,73 @@ def test_a_child_without_a_device_keeps_the_inherited_one(tmp_path: Path) -> Non
     child = {"executor": {"kind": "devexec", "host": "fixture-host"}}
     loaded = load_recipe(parent_and_child(tmp_path, parent, child), roots=[tmp_path], registry=registry())
     assert loaded.data["executor"] == {"kind": "devexec", "host": "fixture-host", "device": ROCM_0}
+
+
+# ---------------------------------------------------------------------------
+# The profiler's device section (task P17.7): the registered profilers, bound at profiler.kind
+
+
+def with_profilers() -> Registry:
+    """Return the fake registry plus the registered Profilers timing, nvml, and rocm_smi (loading builds none)."""
+    try:
+        importlib.import_module("lassi.profilers")
+    except ModuleNotFoundError as error:
+        pytest.fail(f"lassi.profilers does not exist yet (task P17.7): {error}")
+    found = registry()
+    for name in ("timing", "nvml", "rocm_smi"):
+        found.register("Profiler", name, DEFAULT_REGISTRY.get("Profiler", name).factory)
+    return found
+
+
+def load_profiled(tmp_path: Path, profiler: Mapping[str, Any], name: str = "profiled") -> Any:
+    """Write and load a recipe with `profiler` as its profiler section, with the registered profilers."""
+    return load_recipe(write(tmp_path, name, recipe(profiler=profiler)), roots=[tmp_path], registry=with_profilers())
+
+
+def profiled_error(tmp_path: Path, profiler: Mapping[str, Any]) -> str:
+    """Return the RecipeError message for a recipe with `profiler`; the message must name the recipe file."""
+    with pytest.raises(RecipeError) as info:
+        load_profiled(tmp_path, profiler)
+    message = str(info.value)
+    assert "profiled.yaml" in message, message
+    return message
+
+
+@pytest.mark.parametrize("kind", ["nvml", "rocm_smi"])
+def test_a_power_profiler_needs_its_device_section_naming_profiler_device(tmp_path: Path, kind: str) -> None:
+    message = profiled_error(tmp_path, {"kind": kind, "interval_ms": 10})
+    assert "profiler.device" in message and kind in message, message
+
+
+def test_a_profiler_device_section_loads_and_enters_the_hash(tmp_path: Path) -> None:
+    first = load_profiled(tmp_path, {"kind": "rocm_smi", "device": ROCM_0, "interval_ms": 10}, "first")
+    (profiler,) = binding(first, "Profiler")
+    assert (profiler.name, profiler.where) == ("rocm_smi", "profiler.kind")
+    assert dict(profiler.config) == {"device": ROCM_0, "interval_ms": 10}
+    other = {"kind": "rocm_smi", "device": {"kind": "rocm", "indices": [1]}, "interval_ms": 10}
+    second = load_profiled(tmp_path, other)
+    assert first.recipe_hash != second.recipe_hash, "the profiler's device section enters the recipe hash"
+
+
+def test_idle_window_s_is_refused_at_load_naming_it(tmp_path: Path) -> None:
+    section = {"kind": "rocm_smi", "device": ROCM_0, "interval_ms": 10, "idle_window_s": 15}
+    message = profiled_error(tmp_path, section)
+    assert "profiler.idle_window_s" in message, "the LASSI-EE idle window is P9's, so no profiler accepts it yet"
+
+
+@pytest.mark.parametrize(
+    ("section", "dotted"),
+    [
+        pytest.param({"kind": "timing", "interval_ms": 10}, "profiler.interval_ms", id="timing-interval"),
+        pytest.param({"kind": "timing", "device": ROCM_0}, "profiler.device", id="timing-device"),
+        pytest.param(
+            {"kind": "rocm_smi", "device": {"kind": "rocm", "indices": [0, 0]}, "interval_ms": 10},
+            "profiler.device.indices",
+            id="duplicate-index",
+        ),
+    ],
+)
+def test_a_profiler_section_the_registry_refuses_names_the_key(
+    tmp_path: Path, section: dict[str, Any], dotted: str
+) -> None:
+    assert dotted in profiled_error(tmp_path, section)

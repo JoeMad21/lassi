@@ -17,9 +17,12 @@ registry name. Contract rules (bible, Component Interfaces):
 - A Trainer writes only under the output directory it is given and reads a
   bench item only through TrainData.bench_item, which asks the bench
   registry for purpose train (Agent Rule 5; task P17.8).
+- A Profiler brackets one attempt run with start() and stop() and returns
+  a Profile (task P17.7); power values come only from a profiler that
+  declares supports_power.
 - Every component declares its capabilities (see `capabilities.Component`).
 
-Trial, Attempt, Diagnostic, and DeviceRecord are Result Record types in
+Trial, Attempt, Diagnostic, DeviceRecord, and Profile are Result Record types in
 `lassi.core.record`, FrameworkBuild is in `lassi.core.devices`, and Suite
 and SuiteItem are in `lassi.bench.registry`; they are referenced here by
 name only.
@@ -36,7 +39,7 @@ from lassi.core.capabilities import Component
 if TYPE_CHECKING:
     from lassi.bench.registry import Suite, SuiteItem
     from lassi.core.devices import FrameworkBuild
-    from lassi.core.record import Attempt, DeviceRecord, Diagnostic, Trial
+    from lassi.core.record import Attempt, DeviceRecord, Diagnostic, Profile, Trial
 
 
 @dataclass(frozen=True)
@@ -266,14 +269,22 @@ class Oracle(Component, Protocol):
 
 
 class Profiler(Component, Protocol):
-    """Traces a run: timing, and power where telemetry exists."""
+    """Traces a run: timing, and power where telemetry exists (task P17.7).
+
+    run_loop calls start() right before one attempt run and stop() right
+    after it, in a finally block, so stop() also runs when the executor
+    raises. One profiler is built per run and profiles one window after
+    another. A profiler that declares supports_power reads power telemetry
+    and declares takes_device; one that does not leaves the power fields of
+    its Profile null.
+    """
 
     def start(self) -> None:
-        """Begin tracing."""
+        """Begin tracing one window; a second start() before stop() is a ValueError."""
         ...
 
-    def stop(self) -> Mapping[str, float]:
-        """End tracing and return measured values such as `runtime_s`."""
+    def stop(self) -> Profile:
+        """End the window and return its Profile; stop() without start() is a ValueError."""
         ...
 
 

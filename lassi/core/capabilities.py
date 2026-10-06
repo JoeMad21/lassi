@@ -76,6 +76,12 @@ TAKES_DEVICE = "takes_device"
 # The key of a device section inside a component's recipe section.
 DEVICE_KEY = "device"
 
+# The capability of a Profiler that reads power telemetry (task P17.7): its stop() may fill a Profile's avg_power_w
+# and energy_j, and it must also declare TAKES_DEVICE, its device section naming the one GPU it reads. The runner
+# refuses, before any directory exists, such a profiler without TAKES_DEVICE, or one beside a profiled executor that
+# runs on another device; run_loop refuses power values from a profiler that does not declare it.
+SUPPORTS_POWER = "supports_power"
+
 
 @runtime_checkable
 class Component(Protocol):

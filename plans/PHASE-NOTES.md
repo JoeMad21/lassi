@@ -166,9 +166,9 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - Owner review first: with P17 next after P4, the review the P5 notes schedule for "the next phase's planning" (OQ-027 to OQ-033, OQ-036, OQ-037, OQ-038, OQ-039, OQ-041, and OQ-042) happens at P17's planning, before P17.1. It also takes two choices the draft plan makes: the Trainer Protocol as a thirteenth interface (P17.8; Component Interfaces names twelve, and Agent Rule 3 puts new behavior behind an existing interface), and whether P17.1's AMD probe and P17.6 go ahead under OQ-039 (a) while the bible records OQ-002's answer as "no agent action on AMD for now".
 - Seams that do not exist yet (at d35b0a4):
   - hf_local: done in P17.4 (bible Model Serving, Serving Rules).
-  - lassi/profilers/; the Profiler Protocol is at lassi/core/interfaces.py:227-236.
+  - lassi/profilers/: done in P17.7 (bible Component Interfaces, contract rules, Profiler).
   - lassi/train/ and the Trainer Protocol: done in P17.8 (bible Component Interfaces, Trainer; Project Recipes, Notes, train recipes).
-  - Profiler binding: the runner refuses the `profiler` key (lassi/core/runner.py:270, _NOT_CARRIED_OUT), although Attempt.profile exists (lassi/core/record.py:344-354, 441).
+  - Profiler binding: done in P17.7 (bible Project Recipes, Notes, Profilers; Result Record, Profiles).
   - Recipe HTTP settings: done in P17.3 (model.base_url, model.timeout_s, model.api_key_env; bible Project Recipes, Notes). A YAML syntax error in a recipe quotes the offending line in the loader's message (lassi/core/recipe.py, the yaml error path), which could show a mistyped api_key_env value: drop the snippet for that key in task P17.11, whose gate recipes are the next recipe-loader work, or earlier if a task changes the loader's error path (P17.3 commit audit).
   - A driver version in provenance: `driver` stays null (lassi/core/runner.py:1789).
 - Registration rule (PHASE-NOTES P0): lassi.llm is imported eagerly so that every backend registers. hf_local's module must therefore import without torch, load the framework only when it is built, and refuse with a message naming the extra when the extra is missing. Done for hf_local in P17.4 (bible Serving Rules; tests/llm/test_package.py checks the imports). The same holds for lassi/train and the profilers' vendor libraries; lassi/train follows it since P17.8 (tests/train/test_train_package.py checks the imports).
@@ -269,3 +269,21 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - Relocatable device code (`-fgpu-rdc`) for programs whose device functions span files.
   - A shared offload-bundle reader in lassi/, from the remote test's copy, if a stage or target ever checks an artifact's device code.
   - Sandbox: a compile covers /sys/class and /sys/bus but leaves /proc/bus/pci readable (lassi/executors/sandbox.py), so a program a compile starts can still list PCI devices, as rocm_agent_enumerator's lspci step would (ROCm/rocm-systems tag therock-7.12, projects/rocminfo/rocm_agent_enumerator:184-189); hiding it in compiles is a Sandbox edit with a Decision Log entry.
+- P17.7's profilers (bible Component Interfaces, contract rules, Profiler; Result Record, Profiles; Project Recipes, Notes, Profilers). Candidates not built:
+  - P9: idle_window_s, the pre-run and post-run idle windows, idle subtraction, the negative-sample clamp, and the idle-drift report (bible Acceptance Criteria); new profiler keys and Profile fields, a Result Record edit.
+  - P9 and P10: profile the baseline's reference runs (a profile in Trial.reference_run) for energy reduction and within_10pct.
+  - P10: within_10pct from runtime_s; then reword the texts that say no timing profiler exists: assets/scoring/lassi.yaml (an asset change changes the sha256 that score trees record), lassi/scoring/lassi_profile.py, lassi/analysis/metrics.py WITHIN_NOTE, and the docstrings of tests/scoring/test_lassi_profile.py and tests/analysis/test_run_metrics.py.
+  - Program-only timing: carry SandboxResult.program_s in RunResult (bible Component Interfaces, Executor; Result Record), so runtime excludes sandbox setup and copy-back.
+  - Energy counters instead of integration: NVML's total energy counter and the amdgpu energy accumulator, compared with the integrated value on the GPU host (P17.13).
+  - A power device section with several indices that sums power, for an executor on several GPUs.
+  - profiled_run: when both the executor and stop() raise, stop()'s error hides the executor's; chain them or raise the executor's first.
+  - A maximum-gap rule: a read that stalls for several intervals is bridged linearly by the trapezoid rule with no mark in the record; null the power, or note it, when a gap exceeds k x interval_ms.
+  - Run the build read through the sampling rule, so a source that returns NaN or a negative value when built is TelemetryUnavailable, as a later such sample is a failed one.
+  - One helper in lassi/executors/devices.py that returns the NVIDIA bus ids in the gpu executor's index order, used by lassi/profilers/nvml.py instead of its own listing.
+  - P17.13: nvidia-ml-py pinned in the cuda extra (pyproject.toml, uv.lock) and its version in provenance; lassi/profilers/nvml.py cites pynvml 13.615.71.
+  - A provenance `profiler` record naming the source and the file or call read (Agent Rule 1), with a run.md row.
+  - Label, rather than refuse, a timing profiler on a simulator executor when LASSI-DF wants ttsim timing.
+  - P17.12 and P17.13: measure which hwmon power attribute the GPU host exposes (power1_average, or only power1_input, which the ROCm SMI library's rsmi_dev_power_get tries first, rocm_smi.cc:3309-3314), its update interval against 10 ms sampling, NVML's averaging window, the renderD<m>/device/hwmon path against the library's card<N> path, and that a power read opens no node; then fix lassi/profilers/rocm_smi.py and nvml.py.
+  - The AMD SMI library as a source, once OQ-040's grant allows opening the render nodes.
+  - The furiosa_smi and tt_smi profilers the Repository Layout lists, in their phases.
+  - Hint: keep rocm_smi and the SMI tool names out of rx command text; name test directories, not the profiler test files.

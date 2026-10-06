@@ -116,6 +116,15 @@ The runner checks either kind before any model is asked.
   trial's RunContext (RunContext.artifacts), in memory and not in the
   record, so an attempt cannot be run again from the record alone.
 
+  Profiles (task P17.7). When the recipe binds a profiler
+  (RunContext.profiler), every attempt run is profiled, whatever its
+  outcome (profiled_run): start() right after the backend's unload, then
+  the run, then stop() in a finally block, so stop() runs when the
+  executor raises too. Attempt.profile is stop()'s Profile, which
+  checked_profile holds to the contract; an attempt that never ran keeps
+  Profile() (all null), and the baseline's reference runs are not
+  profiled.
+
   Simulator readings (task P4.6; RunResult's findings, never the
   executor's name). The attempt also gains the executor's diagnostics of
   the run (RunResult.diagnostics) and records RunResult.sim_ub in
@@ -263,6 +272,7 @@ from lassi.core.capabilities import (
     GUARD_CODE_PREFIX,
     HOST_COMPUTE_GUARD,
     SIMULATOR,
+    SUPPORTS_POWER,
     WATCHER_CODE,
     OutputFileOracle,
     declares,
@@ -277,6 +287,7 @@ from lassi.core.interfaces import (
     Limits,
     LLMBackend,
     Message,
+    Profiler,
     RunResult,
     Sampling,
     Toolchain,
@@ -287,6 +298,7 @@ from lassi.core.record import (
     Attempt,
     Diagnostic,
     EndReason,
+    Profile,
     Request,
     RequestMessage,
     RunInfo,
@@ -460,7 +472,9 @@ class RunContext:
     never carries an artifact from one trial to the next. `observer` gets the
     stages' progress events (lassi.core.progress: request-sent and attempt);
     the runner passes its GuardedObserver, or None when the run has no
-    observer, and no stage reads anything back from it.
+    observer, and no stage reads anything back from it. `profiler` is the
+    run's Profiler (task P17.7), built once per run, or None when the recipe
+    binds none; run_loop brackets each attempt run with it (profiled_run).
     """
 
     recipe: Recipe
@@ -481,6 +495,7 @@ class RunContext:
     artifacts: dict[int, Path] = field(default_factory=dict)
     executors: Mapping[str, Executor] = field(default_factory=dict)
     observer: Observer | None = None
+    profiler: Profiler | None = None
 
 
 def executor_for(context: RunContext, language: str) -> Executor:
@@ -1526,17 +1541,59 @@ class RunLoopStage:
         limits = attempt_limits(context, trial)
         run_args = stage_inputs(context.suite.item(context.item, purpose=PURPOSE), artifact.parent)
         unload_before_run(context.backend)
-        run = context.executor.run(artifact, run_args, limits)
+        run, profile = profiled_run(context, artifact, run_args, limits)
         info = _run_info(context, run, keep_outputs=self.keeps_outputs)
         diagnostics = [*attempt.diagnostics, *run.diagnostics, *_run_flag_warnings(run)]
         reached = run_stage(run)
         if reached == COMPILED and run.sim_gap is None:
             status = _run_status(run, limits, simulator=declares(context.executor, SIMULATOR))
             diagnostics.append(Diagnostic(stage="run", severity="error", code=RUN_ERROR, message=status))
-        ran = dataclasses.replace(attempt, run=info, diagnostics=diagnostics, stage_reached=reached)
+        ran = dataclasses.replace(attempt, run=info, profile=profile, diagnostics=diagnostics, stage_reached=reached)
         trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], ran])
         notify(context.observer, ATTEMPT, trial, self.name)
         return trial, run, limits
+
+
+def profiled_run(
+    context: RunContext, artifact: Path, inputs: Sequence[str], limits: Limits
+) -> tuple[RunResult, Profile]:
+    """Run `artifact` on context.executor, profiled by context.profiler when there is one; return the run and Profile.
+
+    Without a profiler the executor runs alone and the Profile is Profile()
+    (nothing measured). With one, start() comes right before the run and
+    stop() in a finally block right after it, so stop() runs, and a power
+    profiler's sampling thread ends, when the executor raises too; the
+    executor's error then propagates and stop()'s result is dropped. Only
+    context.profiler and context.executor are read.
+    """
+    profiler = context.profiler
+    if profiler is None:
+        return context.executor.run(artifact, inputs, limits), Profile()
+    profiler.start()
+    try:
+        run = context.executor.run(artifact, inputs, limits)
+    finally:
+        stopped = profiler.stop()
+    return run, checked_profile(profiler, stopped)
+
+
+def checked_profile(profiler: Profiler, value: object) -> Profile:
+    """Return `value`, a profiler's stop() result, when it is a Profile inside the Profiler contract.
+
+    Raises ValueError, naming the profiler, for a result that is not a
+    lassi.core.record.Profile, and for a Profile with avg_power_w or
+    energy_j set from a profiler that does not declare supports_power (only
+    a profiler that reads power telemetry may report power).
+    """
+    name = getattr(profiler, "name", type(profiler).__name__)
+    if not isinstance(value, Profile):
+        raise ValueError(f"Profiler {name!r} returned {type(value).__name__} from stop(), not a Profile")
+    if not declares(profiler, SUPPORTS_POWER) and (value.avg_power_w is not None or value.energy_j is not None):
+        raise ValueError(
+            f"Profiler {name!r} reported power, but it does not declare {SUPPORTS_POWER}: "
+            f"avg_power_w {value.avg_power_w!r}, energy_j {value.energy_j!r}"
+        )
+    return value
 
 
 def attempt_limits(context: RunContext, trial: Trial) -> Limits:

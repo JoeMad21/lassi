@@ -4,9 +4,9 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
 
 1. loads the recipe with the registry (every component registers when this
    module is imported, since it imports lassi.llm, lassi.toolchains,
-   lassi.executors, lassi.core.stages, lassi.core.oracle_stage, which
-   imports lassi.oracles, and lassi.scoring, which registers every
-   ScoreProfile);
+   lassi.executors, lassi.profilers, lassi.core.stages,
+   lassi.core.oracle_stage, which imports lassi.oracles, and lassi.scoring,
+   which registers every ScoreProfile);
 2. refuses what it cannot run, before any directory is created or any model
    is asked: arms without a model (the model registry that maps arms to
    backends comes later) and arms beside a model; a recipe with no
@@ -77,6 +77,14 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    executor's device section (single or per language) name the same kind
    and share an index, unless the backend declares `unload_before_run`
    (one GPU, one role, task P17.5; _check_one_role).
+   Then, for a recipe that binds a profiler (task P17.7; _check_profiler),
+   it refuses one with nothing to profile (no listed stage declares
+   `runs_model_code`, or no target language's executor runs programs), one
+   whose profiled executor declares `simulator` (Agent Rule 2), one that
+   declares `supports_power` without `takes_device`, and a power profiler
+   beside a profiled executor (the single one, or each target language's
+   that runs programs) whose device section does not name the profiler's
+   kind and indices, naming profiler.device and that executor's key.
    A stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id, **config), whose
    config holds the model section's keys other than backend and id (its
@@ -92,7 +100,9 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    as factory(**config) (one, or one per language; a DeviceUnavailable it
    raises, as the gpu executor does for a node or an index this host lacks,
    is a RunError naming the device key, task P17.5), asking each for its
-   device() and reading the pins it declares, and the ScoreProfiles
+   device() and reading the pins it declares, then the profiler, once per
+   run, as factory(**config) (a setting it refuses, or telemetry this host
+   lacks, is a RunError; task P17.7), and the ScoreProfiles
    `score` and `metrics` need
    (lassi.scoring.profiles.build_profile, with the bench root for a profile
    that declares reads_bench_sources);
@@ -108,9 +118,10 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    unload (upstream's setup unload, lassi.core.capabilities), then the
    stages run in recipe order on a fresh RunContext (which carries the
    prompt set's fragments, the context packs by language, the target
-   language's executor, which runs every attempt, and, with executors per
-   language, every language's executor, so the baseline runs each reference
-   on its own language's), then the
+   language's executor, which runs every attempt, with executors per
+   language every language's executor, so the baseline runs each reference
+   on its own language's, and the run's profiler, which run_loop wraps
+   around every attempt run), then the
    trial's final block, whose alignment is that of the attempt whose output
    stands (_final). A stage that sets final.end_reason ends the trial:
    no later stage runs, and the final block keeps the end reason. With
@@ -256,12 +267,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from lassi import profilers  # noqa: F401  (registers the Profilers timing, nvml, and rocm_smi)
 from lassi.bench import Direction, Suite, load_suite, sources_dir
 from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
 from lassi.core.capabilities import (
     DEVICE_KEY,
     MODEL_CHECK,
     SIMULATOR,
+    SUPPORTS_POWER,
     TAKES_DEVICE,
     UNLOAD_BEFORE_RUN,
     declares,
@@ -277,7 +290,7 @@ from lassi.core.devices import (
     probe_device,
 )
 from lassi.core.fragments import fragment_key, pack_language
-from lassi.core.interfaces import Executor, Sampling, Toolchain
+from lassi.core.interfaces import Executor, Profiler, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
 from lassi.core.progress import STAGE_START, TRIAL_END, TRIAL_START, GuardedObserver, Observer, ProgressEvent, notify
 from lassi.core.recipe import (
@@ -344,7 +357,7 @@ _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
 # put its trial directories among the text store or the Parquet tables.
 _RUN_TREE_NAMES = frozenset({"texts", PARQUET_DIR, RESOLVED_RECIPE, TOOLCHAINS_JSON, PROVENANCE_JSON, RUN_MD})
 # Recipe sections this runner does not carry out; a recipe that sets one is refused, never run without it.
-_NOT_CARRIED_OUT = ("profiler", "adversary", "refine", "agents", "judges")
+_NOT_CARRIED_OUT = ("adversary", "refine", "agents", "judges")
 # How long git may take to report the commit or the dirty flag, in seconds.
 _GIT_TIMEOUT_S = 60.0
 # How long a pinned compiler's --version may take, in seconds, and the name prefix of the fresh directory under
@@ -504,7 +517,9 @@ class _Run:
     `observer` is RunOptions.observer in a GuardedObserver, or None.
     `devices` holds the record of each device section, in binding order
     (probe_devices). `serving` is the backend's serving record when it declares
-    model_check, else None (_served_model).
+    model_check, else None (_served_model). `profiler` is the run's one
+    Profiler, built before the first trial (_built_profiler), or None when
+    the recipe binds none.
     """
 
     recipe: Recipe
@@ -525,6 +540,7 @@ class _Run:
     observer: GuardedObserver | None = None
     devices: tuple[DeviceRecord, ...] = ()
     serving: Mapping[str, Any] | None = None
+    profiler: Profiler | None = None
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -579,6 +595,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     _check_plan(recipe, registry, settings, bench)
     devices = probe_devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
     _check_one_role(recipe, registry, devices)
+    _check_profiler(recipe, registry, settings, devices)
     _check_oracle(recipe, registry, bench)
     scoring = _scoring(recipe, registry, bench)
     backend = _backend(recipe, registry, settings)
@@ -586,6 +603,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     serving = _served_model(recipe, settings, backend)
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
     executors = _executors(recipe, registry, settings)
+    profiler = _built_profiler(recipe, registry)
     pins, target_pins = _run_pins(recipe, settings, toolchains, executors)
     commit, dirty = git_state()
     try:
@@ -611,6 +629,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         observer=None if options.observer is None else GuardedObserver(options.observer),
         devices=devices,
         serving=serving,
+        profiler=profiler,
     )
 
 
@@ -674,6 +693,144 @@ def _check_one_role(recipe: Recipe, registry: Registry, devices: Sequence[Device
                 f"{recipe.path}: {held.key} and {record.key} both name {held.kind} index {named}; a model's GPU "
                 f"never runs candidates unless its backend declares {UNLOAD_BEFORE_RUN!r} (one GPU, one role)"
             )
+
+
+def _profiler_binding(recipe: Recipe) -> Binding | None:
+    """Return the recipe's Profiler binding (profiler.kind), or None when it binds no profiler."""
+    return next((binding for binding in recipe.bindings if binding.interface == "Profiler"), None)
+
+
+def _check_profiler(recipe: Recipe, registry: Registry, settings: _Settings, devices: Sequence[DeviceRecord]) -> None:
+    """Refuse a profiler the run cannot honor, before any component is built and before any directory exists.
+
+    Task P17.7. The profiled executors are those that run the attempts of
+    the directions' target languages and run programs
+    (_profiled_executors). Refused: a profiler with nothing to profile (no
+    listed stage declares runs_model_code, or no profiled executor), since
+    the runner never ignores a choice; a profiled executor that declares
+    simulator, whose timing is never performance (Agent Rule 2); a profiler
+    that declares supports_power without takes_device; and, for one that
+    declares supports_power, a profiled executor that does not run on the
+    profiler's device (_check_power_device). It runs after the probes, so
+    the profiler's own device (profiler.device) is one this host has.
+    """
+    binding = _profiler_binding(recipe)
+    if binding is None:
+        return
+    entry = registry.get(binding.interface, binding.name)
+    named = f"Profiler {entry.name!r} ({binding.where})"
+    stages = recipe.data["stages"]
+    if not any(getattr(registry.get("Stage", name).factory, "runs_model_code", False) for name in stages):
+        raise RunError(
+            f"{recipe.path}: {named} would profile nothing: no listed stage runs attempts (none declares "
+            "runs_model_code; run_loop does); list run_loop or remove the profiler section"
+        )
+    profiled = _profiled_executors(recipe, registry, settings)
+    if profiled is None:
+        return
+    if not profiled:
+        raise RunError(
+            f"{recipe.path}: {named} would profile nothing: no target language's executor runs programs "
+            f"(none declares {RUNS_CODE!r}); remove the profiler section"
+        )
+    for executor, executor_entry in profiled:
+        if SIMULATOR in executor_entry.capabilities:
+            raise RunError(
+                f"{recipe.path}: {named} would profile the runs of Executor {executor_entry.name!r} "
+                f"({executor.where}), which declares {SIMULATOR!r}; simulator timing is never performance "
+                "(Agent Rule 2)"
+            )
+    if SUPPORTS_POWER not in entry.capabilities:
+        return
+    if TAKES_DEVICE not in entry.capabilities:
+        raise RunError(
+            f"{recipe.path}: {named} declares {SUPPORTS_POWER!r} without {TAKES_DEVICE!r}; a power profiler names "
+            "the one GPU it reads in its device section"
+        )
+    records = {record.key: record for record in devices}
+    for executor, executor_entry in profiled:
+        _check_power_device(recipe, records[device_path(binding)], executor, executor_entry, records)
+
+
+def _profiled_executors(recipe: Recipe, registry: Registry, settings: _Settings) -> list[tuple[Binding, Entry]] | None:
+    """Return the Executor bindings whose runs a profiler profiles, with their entries, each once, in target order.
+
+    For each target language of the directions, that is the executor that
+    runs its attempts (the single one, or executor.<language> with
+    executors per language) when it declares runs_code; a compile-only
+    target never runs an attempt. A language that is only a source is not
+    profiled, since the baseline's reference runs are not. With executors
+    per language, it returns None when a target language has no executor:
+    _executors refuses that run, naming executor.<language>, before the
+    profiler is built.
+    """
+    bindings = [binding for binding in recipe.bindings if binding.interface == "Executor"]
+    languages = executor_languages(recipe.data)
+    by_language = dict(zip(languages, bindings, strict=True)) if languages else {}
+    found: dict[str, tuple[Binding, Entry]] = {}
+    for direction in settings.directions:
+        binding = by_language.get(direction.target) if languages else bindings[0]
+        if binding is None:
+            return None
+        entry = registry.get(binding.interface, binding.name)
+        if RUNS_CODE in entry.capabilities:
+            found.setdefault(binding.where, (binding, entry))
+    return list(found.values())
+
+
+def _check_power_device(
+    recipe: Recipe, held: DeviceRecord, executor: Binding, entry: Entry, records: Mapping[str, DeviceRecord]
+) -> None:
+    """Refuse a profiled executor that does not run on a power profiler's device (`held`, the profiler.device record).
+
+    The executor must declare takes_device, and its device record must name
+    the profiler's kind and the same indices, as written, so every attempt
+    run of the run is on the GPU whose power is read and none is measured on
+    one GPU while it runs on another. The message names profiler.device and
+    the executor's device key, or its binding path when it takes no device.
+    """
+    named = " ".join([held.kind, *(str(index) for index in held.indices)])
+    if TAKES_DEVICE not in entry.capabilities:
+        raise RunError(
+            f"{recipe.path}: {held.key} names {named}, but Executor {entry.name!r} ({executor.where}) takes no "
+            "device section, so its runs are not on the GPU whose power is read; a power profiler needs each "
+            "profiled executor on its device"
+        )
+    record = records[device_path(executor)]
+    if record.kind != held.kind or list(record.indices) != list(held.indices):
+        runs = " ".join([record.kind, *(str(index) for index in record.indices)])
+        raise RunError(
+            f"{recipe.path}: {held.key} names {named}, but {record.key} names {runs}; a power profiler reads the "
+            "GPU every profiled attempt runs on, so both name the same kind and indices"
+        )
+
+
+def _built_profiler(recipe: Recipe, registry: Registry) -> Profiler | None:
+    """Return the recipe's Profiler built as factory(**config), or None when it binds none; RunError before any mkdir.
+
+    Task P17.7. It is built once per run, after the executors and before
+    the first trial. A setting it refuses (ValueError, such as a missing
+    profiler.interval_ms) is a RunError naming the profiler and the
+    refusal; telemetry it cannot read on this host (a DeviceUnavailable,
+    which lassi.profilers.power.TelemetryUnavailable is) is a RunError
+    naming profiler.device and the run's lack of telemetry. Any other error
+    propagates as it is.
+    """
+    binding = _profiler_binding(recipe)
+    if binding is None:
+        return None
+    entry = registry.get(binding.interface, binding.name)
+    try:
+        return entry.factory(**binding.config)
+    except DeviceUnavailable as error:
+        raise RunError(
+            f"{recipe.path}: {device_path(binding)}: Profiler {entry.name!r} ({binding.where}) cannot read power "
+            f"on this host: {error}; the run lacks its telemetry"
+        ) from None
+    except ValueError as error:
+        raise RunError(
+            f"{recipe.path}: Profiler {entry.name!r} ({binding.where}) refused its settings: {error}"
+        ) from None
 
 
 def framework_build(recipe: Recipe, binding: Binding, entry: Entry) -> FrameworkBuild | None:
@@ -2075,6 +2232,7 @@ def _context(run: _Run, backend: Any, direction: Direction, item: str) -> RunCon
         fragments=settings.fragments,
         packs=settings.packs,
         observer=run.observer,
+        profiler=run.profiler,
     )
 
 
