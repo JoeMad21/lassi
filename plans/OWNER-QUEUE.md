@@ -641,3 +641,4 @@ Recommendation: scope (a); access (a).
 Answer:
 Owner's choice (asked in the working session, 2026-10-07; recorded by the agent): scope (a), both; access (a), prepare and rehearse.
 Closed: the approval covers the steps named above; any other server step asks again.
+Done 2026-10-07: the scripts are in tools/demo/ and installed in alpha01's bin from a1a338a (the replaced copies kept as *.20261007-before; rx 20261007-161247-demo-live-8998 and 20261007-161507-demo-live-3c33). lassi-showcase ran clean (rx 20261007-161308-demo-live-4603). The model rehearsal did not run: every card from npu1 to npu7 was held by another tenant, so lassi-live refused to start (rx job 20261007-161322-demo-rehearsal-9fa6). The mock fallback `lassi-live --mock --both` ran both segments to S5 (rx job 20261007-161517-demo-mock-rehearsal-7949): exploratory, mock replies, never a model result.
