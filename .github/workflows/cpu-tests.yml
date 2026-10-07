@@ -1,0 +1,66 @@
+name: cpu-tests
+
+# The device-neutral tests of tasks P17.2 to P17.9 on a Linux runner with no GPU (task P17.10):
+# the cpu extra from the lock, the slow framework tests included, the remote tests excluded.
+# text-policy.yml is a separate workflow and stays unchanged.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install uv at the version that wrote the lock
+        run: python -m pip install uv==0.12.17
+      - name: Install the control plane and the cpu extra from the lock
+        run: uv sync --frozen --extra cpu
+      - name: Show the torch build (no CUDA, no HIP)
+        run: >-
+          uv run --frozen --extra cpu python -c
+          "import torch; assert not torch.cuda.is_available(); print(torch.__version__, torch.version.cuda, torch.version.hip)"
+      - name: Device-neutral tests of P17.2 to P17.9, remote tests excluded
+        # The sandbox refuses a workdir under /tmp, which a private tmpfs hides inside, so the tests'
+        # temporary directories go under the runner's temp directory.
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: >-
+          uv run --frozen --extra cpu pytest -q -m "not remote"
+          tests/core/test_devices.py
+          tests/core/test_recipe_devices.py
+          tests/core/test_runner_devices.py
+          tests/executors/test_device_probes.py
+          tests/core/test_recipe_serving.py
+          tests/llm/test_serving.py
+          tests/llm/test_served_runs.py
+          tests/llm/test_package.py
+          tests/core/test_context_exceeded.py
+          tests/core/test_recipe_model_pin.py
+          tests/llm/test_hf_local.py
+          tests/llm/test_hf_local_settings.py
+          tests/llm/test_hf_local_runs.py
+          tests/executors/test_gpu.py
+          tests/executors/test_sandbox.py
+          tests/executors/test_sandbox_compile.py
+          tests/toolchains/test_hipcc.py
+          tests/profilers
+          tests/core/test_runner_profiler.py
+          tests/core/test_train_recipe.py
+          tests/core/test_trainer_interface.py
+          tests/bench/test_registry.py
+          tests/core/test_record.py
+          tests/core/test_parquet.py
+          tests/core/test_trial_md.py
+          tests/core/test_runner.py
+          tests/core/test_recipe.py
+          tests/core/test_interfaces.py
+          tests/train

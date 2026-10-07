@@ -150,7 +150,9 @@ The remote build host is alpha01 on the I/ONX cluster. Reach it only through `uv
 ## Repository Checks
 
 - `git config core.hooksPath .githooks` in every clone. The commit-msg, pre-commit, and pre-push hooks run `tools/check_text_policy.py`: owner pattern list (kept outside git), plain ASCII, branch names, commit identities.
-- CI runs the same checker on every push and pull request.
+- CI runs the same checker on every push and pull request (`.github/workflows/text-policy.yml`).
+- CI also runs the device-neutral tests of P17.2 to P17.9, slow framework tests included and remote tests excluded, with the cpu extra on a Linux runner with no GPU (`.github/workflows/cpu-tests.yml`; task P17.10). Its test list is explicit: a new test file for the device layer, served or in-process models, the gpu executor, profilers, or training joins it there, unless it sits in tests/profilers or tests/train, which the list names whole. The test step sets TMPDIR to the runner's temp directory, since the sandbox refuses a workdir under /tmp.
+- Framework tests run with `uv run --extra cpu pytest ...`. A bare `uv run` leaves an installed extra in place, so run a plain `uv sync` before a run meant to skip the framework tests, and before ending a session.
 - Before ending a session: `uv run pytest -q` passes and `uv run tools/status.py check` passes.
 
 ## Roles

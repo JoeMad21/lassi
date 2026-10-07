@@ -223,7 +223,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - Record a refused request (its messages, no reply) in Trial.requests with a diagnostic; a Result Record edit.
   - Record each request's prompt and completion token counts (Request has none, and the stages keep only the text); a Result Record edit for every backend.
   - P17.9 plan wording: done; the training pins joined the three flavor extras (bible Toolchain Pins).
-  - AGENTS.md Repository Checks (P17.10): the framework test command `uv run --extra cpu pytest`, and that a bare `uv run` leaves an installed extra in place, so a plain `uv sync` comes before a run meant to skip the framework tests.
+  - Done in P17.10. AGENTS.md Repository Checks (P17.10): the framework test command `uv run --extra cpu pytest`, and that a bare `uv run` leaves an installed extra in place, so a plain `uv sync` comes before a run meant to skip the framework tests.
   - A model.dtype key; bf16 on alpha01's CPU is unmeasured (P17.11 measures speed).
   - A CPU thread-count key for hf_local: torch defaults to the core count, 256 on alpha01, beside sandboxed runs; the serving record holds threads today.
   - hf_local on several indices (device_map), and CUDA_DEVICE_ORDER=PCI_BUS_ID with P17.5's index-to-node mapping (P17.13).
@@ -261,7 +261,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - Lock a GPU across processes for lassi train, with P17.5's lock candidate.
   - Episode semantics: whether grpo without episode means single_turn (the bible's default) or a required choice.
 - P17.9's trl Trainer (bible Training Module, Compute and Safeguards; Component Interfaces, Trainer). Candidates not built:
-  - P17.10: nothing excludes the slow marker from `uv run pytest -q`; test_trl_runs.py skips only because the extra is absent, so the CI job that installs the cpu extra runs it unless it deselects slow on purpose.
+  - Settled in P17.10: cpu-tests.yml runs the slow tests on purpose. Nothing excludes the slow marker from `uv run pytest -q`; test_trl_runs.py skips only because the extra is absent, so the CI job that installs the cpu extra runs it unless it deselects slow on purpose.
   - Hash the base model's files in _load_base, before the load, rather than after training, so checkpoint.json pins exactly what was loaded.
   - _check_base and _base_dir read lassi.train.data SYNTHETIC_DIR and ignore TrainOptions.synthetic_dir, so a test's base and data can come from different directories.
   - P17.11: quiet the run's output: transformers prints each step's log on stdout when disable_tqdm is set (PrinterCallback), datasets and transformers print progress bars on stderr, and TRL warns on stderr for each unscorable row with the completion's text, which may not be ASCII.
