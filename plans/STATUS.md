@@ -114,7 +114,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.G | BLOCKED | Phase gate: part (a) rerun and part (b) on a GPU host | P17.11,P17.13 | no GPU host for part (b) (OQ-040, 2026-10-06); part (a) runs as P17.11 |
 | P5.0 | DONE | Plan phase P5 into plans/p5-ir.md and add its tasks here | - | plan plans/p5-ir.md; base p17-portable at 7f920d7 (P17 stalled, not merged); OQ-048 and OQ-049 filed |
 | P5.1 | DONE | Spike: Polygeist and tt-mlir pins, builds, and budget | - | plans/spikes/p5-mlir-pins.md: Polygeist 77c04bb2 (llvm-project 26eb4285), two LLVMs; tt-mlir 5f396fd6 runtime off, Python 3.10; the raiser links Polygeist's clang; both stacks PROJECTED 24-43 GiB static, 13-28 shared, against 17.1 GiB under the stop line: does not fit (OQ-049 Response); bible mirror edit in plans/BIBLE-SYNC.md (master unreachable) |
-| P5.2 | ACTIVE | Spike: the v0 corpus pipeline on alpha01 (question 8) | - |  |
+| P5.2 | ACTIVE | Spike: the v0 corpus pipeline on alpha01 (question 8) | - | draft spike committed (plans/spikes/p5-v0-corpus.md): one review round and one fix pass done, bible text applied to the mirror and plans/BIBLE-SYNC.md; pending: the commit audit. Probes past OQ-050 ratified by the owner (OQ-051); OQ-051 waits for the owner to revoke the token, reset the remote, and remove the stray directory |
 | P5.3 | READY | Spike: Tier B sources at the joint pin | - |  |
 | P5.11 | READY | lassi/corpus: the v0 migration and corpus records | P5.2 |  |
 | P5.4 | OWNER | Install tt-mlir and its LLVM at the joint pin | P5.1 | OQ-049: P5.1's projection for both stacks together (about 24 to 43 GiB static, 13 to 28 GiB shared) does not fit under the 115G stop line; READY when the owner's answer frees space |
