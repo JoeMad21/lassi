@@ -1358,6 +1358,18 @@ def test_python_tags_are_refused(load_error: Callable[..., str], tmp_path: Path,
     assert "unsafe.yaml" in message and "python/" in message and "not valid YAML" in message, message
 
 
+def test_a_yaml_syntax_error_names_its_line_and_column_and_quotes_no_source_line(
+    load_error: Callable[..., str], tmp_path: Path
+) -> None:
+    # SYNTHETIC: a mistyped api_key_env line holding a key-like value. The message gives the problem, the line, and
+    # the column only, never the snippet of the line that PyYAML's own text quotes (task P17.11; PHASE-NOTES P17).
+    snippet = "model:\n  backend: fake\n  api_key_env: sk-SYNTHETIC-123: x"
+    message = load_error(over_child(tmp_path, snippet, "secret.yaml"))
+    assert "secret.yaml" in message and "not valid YAML" in message, message
+    assert "mapping values are not allowed here" in message and "line 4, column " in message, message
+    assert "sk-SYNTHETIC" not in message and "^" not in message, message
+
+
 DEEP_VALUES = [
     pytest.param(f"executor: {{kind: native, host: {nested(100, 'list')}}}", id="lists-100"),
     pytest.param(f"executor: {{kind: native, host: {nested(400, 'list')}}}", id="lists-400"),

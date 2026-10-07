@@ -1,0 +1,8 @@
+# A refusal fixture of gate part (a) (task P17.11): on alpha01 `lassi run` of this recipe is refused before any
+# directory exists, naming the device it lacks, and opens no device node (OQ-002). It is never meant to run.
+# P17.G, if a GPU host is ever granted (OQ-040: none is planned), adds part (b)'s bindings (the gpu executor per
+# language, the vendor profiler) and its own index choices.
+# It is p17-cpu-hf.yaml with the model on AMD GPU 0; the cpu extra's torch build cannot reach a rocm device.
+extends: p17-cpu-hf.yaml  # the CPU recipe; only the model's device differs
+model:
+  device: {kind: rocm, indices: [0]}  # refused at model.device: the torch build is not a HIP build

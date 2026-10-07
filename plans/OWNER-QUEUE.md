@@ -570,3 +570,15 @@ Question: OQ-002 and OQ-043 entry 15 allow AMD software work that opens no GPU d
 Options: (a) Record it and go on: from P17.6 on every hipcc command LASSI runs names its target, and the remote test checks the version check and a build. (b) As (a), and the gate also refuses command text that runs hipcc without `--offload-arch=`, so no rx exec repeats it; a gate configuration change the owner makes. (c) As (a), and ask the host's administrator whether a device query from joseph_ufl was logged on 2026-10-05.
 Recommendation: (a). Neither run opened a GPU device node: the host run most likely read only the KFD topology in sysfs, and the sandboxed run most likely read PCI device data through lspci. The cause is fixed in code and checked by a remote test; hiding /proc/bus/pci from compiles is a PHASE-NOTES candidate (P17 section). Choose (c) to have the host's administrator check for a logged device query.
 Answer:
+
+## OQ-047 Approval To Run P17.11's Gate Part (a) Batch On alpha01 (Agent Rule 17)
+State: OPEN
+Kind: access
+Blocks: P17.11 (the launch, its evidence commit, and the pull request "P17 Portable Stack, part (a)")
+Evidence: AGENTS.md hard rule 17 and the bible's Decision Log of 2026-10-06; plans/runs/p17-gate-a/run.sh (header: steps, limits, the stop procedure); tests/fixtures/recipes/p17-*.yaml; plans/p17-portable.md, P17.11
+Question: Agent Rule 17 holds model inference and training on alpha01 for the owner's yes. P17.11's batch is one rx job, CPU only, about 25 to 85 minutes PROJECTED with a 6-hour cap: one download of Qwen/Qwen2.5-Coder-0.5B-Instruct at revision ea3f2471cf1b1f0db85067f1ef93848e38e88c25 (1.0 GB, only when absent); in-process inference on the CPU at 16 threads (an optional speed check, then `lassi run` of one HeCBench item, matrix-rotate, in both directions, at most 10 model calls and 20,480 new tokens); three 2-step training smokes (sft, dpo, grpo) on a tiny random-weight model with SYNTHETIC data; and four GPU recipes that must be refused before any model load, under strace. It touches about 2 to 3 GiB under /mnt/nvme10/joseph_ufl and the network (PyPI, the PyTorch CPU index, the Hugging Face Hub once, GitHub); no GPU, no RNGD card, no server. May it run, and with or without the speed check?
+Options: (a) Run it with the speed check, which reports the CPU decode rate within minutes so a slow run can be stopped early. (b) Run it without the speed check (one model load and one 8,000-token prompt fewer). (c) Not yet: the prep stays committed and nothing runs; P17 stays ACTIVE with P17.11 held for the owner.
+Recommendation: (a), for the early warning on run time.
+Answer:
+Owner's choice (asked in the working session, 2026-10-06; recorded by the agent): (c), not yet.
+Pending the owner's yes. P17.11 is OWNER; the prep is committed and nothing has run on alpha01.

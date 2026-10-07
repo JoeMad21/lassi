@@ -28,7 +28,7 @@ jobs:
         run: >-
           uv run --frozen --extra cpu python -c
           "import torch; assert not torch.cuda.is_available(); print(torch.__version__, torch.version.cuda, torch.version.hip)"
-      - name: Device-neutral tests of P17.2 to P17.9, remote tests excluded
+      - name: Device-neutral P17 tests, remote tests excluded
         # The sandbox refuses a workdir under /tmp, which a private tmpfs hides inside, so the tests'
         # temporary directories go under the runner's temp directory.
         env:
@@ -38,6 +38,7 @@ jobs:
           tests/core/test_devices.py
           tests/core/test_recipe_devices.py
           tests/core/test_runner_devices.py
+          tests/core/test_p17_gate_recipes.py
           tests/executors/test_device_probes.py
           tests/core/test_recipe_serving.py
           tests/llm/test_serving.py

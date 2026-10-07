@@ -756,12 +756,13 @@ def _parse_yaml(text: str, path: Path) -> Any:
     """Parse one YAML document with the safe loader.
 
     It refuses repeated keys, self-containing aliases, deep nesting, and
-    aliases that expand to more than _MAX_VALUES values.
+    aliases that expand to more than _MAX_VALUES values. A YAML error's
+    message is _yaml_problem's, which quotes no source line.
     """
     try:
         loader = yaml.SafeLoader(text)
     except yaml.YAMLError as exc:
-        raise RecipeError(f"{path}: not valid YAML: {exc}") from exc
+        raise RecipeError(f"{path}: not valid YAML: {_yaml_problem(exc)}") from None
     loader.name = path.name
     try:
         node = loader.get_single_node()
@@ -772,11 +773,36 @@ def _parse_yaml(text: str, path: Path) -> Any:
     except _SchemaError as exc:
         raise RecipeError(f"{path}: {exc}") from None
     except yaml.YAMLError as exc:
-        raise RecipeError(f"{path}: not valid YAML: {exc}") from exc
+        raise RecipeError(f"{path}: not valid YAML: {_yaml_problem(exc)}") from None
     except RecursionError as exc:
         raise RecipeError(f"{path}: not valid YAML: mappings and lists nest too deep to parse") from exc
     finally:
         loader.dispose()
+
+
+def _yaml_problem(exc: yaml.YAMLError) -> str:
+    """Return a YAML error as its context, its problem, and the problem's line and column, quoting no source line.
+
+    PyYAML's own text (str(exc)) quotes the offending line, which could show
+    a mistyped value such as a key written into api_key_env (task P17.11), so
+    only exc.context, exc.problem, and the line and column (both from 1) of
+    exc.problem_mark, else exc.context_mark, are used, for every key, since
+    a syntax error comes before any key is known. Known cases, not
+    complete: a problem text can itself hold source text, such as an
+    unknown tag's name, and _construct's message for a scalar its explicit
+    tag cannot read quotes the constructor's error, which can hold the
+    scalar. A reader error gives its reason and character position, and any
+    other error its class name.
+    """
+    if isinstance(exc, yaml.reader.ReaderError):
+        return f"{exc.reason} at character {exc.position}"
+    if not isinstance(exc, yaml.MarkedYAMLError):
+        return type(exc).__name__
+    parts = [str(part) for part in (exc.context, exc.problem) if part]
+    mark = exc.problem_mark or exc.context_mark
+    if mark is not None:
+        parts.append(f"at line {mark.line + 1}, column {mark.column + 1}")
+    return " ".join(parts) or type(exc).__name__
 
 
 def _construct(loader: yaml.SafeLoader, node: yaml.Node, *, whole: bool = False) -> Any:

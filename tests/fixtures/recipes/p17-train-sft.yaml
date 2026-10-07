@@ -1,0 +1,15 @@
+# A train smoke recipe of gate part (a) (task P17.11; bible Build Roadmap, P17 row): `lassi train` runs sft briefly on
+# the CPU with a tiny model on SYNTHETIC data. It equals tests/train/trl_smoke.py smoke_recipe('sft', 'full'), the
+# recipe CI's slow tests train (tests/train/test_smoke_recipes.py checks it). The runs root is $LASSI_RUNS_ROOT.
+base_model: fixture:tiny-causal-lm  # tests/fixtures/train/tiny-causal-lm: random weights under the seed, no download
+method: sft  # supervised fine-tuning
+weights: full  # every weight trains
+trainer:
+  kind: trl  # the TRL backend (task P17.9)
+  device: {kind: cpu}  # explicit device, no default
+  steps: 2  # a brief run: two optimizer steps
+  seed: 7  # the trainer's seed (bible Training Module, Compute)
+  batch_size: 2  # two records per step
+  learning_rate: 0.001  # a smoke value; nothing here is tuned
+data:
+  synthetic: sft-smoke.jsonl  # SYNTHETIC records under tests/fixtures/train/, outside every suite (Agent Rule 5)

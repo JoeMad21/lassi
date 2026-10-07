@@ -1,0 +1,10 @@
+# A refusal fixture of gate part (a) (task P17.11): on alpha01 `lassi run` of this recipe is refused before any
+# directory exists, naming the device it lacks, and opens no device node (OQ-002). It is never meant to run.
+# P17.G, if a GPU host is ever granted (OQ-040: none is planned), adds part (b)'s bindings (the gpu executor per
+# language, the vendor profiler) and its own index choices.
+# It is p17-cpu-hf.yaml with the gpu executor on AMD GPU 0, bound for the cuda language only to exercise the rocm
+# probe's refusal, since no suite language builds for AMD yet (a HIP item is a P17.6 candidate). alpha01's /dev/kfd
+# exists, and the probe asks access(2), which opens nothing, and is refused (OQ-002).
+extends: p17-cpu-hf.yaml  # the CPU recipe; only executor.cuda differs
+executor:
+  cuda: {kind: gpu, device: {kind: rocm, indices: [0]}}  # refused at executor.cuda.device: /dev/kfd not usable
