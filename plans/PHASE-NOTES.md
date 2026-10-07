@@ -261,6 +261,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - Lock a GPU across processes for lassi train, with P17.5's lock candidate.
   - Episode semantics: whether grpo without episode means single_turn (the bible's default) or a required choice.
 - P17.9's trl Trainer (bible Training Module, Compute and Safeguards; Component Interfaces, Trainer). Candidates not built:
+  - P17.10's first run (a988ef8) carried two runner notices: ubuntu-latest moves to Ubuntu 26 from 2026-10-19 (actions/runner-images issue 14748), and checkout@v4 and setup-python@v5 target the deprecated Node.js 20. Both workflows use them; pin ubuntu-24.04 or move to newer action majors in one change, and rerun the cpu-tests job.
   - Settled in P17.10: cpu-tests.yml runs the slow tests on purpose. Nothing excludes the slow marker from `uv run pytest -q`; test_trl_runs.py skips only because the extra is absent, so the CI job that installs the cpu extra runs it unless it deselects slow on purpose.
   - Hash the base model's files in _load_base, before the load, rather than after training, so checkpoint.json pins exactly what was loaded.
   - _check_base and _base_dir read lassi.train.data SYNTHETIC_DIR and ignore TrainOptions.synthetic_dir, so a test's base and data can come from different directories.
