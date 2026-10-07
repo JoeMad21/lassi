@@ -629,3 +629,15 @@ Recommendation: (a). Revoking the token is the only fix for its exposure; the di
 Answer:
 Owner's choice (asked in the working session, 2026-10-07; recorded by the agent): (a). The reads are ratified, so P5.2's figures that rest on them stand. The owner removes the empty directory, revokes the token on GitHub, and resets the copy's remote URL; no agent runs that write, which would need its own approval.
 Pending the owner's actions (revoke the token, reset the remote, remove the directory); the item closes when the owner confirms them.
+
+## OQ-052 The LASSI Demo For 2026-10-08: Scope And Server Access (Agent Rule 17)
+State: CLOSED
+Kind: access
+Blocks: none
+Evidence: tools/demo/ (lassi-live, lassi-showcase, README.md); /mnt/nvme10/joseph_ufl/bin/lassi-live and lassi-showcase on alpha01 (read with rx 20261007-160627-exec-9b2f and the reads after it; lassi-showcase named a slot that no longer exists)
+Question: The owner asked to wrap up and update the LASSI demo for the next day. What should it show, and what server access may the session use to prepare it?
+Options: Scope: (a) both the 2026-09-24 LASSI replication on RNGD, on current lassi, and a Tenstorrent segment (one Tier A item on ttsim); (b) the replication only; (c) the Tenstorrent segment only. Access: (a) prepare and rehearse: read the demo scripts, sync the demo slot to the commit that holds them and install them, claim one free RNGD card (0.00 GiB, never npu0), serve Llama-3.1-8B, run a one-item rehearsal of each segment, stop the server, and release the card; (b) prepare without inference; (c) local only.
+Recommendation: scope (a); access (a).
+Answer:
+Owner's choice (asked in the working session, 2026-10-07; recorded by the agent): scope (a), both; access (a), prepare and rehearse.
+Closed: the approval covers the steps named above; any other server step asks again.

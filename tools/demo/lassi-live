@@ -1,0 +1,434 @@
+#!/usr/bin/env python3
+"""Live inference demo: serve the demo model on a free RNGD card and run LASSI against it with the live table.
+
+Usage:
+  lassi-live                          two CUDA -> OpenMP trials (matrix-rotate, entropy), a few minutes; every
+                                      generated program is compiled and run in the sandbox on the CPU
+  lassi-live --tt                     the Tenstorrent segment instead: one tt-pairs-v0 Tier A item
+                                      (eltwise_binary), C++ -> TT and TT -> C++, prompts tt-host-v0; every TT
+                                      program runs on ttsim, a simulator of a Wormhole card, not silicon
+  lassi-live --both                   the CPU segment, then the Tenstorrent segment, on one model server
+  lassi-live --tt-apps loopback       choose the Tier A items (loopback, eltwise_binary, eltwise_sfpu, or the two
+                                      matmuls, matmul_single_core and matmul_multi_core, which are judged by pcc)
+  lassi-live --apps layout,entropy    choose the apps (any of the ten in lassi-hecbench-10: atomicCost, bsearch,
+                                      colorwheel, dense-embedding, entropy, jacobi, layout, matrix-rotate,
+                                      pathfinder, randomAccess); a trial that hits the correction cap takes 5-8 min
+  lassi-live --compile-only           OpenMP -> CUDA and CUDA -> OpenMP, compile only (nothing generated runs)
+  lassi-live --card npu2              use this card (never npu0); default: the first free card, npu1 to npu7
+  lassi-live --plain                  the same run with graphics off (no banner, no live table)
+  lassi-live --show RUN_ID            print the outcome table of a finished run and exit (no card, no server)
+
+What happens:
+  1. Checks: `furiosa-smi ps` and `furiosa-smi status`; a card from npu1 to npu7 whose memory reads 0.00 GiB;
+     port 8123 closed; no server of this account still running.
+  2. furiosa-llm serves furiosa-ai/Llama-3.1-8B-Instruct (revision v2026.2) on that card at 127.0.0.1:8123;
+     the run starts once /v1/models returns that id (about 40 s).
+  3. `lassi --graphics on run` with the demo recipe: the LASSI-DF banner, then the live inference table
+     (task P4.8) redrawn in place about once a second while the model works on the card. With --both, the CPU
+     segment runs first and the Tenstorrent segment second, against the same server.
+  4. The outcome of each trial, then the server is stopped and the card is checked back at 0.00 GiB. Ctrl-C at
+     any point stops the run and the server; a watchdog also stops the server if this script dies.
+
+The model is the stock demo model, not an experiment arm; results are one sample and never performance. A
+Tenstorrent trial's numbers come from ttsim and are labeled simulator, never silicon. The Tenstorrent segment
+runs one trial per item and direction with at most 3 corrections, so it fits a live demo.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+BASE = Path("/mnt/nvme10/joseph_ufl")
+SLOT = BASE / "lassi-wt" / "demo-live"
+RUNS_ROOT = BASE / "lassi-runs"
+RECIPES = BASE / "lassi-live"
+LOGS = BASE / "tmp"
+VENV = BASE / "furiosa-venv"
+MODEL = "furiosa-ai/Llama-3.1-8B-Instruct"
+REVISION = "v2026.2"
+PORT = 8123
+DEFAULT_APPS = ["matrix-rotate", "entropy"]
+DEFAULT_TT_APPS = ["eltwise_binary"]
+TT_BENCH = BASE / "bench" / "tt-pairs-v0@5280a9cfb00998fd49667a29523d03aee905c129"
+TT_PCC_APPS = {"matmul_single_core", "matmul_multi_core"}
+TT_MAX_ABS_APPS = {"loopback", "eltwise_binary", "eltwise_sfpu"}
+TT_CORRECTIONS = 3
+READY_S = 300
+STOP_S = 60
+STATUS_ROW = re.compile(r"\|\s*rngd\s*\|\s*(npu\d+)\s*\|\s*(\S+)\s*\|\s*([\d.]+)/([\d.]+)\s*GiB")
+ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+RULE = "=" * 78
+NAMES = {"cuda": "CUDA", "omp": "OpenMP", "cpp": "C++", "tt": "TT (ttsim)"}
+
+
+def environment() -> dict:
+    """Return the environment a run gets on this host: scratch roots and caches off the root filesystem."""
+    env = dict(os.environ)
+    env.update(
+        PATH=f"{BASE}/bin:" + env.get("PATH", ""), LASSI_SCRATCH=str(BASE), LASSI_RUNS_ROOT=str(RUNS_ROOT),
+        LASSI_TOOLCHAINS=f"{BASE}/toolchains", TMPDIR=f"{BASE}/tmp", UV_CACHE_DIR=f"{BASE}/.cache/uv",
+        XDG_CACHE_HOME=f"{BASE}/.cache", PIP_CACHE_DIR=f"{BASE}/.cache/pip", HF_HOME=f"{BASE}/hf",
+        PYTHONUNBUFFERED="1",
+    )
+    return env
+
+
+def say(text: str = "") -> None:
+    """Print one line to stderr, where the banner and the live table also go."""
+    print(text, file=sys.stderr, flush=True)
+
+
+def heading(text: str) -> None:
+    """Print a section heading."""
+    say(f"\n{RULE}\n{text}\n{RULE}")
+
+
+def boxed(header: list, rows: list) -> str:
+    """Draw rows as a boxed table in the style of furiosa-smi status."""
+    widths = [max(len(str(c)) for c in col) for col in zip(header, *rows)]
+    rule = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+    line = lambda cells: "| " + " | ".join(str(c).ljust(w) for c, w in zip(cells, widths)) + " |"
+    return "\n".join([rule, line(header), rule, *(line(r) for r in rows), rule])
+
+
+def ascii_only(text: str) -> str:
+    """Return text with every character outside printable ASCII written as '?'."""
+    return "".join(c if " " <= c <= "~" else "?" for c in text)
+
+
+# ---------------------------------------------------------------------------
+# Cards, port, and server
+
+
+def card_status() -> dict[str, tuple[str, float, float]]:
+    """Return {card: (state, used GiB, total GiB)} from `furiosa-smi status`."""
+    out = subprocess.run(["furiosa-smi", "status"], capture_output=True, text=True, check=False).stdout
+    return {m.group(1): (m.group(2), float(m.group(3)), float(m.group(4))) for m in STATUS_ROW.finditer(out)}
+
+
+def show_cards() -> dict[str, tuple[str, float, float]]:
+    """Print `furiosa-smi ps` and the card memory table; return the status rows."""
+    ps = subprocess.run(["furiosa-smi", "ps"], capture_output=True, text=True, check=False).stdout.strip()
+    say("furiosa-smi ps (this account's processes only):")
+    say(ps or "(no output)")
+    cards = card_status()
+    rows = [[card, state, f"{used:.2f}/{total:.2f} GiB", "reserved (never used)" if card == "npu0" else
+             ("free" if used == 0 else "in use")] for card, (state, used, total) in sorted(cards.items())]
+    say("furiosa-smi status (memory shows every tenant):")
+    say(boxed(["Card", "State", "Memory", "For this demo"], rows))
+    return cards
+
+
+def pick_card(cards: dict, wanted: str | None) -> str:
+    """Return the card to serve on: `wanted`, or the first free one from npu1 to npu7."""
+    if wanted == "npu0":
+        raise SystemExit("lassi-live: npu0 is reserved for another tenant and is never used")
+    choices = [wanted] if wanted else [f"npu{i}" for i in range(1, 8)]
+    for card in choices:
+        state, used, _ = cards.get(card, ("missing", -1.0, 0.0))
+        if state == "alive" and used == 0:
+            return card
+    raise SystemExit(f"lassi-live: no free card among {', '.join(choices)} (memory must read 0.00 GiB)")
+
+
+def port_open() -> bool:
+    """Return True when something listens on 127.0.0.1:PORT."""
+    with socket.socket() as sock:
+        sock.settimeout(1)
+        return sock.connect_ex(("127.0.0.1", PORT)) == 0
+
+
+def own_servers() -> list[str]:
+    """Return the pids of this account's furiosa-llm serve processes."""
+    done = subprocess.run(["pgrep", "-u", str(os.getuid()), "-f", "furiosa-llm serve"], capture_output=True,
+                          text=True, check=False)
+    return done.stdout.split()
+
+
+def start_server(card: str, log: Path) -> subprocess.Popen:
+    """Start furiosa-llm serve on `card` in its own session, with a watchdog that stops it if this script dies."""
+    script = (
+        'trap "" PIPE\n'
+        f'source "{VENV}/bin/activate"\n'
+        f"furiosa-llm serve {MODEL} --revision {REVISION} --devices npu:{card[3:]} --host 127.0.0.1 --port {PORT}"
+        " --no-enable-prefix-caching &\n"
+        "S=$!\n"
+        'while kill -0 "$LASSI_LIVE_PID" 2>/dev/null && kill -0 $S 2>/dev/null; do sleep 2; done\n'
+        "kill -TERM $S 2>/dev/null\n"
+        "wait $S\n"
+    )
+    env = environment()
+    env.update(HF_HOME=f"{BASE}/.cache/huggingface", HF_HUB_OFFLINE="1", LASSI_LIVE_PID=str(os.getpid()))
+    handle = open(log, "w", encoding="utf-8")
+    return subprocess.Popen(["bash", "-c", script], stdout=handle, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                            env=env, start_new_session=True)
+
+
+def served_ids() -> list[str]:
+    """Return the model ids /v1/models lists, or [] when the server does not answer yet."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/v1/models", timeout=3) as reply:
+            return [m.get("id") for m in json.load(reply).get("data", [])]
+    except (OSError, ValueError):
+        return []
+
+
+def last_line(log: Path) -> str:
+    """Return the last non-empty line of the serve log, ASCII only."""
+    try:
+        lines = [x for x in log.read_text(encoding="utf-8", errors="replace").splitlines() if x.strip()]
+    except OSError:
+        return ""
+    return ascii_only(ANSI.sub("", lines[-1]).strip()) if lines else ""
+
+
+def wait_ready(server: subprocess.Popen, card: str, log: Path) -> float:
+    """Wait until /v1/models lists MODEL; return the seconds it took."""
+    start = time.monotonic()
+    width = max(40, shutil.get_terminal_size((100, 30)).columns - 1)
+    tty = sys.stderr.isatty()
+    while True:
+        waited = time.monotonic() - start
+        if MODEL in served_ids():
+            if tty:
+                sys.stderr.write("\r\x1b[K")
+            return waited
+        if server.poll() is not None:
+            raise SystemExit(f"lassi-live: the server exited with status {server.returncode}; see {log}")
+        if waited > READY_S:
+            raise SystemExit(f"lassi-live: the server was not ready after {READY_S} s; see {log}")
+        if tty:
+            text = f"loading {MODEL} onto {card}: {int(waited):3d} s  {last_line(log)}"
+            sys.stderr.write("\r\x1b[K" + text[:width])
+            sys.stderr.flush()
+        time.sleep(1)
+
+
+def signal_group(server: subprocess.Popen, sig: int, grace_s: float) -> bool:
+    """Send `sig` to the server's process group; return True once no process of the group is left."""
+    try:
+        os.killpg(server.pid, sig)
+    except ProcessLookupError:
+        return True
+    deadline = time.monotonic() + grace_s
+    while time.monotonic() < deadline:
+        server.poll()  # reap the wrapper, so the group can empty
+        try:
+            os.killpg(server.pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def stop_server(server: subprocess.Popen, card: str) -> None:
+    """Stop the server's process group, wait for it to exit, and check the port and the card."""
+    say(f"\nStopping the server on {card} ...")
+    if not signal_group(server, signal.SIGTERM, STOP_S):
+        signal_group(server, signal.SIGKILL, 10)
+    for _ in range(30):
+        cards = card_status()
+        if not own_servers() and not port_open() and cards.get(card, ("", 1.0, 0.0))[1] == 0:
+            break
+        time.sleep(1)
+    used = card_status().get(card, ("?", -1.0, 0.0))[1]
+    say(f"server stopped: own furiosa-llm serve processes {len(own_servers())}, port {PORT} "
+        f"{'open' if port_open() else 'closed'}, {card} memory {used:.2f} GiB")
+
+
+# ---------------------------------------------------------------------------
+# The run
+
+
+def tt_parent(apps: list[str]) -> str:
+    """Return the Tier A recipe that judges `apps` by their declared metric: max_abs or pcc, never both at once."""
+    unknown = sorted(set(apps) - TT_PCC_APPS - TT_MAX_ABS_APPS)
+    if unknown:
+        raise SystemExit(f"lassi-live: not a tt-pairs-v0 Tier A item: {', '.join(unknown)}")
+    if set(apps) <= TT_MAX_ABS_APPS:
+        return "tier-a-rngd-maxabs.yaml"
+    if set(apps) <= TT_PCC_APPS:
+        return "tier-a-rngd-pcc.yaml"
+    raise SystemExit("lassi-live: give max_abs items (loopback, eltwise_binary, eltwise_sfpu) or pcc items "
+                     "(matmul_single_core, matmul_multi_core) in one run, not both")
+
+
+def write_tt_recipe(run_id: str, apps: list[str]) -> Path:
+    """Write the Tenstorrent segment's recipe: one trial per item and direction, a short correction cap."""
+    RECIPES.mkdir(parents=True, exist_ok=True)
+    parent = SLOT / "projects" / "lassi-demo" / tt_parent(apps)
+    path = RECIPES / f"{run_id}.yaml"
+    path.write_text(
+        f"# Written by lassi-live for run {run_id}: C++ -> TT and TT -> C++, every TT program on ttsim (a "
+        "simulator, not silicon).\n"
+        f"extends: {Path(os.path.relpath(parent, RECIPES)).as_posix()}\n"
+        "bench:\n"
+        f"  items: [{', '.join(apps)}]\n"
+        "trials:\n"
+        "  n: 1  # one trial per item and direction, for a live demo\n"
+        "loop:\n"
+        f"  max_corrections: {TT_CORRECTIONS}  # a short cap for a live demo\n",
+        encoding="ascii",
+    )
+    return path
+
+
+def write_recipe(run_id: str, apps: list[str], compile_only: bool) -> Path:
+    """Write the demo recipe for this run next to the other demo recipes; return its path."""
+    RECIPES.mkdir(parents=True, exist_ok=True)
+    parent = SLOT / "projects" / "lassi-demo" / ("rngd-compile.yaml" if compile_only else "rngd-cpu.yaml")
+    path = RECIPES / f"{run_id}.yaml"
+    what = ("OpenMP -> CUDA and CUDA -> OpenMP, compile only" if compile_only else
+            "CUDA -> OpenMP, every generated program compiled and run in the sandbox on the CPU")
+    path.write_text(
+        f"# Written by lassi-live for run {run_id}: {what}.\n"
+        f"extends: {Path(os.path.relpath(parent, RECIPES)).as_posix()}\n"
+        "bench:\n"
+        f"  items: [{', '.join(apps)}]\n",
+        encoding="ascii",
+    )
+    return path
+
+
+def run_lassi(recipe: Path, run_id: str, graphics: str) -> int:
+    """Run `lassi --graphics <on|off> run` in the demo slot on the terminal; return its exit status."""
+    command = ["uv", "run", "--quiet", "lassi", "--graphics", graphics, "run", str(recipe), "--run-id", run_id]
+    return subprocess.run(command, cwd=SLOT, env=environment(), check=False).returncode
+
+
+def outcome(run_id: str) -> str:
+    """Return one boxed row per finished trial of the run: app, direction, stage, corrections, end reason, time."""
+    rows = []
+    for path in sorted((RUNS_ROOT / "runs" / run_id).rglob("trial.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        final, item = data["final"], data["bench_item"]
+        reason = final.get("end_reason") or {}
+        stage = final.get("stage_reached") or "-"
+        words = {"S0": "no output", "S1": "parses", "S2": "verifies", "S3": "lowers", "S4": "compiles",
+                 "S5": "runs clean"}
+        source, _, target = item["direction"].partition("-")
+        direction = f"{NAMES.get(source, source)} -> {NAMES.get(target, target)}"
+        rows.append([item["item"], direction, f"{stage} {words.get(stage, '')}".strip(),
+                     final.get("corrections", 0), reason.get("code") or "-",
+                     f"{final['wall_s']:.0f} s" if final.get("wall_s") is not None else "-"])
+    if not rows:
+        return "(no finished trial)"
+    return boxed(["App", "Direction", "Reached", "Corrections", "End reason", "Wall time"], rows)
+
+
+def parse(argv: list[str]) -> argparse.Namespace:
+    """Parse the command line."""
+    parser = argparse.ArgumentParser(prog="lassi-live", description=__doc__.split("\n")[0])
+    parser.add_argument("--apps", default=",".join(DEFAULT_APPS), help="comma-separated apps")
+    parser.add_argument("--compile-only", action="store_true", help="both directions, compile only")
+    parser.add_argument("--tt", action="store_true", help="the Tenstorrent segment instead of the CPU one")
+    parser.add_argument("--both", action="store_true", help="the CPU segment, then the Tenstorrent segment")
+    parser.add_argument("--tt-apps", default=",".join(DEFAULT_TT_APPS), help="comma-separated Tier A items")
+    parser.add_argument("--card", help="the card to serve on (never npu0)")
+    parser.add_argument("--run-id", help="the run id (default demo-live-<date>-<time>)")
+    parser.add_argument("--plain", action="store_true", help="graphics off: no banner, no live table")
+    parser.add_argument("--show", metavar="RUN_ID", help="print the outcome table of a finished run and exit")
+    return parser.parse_args(argv)
+
+
+def stop_on_signal(signum: int, _frame: object) -> None:
+    """Turn SIGTERM and SIGHUP into an exit, so the server is stopped on the way out."""
+    raise SystemExit(128 + signum)
+
+
+def segments(args: argparse.Namespace, run_id: str) -> list[tuple[str, str, list[str]]]:
+    """Return (segment, run id, items) for each segment this demo runs, checking what each needs first."""
+    apps = [a.strip() for a in args.apps.split(",") if a.strip()]
+    tt_apps = [a.strip() for a in args.tt_apps.split(",") if a.strip()]
+    chosen = (["cpu", "tt"] if args.both else ["tt"] if args.tt else ["cpu"])
+    if "cpu" in chosen and not any((SLOT / "assets" / "prompts" / "lassi-2024").glob("*.txt")):
+        raise SystemExit(f"lassi-live: {SLOT} has no generated upstream prompts; run there: uv run "
+                         "tools/extract_lassi_assets.py --upstream <a checkout of upstream LASSI at the pin>")
+    if "tt" in chosen:
+        tt_parent(tt_apps)
+        if not TT_BENCH.is_dir():
+            raise SystemExit(f"lassi-live: {TT_BENCH} is missing; run in {SLOT}: uv run tools/fetch_bench.py "
+                             "assets/bench/tt-pairs-v0.yaml")
+    if len(chosen) == 1:
+        return [(chosen[0], run_id, apps if chosen[0] == "cpu" else tt_apps)]
+    return [("cpu", f"{run_id}-cpu", apps), ("tt", f"{run_id}-tt", tt_apps)]
+
+
+def describe(segment: str, items: list[str], compile_only: bool) -> str:
+    """Return one line naming a segment's trials."""
+    if segment == "tt":
+        return (f"Tenstorrent segment: {', '.join(items)}; C++ -> TT and TT -> C++, one trial each, at most "
+                f"{TT_CORRECTIONS} corrections; every TT program runs on ttsim, a simulator, not silicon")
+    return f"CPU segment: {', '.join(items)}; " + ("both directions, compile only" if compile_only else
+                                                    "CUDA -> OpenMP, each program compiled and run on the CPU")
+
+
+def main(argv: list[str]) -> int:
+    """Run the demo; return the exit status."""
+    args = parse(argv)
+    if args.show:
+        say(outcome(args.show))
+        return 0
+    signal.signal(signal.SIGTERM, stop_on_signal)
+    signal.signal(signal.SIGHUP, stop_on_signal)
+    run_id = args.run_id or time.strftime("demo-live-%Y%m%d-%H%M%S")
+    plan = segments(args, run_id)
+    head = subprocess.run(["git", "log", "-1", "--format=%h %s"], cwd=SLOT, capture_output=True, text=True)
+    heading("LASSI live inference demo")
+    say(f"code: {SLOT} at {head.stdout.strip() or 'unknown commit'}")
+    say(f"model: {MODEL} at {REVISION}, furiosa-llm on one Furiosa RNGD card (the stock demo model)")
+    for segment, _, items in plan:
+        say(describe(segment, items, args.compile_only))
+    heading("1. The cards")
+    cards = show_cards()
+    if own_servers():
+        raise SystemExit("lassi-live: a furiosa-llm server of this account is still running; wait for it to exit")
+    if port_open():
+        raise SystemExit(f"lassi-live: port {PORT} is already in use")
+    card = pick_card(cards, args.card)
+    say(f"serving on {card}")
+    heading(f"2. Serving the model on {card}")
+    LOGS.mkdir(parents=True, exist_ok=True)
+    log = LOGS / f"lassi-live-serve-{run_id}.log"
+    server = start_server(card, log)
+    try:
+        ready = wait_ready(server, card, log)
+        say(f"ready in {ready:.0f} s: /v1/models lists {MODEL} (serve log {log})")
+        say(f"{card} memory now {card_status().get(card, ('?', -1.0, 0.0))[1]:.2f} GiB")
+        status = 0
+        for number, (segment, segment_id, items) in enumerate(plan):
+            label = "the Tenstorrent segment, on ttsim" if segment == "tt" else "the CPU segment"
+            heading(f"{3 + 2 * number}. lassi run with the live inference table: {label}")
+            recipe = (write_tt_recipe(segment_id, items) if segment == "tt" else
+                      write_recipe(segment_id, items, args.compile_only))
+            say(f"recipe: {recipe}")
+            done = run_lassi(recipe, segment_id, "off" if args.plain else "on")
+            heading(f"{4 + 2 * number}. Outcome: {label}")
+            say(outcome(segment_id))
+            if segment == "tt":
+                say("TT results come from ttsim, a simulator of a Wormhole card: simulator, not silicon.")
+            say(f"records: {RUNS_ROOT / 'runs' / segment_id}   (again: lassi-live --show {segment_id})")
+            if done:
+                say(f"lassi run exited with status {done}")
+            status = status or done
+        return status
+    except KeyboardInterrupt:
+        say("\ninterrupted")
+        return 130
+    finally:
+        stop_server(server, card)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

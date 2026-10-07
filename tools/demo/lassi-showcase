@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Show the work so far on alpha01: the LASSI-DF banner and graphics setting, then scoring a real run.
+
+Usage:
+  lassi-showcase            run every step
+  lassi-showcase --plain    the same with graphics off (no banner)
+
+Steps:
+  1. The graphics setting and the LASSI-DF banner (task P4.7).
+  2. lassi score on the demo run demo-rngd-cpu-1 with both score profiles (P2.6, P2.7, P2.9).
+  3. The run metrics table for that run: rates, Wilson 95% intervals, pass@k, and the paper's values (P2.8).
+  4. One score per trial, drawn as a boxed table.
+  5. The start of the review packet for one trial (plain ASCII; no source, prompt, or model text).
+
+Nothing here needs a model server or an accelerator: step 2 scores the records a finished run left behind.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+BASE = "/mnt/nvme10/joseph_ufl"
+WORKTREE = Path(f"{BASE}/lassi-wt/demo-live")  # the demo slot lassi-live also runs from
+RUNS_ROOT = Path(f"{BASE}/lassi-runs")
+RUN = RUNS_ROOT / "runs" / "demo-rngd-cpu-1"
+RULE = "=" * 78
+
+
+def environment() -> dict:
+    """Return the environment the rx gate gives a run: scratch roots and caches off the root filesystem."""
+    env = dict(os.environ)
+    env.update(
+        PATH=f"{BASE}/bin:" + env.get("PATH", ""), LASSI_SCRATCH=BASE, LASSI_RUNS_ROOT=str(RUNS_ROOT),
+        LASSI_TOOLCHAINS=f"{BASE}/toolchains", TMPDIR=f"{BASE}/tmp", UV_CACHE_DIR=f"{BASE}/.cache/uv",
+        XDG_CACHE_HOME=f"{BASE}/.cache", PIP_CACHE_DIR=f"{BASE}/.cache/pip", HF_HOME=f"{BASE}/hf",
+        PYTHONUNBUFFERED="1",
+    )
+    return env
+
+
+def step(number: int, title: str) -> None:
+    """Print a step heading."""
+    print(f"\n{RULE}\nStep {number}: {title}\n{RULE}", flush=True)
+
+
+def lassi(*args: str, capture: bool = False) -> subprocess.CompletedProcess:
+    """Run `uv run lassi <args>` in the worktree."""
+    return subprocess.run(["uv", "run", "--quiet", "lassi", *args], cwd=WORKTREE, env=environment(),
+                          text=True, capture_output=capture)
+
+
+def boxed(header: list, rows: list) -> str:
+    """Draw rows as a boxed table in the style of furiosa-smi status."""
+    widths = [max(len(str(c)) for c in col) for col in zip(header, *rows)]
+    rule = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+    line = lambda cells: "| " + " | ".join(str(c).ljust(w) for c, w in zip(cells, widths)) + " |"
+    return "\n".join([rule, line(header), rule, *(line(r) for r in rows), rule])
+
+
+def trial_scores(score_dir: Path) -> str:
+    """Return one boxed row per trial from the score tree's trial components (read with the worktree's pyarrow)."""
+    code = (
+        "import json, sys, pyarrow.dataset as ds\n"
+        "rows = ds.dataset(sys.argv[1], format='parquet').to_table().to_pylist()\n"
+        "out = {}\n"
+        "for r in rows:\n"
+        "    out.setdefault(r['trial_id'].split('/')[-2], {})[r['profile'] + ':' + r['component']] = r['value']\n"
+        "print(json.dumps(out))\n"
+    )
+    done = subprocess.run(["uv", "run", "--quiet", "python", "-c", code, str(score_dir / "parquet" / "trial_components")],
+                          cwd=WORKTREE, env=environment(), text=True, capture_output=True, check=True)
+    data = json.loads(done.stdout)
+    fmt = lambda v: "-" if v is None else f"{v:.3f}"
+    header = ["app (CUDA -> OpenMP)", "compiled", "correct", "corrections", "df-v0 score", "Sim-T", "C Sim-T", "Sim-L"]
+    rows = [[app, fmt(c.get("lassi:compiled")), fmt(c.get("lassi:correct")), fmt(c.get("lassi:self_corr")),
+             fmt(c.get("df-v0:multi_turn")), fmt(c.get("lassi:sim_t")), fmt(c.get("lassi:sim_t_c")),
+             fmt(c.get("lassi:sim_l"))] for app, c in sorted(data.items())]
+    return boxed(header, rows)
+
+
+def metrics_table(score_dir: Path) -> str:
+    """Return the metrics table's rows and distributions from metrics.md, without the long legend.
+
+    The table stops before metrics.md's Guard coverage section (task P17.14), whose columns differ.
+    """
+    lines = (score_dir / "metrics.md").read_text(encoding="ascii").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("## "))
+    end = next((i for i, line in enumerate(lines) if i > start and line.startswith("## Guard coverage")), len(lines))
+    keep = []
+    for line in lines[start:end]:
+        if line.startswith("|"):
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if len(cells) >= 8:
+                cells = cells[:4] + [cells[5]]  # metric, value, count, Wilson 95%, paper recount
+            line = "| " + " | ".join(cells) + " |"
+        keep.append(line)
+    return "\n".join(keep)
+
+
+def review_excerpt(score_dir: Path, trial: str = "bsearch", limit: int = 28) -> str:
+    """Return the first lines of one trial's section of review.md."""
+    text = (score_dir / "review.md").read_text(encoding="ascii")
+    sections = text.split("\n## ")
+    section = next((s for s in sections if f"/{trial}/" in s.split("\n", 1)[0]), sections[1])
+    return "\n".join(("## " + section).splitlines()[:limit])
+
+
+def main() -> int:
+    """Run the showcase; return the exit status."""
+    plain = "--plain" in sys.argv[1:]
+    graphics = "off" if plain else "on"
+    head = subprocess.run(["git", "log", "-1", "--format=%h %s"], cwd=WORKTREE, text=True, capture_output=True)
+    print(f"LASSI showcase from {WORKTREE.name} at {head.stdout.strip() or 'unknown commit'}")
+
+    step(1, "the graphics setting and the LASSI-DF banner (P4.7)")
+    lassi("--graphics", graphics, "settings", "graphics")
+    print("(graphics are optional: `lassi settings graphics on|off` saves a preset; without a terminal nothing is asked)")
+
+    step(2, "lassi score on demo-rngd-cpu-1 with the df-v0 and lassi profiles (P2.6, P2.7, P2.9)")
+    score_id = time.strftime("showcase-%Y%m%d-%H%M%S")
+    done = lassi("--graphics", "off", "score", str(RUN), "--profile", "df-v0", "--profile", "lassi",
+                 "--score-id", score_id, capture=True)
+    print(done.stdout.strip() or done.stderr.strip())
+    if done.returncode != 0:
+        return done.returncode
+    score_dir = RUNS_ROOT / "scores" / score_id
+    provenance = json.loads((score_dir / "provenance.json").read_text(encoding="ascii"))
+    print(f"scored {provenance['trials']} trials at commit {provenance['commit'][:7]}"
+          f" (clean tree: {not provenance['dirty']}); the run tree itself is never changed")
+
+    step(3, "run metrics: rates, Wilson 95% intervals, pass@k, and the paper's recount (P2.8)")
+    print(metrics_table(score_dir))
+
+    step(4, "one score per trial (1 = yes, 0 = no; the demo model on the CPU proxy)")
+    print(trial_scores(score_dir))
+
+    step(5, "the review packet: the start of one trial's section (plain ASCII, no code or model text)")
+    print(review_excerpt(score_dir))
+    print(f"\nFull packet: {score_dir}/review.md and metrics.md")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
