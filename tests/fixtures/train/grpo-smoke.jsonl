@@ -1,0 +1,4 @@
+{"prompt": "SYNTHETIC grpo prompt 1: write lowercase letters.", "target": "abcdefghijklmnopqrstuvwxyz"}
+{"prompt": "SYNTHETIC grpo prompt 2: write lowercase letters.", "target": "abcdefghijklmnopqrstuvwxyz"}
+{"prompt": "SYNTHETIC grpo prompt 3: unscorable, its reward is null.", "target": null}
+{"prompt": "SYNTHETIC grpo prompt 4: write lowercase letters.", "target": "abcdefghijklmnopqrstuvwxyz"}

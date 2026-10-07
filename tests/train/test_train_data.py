@@ -1,4 +1,4 @@
-"""Tests for the train data sources and the data split hash (task P17.8; lassi.train.data).
+"""Tests for the train data sources and the data split hash (tasks P17.8, P17.9; lassi.train.data).
 
 Bible: Training Module (Safeguards: eval splits are refused by the trainer,
 and every checkpoint logs data split hashes), Project Recipes (train.yaml),
@@ -19,8 +19,10 @@ The contract these tests fix:
   fetches every selected item (bench.items, else every item of the train
   split) with Suite.item(name, purpose="train"), so an eval or unassigned
   item raises EvalSplitError, reported as a RunError naming bench.items
-  and Agent Rule 5. It returns TrainData(source="bench") with the suite and
-  the sorted item names, and the identity {"source": "bench", "suite",
+  and Agent Rule 5. It returns TrainData(source="bench") with the suite's
+  train-only view (Suite.train_view(), lassi.bench.registry TrainView; task
+  P17.9), so no eval or unassigned item is reachable from it, and the
+  sorted item names, and the identity {"source": "bench", "suite",
   "commit", "split": "train", "items", "manifest_sha256"}, whose split hash
   changes when the manifest's bytes or the selected items change. No source
   file is read.
@@ -32,8 +34,11 @@ in this module is a measurement.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
+from collections.abc import Mapping
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -54,7 +59,7 @@ from train_fakes import (
     write_suite,
 )
 
-from lassi.bench import EvalSplitError, Suite
+from lassi.bench import EvalSplitError, Suite, SuiteItem
 from lassi.core.runner import RunError
 
 
@@ -192,7 +197,11 @@ def test_load_bench_takes_every_train_item_through_suite_item(tmp_path: Path, mo
     assert set(calls) == {("alpha", "train"), ("beta", "train")}
     assert identity == bench_identity(manifest, ["alpha", "beta"])
     assert data.source == "bench" and list(data.items) == ["alpha", "beta"] and tuple(data.records) == ()
-    assert isinstance(data.suite, Suite) and data.suite.name == SUITE
+    registry = importlib.import_module("lassi.bench.registry")
+    if not hasattr(registry, "TrainView"):
+        pytest.fail("lassi.bench.registry has no TrainView yet (task P17.9)")
+    assert isinstance(data.suite, registry.TrainView), "TrainData.suite is the train-only view (task P17.9)"
+    assert (data.suite.name, data.suite.commit) == (SUITE, SUITE_COMMIT)
     assert data.split_hash == sha256_text(canonical_json(identity))
 
 
@@ -228,3 +237,35 @@ def test_bench_item_on_the_returned_handle_refuses_eval_items(tmp_path: Path) ->
     assert data.bench_item("alpha").split == "train"
     with pytest.raises(EvalSplitError):
         data.bench_item("held")
+
+
+def reachable(root: object) -> list[object]:
+    """Return every object reachable from `root` through attributes, mapping keys and values, and sequences."""
+    seen: dict[int, object] = {}
+    stack = [root]
+    while stack:
+        obj = stack.pop()
+        if id(obj) in seen or isinstance(obj, (str, bytes, int, float, bool, type(None), type, ModuleType)):
+            continue
+        seen[id(obj)] = obj
+        if isinstance(obj, Mapping):
+            stack.extend(obj.keys())
+            stack.extend(obj.values())
+        elif isinstance(obj, (list, tuple, set, frozenset)):
+            stack.extend(obj)
+        if hasattr(obj, "__dict__"):
+            stack.extend(vars(obj).values())
+        for slot in getattr(type(obj), "__slots__", ()):
+            if hasattr(obj, slot):
+                stack.append(getattr(obj, slot))
+    return list(seen.values())
+
+
+def test_no_eval_or_unassigned_item_is_reachable_from_loaded_bench_data(tmp_path: Path) -> None:
+    # Agent Rule 5 rests on the data a Trainer gets, not on each backend calling bench_item (task P17.9).
+    write_suite(tmp_path / "suites")
+    data, _ = train_data().load_bench(bench_recipe(tmp_path, items=["beta"]), tmp_path / "suites")
+    found = reachable(data)
+    assert not [obj for obj in found if isinstance(obj, Suite)], "TrainData holds the whole suite"
+    splits = sorted(obj.split for obj in found if isinstance(obj, SuiteItem))
+    assert splits == ["train", "train"], f"TrainData reaches items of the splits {splits}"

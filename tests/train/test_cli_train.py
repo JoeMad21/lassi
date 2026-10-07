@@ -215,9 +215,9 @@ def test_lassi_train_on_an_eval_split_exits_2_naming_bench_split(
 
 
 def test_a_run_error_from_the_layer_exits_2(tmp_path: Path, fake_registry_in_place: Log) -> None:
-    recipe = committed_recipe(tmp_path / "recipes", lora={"r": 8, "targets": "all-linear"})
+    recipe = committed_recipe(tmp_path / "recipes", reward={"profile": "df-v0", "executor": "ttsim", "cache": True})
     runs_root = tmp_path / "runs-root"
     session = invoke(["--graphics", "off", *train_argv(recipe, runs_root)])
     assert session.code == 2 and session.out == ""
-    assert session.err.startswith("lassi train: ") and "lora" in session.err, session.err
+    assert session.err.startswith("lassi train: ") and "reward" in session.err, session.err
     assert not runs_root.exists()

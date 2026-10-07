@@ -1,4 +1,4 @@
-"""Tests for the lassi.train package as a whole (task P17.8): the registration rule and module hygiene.
+"""Tests for the lassi.train package as a whole (tasks P17.8, P17.9): the registration rule and module hygiene.
 
 Bible: Repository Layout (train/), Readability Standards (docstrings on
 public interfaces, type hints, plain ASCII), Design Principle 9 (placement:
@@ -9,12 +9,15 @@ module level, and a framework is imported only when a component is built.
 
 The contract these tests fix:
 
-- lassi.train, lassi.train.run, and lassi.train.data exist, and importing
-  lassi.train and lassi.cli succeeds in a fresh interpreter in which every
-  framework import fails (torch, transformers, trl, peft, accelerate,
-  datasets, huggingface_hub), loading none of them; importing lassi.cli
-  imports lassi.train, so a trainer that lassi.train registers is
-  registered for `lassi train`.
+- lassi.train, lassi.train.run, and lassi.train.data exist, and so do
+  lassi.train.trl_trainer, lassi.train.checkpoint, and
+  lassi.train.fixture_reward (task P17.9). Importing lassi.train and
+  lassi.cli succeeds in a fresh interpreter in which every framework import
+  fails (torch, transformers, trl, peft, accelerate, datasets,
+  huggingface_hub), loading none of them, and registers exactly one
+  Trainer, trl (lassi.train.trl_trainer); importing lassi.cli imports
+  lassi.train, so a trainer that lassi.train registers is registered for
+  `lassi train`.
 - Every module under lassi/train/ imports only the standard library and
   lassi at module level; inside a function it may import only those
   framework packages (a trainer's framework, as P17.9 adds), never another
@@ -40,7 +43,10 @@ import pytest
 from train_fakes import REPO
 
 TRAIN_DIR = REPO / "lassi" / "train"
-NAMED_MODULES = ("lassi.train", "lassi.train.run", "lassi.train.data")
+NAMED_MODULES = (
+    "lassi.train", "lassi.train.run", "lassi.train.data", "lassi.train.trl_trainer", "lassi.train.checkpoint",
+    "lassi.train.fixture_reward",
+)
 FOUND_MODULES = tuple(
     "lassi.train" if path.stem == "__init__" else f"lassi.train.{path.stem}" for path in sorted(TRAIN_DIR.glob("*.py"))
 )
@@ -87,7 +93,7 @@ def module_source(name: str) -> str:
     except ModuleNotFoundError:
         spec = None
     if spec is None or not spec.origin:
-        pytest.fail(f"{name} does not exist yet (task P17.8)")
+        pytest.fail(f"{name} does not exist yet (tasks P17.8, P17.9)")
     raw = Path(spec.origin).read_bytes()
     assert raw.isascii(), f"{name} has non-ASCII source text"
     assert b"\r" not in raw, f"{name} has a CR"
@@ -152,7 +158,7 @@ def test_named_modules_exist() -> None:
     if importlib.util.find_spec("lassi.train") is None:
         pytest.fail("lassi.train does not exist yet (task P17.8)")
     missing = [name for name in NAMED_MODULES if importlib.util.find_spec(name) is None]
-    assert not missing, f"missing modules (task P17.8): {missing}"
+    assert not missing, f"missing modules (tasks P17.8, P17.9): {missing}"
 
 
 def test_lassi_train_and_cli_import_with_every_framework_blocked() -> None:
@@ -165,9 +171,11 @@ def test_lassi_train_and_cli_import_with_every_framework_blocked() -> None:
     assert result.returncode == 0, result.stderr
     report = json.loads(result.stdout.strip().splitlines()[-1])
     assert report["loaded"] == [], f"a framework was imported: {report['loaded']}"
-    assert {"lassi.train", "lassi.train.run", "lassi.train.data"} <= set(report["modules"]), report["modules"]
+    assert {"lassi.train", "lassi.train.run", "lassi.train.data", "lassi.train.trl_trainer"} <= set(
+        report["modules"]
+    ), report["modules"]
     assert report["interfaces"][-1] == "Trainer", report["interfaces"]
-    assert isinstance(report["trainers"], list)
+    assert report["trainers"] == ["trl"], "lassi.train registers the trl Trainer without a framework (task P17.9)"
 
 
 def test_lassi_cli_imports_lassi_train() -> None:

@@ -10,11 +10,13 @@ config keys. When train(job) runs it records what was on disk at that
 moment (the resolved recipe and provenance.json beside job.out_dir, and
 whether job.out_dir was empty), so a test can show that the records came
 before any step, reads every bench item through job.data.bench_item, and
-writes one checkpoint directory under job.out_dir. Config keys turn on its
-failure modes: refuse (a ValueError when built), fail (an error during the
-steps), checkpoint and create (the checkpoint it reports and whether it
-makes it), steps (the step count it reports), and forbidden (an item it
-asks for through bench_item, expecting EvalSplitError).
+writes one checkpoint directory under job.out_dir. Its check(recipe, data)
+(task P17.9) records what it was given. Config keys turn on its failure
+modes: refuse (a ValueError when built), reject (a ValueError from
+check()), fail (an error during the steps), checkpoint and create (the
+checkpoint it reports and whether it makes it), steps (the step count it
+reports), and forbidden (an item it asks for through bench_item, expecting
+EvalSplitError).
 
 The probes answer with SYNTHETIC host facts and every framework build is
 SYNTHETIC. The fake is never registered in lassi's DEFAULT_REGISTRY. No
@@ -60,6 +62,7 @@ ROCM_DRIVER = "SYNTHETIC-amdgpu-6.8.5"
 NO_KFD = "SYNTHETIC: this host has no kfd node"
 NO_EXTRA = "SYNTHETIC: no framework extra is installed"
 REFUSAL = "SYNTHETIC: the fake trainer refuses its settings"
+REJECTION = "SYNTHETIC: the fake trainer's check refuses the recipe"
 FAILURE = "SYNTHETIC: the fake trainer failed during its steps"
 # The distributions the fake names as its framework pins: one installed in every test environment, one never.
 PACKAGES = ("pytest", "lassi-no-such-dist")
@@ -109,14 +112,18 @@ items:
 SUITE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
 TRAIN_ITEMS = ("alpha", "beta")
 
-# Every train key the layer does not carry out yet, with a value the schema accepts (lassi.train.run NOT_CARRIED_OUT).
-LATER_KEYS: dict[str, Any] = {
+# Every train key the layer does not carry out, with a value the schema accepts, in order (lassi.train.run
+# NOT_CARRIED_OUT; task P17.9): the episode and the executing reward (P7, P8), the adversary (P16), and export (P7).
+LAYER_KEYS: dict[str, Any] = {
     "episode": "single_turn",
-    "lora": {"r": 8, "targets": "all-linear"},
     "reward": {"profile": "df-v0", "executor": "ttsim", "cache": True},
-    "rollout": {"engine": "vllm", "group_size": 8},
     "adversary": {"kind": "llm", "model": "SYNTHETIC-model", "trained": False},
     "export": {"merge": True, "fxb": "check_then_build", "register_as": "SYNTHETIC-registered"},
+}
+# The train keys the layer passes to the Trainer's check(recipe, data), which refuses what it does not carry out.
+TRAINER_KEYS: dict[str, Any] = {
+    "lora": {"r": 8, "targets": "all-linear"},
+    "rollout": {"engine": "vllm", "group_size": 8},
 }
 
 
@@ -162,10 +169,14 @@ def framework_build(values: tuple[str, str, str | None, str | None]) -> Any:
 
 @dataclass
 class Log:
-    """What the fakes saw, in order: framework() calls, builds, probes, steps, and what train() found on disk."""
+    """What the fakes saw, in order: framework() calls, builds, checks, probes, steps, and what train() found on disk.
+
+    `checks` holds (recipe, data) as each check() call received them.
+    """
 
     events: list[str] = field(default_factory=list)
     configs: list[dict[str, Any]] = field(default_factory=list)
+    checks: list[tuple[dict[str, Any], Any]] = field(default_factory=list)
     jobs: list[Any] = field(default_factory=list)
     seen: list[dict[str, Any]] = field(default_factory=list)
     refusals: list[str] = field(default_factory=list)
@@ -194,8 +205,12 @@ def fake_trainer(
     weight_modes: Any = frozenset({"full"}),
     data_sources: Any = frozenset({"synthetic", "bench"}),
     takes_device: bool = True,
+    check: Any = True,
 ) -> type:
-    """Return a fake Trainer class; `framework` is a build tuple, a callable, or MISSING, and MISSING drops a key."""
+    """Return a fake Trainer class; `framework` is a build tuple, a callable, or MISSING, and MISSING drops a key.
+
+    `check` MISSING leaves out check(), which the layer refuses (task P17.9).
+    """
 
     def report() -> Any:
         log.events.append("framework")
@@ -210,35 +225,47 @@ def fake_trainer(
             raise ValueError(REFUSAL)
         self.config = config
 
+    def checked(self: Any, recipe: Any, data: Any) -> None:
+        log.events.append("check")
+        log.checks.append((copy.deepcopy(dict(recipe)), data))
+        if self.config.get("reject"):
+            raise ValueError(REJECTION)
+
     def train(self: Any, job: Any) -> Any:
-        log.events.append("train")
-        log.jobs.append(job)
-        out_dir = Path(job.out_dir)
-        log.seen.append(_on_disk(out_dir))
-        _read_bench(log, job, self.config.get("forbidden"))
-        if self.config.get("fail"):
-            raise RuntimeError(FAILURE)
-        checkpoint = self.config.get("checkpoint", "checkpoint-1")
-        if self.config.get("create", True):
-            (out_dir / checkpoint).mkdir(parents=True)
-            (out_dir / checkpoint / "marker").write_bytes(b"SYNTHETIC checkpoint marker\n")
-        result = core_name("lassi.core.interfaces", "TrainResult")
-        return result(steps=self.config.get("steps", 1), checkpoints=(checkpoint,))
+        return _fake_train(log, self.config, job)
 
     namespace: dict[str, Any] = {
         "__doc__": f"Fake Trainer {name} for the lassi train tests.",
         "name": name,
         "capabilities": frozenset({TAKES_DEVICE} if takes_device else set()),
-        "config_keys": frozenset({"steps", "refuse", "fail", "checkpoint", "create", "forbidden"}),
+        "config_keys": frozenset({"steps", "refuse", "reject", "fail", "checkpoint", "create", "forbidden"}),
         "methods": methods,
         "weight_modes": weight_modes,
         "data_sources": data_sources,
         "packages": packages,
         "framework": MISSING if framework is MISSING else staticmethod(report),
         "__init__": build,
+        "check": MISSING if check is MISSING else checked,
         "train": train,
     }
     return type(f"Fake_{name}", (), {key: value for key, value in namespace.items() if value is not MISSING})
+
+
+def _fake_train(log: Log, config: Mapping[str, Any], job: Any) -> Any:
+    """Run a fake Trainer's train(job): log it, read the bench items, then fail or write one checkpoint marker."""
+    log.events.append("train")
+    log.jobs.append(job)
+    out_dir = Path(job.out_dir)
+    log.seen.append(_on_disk(out_dir))
+    _read_bench(log, job, config.get("forbidden"))
+    if config.get("fail"):
+        raise RuntimeError(FAILURE)
+    checkpoint = config.get("checkpoint", "checkpoint-1")
+    if config.get("create", True):
+        (out_dir / checkpoint).mkdir(parents=True)
+        (out_dir / checkpoint / "marker").write_bytes(b"SYNTHETIC checkpoint marker\n")
+    result = core_name("lassi.core.interfaces", "TrainResult")
+    return result(steps=config.get("steps", 1), checkpoints=(checkpoint,))
 
 
 def _read_bench(log: Log, job: Any, forbidden: str | None) -> None:

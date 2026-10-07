@@ -1,4 +1,4 @@
-"""Tests for the train layer behind `lassi train` (task P17.8): every refusal first, then the records, then the steps.
+"""Tests for the train layer of `lassi train` (tasks P17.8, P17.9): the refusals, then the records, then the steps.
 
 Bible: Training Module (Compute: a train recipe names its device with no
 default, and every checkpoint records the device, the framework pins, and
@@ -6,15 +6,16 @@ the resolved train recipe; Safeguards: eval splits are refused by the
 trainer, and checkpoints log data split hashes), Project Recipes (train.yaml;
 the Notes on device sections and train recipes), Component Interfaces
 (Trainer), Result Record (provenance), Agent Rules 5, 7, and 10;
-plans/p17-portable.md, task P17.8.
+plans/p17-portable.md, tasks P17.8 and P17.9.
 
 The contract these tests fix (lassi.train.run):
 
 - run_training(path, options=TrainOptions()) -> Path loads the train recipe
   (lassi.core.recipe.load_train_recipe), then refuses, before any directory
-  exists: a key the layer does not carry out yet (NOT_CARRIED_OUT: episode,
-  lora, reward, rollout, adversary, export), naming every one the recipe
-  sets, in that order; a runs root that is not absolute, that resolves
+  exists: a key the layer does not carry out (NOT_CARRIED_OUT: episode,
+  reward, adversary, export; task P17.9 passes lora and rollout to the
+  Trainer's check), naming every one the recipe sets, in that order; a runs
+  root that is not absolute, that resolves
   inside the repository, or outside $LASSI_SCRATCH when that is set, or
   that no source gives (the option, else $LASSI_RUNS_ROOT, else the
   recipe's runs_root); a train directory that resolves inside the
@@ -29,8 +30,12 @@ The contract these tests fix (lassi.train.run):
   items); a device the host lacks (the probes of lassi.core.devices, never
   a fallback); a framework() that is missing, raises, returns None, or
   returns something other than a FrameworkBuild; a packages declaration
-  that is missing or not a collection of distribution names; and a trainer
-  that refuses its settings when built as factory(**config).
+  that is missing or not a collection of distribution names; a trainer
+  that refuses its settings when built as factory(**config); and, task
+  P17.9, a trainer without a callable check(), or whose check(recipe.data,
+  data), called right after the build with the resolved recipe mapping and
+  the TrainData, raises ValueError, which becomes a RunError naming the
+  trainer.
 - The train directory is <runs root>/train/<train id> (the id defaults to
   the UTC start time, YYYYMMDD-HHMMSS). The layer creates it exclusively,
   writes recipe.resolved.yaml and provenance.json (status running) as
@@ -89,7 +94,7 @@ from train_fakes import (
     FAKE_COMMIT,
     FIXTURE,
     HIP_BUILD,
-    LATER_KEYS,
+    LAYER_KEYS,
     MISSING,
     NO_EXTRA,
     NO_KFD,
@@ -98,6 +103,7 @@ from train_fakes import (
     PROVENANCE_JSON,
     RECORDS,
     REFUSAL,
+    REJECTION,
     REPO,
     RESOLVED_RECIPE,
     ROCM_DRIVER,
@@ -106,6 +112,7 @@ from train_fakes import (
     TRAIN,
     TRAIN_ID,
     TRAINER,
+    TRAINER_KEYS,
     FakeProbe,
     Log,
     Setup,
@@ -173,15 +180,16 @@ def test_train_options_default_every_field_to_none() -> None:
     assert all(value is None for value in dataclasses.astuple(options()))
 
 
-def test_not_carried_out_names_the_keys_p17_8_leaves_to_later_tasks() -> None:
-    # P17.9 removes each key it carries out (lora, and what grpo's fixture reward needs) from this tuple.
-    assert train_run().NOT_CARRIED_OUT == tuple(LATER_KEYS)
+def test_not_carried_out_names_the_keys_later_phases_own() -> None:
+    # P17.9 passes lora and rollout to the Trainer's check(); episode and reward are P7's and P8's, adversary is
+    # P16's, and export is P7's.
+    assert train_run().NOT_CARRIED_OUT == tuple(LAYER_KEYS) == ("episode", "reward", "adversary", "export")
 
 
-@pytest.mark.parametrize("key", list(LATER_KEYS))
+@pytest.mark.parametrize("key", list(LAYER_KEYS))
 def test_a_key_not_carried_out_is_refused_naming_it(key: str, setup: Setup) -> None:
     with pytest.raises(RunError) as refused:
-        setup.run(recipe_data(**{key: LATER_KEYS[key]}))
+        setup.run(recipe_data(**{key: LAYER_KEYS[key]}))
     assert key in str(refused.value), str(refused.value)
     assert not setup.runs_root.exists()
     assert "build" not in setup.log.events and "train" not in setup.log.events
@@ -189,11 +197,45 @@ def test_a_key_not_carried_out_is_refused_naming_it(key: str, setup: Setup) -> N
 
 def test_every_key_not_carried_out_is_named_in_order(setup: Setup) -> None:
     with pytest.raises(RunError) as refused:
-        setup.run(recipe_data(reward=LATER_KEYS["reward"], lora=LATER_KEYS["lora"]))
+        setup.run(recipe_data(reward=LAYER_KEYS["reward"], episode=LAYER_KEYS["episode"]))
     message = str(refused.value)
-    assert "lora" in message and "reward" in message, message
-    assert message.index("lora") < message.index("reward"), message
+    assert "episode" in message and "reward" in message, message
+    assert message.index("episode") < message.index("reward"), message
     assert not setup.runs_root.exists()
+
+
+def test_lora_and_rollout_pass_the_layer_to_the_trainers_check(setup: Setup) -> None:
+    train_dir = setup.run(recipe_data(**TRAINER_KEYS))
+    assert provenance(train_dir)["status"] == "complete"
+    [(checked, _)] = setup.log.checks
+    assert {key: checked[key] for key in TRAINER_KEYS} == TRAINER_KEYS
+
+
+# ---------------------------------------------------------------------------
+# The Trainer's check(recipe, data): after the build, before any directory (task P17.9)
+
+
+def test_check_gets_the_resolved_recipe_and_the_data_after_the_build(setup: Setup) -> None:
+    setup.run()
+    events = setup.log.events
+    assert events.count("check") == 1
+    assert events.index("build") < events.index("check") < events.index("train"), events
+    [(recipe, data)] = setup.log.checks
+    assert recipe == loaded_recipe(setup, setup.recipes / "train.yaml").data
+    job = setup.log.jobs[0]
+    assert isinstance(data, core_name("lassi.core.interfaces", "TrainData"))
+    assert (data.source, data.split_hash, tuple(data.records)) == (
+        job.data.source, job.data.split_hash, tuple(job.data.records)
+    )
+
+
+def test_a_check_refusal_is_a_run_error_naming_the_trainer_before_any_directory(setup: Setup) -> None:
+    with pytest.raises(RunError) as refused:
+        setup.run(recipe_data(trainer={**TRAIN["trainer"], "reject": True}))
+    message = str(refused.value)
+    assert REJECTION in message and TRAINER in message, message
+    assert not setup.runs_root.exists(), "check() runs before any directory exists"
+    assert "check" in setup.log.events and "train" not in setup.log.events
 
 
 def test_the_bible_train_block_is_refused_naming_every_key_not_carried_out(setup: Setup) -> None:
@@ -286,7 +328,8 @@ def test_the_trainer_is_built_with_its_section_as_given_after_the_probe(setup: S
     setup.run()
     assert setup.log.configs == [{"device": {"kind": "cpu"}, "steps": 2}]
     events = setup.log.events
-    assert events.index("framework") < events.index("probe cpu") < events.index("build") < events.index("train")
+    assert events.index("framework") < events.index("probe cpu") < events.index("build") < events.index("check")
+    assert events.index("check") < events.index("train")
 
 
 def test_train_tree_lies_under_the_runs_root_train_directory(
@@ -428,6 +471,10 @@ REFUSALS: dict[str, Refusal] = {
     # Building the trainer.
     "trainer-refuses": Refusal(RunError, (REFUSAL, TRAINER),
                                data=lambda: recipe_data(trainer={**TRAIN["trainer"], "refuse": True})),
+    # The Trainer's check (task P17.9).
+    "check-refuses": Refusal(RunError, (REJECTION, TRAINER),
+                             data=lambda: recipe_data(trainer={**TRAIN["trainer"], "reject": True})),
+    "check-missing": Refusal(RunError, ("check", TRAINER), declared={"check": MISSING}),
     # The runs root and the train id (Agent Rule 7).
     "relative-runs-root": Refusal(RunError, ("absolute",), options=lambda setup: {"runs_root": Path("rel-runs")}),
     "runs-root-outside-scratch": Refusal(RunError, ("LASSI_SCRATCH",), prepare=_scratch_elsewhere),

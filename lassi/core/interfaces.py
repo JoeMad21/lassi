@@ -15,17 +15,19 @@ registry name. Contract rules (bible, Component Interfaces):
 - Stages are pure over the trial record: read fields, append an attempt or
   annotation, return. Side effects go through components.
 - A Trainer writes only under the output directory it is given and reads a
-  bench item only through TrainData.bench_item, which asks the bench
-  registry for purpose train (Agent Rule 5; task P17.8).
+  bench item only through TrainData.bench_item, which reads the suite's
+  train-only view (Agent Rule 5; tasks P17.8, P17.9). Before any directory
+  exists, its check(recipe, data) refuses every recipe key, value, and
+  record it does not carry out (task P17.9).
 - A Profiler brackets one attempt run with start() and stop() and returns
   a Profile (task P17.7); power values come only from a profiler that
   declares supports_power.
 - Every component declares its capabilities (see `capabilities.Component`).
 
 Trial, Attempt, Diagnostic, DeviceRecord, and Profile are Result Record types in
-`lassi.core.record`, FrameworkBuild is in `lassi.core.devices`, and Suite
-and SuiteItem are in `lassi.bench.registry`; they are referenced here by
-name only.
+`lassi.core.record`, FrameworkBuild is in `lassi.core.devices`, and
+SuiteItem and TrainView are in `lassi.bench.registry`; they are referenced
+here by name only.
 """
 
 from __future__ import annotations
@@ -37,7 +39,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Protocol, Sequence
 from lassi.core.capabilities import Component
 
 if TYPE_CHECKING:
-    from lassi.bench.registry import Suite, SuiteItem
+    from lassi.bench.registry import SuiteItem, TrainView
     from lassi.core.devices import FrameworkBuild
     from lassi.core.record import Attempt, DeviceRecord, Diagnostic, Profile, Trial
 
@@ -336,21 +338,21 @@ class TrainData:
 
     `source` is "synthetic" or "bench". `split_hash` is the sha256 the train
     layer took over the data's identity. `records` holds the synthetic
-    records in file order (() for bench). `suite` and `items` hold the bench
-    suite and the names of the selected items, each of which already passed
-    Suite.item for purpose train (None and () for synthetic data). A Trainer
-    reads a bench item only through bench_item (Agent Rule 5); that is its
-    contract, since `suite` itself answers any purpose.
+    records in file order (() for bench). `suite` is the bench suite's
+    train-only view (lassi.bench.registry TrainView, from Suite.train_view();
+    task P17.9), which holds no eval or unassigned item (Agent Rule 5), and
+    `items` the names of the selected items (None and () for synthetic
+    data). A Trainer reads a bench item through bench_item.
     """
 
     source: str
     split_hash: str
     records: tuple[Mapping[str, Any], ...]
-    suite: Suite | None
+    suite: TrainView | None
     items: tuple[str, ...]
 
     def bench_item(self, name: str) -> SuiteItem:
-        """Return bench item `name` through Suite.item for purpose train.
+        """Return bench item `name` through the train-only view.
 
         An eval or unassigned item raises EvalSplitError (Agent Rule 5); a
         train item outside `items`, which the split hash does not cover, and
@@ -358,7 +360,7 @@ class TrainData:
         """
         if self.suite is None:
             raise ValueError(f"the train data is {self.source}, not bench, so it has no bench item {name!r}")
-        found = self.suite.item(name, purpose="train")
+        found = self.suite.item(name)
         if name not in self.items:
             raise ValueError(f"bench item {name!r} is not among the selected items {list(self.items)}")
         return found
@@ -406,12 +408,19 @@ class Trainer(Component, Protocol):
     names whose installed versions are recorded as its framework pins. It
     declares the capability takes_device and is built as factory(**config)
     from its trainer section, device included; building it writes nothing
-    and loads no model.
+    and loads no model. The train layer then calls check(recipe, data)
+    before any directory exists (task P17.9): a Trainer refuses there every
+    recipe key, value, and record it does not carry out, rather than train
+    without it.
     """
 
     @staticmethod
     def framework() -> FrameworkBuild:
         """Return the framework build it trains on, read from build metadata only; called on the class."""
+        ...
+
+    def check(self, recipe: Mapping[str, Any], data: TrainData) -> None:
+        """Raise ValueError naming any recipe key, value, or record it does not carry out; write and load nothing."""
         ...
 
     def train(self, job: TrainJob) -> TrainResult:

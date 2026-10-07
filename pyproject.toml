@@ -11,11 +11,19 @@ dependencies = [
 ]
 
 # Framework extras (bible Toolchain Pins, framework pins): one per torch build; they conflict, so an environment
-# holds exactly one. A plain `uv sync` installs none of them.
+# holds exactly one. Each holds the same five pins (torch, transformers, and the training pins trl, peft, and
+# accelerate; task P17.9). A plain `uv sync` installs none of them.
 [project.optional-dependencies]
-cpu = ["torch==2.14.1", "transformers==5.18.0"]
-cuda = ["torch==2.14.1", "transformers==5.18.0"]
-rocm = ["torch==2.14.1", "transformers==5.18.0", "triton-rocm==3.8.0 ; sys_platform == 'linux'"]
+cpu = ["torch==2.14.1", "transformers==5.18.0", "trl==1.14.1", "peft==0.21.2", "accelerate==1.15.0"]
+cuda = ["torch==2.14.1", "transformers==5.18.0", "trl==1.14.1", "peft==0.21.2", "accelerate==1.15.0"]
+rocm = [
+    "torch==2.14.1",
+    "transformers==5.18.0",
+    "trl==1.14.1",
+    "peft==0.21.2",
+    "accelerate==1.15.0",
+    "triton-rocm==3.8.0 ; sys_platform == 'linux'",
+]
 
 [tool.uv]
 conflicts = [[{ extra = "cpu" }, { extra = "cuda" }, { extra = "rocm" }]]

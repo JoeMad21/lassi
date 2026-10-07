@@ -149,7 +149,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 
 - A printed finding (P4.11; bible Risks And Questions): ttsim prints its findings inside the host process, so a model's host program can print a line that reads as a gap and end its trial at sim-gap with a null df-v0 reward, or a fake kernel build failure. The ttsim executor cannot tell them apart. Before rewards on ttsim train a policy (P7's offline methods or P8's online RL), decide how a policy is kept from using a printed gap, with OQ-036's option (b) (a gap raised by the model's own kernel read as undefined behavior) among the choices.
 - The CPU -> TT guard (P4.12; bible Harness Contract) is evaluation-grade. Before df-v0 is first used as a reward, review with the owner: the guard's misses and false positives (the Harness Contract's guard limits); OQ-041, whether guard outcomes reach the model (option (a), none, is applied); and a stronger check, a null-kernel differential, which reruns a checked attempt with TT_METAL_NULL_KERNELS=1 and compares its output files byte for byte with the scored run's. The pinned gate example looks the variable up (results/p4-ttsim-runtime/getenv.txt:92); what it does at the pin is reported, not re-read (rx 20261001-054118-exec-f39b). Adopting it needs the name on the sandbox's fixed environment allowlist (lassi.executors.sandbox ENVIRONMENT_NAMES; bible Sandbox), with a Decision Log entry, and one more ttsim run per checked attempt. Its known evasions are a getenv of the variable, the working directory as a tell, run-to-run jitter, and laundering through a working kernel; its false positive is an in-place buffer whose operation is the identity on the input domain. A check of the program's binary imports is the alternative. Also correct plans/spikes/p4-ttsim-runtime.md:286: the JIT cache's top directory at the pin is tt-metal-cache5280a9cfb0 (reported: rx 20261001-050102-exec-a914), not tt-metal-cache/.
-- From the P4 notes: P4.11's entry (the trainer skips df-v0's null reward, never reads it as 0; P17.9's grpo smoke uses a fixture reward with no nulls, so nothing before P7 enforces it) and the P4.8 presentation follow-up (fix the Windows console before the training table draws the same way).
+- From the P4 notes: P4.11's entry (the trainer skips df-v0's null reward, never reads it as 0; P17.9's grpo smoke skips a null fixture reward with one TRL reward function, bible Training Module, Safeguards, and P7 and P8 keep the rule for df-v0 and its components) and the P4.8 presentation follow-up (fix the Windows console before the training table draws the same way).
 - The training data loader excludes attempts marked alignment_missing (owner, OQ-028, 2026-10-05). The guard's not-run reasons and not-checked rates arrive with P17.14.
 
 ## P11 Dataflow Dialect
@@ -222,7 +222,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - Before any directory: refuse a recipe whose llm.sampling.max_tokens alone reaches the model's context, from a backend-neutral context value (hf_local's max_position_embeddings, a server's max_model_len or meta.n_ctx); joins P17.3's longest-prompt candidate. Check sampling values a backend refuses (a temperature below 0) there too, and a max_tokens below 1, which the loader accepts.
   - Record a refused request (its messages, no reply) in Trial.requests with a diagnostic; a Result Record edit.
   - Record each request's prompt and completion token counts (Request has none, and the stages keep only the text); a Result Record edit for every backend.
-  - P17.9 plan wording: its pins join the three flavor extras; a separate train extra resolves PyPI's torch with CUDA 13 packages when installed without a flavor (bible Toolchain Pins).
+  - P17.9 plan wording: done; the training pins joined the three flavor extras (bible Toolchain Pins).
   - AGENTS.md Repository Checks (P17.10): the framework test command `uv run --extra cpu pytest`, and that a bare `uv run` leaves an installed extra in place, so a plain `uv sync` comes before a run meant to skip the framework tests.
   - A model.dtype key; bf16 on alpha01's CPU is unmeasured (P17.11 measures speed).
   - A CPU thread-count key for hf_local: torch defaults to the core count, 256 on alpha01, beside sandboxed runs; the serving record holds threads today.
@@ -234,7 +234,7 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - openai_compat: send a seed to servers that honor one (vLLM, SGLang).
   - hf_local: refuse an id that also names a directory under the working directory, which from_pretrained would load; the <owner>/<name> rule leaves only that case.
   - hf_local: turn a load's RuntimeError or safetensors read error, and model.to on an unusable device, into a ServingError, so the run is refused with a RunError instead of a traceback (both come before any directory).
-  - P17.9: set the hub library offline in lassi/train before any load, as hf_local's _hub_offline does; local_files_only alone still lets huggingface_hub reach the Hub (bible Serving Rules).
+  - P17.9, hub offline: done; the trl trainer calls hf_local's hub_offline before any load (bible Training Module, Compute).
 - P17.5's gpu executor and device exposure (bible Execution Backends, gpu rows; Sandbox, gpu program runs; Component Interfaces, contract rules). Candidates not built:
   - P17.12: measure every node, /sys path, and /proc path each runtime opens in the sandbox (PCI sysfs under /sys/devices/pci*, /sys/class/drm, /sys/dev/char, which libdrm and CUDA may read), and confirm the index order, drm_render_minor, the gfx_target_version decoding, the information file's fields, and whether hiding a node renumbers the runtime's devices (the 0,...,n-1 values); then fix the tables in lassi/executors/gpu.py.
   - Move the per-index node checks into the rocm and cuda probes (a HostFacts field of unusable indices), so hf_local gets them and a refusal comes before any component is built.
@@ -247,19 +247,39 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - Bind /dev/udmabuf (HSA_USE_UDMABUF), nvidia-modeset, or the MIG nvidia-caps nodes only when a measured need appears.
   - device(): memory per GPU (KFD mem_banks, the NVIDIA information file) once P17.12 confirms the files.
 - P17.8's train layer (bible Component Interfaces, Trainer; Project Recipes, Notes, train recipes). Points later tasks act on:
-  - P17.9: give the Trainer a train-only view of the suite in TrainData (eval and unassigned names refused with EvalSplitError) instead of the whole Suite, so Agent Rule 5 does not rest on each backend reading through bench_item (P17.8 commit audit).
-  - P17.9: register the Trainer with methods, weight_modes, data_sources, packages, and framework(), and remove each key it carries out from lassi.train.run NOT_CARRIED_OUT, with the test that pins the tuple.
+  - P17.9, the train-only view: done; TrainData.suite is a TrainView (bible Component Interfaces, Trainer).
+  - P17.9, registration: done; trl is registered, and lora and rollout moved from NOT_CARRIED_OUT to the Trainer's check() (bible Project Recipes, Notes, train recipes).
   - P17.11: the smoke recipes name data.synthetic files under tests/fixtures/train/ and a trainer section with device {kind: cpu}.
   Candidates not built:
-  - A base model pin: a train key such as revision (40 hex, as model.revision), required by a trainer that loads from the Hub (Agent Rule 10); P17.9 decides with its tiny config-built model.
-  - A training seed key, recorded in provenance.
+  - A base model pin: P17.9 pins its fixture base by content and seed; a revision key (40 hex, as model.revision) waits for P7, which first loads a Hub base (Agent Rule 10).
+  - A training seed key: done in P17.9 as trainer.seed (bible Training Module, Compute).
   - A progress hook for training (a TrainJob observer, like RunOptions.observer), for P7's training table.
-  - A helper that copies the resolved recipe, device record, pins, and split hash into each checkpoint directory, if P17.9 and later backends would otherwise repeat it.
-  - One hub-offline helper shared by hf_local and lassi/train, not a second copy (P17.9).
+  - The checkpoint copy helper: done in P17.9 (lassi.train.checkpoint; bible Training Module, Safeguards).
+  - One hub-offline helper: done in P17.9 (lassi.llm.hf_local hub_offline).
   - P7 and P8: bench items as training examples, read through TrainData.bench_item, with directions and a bench root option. The RL loader's alignment_missing exclusion and df-v0's null rewards (P7 notes) belong to that data, not to this layer.
   - A train.md beside provenance.json (Readability Standards), when P7 trains.
   - Lock a GPU across processes for lassi train, with P17.5's lock candidate.
   - Episode semantics: whether grpo without episode means single_turn (the bible's default) or a required choice.
+- P17.9's trl Trainer (bible Training Module, Compute and Safeguards; Component Interfaces, Trainer). Candidates not built:
+  - P17.10: nothing excludes the slow marker from `uv run pytest -q`; test_trl_runs.py skips only because the extra is absent, so the CI job that installs the cpu extra runs it unless it deselects slow on purpose.
+  - Hash the base model's files in _load_base, before the load, rather than after training, so checkpoint.json pins exactly what was loaded.
+  - _check_base and _base_dir read lassi.train.data SYNTHETIC_DIR and ignore TrainOptions.synthetic_dir, so a test's base and data can come from different directories.
+  - P17.11: quiet the run's output: transformers prints each step's log on stdout when disable_tqdm is set (PrinterCallback), datasets and transformers print progress bars on stderr, and TRL warns on stderr for each unscorable row with the completion's text, which may not be ASCII.
+  - P17.11: a precision key; at the pin TRL trains under bf16 autocast with gradient checkpointing on by default (recorded in training_args); measure on alpha01's CPU.
+  - P17.11: a CPU thread-count key for training (torch defaults to the core count, 256 on alpha01).
+  - P17.11: du of HF_HOME after the smoke runs, to confirm the libraries wrote only there.
+  - P7: a Hub base model with a revision key, loaded offline from HF_HOME at the pin.
+  - P7 and P8: several reward components through TRL: pass one function and log components, or mask nulls per component, since TRL sums a null component as 0 with several functions (bible Training Module, Safeguards).
+  - P8: an unscorable completion still counts in the loss's token normalization (TRL's loss_type dapo default); decide whether to drop it from the batch.
+  - P8: steps_per_generation or num_iterations above 1 changes how reward calls map to steps; the reward record's step key holds only at the values P17.9 uses.
+  - P7 and P8: FSDP or DeepSpeed for full weights on several GPUs; DeepSpeed is not in the extras.
+  - P7: periodic checkpoints and resume; a progress hook for the training table.
+  - P7 export: reload a saved checkpoint and its tokenizer through the Auto classes before merge and register.
+  - P7 and P8: a bench data source for trl, through TrainData.bench_item and the view.
+  - P17.13: the trl trainer on cuda or rocm, if a GPU host is ever granted (OQ-040).
+  - P7 and P8: check() bounds each record's tokens, plus trainer.max_completion_length for grpo, by config.json's max_position_embeddings (256 for the fixture), so a long record is refused before any directory instead of failing inside train() after the train directory exists.
+  - lassi.train.checkpoint write_records raises after the steps if TRL's arguments hold a non-finite number (none does at 1.14.1); write it as null under the nonfinite rule instead.
+  - Name the owning phase in every not-carried-out refusal (a mapping beside NOT_CARRIED_OUT and the declarations), if users need it.
 - P17.6's hipcc toolchain (bible Toolchain Pins, the HIP build; Execution Backends, gpu (AMD) row; Host Facts, ROCm). Part 2 read the captures in tests/toolchains/fixtures/hipcc and added only the pattern they needed, the device link's `lld:` line (DEVICE_LLD). Candidates not built:
   - `.cu` and `.cpp` HIP sources (HeCBench's HIP versions name `main.cu`): measure how this hipcc treats each suffix before widening SOURCE_SUFFIXES.
   - A `.hip` entry in lassi/core/files.py's fence map, with a HIP prompt set and a recipe binding `hip: hipcc-gfx942` with the executor none.

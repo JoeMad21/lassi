@@ -18,7 +18,7 @@ nothing and reads no file; check() loads the model once.
 Loading. The model, its config, and its tokenizer load from $HF_HOME/hub
 only, at the pinned revision, with local_files_only=True,
 trust_remote_code=False, no token, and the hub library's offline flag set
-for the process (_hub_offline), in the checkpoint's dtype, on the named
+for the process (hub_offline), in the checkpoint's dtype, on the named
 device (cpu, or cuda:<i> for cuda and rocm, since ROCm PyTorch reaches its
 GPUs through torch's cuda device type). An unset HF_HOME, a
 revision the cache lacks, a config without max_position_embeddings, a
@@ -102,10 +102,12 @@ def _import_framework() -> tuple[ModuleType, ModuleType]:
     return _import(FRAMEWORK_MODULES[0]), _import(FRAMEWORK_MODULES[1])
 
 
-def _hub_offline() -> None:
+def hub_offline() -> None:
     """Set the hub library offline for the process, so no load reaches the Hub.
 
-    local_files_only alone does not: in huggingface_hub 1.33.0, with telemetry
+    The one function that sets the flag: hf_local and the trl trainer
+    (lassi.train.trl_trainer) call it before any load (task P17.9).
+    local_files_only alone does not keep a load off the Hub: in huggingface_hub 1.33.0, with telemetry
     on (utils/_headers.py:183), a request's headers call detect_agent()
     (utils/_headers.py:187), which fetches
     {ENDPOINT}/api/agent-harnesses and writes it under HF_HOME unless
@@ -196,13 +198,13 @@ def _load(model_id: str, revision: str, device: str) -> _Loaded:
 
     An OSError, ValueError, or ImportError from the framework import or any of
     the three loads becomes a ServingError naming the id and the revision.
-    The hub library is set offline first (_hub_offline).
+    The hub library is set offline first (hub_offline).
     """
     cache = str(_hub_cache())
     where = f"{model_id} at revision {revision}"
     try:
         _, transformers = _import_framework()
-        _hub_offline()
+        hub_offline()
         options = {"revision": revision, "cache_dir": cache, "local_files_only": True, "trust_remote_code": False}
         config = transformers.AutoConfig.from_pretrained(model_id, **options)
         tokenizer = transformers.AutoTokenizer.from_pretrained(model_id, **options)

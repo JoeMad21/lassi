@@ -14,8 +14,9 @@ load_train_recipe):
 - bench, a suite manifest's train split. load_bench loads the manifest and
   fetches every selected item (bench.items, else every item of the train
   split) with Suite.item(name, purpose="train"), so an eval or unassigned
-  item raises EvalSplitError, reported as a RunError (Agent Rule 5). It
-  reads no source file.
+  item raises EvalSplitError, reported as a RunError (Agent Rule 5). The
+  TrainData holds the suite's train-only view (Suite.train_view(); task
+  P17.9), never the suite. It reads no source file.
 
 Each returns a TrainData whose split_hash is the sha256 of the canonical JSON
 of the data's identity (split_hash): for synthetic data the records in file
@@ -147,7 +148,8 @@ def load_bench(recipe: Recipe, suites_dir: Path) -> tuple[TrainData, dict[str, A
     that is not one plain segment, a missing or refused manifest, a split
     with no items, an item named twice, an unknown item, and an eval or
     unassigned item (EvalSplitError, Agent Rule 5) are RunErrors naming the
-    key. The identity is what the split hash is taken over.
+    key. The TrainData holds the suite's train-only view (Suite.train_view()).
+    The identity is what the split hash is taken over.
     """
     bench = recipe.data["bench"]
     name = bench["suite"]
@@ -170,7 +172,8 @@ def load_bench(recipe: Recipe, suites_dir: Path) -> tuple[TrainData, dict[str, A
         "items": list(items),
         "manifest_sha256": hashlib.sha256(raw).hexdigest(),
     }
-    data = TrainData(source="bench", split_hash=split_hash(identity), records=(), suite=suite, items=items)
+    view = suite.train_view()
+    data = TrainData(source="bench", split_hash=split_hash(identity), records=(), suite=view, items=items)
     return data, identity
 
 

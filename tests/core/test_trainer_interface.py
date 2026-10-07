@@ -1,4 +1,4 @@
-"""Tests for the Trainer interface and its job types (task P17.8).
+"""Tests for the Trainer interface and its job types (tasks P17.8 and P17.9).
 
 Bible: Component Interfaces (the table's last row, Trainer, and its contract
 rule), Training Module (Compute: a replaceable trainer behind lassi/train;
@@ -12,15 +12,21 @@ The contract these tests fix:
   Component, and the registry's INTERFACES holds it last, after Stage, as
   the thirteenth name (lassi/core/registry.py), so a Trainer registers like
   any component.
-- It has one instance method, train(job: TrainJob) -> TrainResult, and a
-  staticmethod framework() -> FrameworkBuild that the layer calls on the
-  class before anything is built (as hf_local's framework() is).
+- It has two instance methods, check(recipe: Mapping[str, Any], data:
+  TrainData) -> None (task P17.9: the layer calls it after the build and
+  before any directory; it raises ValueError naming any recipe key, value,
+  or record the Trainer does not carry out) and train(job: TrainJob) ->
+  TrainResult, and a staticmethod framework() -> FrameworkBuild that the
+  layer calls on the class before anything is built (as hf_local's
+  framework() is).
 - TrainData, TrainJob, and TrainResult are frozen dataclasses beside it.
   TrainData holds the data source ("synthetic" or "bench"), the split hash,
-  the synthetic records, and for bench the suite and the item names; its
-  one read path to a bench item is bench_item(name), which goes through
-  Suite.item(name, purpose="train"), so an eval or unassigned item raises
-  EvalSplitError (Agent Rule 5), and a train item outside the selected
+  the synthetic records, and for bench the suite's train-only view
+  (lassi.bench.registry TrainView, from Suite.train_view(); task P17.9) and
+  the item names; its one read path to a bench item is bench_item(name),
+  which goes through the view, so an eval or unassigned item raises
+  EvalSplitError (Agent Rule 5) and no eval or unassigned SuiteItem is
+  reachable from a TrainData at all; a train item outside the selected
   items and a synthetic handle are refused with a ValueError. TrainJob
   carries the resolved recipe (mapping and YAML text), the data, the probed
   DeviceRecord, the first provenance, and the output directory; TrainResult
@@ -37,13 +43,14 @@ from __future__ import annotations
 import dataclasses
 import importlib
 import inspect
+from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import pytest
 
-from lassi.bench import EvalSplitError, Suite, load_suite
+from lassi.bench import EvalSplitError, Suite, SuiteItem, load_suite
 from lassi.core.capabilities import Component
 from lassi.core.registry import Registry
 
@@ -92,6 +99,40 @@ def synthetic_suite(tmp_path: Path) -> Suite:
     path = tmp_path / f"{SUITE_NAME}.yaml"
     path.write_bytes(SUITE_TEXT.encode("ascii"))
     return load_suite(path)
+
+
+def train_view(suite: Suite) -> Any:
+    """Return suite.train_view(), failing the test clearly while it does not exist (task P17.9)."""
+    if not hasattr(suite, "train_view"):
+        pytest.fail("Suite has no train_view() yet (task P17.9)")
+    return suite.train_view()
+
+
+def bench_data(tmp_path: Path, items: tuple[str, ...] = ("alpha", "beta")) -> Any:
+    """Return bench TrainData over the SYNTHETIC suite's train-only view with `items` selected."""
+    return train_data(source="bench", records=(), suite=train_view(synthetic_suite(tmp_path)), items=items)
+
+
+def reachable(root: object) -> list[object]:
+    """Return every object reachable from `root` through attributes, mapping keys and values, and sequences."""
+    seen: dict[int, object] = {}
+    stack = [root]
+    while stack:
+        obj = stack.pop()
+        if id(obj) in seen or isinstance(obj, (str, bytes, int, float, bool, type(None), type, ModuleType)):
+            continue
+        seen[id(obj)] = obj
+        if isinstance(obj, Mapping):
+            stack.extend(obj.keys())
+            stack.extend(obj.values())
+        elif isinstance(obj, (list, tuple, set, frozenset)):
+            stack.extend(obj)
+        if hasattr(obj, "__dict__"):
+            stack.extend(vars(obj).values())
+        for slot in getattr(type(obj), "__slots__", ()):
+            if hasattr(obj, slot):
+                stack.append(getattr(obj, slot))
+    return list(seen.values())
 
 
 def field_names(cls: type) -> set[str]:
@@ -143,6 +184,17 @@ def test_trainer_train_takes_a_train_job_and_returns_a_train_result() -> None:
     assert method.__annotations__["return"] in ("TrainResult", named("TrainResult"))
 
 
+def test_trainer_check_takes_the_recipe_and_the_data_and_returns_none() -> None:
+    trainer = named("Trainer")
+    method = vars(trainer).get("check")
+    assert inspect.isfunction(method), "Trainer defines no check method (task P17.9)"
+    assert (method.__doc__ or "").strip()
+    assert list(inspect.signature(method).parameters) == ["self", "recipe", "data"]
+    assert method.__annotations__["recipe"] in ("Mapping[str, Any]", Mapping)
+    assert method.__annotations__["data"] in ("TrainData", named("TrainData"))
+    assert method.__annotations__["return"] in ("None", None)
+
+
 def test_trainer_framework_is_a_staticmethod_returning_a_framework_build() -> None:
     trainer = named("Trainer")
     declared = vars(trainer).get("framework")
@@ -167,6 +219,11 @@ def test_the_job_types_are_frozen_dataclasses_with_the_designed_fields() -> None
         result.steps = 3  # type: ignore[misc]
 
 
+def test_train_data_suite_is_the_train_only_view() -> None:
+    annotation = {item.name: item.type for item in dataclasses.fields(named("TrainData"))}["suite"]
+    assert "TrainView" in str(annotation), f"TrainData.suite is {annotation}, not the train-only view (task P17.9)"
+
+
 def test_the_job_types_are_not_protocols() -> None:
     for name in ("TrainData", "TrainJob", "TrainResult"):
         assert not getattr(named(name), "_is_protocol", False), name
@@ -176,7 +233,7 @@ def test_the_job_types_are_not_protocols() -> None:
 # TrainData.bench_item: the only bench read path a trainer gets (Agent Rule 5)
 
 
-def test_bench_item_reads_through_the_registry_for_purpose_train(
+def test_bench_item_reads_a_train_item_fetched_for_purpose_train(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     suite = synthetic_suite(tmp_path)
@@ -188,26 +245,33 @@ def test_bench_item_reads_through_the_registry_for_purpose_train(
         return original(self, name, purpose=purpose)
 
     monkeypatch.setattr(Suite, "item", spy)
-    data = train_data(source="bench", records=(), suite=suite, items=("alpha", "beta"))
+    data = train_data(source="bench", records=(), suite=train_view(suite), items=("alpha", "beta"))
+    assert sorted(calls) == [("alpha", "train"), ("beta", "train")], "the view fetches each train item for train"
     found = data.bench_item("alpha")
-    assert found.name == "alpha" and found.split == "train"
-    assert calls == [("alpha", "train")]
+    assert found is suite.items["alpha"] and found.split == "train"
+    assert {purpose for _, purpose in calls} == {"train"}
 
 
 @pytest.mark.parametrize("item", ["held", "open"], ids=["eval", "unassigned"])
 def test_bench_item_refuses_an_eval_or_unassigned_item(item: str, tmp_path: Path) -> None:
-    suite = synthetic_suite(tmp_path)
-    data = train_data(source="bench", records=(), suite=suite, items=("alpha", "beta"))
+    data = bench_data(tmp_path)
     with pytest.raises(EvalSplitError) as refused:
         data.bench_item(item)
     assert "Agent Rule 5" in str(refused.value)
 
 
 def test_bench_item_refuses_a_train_item_that_was_not_selected(tmp_path: Path) -> None:
-    data = train_data(source="bench", records=(), suite=synthetic_suite(tmp_path), items=("alpha",))
+    data = bench_data(tmp_path, items=("alpha",))
     with pytest.raises(ValueError, match="not among the selected items") as refused:
         data.bench_item("beta")
     assert not isinstance(refused.value, EvalSplitError)
+
+
+def test_no_eval_or_unassigned_item_is_reachable_from_train_data(tmp_path: Path) -> None:
+    found = reachable(bench_data(tmp_path))
+    assert not [obj for obj in found if isinstance(obj, Suite)], "TrainData holds the whole suite"
+    splits = sorted(obj.split for obj in found if isinstance(obj, SuiteItem))
+    assert splits == ["train", "train"], f"TrainData reaches items of the splits {splits} (Agent Rule 5)"
 
 
 def test_a_synthetic_handle_has_no_bench_item() -> None:

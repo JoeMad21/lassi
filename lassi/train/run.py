@@ -15,7 +15,11 @@ load_train_recipe) and, before any directory exists, refuses:
 - a Trainer whose framework() is missing, raises, or returns anything but a
   FrameworkBuild, or whose packages declaration is not a collection of
   distribution names (Agent Rule 10);
-- a Trainer that refuses its settings when built as factory(**config).
+- a Trainer that refuses its settings when built as factory(**config);
+- a Trainer without a callable check(), or whose check(recipe, data),
+  called with the resolved recipe mapping and the TrainData, raises
+  ValueError for a recipe key, value, or record it does not carry out
+  (task P17.9).
 
 It then creates <runs root>/train/<train id>/ exclusively and writes
 recipe.resolved.yaml and provenance.json (status running) as ASCII with LF,
@@ -61,8 +65,10 @@ from lassi.core.runner import (
 )
 from lassi.train import data as train_data
 
-# Train recipe keys this layer does not carry out yet; a recipe that sets one is refused, never trained without it.
-NOT_CARRIED_OUT: tuple[str, ...] = ("episode", "lora", "reward", "rollout", "adversary", "export")
+# Train recipe keys no Trainer carries out yet; a recipe that sets one is refused, never trained without it: the
+# episode and the executing reward (P7, P8), the adversary (P16), and export (P7). lora and rollout pass to the
+# Trainer's check(), which refuses what it does not carry out (task P17.9).
+NOT_CARRIED_OUT: tuple[str, ...] = ("episode", "reward", "adversary", "export")
 # The train tree: <runs root>/TRAIN_DIR/<train id>/ holds RESOLVED_RECIPE, PROVENANCE_JSON, and OUTPUT_DIR.
 TRAIN_DIR = "train"
 RESOLVED_RECIPE = "recipe.resolved.yaml"
@@ -177,6 +183,7 @@ def _prepare(path: Path, options: TrainOptions, started: datetime) -> _Training:
     entry = registry.get(binding.interface, binding.name)
     pins = {"build": dataclasses.asdict(_framework(recipe, binding, entry)), "packages": _packages(recipe, entry)}
     trainer = _build(recipe, binding, entry)
+    _check_trainer(recipe, entry, trainer, data)
     commit, dirty = git_state()
     return _Training(
         recipe=recipe,
@@ -275,6 +282,19 @@ def _build(recipe: Recipe, binding: Binding, entry: Entry) -> Any:
         return entry.factory(**copy.deepcopy(dict(binding.config)))
     except ValueError as error:
         raise RunError(f"{recipe.path}: {_who(entry)} refused its settings: {error}") from None
+
+
+def _check_trainer(recipe: Recipe, entry: Entry, trainer: Any, data: TrainData) -> None:
+    """Call trainer.check(recipe, data) on a copy of the recipe; a missing check() or its ValueError is a RunError."""
+    if not callable(getattr(trainer, "check", None)):
+        raise RunError(
+            f"{recipe.path}: {_who(entry)} defines no check(); a Trainer refuses there every recipe key, value, and "
+            "record it does not carry out"
+        )
+    try:
+        trainer.check(copy.deepcopy(recipe.data), data)
+    except ValueError as error:
+        raise RunError(f"{recipe.path}: {_who(entry)} does not carry out the recipe: {error}") from None
 
 
 def _checked_result(recipe: Recipe, result: Any, out_dir: Path) -> tuple[int, tuple[str, ...]]:

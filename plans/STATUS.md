@@ -105,7 +105,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.6 | DONE | hipcc toolchain, compile-only on alpha01 | P17.1 | hipcc-gfx942 and toolchains/hipcc.pin (f03fa62); alpha01 remote tests 6 passed and eight diagnostics captured, rx 20261006-121638-desktop-8r113ei-detached-f03fa62a-961a, clean; device lld pattern from the captures; results/p17-hipcc-fixtures |
 | P17.7 | DONE | Profilers: timing, nvml, rocm_smi | P17.2,P17.5 | timing, nvml, rocm_smi profilers; runner binds profiler, run_loop fills Attempt.profile; power profilers tested with fakes, unverified with no GPU host (OQ-040); bible rev 259 |
 | P17.8 | DONE | Trainer interface and the train recipe | P17.2 | Trainer Protocol, the thirteenth interface; train recipes (load_train_recipe, TRAIN_SCHEMA in lassi/core/recipe.py) and lassi train with a train tree under the runs root; refusals before any directory; also public runner helpers, tests/fixtures/train/layer-smoke.jsonl, tests/replay/notebook_replay.py |
-| P17.9 | READY | TRL backend: sft, dpo, and grpo on PyTorch | P17.1,P17.8 |  |
+| P17.9 | DONE | TRL backend: sft, dpo, and grpo on PyTorch | P17.1,P17.8 | trl Trainer: sft, dpo, grpo on the CPU with full and lora weights; Trainer.check; TrainView; checkpoint records; trl, peft, accelerate pinned in the three extras; also touches lassi/core/interfaces.py, lassi/bench/registry.py, lassi/llm/hf_local.py (check hook, train-only view, one hub_offline); bible rev 262 |
 | P17.10 | READY | CI on the CPU | P17.4,P17.9 |  |
 | P17.14 | READY | Guard not-run reasons and not-checked rates | - | owner's OQ-028 conditions (2026-10-05) |
 | P17.11 | READY | Gate part (a): recipes and the hardware-free evidence | P17.3,P17.4,P17.5,P17.7,P17.9,P17.10,P17.14 |  |

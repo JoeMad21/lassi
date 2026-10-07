@@ -1,0 +1,4 @@
+{"prompt": "SYNTHETIC dpo prompt 1: say abc.", "chosen": " abc", "rejected": " xyz"}
+{"prompt": "SYNTHETIC dpo prompt 2: say def.", "chosen": " def", "rejected": " uvw"}
+{"prompt": "SYNTHETIC dpo prompt 3: say ghi.", "chosen": " ghi", "rejected": " rst"}
+{"prompt": "SYNTHETIC dpo prompt 4: say jkl.", "chosen": " jkl", "rejected": " opq"}

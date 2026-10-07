@@ -73,14 +73,17 @@ TRAIN: dict[str, Any] = {
 }
 # The bench section of a train recipe, in place of data.
 BENCH_TRAIN = {"suite": "synthetic-train", "split": "train"}
-# Every train key the layer does not carry out yet, with a value the schema accepts (lassi.train.run NOT_CARRIED_OUT).
-LATER_KEYS: dict[str, Any] = {
+# Every train key the layer does not carry out, with a value the schema accepts (lassi.train.run NOT_CARRIED_OUT;
+# task P17.9), and the keys it passes to the Trainer's check(recipe, data); the loader accepts both.
+LAYER_KEYS: dict[str, Any] = {
     "episode": "single_turn",
-    "lora": {"r": 8, "targets": "all-linear"},
     "reward": {"profile": "df-v0", "executor": "ttsim", "cache": True},
-    "rollout": {"engine": "vllm", "group_size": 8},
     "adversary": {"kind": "llm", "model": "SYNTHETIC-model", "trained": False},
     "export": {"merge": True, "fxb": "check_then_build", "register_as": "SYNTHETIC-registered"},
+}
+TRAINER_KEYS: dict[str, Any] = {
+    "lora": {"r": 8, "targets": "all-linear"},
+    "rollout": {"engine": "vllm", "group_size": 8},
 }
 
 
@@ -460,6 +463,13 @@ def test_every_bible_method_weight_mode_and_episode_loads(tmp_path: Path) -> Non
             assert load(tmp_path, data, name=f"{method}-{weights}", found=found).data["method"] == method
     for episode in named("EPISODES"):
         assert load(tmp_path, train(episode=episode), name=episode).data["episode"] == episode
+
+
+def test_the_loader_accepts_every_later_key_and_leaves_refusal_to_lassi_train(tmp_path: Path) -> None:
+    # lassi.train.run refuses LAYER_KEYS and the Trainer's check() what it does not carry out (task P17.9).
+    later = {**LAYER_KEYS, **TRAINER_KEYS}
+    loaded = load(tmp_path, train(**later))
+    assert {key: loaded.data[key] for key in later} == later
 
 
 def test_runs_root_is_an_optional_string(tmp_path: Path) -> None:
