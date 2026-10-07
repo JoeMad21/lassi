@@ -16,8 +16,8 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P5 IR Levels | p5-ir | ACTIVE | base: p17-portable at 7f920d7 (P17 stalled, not merged: P17.11 OWNER on OQ-047; GPU half BLOCKED, OQ-040); plan plans/p5-ir.md; OQ-048 and OQ-049 filed |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
 | P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
-| P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); the owner said 2026-10-06 the MI300Xs will not be granted (OQ-040) |
-| P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); the owner said 2026-10-06 the MI300Xs will not be granted (OQ-040) |
+| P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
+| P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
 | P10 Full LASSI | p10-full | BLOCKED | no NVIDIA host (OQ-003, 2026-09-23); compile-only tier and -mp=multicore proxy meanwhile |
 | P11 Dataflow Dialect | p11-df | NOT-STARTED | full scope needs P5; design notes may start earlier |
 | P12 Language Frontends | p12-frontends | NOT-STARTED | - |
@@ -25,7 +25,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
 | P16 Adversarial | p16-adversarial | BLOCKED | P4, P8 for training |
-| P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; GPU half has no host: the owner said 2026-10-06 the MI300Xs will not be granted, focus on Tenstorrent and CPU (OQ-040); stalled since 2026-10-06: P17.11 OWNER on OQ-047 (Agent Rule 17), so part (a) has not run and no PR is open (OQ-038); P5 started 2026-10-07 from p17-portable at 7f920d7 |
+| P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; GPU half has no host: no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07), focus on Tenstorrent and CPU; stalled since 2026-10-06: P17.11 OWNER on OQ-047 (Agent Rule 17), so part (a) has not run and no PR is open (OQ-038); P5 started 2026-10-07 from p17-portable at 7f920d7 |
 
 ## Tasks
 
@@ -109,8 +109,8 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.10 | DONE | CI on the CPU | P17.4,P17.9 | cpu-tests.yml: cpu extra from the lock, device-neutral P17.2-P17.9 tests incl. slow, remote excluded, ubuntu-latest, no GPU; green at a988ef8: https://github.com/JoeMad21/lassi/actions/runs/37552096412 (2763 passed, 2 skipped) |
 | P17.14 | DONE | Guard not-run reasons and not-checked rates | - | Guards.host_compute_not_checked (not-built, no-program, no-guard, guard-not-checked); guard coverage per run and per target in run.md, metrics.md, metric tables, Parquet guard_coverage; older records load unchanged; also touches runner.py (run.md) and df_v0.py (guard_state by name); bible rev 264 |
 | P17.11 | OWNER | Gate part (a): recipes and the hardware-free evidence | P17.3,P17.4,P17.5,P17.7,P17.9,P17.10,P17.14 | prep committed (recipes, plans/runs/p17-gate-a batch, WSL dry run, tests); the launch waits for the owner's Agent Rule 17 yes (OQ-047; asked 2026-10-06: not yet); nothing has run on alpha01 |
-| P17.12 | BLOCKED | Spike on the first GPU host | P17.5 | no GPU host: the owner will not grant the MI300Xs (OQ-040, 2026-10-06) |
-| P17.13 | BLOCKED | GPU runs: executor, profilers, hf_local, training | P17.4,P17.7,P17.9,P17.12 | no GPU host: the owner will not grant the MI300Xs (OQ-040, 2026-10-06) |
+| P17.12 | BLOCKED | Spike on the first GPU host | P17.5 | no GPU host for now: no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
+| P17.13 | BLOCKED | GPU runs: executor, profilers, hf_local, training | P17.4,P17.7,P17.9,P17.12 | no GPU host for now: no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
 | P17.G | BLOCKED | Phase gate: part (a) rerun and part (b) on a GPU host | P17.11,P17.13 | no GPU host for part (b) (OQ-040, 2026-10-06); part (a) runs as P17.11 |
 | P5.0 | DONE | Plan phase P5 into plans/p5-ir.md and add its tasks here | - | plan plans/p5-ir.md; base p17-portable at 7f920d7 (P17 stalled, not merged); OQ-048 and OQ-049 filed |
 | P5.1 | ACTIVE | Spike: Polygeist and tt-mlir pins, builds, and budget | - | draft spike committed (plans/spikes/p5-mlir-pins.md): one review round and one fix pass done; pending: the commit audit, the bible edit in the report's Proposed bible edit section, and the master update. Polygeist 77c04bb2, two LLVMs; budget does not fit (OQ-049 Response) |

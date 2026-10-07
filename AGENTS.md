@@ -40,7 +40,7 @@ Hard rules:
 14. Measured beats judged. A judge never overrides an oracle outcome or a profiler measurement, and judged values carry [JUDGED].
 15. Every repository surface follows the Attribution Policy: no reference to any AI vendor, assistant, or coding tool, or to AI assistance in design or implementation, in commits, branch names, docs, comments, PRs, issues, or releases.
 16. The repository keeps a vendor-neutral `AGENTS.md` at the root, with nested ones where useful. Vendor-named agent files and tool config directories stay local and uncommitted.
-17. No model inference on alpha01 without the owner's approval in the working session. File uploads and compiler work need none; serving a model (RNGD included), loading one in process (hf_local), and any training run wait for the owner's yes, asked with what runs, for how long, and what it touches.
+17. No access to alpha01 without the owner's approval in the working session: no rx command of any kind (run, job, exec, doctor, pull, or sync), read-only probes, file uploads, and compiler work included, and no model inference (serving, RNGD included, or loading one in process) or training there. Ask once per batch of server steps, with what runs, for how long, and what it touches, and wait for the owner's yes.
 
 ## Operating Mode
 
@@ -130,7 +130,7 @@ End the session cleanly (tree clean, STATUS true, summary line) when any of thes
 
 ## Remote Execution
 
-The remote build host is alpha01 on the I/ONX cluster. Reach it only through `uv run tools/rx.py` (`--help` lists commands). Raw ssh, scp, rsync, and sftp are forbidden.
+The remote build host is alpha01 on the I/ONX cluster. Reach it only through `uv run tools/rx.py` (`--help` lists commands), and only with the owner's approval in the working session (rule 17): every rx command below waits for it. Raw ssh, scp, rsync, and sftp are forbidden.
 
 - `rx run -- '<cmd>'` syncs the current commit (a dirty tree goes as a snapshot commit) into a worktree slot and runs there. Pass complex commands as one quoted string.
 - Anything that may take longer than about 20 minutes (LLVM, Polygeist, tt-mlir, tt-metal, CUDA or NVHPC installs, large runs) is a job: `rx job start --big --name <n> -- '<cmd>'`, then `rx job wait <id> --timeout 600` or `rx job status`, doing local work between polls.
