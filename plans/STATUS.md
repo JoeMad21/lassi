@@ -13,7 +13,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2 Scoring | p2-scoring | DONE | base: p1-faithful at 5d5fd0c; plan plans/p2-scoring.md; gate evidence results/p2-gate; owner review OQ-024 accepted with option (b), review questions moved to P4.15; PR 3 merged |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
 | P4 ttsim Execution | p4-ttsim | DONE | base: main at 75eceef (P2 DONE, PR 3 merged); plan plans/p4-ttsim.md; gate passed 2026-10-05 (results/p4-gate); PR 4 merged at 0dcc261 |
-| P5 IR Levels | p5-ir | NOT-STARTED | - |
+| P5 IR Levels | p5-ir | ACTIVE | base: p17-portable at 7f920d7 (P17 stalled, not merged: P17.11 OWNER on OQ-047; GPU half BLOCKED, OQ-040); plan plans/p5-ir.md; OQ-048 and OQ-049 filed |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
 | P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
 | P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); the owner said 2026-10-06 the MI300Xs will not be granted (OQ-040) |
@@ -25,7 +25,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
 | P16 Adversarial | p16-adversarial | BLOCKED | P4, P8 for training |
-| P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; GPU half has no host: the owner said 2026-10-06 the MI300Xs will not be granted, focus on Tenstorrent and CPU (OQ-040); part (a) opens a PR, then P5 may start (OQ-038) |
+| P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; GPU half has no host: the owner said 2026-10-06 the MI300Xs will not be granted, focus on Tenstorrent and CPU (OQ-040); stalled since 2026-10-06: P17.11 OWNER on OQ-047 (Agent Rule 17), so part (a) has not run and no PR is open (OQ-038); P5 started 2026-10-07 from p17-portable at 7f920d7 |
 
 ## Tasks
 
@@ -112,3 +112,19 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.12 | BLOCKED | Spike on the first GPU host | P17.5 | no GPU host: the owner will not grant the MI300Xs (OQ-040, 2026-10-06) |
 | P17.13 | BLOCKED | GPU runs: executor, profilers, hf_local, training | P17.4,P17.7,P17.9,P17.12 | no GPU host: the owner will not grant the MI300Xs (OQ-040, 2026-10-06) |
 | P17.G | BLOCKED | Phase gate: part (a) rerun and part (b) on a GPU host | P17.11,P17.13 | no GPU host for part (b) (OQ-040, 2026-10-06); part (a) runs as P17.11 |
+| P5.0 | DONE | Plan phase P5 into plans/p5-ir.md and add its tasks here | - | plan plans/p5-ir.md; base p17-portable at 7f920d7 (P17 stalled, not merged); OQ-048 and OQ-049 filed |
+| P5.1 | READY | Spike: Polygeist and tt-mlir pins, builds, and budget | - |  |
+| P5.2 | READY | Spike: the v0 corpus pipeline on alpha01 (question 8) | - |  |
+| P5.3 | READY | Spike: Tier B sources at the joint pin | - |  |
+| P5.11 | READY | lassi/corpus: the v0 migration and corpus records | P5.2 |  |
+| P5.4 | OWNER | Install tt-mlir and its LLVM at the joint pin | P5.1 | OQ-049: even the low end of the projected budget passes the 115G stop line; READY when the owner's answer frees space or P5.1's projection for both stacks together fits |
+| P5.5 | OWNER | Install Polygeist (cgeist) | P5.1,P5.4 | OQ-049, as P5.4; the job starts after P5.4's jobs end (one big job at a time) |
+| P5.6 | READY | IR levels: parse, verify, normalize | P5.4,P5.5,P5.11 |  |
+| P5.7 | READY | C and C++ frontend (cgeist) and the CPU target | P5.5,P5.6 |  |
+| P5.8 | READY | TT raiser: Metalium kernels to ttkernel | P5.4,P5.6 |  |
+| P5.9 | READY | Program spec: extraction and host generator | P5.8 |  |
+| P5.10 | READY | Tenstorrent target: ttkernel to Metalium C++ on ttsim | P5.4,P5.6,P5.9 |  |
+| P5.12 | READY | Execution gate and the round-trip driver | P5.7,P5.10,P5.11 |  |
+| P5.13 | OWNER | Tier B of tt-pairs-v0 | P5.3,P5.12 | waits for the owner's answer to OQ-048 (Tier B sources, items, holding); P5.3 adds its evidence there |
+| P5.14 | READY | Tier B through the round trip: raiser, spec, and frontend coverage | P5.12,P5.13 |  |
+| P5.G | READY | Phase gate: Tier A and B pairs round-trip on ttsim; per-kernel gate rates | P5.12,P5.14 |  |
