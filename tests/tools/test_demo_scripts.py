@@ -83,3 +83,13 @@ def test_tt_directions_are_named_and_labeled_simulator(live: ModuleType) -> None
 def test_showcase_runs_from_the_demo_slot() -> None:
     showcase = load_script("lassi-showcase")
     assert showcase.WORKTREE.name == "demo-live"
+
+
+@pytest.mark.parametrize("segment", ["cpu", "tt"])
+def test_mock_recipes_bind_the_mock_model_and_one_trial(live: ModuleType, segment: str) -> None:
+    path = (live.write_tt_recipe("demo-test-mock-tt", ["eltwise_binary"], mock=True) if segment == "tt" else
+            live.write_recipe("demo-test-mock-cpu", ["matrix-rotate"], compile_only=False, mock=True))
+    data = resolved(path)
+    assert data["model"]["backend"] == "mock"
+    assert data["model"]["id"] == "mock-reference"
+    assert data["trials"]["n"] == 1

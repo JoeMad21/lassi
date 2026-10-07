@@ -24,6 +24,10 @@ Tenstorrent number comes from ttsim, a simulator: label it simulator, never sili
 
 ## Options
 
+- `lassi-live --mock --both` is the fallback when no card is free (on 2026-10-07 every card from npu1 to
+  npu7 was held by another tenant). No card, no server, no inference: the mock model replies with each
+  item's reference program, so the builds, the sandbox, ttsim, the oracle, and the live table run for
+  real and every trial passes by construction. Say so: it shows the pipeline, never a model.
 - `lassi-live` alone runs only the CPU segment, as before; `lassi-live --tt` only the Tenstorrent segment.
 - `--apps a,b` chooses the CPU segment's apps (any of lassi-hecbench-10); a trial that hits the correction cap
   takes 5 to 8 minutes. `--tt-apps` chooses the Tier A items: loopback, eltwise_binary, and eltwise_sfpu are

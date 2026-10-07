@@ -17,6 +17,10 @@ Usage:
   lassi-live --card npu2              use this card (never npu0); default: the first free card, npu1 to npu7
   lassi-live --plain                  the same run with graphics off (no banner, no live table)
   lassi-live --show RUN_ID            print the outcome table of a finished run and exit (no card, no server)
+  lassi-live --mock --both            no card, no server, no inference: the mock model replies with each
+                                      item's reference program, so the build, sandbox, ttsim, and live table
+                                      run for real and every trial passes by construction; the fallback when
+                                      no card is free
 
 What happens:
   1. Checks: `furiosa-smi ps` and `furiosa-smi status`; a card from npu1 to npu7 whose memory reads 0.00 GiB;
@@ -264,7 +268,14 @@ def tt_parent(apps: list[str]) -> str:
                      "(matmul_single_core, matmul_multi_core) in one run, not both")
 
 
-def write_tt_recipe(run_id: str, apps: list[str]) -> Path:
+MOCK_MODEL = (
+    "model:\n"
+    "  backend: mock  # replies with each item's reference program: no model, no inference\n"
+    "  id: mock-reference\n"
+)
+
+
+def write_tt_recipe(run_id: str, apps: list[str], mock: bool = False) -> Path:
     """Write the Tenstorrent segment's recipe: one trial per item and direction, a short correction cap."""
     RECIPES.mkdir(parents=True, exist_ok=True)
     parent = SLOT / "projects" / "lassi-demo" / tt_parent(apps)
@@ -273,7 +284,8 @@ def write_tt_recipe(run_id: str, apps: list[str]) -> Path:
         f"# Written by lassi-live for run {run_id}: C++ -> TT and TT -> C++, every TT program on ttsim (a "
         "simulator, not silicon).\n"
         f"extends: {Path(os.path.relpath(parent, RECIPES)).as_posix()}\n"
-        "bench:\n"
+        + (MOCK_MODEL if mock else "")
+        + "bench:\n"
         f"  items: [{', '.join(apps)}]\n"
         "trials:\n"
         "  n: 1  # one trial per item and direction, for a live demo\n"
@@ -284,7 +296,7 @@ def write_tt_recipe(run_id: str, apps: list[str]) -> Path:
     return path
 
 
-def write_recipe(run_id: str, apps: list[str], compile_only: bool) -> Path:
+def write_recipe(run_id: str, apps: list[str], compile_only: bool, mock: bool = False) -> Path:
     """Write the demo recipe for this run next to the other demo recipes; return its path."""
     RECIPES.mkdir(parents=True, exist_ok=True)
     parent = SLOT / "projects" / "lassi-demo" / ("rngd-compile.yaml" if compile_only else "rngd-cpu.yaml")
@@ -294,7 +306,8 @@ def write_recipe(run_id: str, apps: list[str], compile_only: bool) -> Path:
     path.write_text(
         f"# Written by lassi-live for run {run_id}: {what}.\n"
         f"extends: {Path(os.path.relpath(parent, RECIPES)).as_posix()}\n"
-        "bench:\n"
+        + (MOCK_MODEL + "trials:\n  n: 1  # one trial per item, for a pipeline demo\n" if mock else "")
+        + "bench:\n"
         f"  items: [{', '.join(apps)}]\n",
         encoding="ascii",
     )
@@ -335,6 +348,8 @@ def parse(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--tt", action="store_true", help="the Tenstorrent segment instead of the CPU one")
     parser.add_argument("--both", action="store_true", help="the CPU segment, then the Tenstorrent segment")
     parser.add_argument("--tt-apps", default=",".join(DEFAULT_TT_APPS), help="comma-separated Tier A items")
+    parser.add_argument("--mock", action="store_true",
+                        help="no card and no server: the mock model replies with each reference program")
     parser.add_argument("--card", help="the card to serve on (never npu0)")
     parser.add_argument("--run-id", help="the run id (default demo-live-<date>-<time>)")
     parser.add_argument("--plain", action="store_true", help="graphics off: no banner, no live table")
@@ -374,6 +389,30 @@ def describe(segment: str, items: list[str], compile_only: bool) -> str:
                                                     "CUDA -> OpenMP, each program compiled and run on the CPU")
 
 
+def run_segments(plan: list[tuple[str, str, list[str]]], args: argparse.Namespace, first: int) -> int:
+    """Run each segment's lassi run with its outcome table, numbering headings from `first`; return the status."""
+    status = 0
+    for number, (segment, segment_id, items) in enumerate(plan):
+        label = "the Tenstorrent segment, on ttsim" if segment == "tt" else "the CPU segment"
+        heading(f"{first + 2 * number}. lassi run with the live inference table: {label}")
+        recipe = (write_tt_recipe(segment_id, items, args.mock) if segment == "tt" else
+                  write_recipe(segment_id, items, args.compile_only, args.mock))
+        say(f"recipe: {recipe}")
+        done = run_lassi(recipe, segment_id, "off" if args.plain else "on")
+        heading(f"{first + 1 + 2 * number}. Outcome: {label}")
+        say(outcome(segment_id))
+        if segment == "tt":
+            say("TT results come from ttsim, a simulator of a Wormhole card: simulator, not silicon.")
+        if args.mock:
+            say("Mock model: every candidate is the reference program, so these passes show the pipeline, "
+                "never a model.")
+        say(f"records: {RUNS_ROOT / 'runs' / segment_id}   (again: lassi-live --show {segment_id})")
+        if done:
+            say(f"lassi run exited with status {done}")
+        status = status or done
+    return status
+
+
 def main(argv: list[str]) -> int:
     """Run the demo; return the exit status."""
     args = parse(argv)
@@ -385,11 +424,20 @@ def main(argv: list[str]) -> int:
     run_id = args.run_id or time.strftime("demo-live-%Y%m%d-%H%M%S")
     plan = segments(args, run_id)
     head = subprocess.run(["git", "log", "-1", "--format=%h %s"], cwd=SLOT, capture_output=True, text=True)
-    heading("LASSI live inference demo")
+    heading("LASSI pipeline demo with the mock model" if args.mock else "LASSI live inference demo")
     say(f"code: {SLOT} at {head.stdout.strip() or 'unknown commit'}")
-    say(f"model: {MODEL} at {REVISION}, furiosa-llm on one Furiosa RNGD card (the stock demo model)")
+    if args.mock:
+        say("model: mock, which replies with each item's reference program; no card, no server, no inference")
+    else:
+        say(f"model: {MODEL} at {REVISION}, furiosa-llm on one Furiosa RNGD card (the stock demo model)")
     for segment, _, items in plan:
         say(describe(segment, items, args.compile_only))
+    if args.mock:
+        try:
+            return run_segments(plan, args, 1)
+        except KeyboardInterrupt:
+            say("\ninterrupted")
+            return 130
     heading("1. The cards")
     cards = show_cards()
     if own_servers():
@@ -406,23 +454,7 @@ def main(argv: list[str]) -> int:
         ready = wait_ready(server, card, log)
         say(f"ready in {ready:.0f} s: /v1/models lists {MODEL} (serve log {log})")
         say(f"{card} memory now {card_status().get(card, ('?', -1.0, 0.0))[1]:.2f} GiB")
-        status = 0
-        for number, (segment, segment_id, items) in enumerate(plan):
-            label = "the Tenstorrent segment, on ttsim" if segment == "tt" else "the CPU segment"
-            heading(f"{3 + 2 * number}. lassi run with the live inference table: {label}")
-            recipe = (write_tt_recipe(segment_id, items) if segment == "tt" else
-                      write_recipe(segment_id, items, args.compile_only))
-            say(f"recipe: {recipe}")
-            done = run_lassi(recipe, segment_id, "off" if args.plain else "on")
-            heading(f"{4 + 2 * number}. Outcome: {label}")
-            say(outcome(segment_id))
-            if segment == "tt":
-                say("TT results come from ttsim, a simulator of a Wormhole card: simulator, not silicon.")
-            say(f"records: {RUNS_ROOT / 'runs' / segment_id}   (again: lassi-live --show {segment_id})")
-            if done:
-                say(f"lassi run exited with status {done}")
-            status = status or done
-        return status
+        return run_segments(plan, args, 3)
     except KeyboardInterrupt:
         say("\ninterrupted")
         return 130
