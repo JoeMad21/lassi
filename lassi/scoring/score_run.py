@@ -49,7 +49,7 @@ The score directory holds:
 - parquet/attempt_components/part-0.parquet: trial_id, attempt_index,
   profile, component, and value, likewise, for each profile that declares
   scores_attempts; no file when none does.
-- metrics.md and parquet/metrics, stage_reached, and corrections: when the
+- metrics.md and parquet/metrics, stage_reached, corrections, and guard_coverage: when the
   profile lassi.analysis.metrics reads (SCORE_PROFILE) is among the
   profiles, the P2.8 metric tables of its Scores (metrics_markdown, and
   metrics_arrow written by write_metrics_arrow, as write_metrics_parquet

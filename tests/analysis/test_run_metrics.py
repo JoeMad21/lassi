@@ -97,12 +97,28 @@ The contract these tests fix:
   `write_metrics_parquet(tables, out_dir)` writes Parquet under
   `<out_dir>/<table>/` as lassi.core.parquet does, and
   `read_metrics_parquet(out_dir)` returns {"metrics", "stage_reached",
-  "corrections"} rows: metrics rows hold arm, direction, and every
-  MetricRow field; stage_reached rows hold arm, direction, stage, and
-  count; corrections rows hold arm, direction, corrections, and count.
+  "corrections", "guard_coverage"} rows: metrics rows hold arm, direction,
+  and every MetricRow field; stage_reached rows hold arm, direction, stage,
+  and count; corrections rows hold arm, direction, corrections, and count;
+  guard_coverage rows (task P17.14) are described below. A missing table
+  directory reads as no rows, so a score tree written before a table
+  existed (results/p4-p2-review/score/parquet) still loads.
 - Output is plain ASCII and holds no prompt, source, context, or model text
   (OQ-018): a sentinel placed in replies, files, context, and diagnostics
   never reaches it.
+- Guard coverage (task P17.14; OQ-028, the owner's condition of
+  2026-10-05): each MetricTable ends with `guard`, the
+  lassi.analysis.guard_coverage GuardCoverage of every attempt of its
+  trials (None for a table built by hand, which then renders as before).
+  table_markdown appends, after the corrections distribution, a line naming
+  guard coverage and the table's target and a table whose last row is
+  coverage_cells(guard). metrics_markdown ends with the Guard coverage
+  section, coverage_markdown(guard_coverage(trials)) over every table's
+  trials: the run, then each target language. The Parquet table
+  guard_coverage holds one row per table with a guard: arm, direction,
+  target, attempts, checked, not_checked, not_checked_rate, not_built,
+  no_program, no_guard, guard_not_checked, and not_recorded. No metric row,
+  distribution, or other field changes with the recorded codes.
 
 Every trial and score here is SYNTHETIC and hand-built from the Result
 Record and Score classes; no model is called, no program is run, and the
@@ -112,9 +128,11 @@ specs below, as the comments show. No value in this module is a measurement.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import importlib
 import re
+import shutil
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -132,6 +150,7 @@ from lassi.core.record import (
     Diagnostic,
     EndReason,
     Final,
+    Guards,
     ModelInfo,
     Provenance,
     RunInfo,
@@ -139,6 +158,7 @@ from lassi.core.record import (
     Trial,
     arm_segment,
     make_trial_id,
+    parse_trial_id,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -840,7 +860,7 @@ def test_the_metrics_files_are_parquet(tmp_path: Path) -> None:
     tables = mixed_tables()
     out_dir = tmp_path / "metrics"
     module(TABLES).write_metrics_parquet(tables, out_dir)
-    for name in ("metrics", "stage_reached", "corrections"):
+    for name in ("metrics", "stage_reached", "corrections", "guard_coverage"):
         files = sorted((out_dir / name).rglob("*.parquet"))
         assert files, f"no Parquet file under {name}/"
         assert sum(pq.read_table(path).num_rows for path in files) > 0
@@ -1040,3 +1060,185 @@ def test_a_score_without_sim_t_tiktoken_is_refused() -> None:
     components = {name: value for name, value in score.components.items() if name != "sim_t_tiktoken"}
     with pytest.raises(ValueError, match="sim_t_tiktoken"):
         module(METRICS).metric_tables([(trial, Score(components=components, scalar=score.scalar, notes=score.notes))])
+
+
+# ---------------------------------------------------------------------------
+# Task P17.14: guard coverage in the metric tables (OQ-028, the owner's condition of 2026-10-05)
+
+GUARD = "lassi.analysis.guard_coverage"
+METRICS_TABLES = ("metrics", "stage_reached", "corrections", "guard_coverage")
+GUARD_TABLE_COLUMNS = (
+    "arm", "direction", "target", "attempts", "checked", "not_checked", "not_checked_rate", "not_built",
+    "no_program", "no_guard", "guard_not_checked", "not_recorded",
+)
+# The code each SYNTHETIC attempt records by its stage; an S5 attempt is read and clear (host_compute False).
+STAGE_CODES = {"S0": "not-built", "S1": "no-program", "S4": "guard-not-checked"}
+COMMITTED_SCORE_PARQUET = REPO / "results" / "p4-p2-review" / "score" / "parquet"
+
+
+def guard_module() -> ModuleType:
+    """Import lassi.analysis.guard_coverage; fail the test clearly while task P17.14 has not added it."""
+    try:
+        return importlib.import_module(GUARD)
+    except ModuleNotFoundError as error:
+        if error.name != GUARD:
+            raise
+        pytest.fail(f"task P17.14 adds {GUARD}: {error}")
+
+
+def stage_guards(stage: str) -> Guards:
+    """Return the SYNTHETIC Guards of an attempt at `stage`: S5 read clear, any other stage a null reading's code."""
+    if stage == "S5":
+        return Guards(host_compute=False)
+    return Guards(host_compute_not_checked=STAGE_CODES[stage])
+
+
+def guarded(pairs: Sequence[tuple[Trial, Score]]) -> list[tuple[Trial, Score]]:
+    """Return `pairs` with every attempt's guards set by its stage (stage_guards); nothing else changes."""
+    return [
+        (replace(trial, attempts=[replace(item, guards=stage_guards(item.stage_reached)) for item in trial.attempts]),
+         score)
+        for trial, score in pairs
+    ]
+
+
+def coverage_data(coverage: Any) -> dict[str, Any]:
+    """Return a GuardCoverage as plain data: its counts, its rate, and every reason count."""
+    return {
+        "attempts": coverage.attempts, "checked": coverage.checked, "not_checked": coverage.not_checked,
+        "rate": coverage.rate, "reasons": dict(coverage.reasons),
+    }
+
+
+def group_attempts(pairs: Sequence[tuple[Trial, Score]], arm: str, direction: str) -> list[Attempt]:
+    """Return every attempt of the trials of `pairs` in one arm and direction."""
+    return [
+        item for trial, _ in pairs
+        if (parse_trial_id(trial.trial_id).arm, parse_trial_id(trial.trial_id).direction) == (arm, direction)
+        for item in trial.attempts
+    ]
+
+
+def test_metric_table_ends_with_a_guard_field_that_defaults_to_none() -> None:
+    fields = dataclasses.fields(module(METRICS).MetricTable)
+    assert fields[-1].name == "guard" and fields[-1].default is None
+
+
+def test_each_table_carries_its_guard_coverage() -> None:
+    pairs = guarded(all_group_pairs())
+    gc = guard_module()
+    for (arm, direction), table in tables_of(pairs).items():
+        want = gc.count_attempts(group_attempts(pairs, arm, direction))
+        assert coverage_data(table.guard) == coverage_data(want), (arm, direction)
+    # Hand counts over MAIN (arm A, OpenMP to CUDA): 33 attempts; the 6 at S5 are checked; 25 at S1 (no-program),
+    # 1 at S4 (guard-not-checked), and 1 at S0 (not-built) are not: 27/33.
+    main = tables_of(pairs)[(ARM_A, OMP_TO_CUDA)].guard
+    assert (main.attempts, main.checked, main.not_checked) == (33, 6, 27)
+    assert dict(main.reasons) == {"not-built": 1, "no-program": 25, "no-guard": 0, "guard-not-checked": 1,
+                                  "not recorded": 0}
+    assert main.rate == pytest.approx(27 / 33, abs=EXACT)
+
+
+def test_a_trial_recorded_before_the_reason_counts_as_not_recorded() -> None:
+    table = only_table(pairs_of(MAIN))
+    # MAIN's attempts record no guard reading and no code: all 33 not checked, not recorded.
+    assert (table.guard.attempts, table.guard.checked, table.guard.reasons["not recorded"]) == (33, 0, 33)
+
+
+def test_table_markdown_ends_with_the_guard_coverage_block() -> None:
+    table = only_table(guarded(pairs_of(MAIN)))
+    markdown, bare = markdown_of(table), markdown_of(replace(table, guard=None))
+    assert markdown.startswith(bare), "the block follows everything the table showed before"
+    tail = markdown[len(bare):]
+    assert "guard coverage" in tail.lower() and "target cuda" in tail, tail
+    cells = guard_module().coverage_cells(table.guard)
+    assert cell_rows(tail)[-1] == cells
+    assert cells == ["33", "6", "27", "0.818", "1", "25", "0", "1", "0"], "hand counts over MAIN, rate 27/33"
+    assert tail.isascii()
+
+
+def test_a_table_without_guard_coverage_renders_as_before() -> None:
+    table = replace(only_table(pairs_of(MAIN)), guard=None)
+    markdown = markdown_of(table)
+    assert "guard coverage" not in markdown.lower()
+    assert markdown.rstrip("\n").endswith(f"| {max(MAIN_CORRECTIONS)} | {MAIN_CORRECTIONS[max(MAIN_CORRECTIONS)]} |")
+
+
+def test_metrics_markdown_ends_with_the_guard_coverage_section() -> None:
+    pairs = guarded(all_group_pairs())
+    tables = list(tables_of(pairs).values())
+    gc = guard_module()
+    rows = gc.guard_coverage([trial for trial, _ in pairs])
+    assert [scope for scope, _ in rows] == ["run", "target cuda", "target omp"]
+    document = module(TABLES).metrics_markdown(tables)
+    assert document.endswith(gc.coverage_markdown(rows)), "metrics.md ends with the run and per-target rows"
+    assert document.split("\n").count("## Guard coverage") == 1
+    summary = gc.summary_rows([(table.direction, table.guard) for table in tables])
+    assert [(scope, coverage_data(found)) for scope, found in summary] == [
+        (scope, coverage_data(found)) for scope, found in rows], "the same counts as run.md's section"
+    # Hand count: the run holds MAIN (33 attempts), its layout trials (19), its bsearch trials (14), and all but
+    # layout 1 (32).
+    assert rows[0][1].attempts == 98
+
+
+def test_guard_coverage_parquet_round_trips(tmp_path: Path) -> None:
+    tables = list(tables_of(guarded(all_group_pairs()) + guarded(
+        pairs_of(COMPILE_ONLY, MODEL_C, CUDA_TO_OMP, compile_only=True))).values())
+    assert tuple(module(TABLES).TABLES) == METRICS_TABLES
+    assert tuple(module(TABLES).SCHEMAS["guard_coverage"].names) == GUARD_TABLE_COLUMNS
+    read = written(tmp_path, tables)
+    assert set(read) == set(METRICS_TABLES)
+    assert read["guard_coverage"] == module(TABLES).metrics_rows(tables)["guard_coverage"]
+    assert len(read["guard_coverage"]) == len(tables)
+    gc = guard_module()
+    for table in tables:
+        key = (table.arm, table.direction)
+        (row,) = [row for row in read["guard_coverage"] if (row["arm"], row["direction"]) == key]
+        guard = table.guard
+        assert row == {
+            "arm": table.arm, "direction": table.direction, "target": gc.target_language(table.direction),
+            "attempts": guard.attempts, "checked": guard.checked, "not_checked": guard.not_checked,
+            "not_checked_rate": guard.rate, "not_built": guard.reasons["not-built"],
+            "no_program": guard.reasons["no-program"], "no_guard": guard.reasons["no-guard"],
+            "guard_not_checked": guard.reasons["guard-not-checked"], "not_recorded": guard.reasons["not recorded"],
+        }, (table.arm, table.direction)
+
+
+def test_a_table_without_guard_coverage_writes_no_guard_coverage_row(tmp_path: Path) -> None:
+    tables = [replace(table, guard=None) for table in mixed_tables()]
+    read = written(tmp_path, tables)
+    assert read["guard_coverage"] == []
+    assert not (tmp_path / "metrics" / "guard_coverage").exists(), "a table with no rows gets no directory"
+
+
+def test_a_score_tree_without_guard_coverage_reads_as_no_rows(tmp_path: Path) -> None:
+    committed = module(TABLES).read_metrics_parquet(COMMITTED_SCORE_PARQUET)
+    assert set(committed) == set(METRICS_TABLES)
+    assert committed["guard_coverage"] == [], "the committed P4 score tree has no guard_coverage table"
+    assert committed["metrics"] and committed["stage_reached"] and committed["corrections"]
+    tables = mixed_tables()
+    out_dir = tmp_path / "metrics"
+    module(TABLES).write_metrics_parquet(tables, out_dir)
+    shutil.rmtree(out_dir / "guard_coverage")
+    read = module(TABLES).read_metrics_parquet(out_dir)
+    assert read["guard_coverage"] == []
+    rows = module(TABLES).metrics_rows(tables)
+    assert {name: read[name] for name in METRICS_TABLES[:3]} == {name: rows[name] for name in METRICS_TABLES[:3]}
+
+
+def test_guard_reasons_change_no_metric_row() -> None:
+    with_codes = tables_of(guarded(all_group_pairs()))
+    without = tables_of(all_group_pairs())
+    assert set(with_codes) == set(without)
+    for key, table in with_codes.items():
+        assert replace(table, guard=None) == replace(without[key], guard=None), key
+    rows_with = module(TABLES).metrics_rows(list(with_codes.values()))
+    rows_without = module(TABLES).metrics_rows(list(without.values()))
+    for name in METRICS_TABLES[:3]:
+        assert rows_with[name] == rows_without[name], name
+
+
+def test_the_legend_states_the_guard_coverage_unit() -> None:
+    legend = module(TABLES).LEGEND
+    assert "guard coverage" in legend.lower() and "attempt" in legend
+    assert "not checked over attempts" in legend

@@ -72,6 +72,17 @@ END_REASONS = (
     "sim-gap",
     "context-exceeded",
 )
+# The three guard outcomes of Guards, by field name: what a score reads (lassi.scoring.df_v0 guard_state).
+GUARD_OUTCOMES = ("host_compute", "harness_tamper", "oracle_access")
+# The codes of Guards.host_compute_not_checked (task P17.14; OQ-028): why host_compute is null. not-built means the
+# attempt was never built; no-program means its build gave no program; no-guard means the target language's
+# toolchain declares no host_compute_guard (or none is bound), set on every attempt of that target, built or not;
+# guard-not-checked means the guard ran and gave null, and its guard-not-checked note on the attempt says why.
+NOT_BUILT = "not-built"
+NO_PROGRAM = "no-program"
+NO_GUARD = "no-guard"
+GUARD_NOT_CHECKED = "guard-not-checked"
+HOST_COMPUTE_NOT_CHECKED = (NOT_BUILT, NO_PROGRAM, NO_GUARD, GUARD_NOT_CHECKED)
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -378,15 +389,26 @@ class Profile:
 
 @dataclass(frozen=True, kw_only=True)
 class Guards:
-    """Guard outcomes: host compute, harness tampering, oracle access; None means not checked."""
+    """Guard outcomes: host compute, harness tampering, oracle access; None means not checked.
+
+    host_compute_not_checked (task P17.14) is why host_compute is None: one of HOST_COMPUTE_NOT_CHECKED, or None
+    when host_compute is set or when the record does not say (an attempt recorded before task P17.14).
+    """
 
     host_compute: bool | None = None
     harness_tamper: bool | None = None
     oracle_access: bool | None = None
+    host_compute_not_checked: str | None = None
 
     def __post_init__(self) -> None:
-        """Check that every outcome is a bool or None."""
+        """Check that every outcome is a bool or None, and that a reason is a code beside a null host_compute."""
         _check_fields(self)
+        reason = self.host_compute_not_checked
+        if reason is None:
+            return
+        _check_choice("Guards", "host_compute_not_checked", reason, HOST_COMPUTE_NOT_CHECKED)
+        if self.host_compute is not None:
+            _fail("Guards", "host_compute_not_checked", reason, "must be null when host_compute is set")
 
 
 @dataclass(frozen=True, kw_only=True)

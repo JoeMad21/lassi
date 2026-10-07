@@ -39,10 +39,16 @@ The run flags of Trial.reference_run and Attempt.run (P2.2) are bool
 columns right after the run's outputs_ref columns: reference_run_<flag> in
 the trials table and run_<flag> in the attempts table, for stdout_truncated,
 stderr_truncated, and workdir_incomplete, null where not recorded.
+
+P17.14 adds the string column guards_host_compute_not_checked to the
+attempts table, right after guards_oracle_access: the attempt's
+Guards.host_compute_not_checked code, null where none is recorded. Every
+fixture here but one records none.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from collections.abc import Callable
@@ -152,6 +158,7 @@ ATTEMPT_COLUMNS = (
     "guards_host_compute",
     "guards_harness_tamper",
     "guards_oracle_access",
+    "guards_host_compute_not_checked",
     "score_components",
     "score_scalar",
 )
@@ -692,6 +699,7 @@ def expected_attempt_rows_a_omp_entropy() -> list[dict[str, Any]]:
         "guards_host_compute": None,
         "guards_harness_tamper": None,
         "guards_oracle_access": None,
+        "guards_host_compute_not_checked": None,
         "score_components": "{}",
         "score_scalar": None,
     }
@@ -717,6 +725,7 @@ def expected_attempt_rows_a_omp_entropy() -> list[dict[str, Any]]:
         "guards_host_compute": False,
         "guards_harness_tamper": None,
         "guards_oracle_access": None,
+        "guards_host_compute_not_checked": None,
         "score_components": '{"alignment": 0.75, "energy": null}',
         "score_scalar": None,
     }
@@ -885,6 +894,7 @@ def expected_attempt_row_b_omp_filled_0() -> dict[str, Any]:
         "guards_host_compute": True,
         "guards_harness_tamper": False,
         "guards_oracle_access": None,
+        "guards_host_compute_not_checked": None,
         "score_components": '{"stage": 0.6}',
         "score_scalar": 0.125,
     }
@@ -923,6 +933,7 @@ def expected_attempt_row_b_omp_filled_1() -> dict[str, Any]:
         "guards_host_compute": False,
         "guards_harness_tamper": None,
         "guards_oracle_access": True,
+        "guards_host_compute_not_checked": None,
         "score_components": '{"alignment": 0.5, "stage": 0.8}',
         "score_scalar": 0.375,
     }
@@ -1381,3 +1392,24 @@ def test_a_value_arrow_cannot_encode_leaves_every_table_unchanged(tmp_path: Path
         parquet.write_run_parquet([trial_b_omp_entropy(), bad], out)
     assert "diagnostics" in str(info.value)
     assert snapshot(out) == before
+
+
+# ---------------------------------------------------------------------------
+# Why host_compute is null (P17.14)
+
+
+def test_guard_reason_column_holds_the_code_or_null(tmp_path: Path) -> None:
+    trial = trial_a_omp_entropy()
+    first, second = trial.attempts
+    reason = record.Guards(harness_tamper=False, host_compute_not_checked="no-program")
+    trial = make_trial(ID_A_OMP_ENTROPY, [dataclasses.replace(first, guards=reason), second])
+    rows = parquet.trial_rows([trial])["attempts"]
+    assert [row["guards_host_compute_not_checked"] for row in rows] == ["no-program", None]
+    assert [row["guards_harness_tamper"] for row in rows] == [False, None]
+    out = tmp_path / "parquet"
+    parquet.write_run_parquet([trial], out)
+    read = parquet.read_run_parquet(out)["attempts"]
+    assert [row["guards_host_compute_not_checked"] for row in read] == ["no-program", None]
+    names = parquet.SCHEMAS["attempts"].names
+    assert names.index("guards_host_compute_not_checked") == names.index("guards_oracle_access") + 1
+    assert parquet.SCHEMAS["attempts"].field("guards_host_compute_not_checked").type == pa.string()

@@ -182,7 +182,11 @@ host), resolve inside it (Agent Rule 7). The tree holds:
   (lassi.core.capabilities SIMULATOR), its Trials section opens with a
   note naming those languages: their run wall times are simulator wall
   time, not performance, and the wall_s column is each trial's pipeline
-  wall time (task P4.6). With
+  wall time (task P4.6). A Guard coverage section follows the Trials
+  section in every run (task P17.14; lassi.analysis.guard_coverage): the
+  host-compute guard's checked and not-checked attempts, the not-checked
+  rate, and each host_compute_not_checked code's count, for the run and
+  per target language. With
   `metrics` it ends in a Metrics section
   (lassi.scoring.run_scoring.metrics_section);
 - one directory per trial (one level per trial_id segment) with trial.json,
@@ -268,6 +272,7 @@ from pathlib import Path
 from typing import Any
 
 from lassi import profilers  # noqa: F401  (registers the Profilers timing, nvml, and rocm_smi)
+from lassi.analysis.guard_coverage import coverage_markdown, guard_coverage
 from lassi.bench import Direction, Suite, load_suite, sources_dir
 from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
 from lassi.core.capabilities import (
@@ -2515,9 +2520,10 @@ def _run_md(
 ) -> str:
     """Return run.md: the run summary, the resolved recipe, the toolchain pins, and one trials table per arm.
 
-    The Trials section opens with _simulator_note when it applies. With
+    The Trials section opens with _simulator_note when it applies, and the
+    Guard coverage section (task P17.14) follows it. With
     `metrics` (the recipe names metrics), a Metrics section follows
-    the trials (lassi.scoring.run_scoring.metrics_section). It is
+    that (lassi.scoring.run_scoring.metrics_section). It is
     deterministic for given records, plain ASCII (non-ASCII becomes
     backslash escapes) with LF newlines, and names no absolute run path, so
     it reads the same wherever the run tree is copied.
@@ -2539,6 +2545,7 @@ def _run_md(
     pin_header = ("Toolchain", "Languages", "Pin", "Version", "Install prefix")
     blocks += ["## Toolchain pins\n", _md_table(pin_header, _pin_rows(run.toolchains))]
     blocks += ["## Trials\n", *_simulator_note(run, trials), *_trial_blocks(trials)]
+    blocks.append(coverage_markdown(guard_coverage(trials)))
     if metrics is not None:
         blocks.append(metrics_section(metrics, run.scoring.score))
     return "\n".join(blocks).encode("ascii", "backslashreplace").decode("ascii")

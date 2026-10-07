@@ -37,6 +37,19 @@ and framework_version are both set or both None. Every DeviceRecord field is
 required. The bible's Result Record block names device_records last in
 provenance, as [DeviceRecord], and defines the DeviceRecord block after
 OutputStats.
+
+Guards.host_compute_not_checked (P17.14; OQ-028, the owner's condition of
+2026-10-05) records why host_compute is null. It is the last Guards field,
+after the three guard outcomes that GUARD_OUTCOMES names, and defaults to
+None. Its value is one of HOST_COMPUTE_NOT_CHECKED, in this order:
+`not-built`, `no-program`, `no-guard`, and `guard-not-checked`, each also a
+module constant (NOT_BUILT, NO_PROGRAM, NO_GUARD, GUARD_NOT_CHECKED). A code
+beside a true or false host_compute, and any value outside the four, is
+refused with a ValueError naming the field, when a record is built and when
+one is loaded. to_dict always writes the key, null when no code is
+recorded. A trial.json written before the field has no such key and loads
+unchanged with it None, which means not recorded and is never read as a
+code (Agent Rule 1).
 """
 
 from __future__ import annotations
@@ -1488,7 +1501,12 @@ def test_minimal_attempt_to_dict_exact() -> None:
         },
         "alignment": {"per_input": [], "mean": None, "outputs": None},
         "profile": {"runtime_s": None, "avg_power_w": None, "energy_j": None},
-        "guards": {"host_compute": None, "harness_tamper": None, "oracle_access": None},
+        "guards": {
+            "host_compute": None,
+            "harness_tamper": None,
+            "oracle_access": None,
+            "host_compute_not_checked": None,
+        },
         "score": {"components": {}, "scalar": None},
     }
 
@@ -2150,3 +2168,113 @@ def test_read_trial_rejects_malformed_json(tmp_path: Path, text_store: store.Tex
     path.write_bytes(text.encode("ascii"))
     with pytest.raises(ValueError):
         store.read_trial(path, text_store)
+
+
+# ---------------------------------------------------------------------------
+# Why host_compute is null: Guards.host_compute_not_checked (P17.14)
+
+# The three guard outcomes and the four codes, in the order the module holds them.
+GUARD_OUTCOME_NAMES = ("host_compute", "harness_tamper", "oracle_access")
+NOT_CHECKED_CODES = ("not-built", "no-program", "no-guard", "guard-not-checked")
+REASON = "host_compute_not_checked"
+
+
+def test_guard_outcomes_and_the_reason_codes_are_the_documented_values() -> None:
+    assert record.GUARD_OUTCOMES == GUARD_OUTCOME_NAMES
+    assert record.HOST_COMPUTE_NOT_CHECKED == NOT_CHECKED_CODES
+    constants = (record.NOT_BUILT, record.NO_PROGRAM, record.NO_GUARD, record.GUARD_NOT_CHECKED)
+    assert constants == NOT_CHECKED_CODES
+
+
+def test_the_reason_is_the_last_guards_field_and_defaults_to_not_recorded() -> None:
+    assert [f.name for f in dataclasses.fields(record.Guards)] == [*GUARD_OUTCOME_NAMES, REASON]
+    spec = {f.name: f for f in dataclasses.fields(record.Guards)}[REASON]
+    assert spec.default is None and spec.kw_only
+    assert unwrap_optional(typing.get_type_hints(record.Guards)[REASON]) is str
+    assert getattr(record.Guards(), REASON) is None
+    assert getattr(record.Guards(host_compute=True), REASON) is None
+
+
+@pytest.mark.parametrize("code", NOT_CHECKED_CODES)
+def test_a_guards_reason_is_one_of_the_codes_and_round_trips(code: str) -> None:
+    guards = record.Guards(harness_tamper=False, host_compute_not_checked=code)
+    assert guards.host_compute is None and guards.host_compute_not_checked == code
+    attempt = record.Attempt(index=0, stage_reached="S1", guards=guards)
+    assert record.to_dict(attempt)["guards"] == {
+        "host_compute": None,
+        "harness_tamper": False,
+        "oracle_access": None,
+        REASON: code,
+    }
+    assert record.from_json(record.Attempt, record.to_json(attempt)) == attempt
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["", "not built", "NOT-BUILT", "no_guard", "guard-host-compute", "not recorded", 3, True],
+    ids=["empty", "spaced", "upper", "underscore", "guard-code", "not-recorded", "int", "bool"],
+)
+def test_a_guards_reason_outside_the_codes_is_refused(value: Any) -> None:
+    with pytest.raises(ValueError) as info:
+        record.Guards(host_compute_not_checked=value)
+    assert REASON in str(info.value) and mentions(str(info.value), value), str(info.value)
+    data = record.to_dict(record.Attempt(index=0, stage_reached="S1"))
+    data["guards"][REASON] = value
+    with pytest.raises(ValueError) as info:
+        record.from_dict(record.Attempt, data)
+    assert REASON in str(info.value), str(info.value)
+
+
+@pytest.mark.parametrize("host_compute", [True, False])
+@pytest.mark.parametrize("code", NOT_CHECKED_CODES)
+def test_a_reason_beside_a_set_host_compute_is_refused(host_compute: bool, code: str) -> None:
+    with pytest.raises(ValueError) as info:
+        record.Guards(host_compute=host_compute, host_compute_not_checked=code)
+    assert REASON in str(info.value), str(info.value)
+    data = record.to_dict(minimal_trial([record.Attempt(index=0, stage_reached="S4")]))
+    data["attempts"][0]["guards"].update({"host_compute": host_compute, REASON: code})
+    with pytest.raises(ValueError) as info:
+        record.from_dict(record.Trial, data)
+    assert REASON in str(info.value) and "attempts[0].guards" in str(info.value), str(info.value)
+    data["attempts"][0]["guards"][REASON] = None
+    assert record.from_dict(record.Trial, data).attempts[0].guards == record.Guards(host_compute=host_compute)
+
+
+def test_to_dict_always_writes_the_reason() -> None:
+    data = record.to_dict(json_trial())
+    for attempt in data["attempts"]:
+        assert list(attempt["guards"]) == [*GUARD_OUTCOME_NAMES, REASON]
+        assert attempt["guards"][REASON] is None
+
+
+def older_trial_dict(trial: record.Trial) -> dict[str, Any]:
+    """Return to_dict(trial) as a trial.json written before task P17.14 held it: no reason key in any guards."""
+    data = record.to_dict(trial)
+    for attempt in data["attempts"]:
+        attempt["guards"].pop(REASON, None)
+        assert list(attempt["guards"]) == list(GUARD_OUTCOME_NAMES), "the guards block of an older trial.json"
+    return data
+
+
+def test_an_older_trial_json_loads_with_the_guard_reason_not_recorded() -> None:
+    # Attempt 0 is an S1 attempt with host_compute null, which an older record never says why; it stays None.
+    trial = json_trial()
+    loaded = record.from_dict(record.Trial, older_trial_dict(trial))
+    assert loaded == trial, "every other value loads unchanged"
+    assert loaded.attempts[0].guards.host_compute is None and loaded.attempts[0].stage_reached == "S1"
+    assert [attempt.guards.host_compute_not_checked for attempt in loaded.attempts] == [None, None]
+    assert record.to_dict(loaded) == record.to_dict(trial), "written again, the key is null"
+
+
+def test_an_older_trial_json_file_reads_back_with_the_guard_reason_not_recorded(
+    tmp_path: Path, text_store: store.TextStore
+) -> None:
+    trial = stored_trial(text_store)
+    out = store.write_trial(trial, tmp_path / "runs", text_store)
+    data = json.loads((out / "trial.json").read_text(encoding="ascii"))
+    for attempt in data["attempts"]:
+        attempt["guards"].pop(REASON, None)
+    (out / "trial.json").write_bytes((json.dumps(data, indent=2) + "\n").encode("ascii"))
+    back = store.read_trial(out, text_store)
+    assert back == trial
+    assert all(attempt.guards.host_compute_not_checked is None for attempt in back.attempts)

@@ -22,7 +22,9 @@ after the run's outputs_ref columns, null where not recorded. RunInfo.outputs
 (task P4.4) follows them as the string column reference_run_outputs or
 run_outputs: the file -> sha256 mapping as JSON text with sorted keys, as
 the files and score_components columns hold theirs, null where not
-recorded.
+recorded. The attempts table's guards_host_compute_not_checked (task
+P17.14), a string column right after guards_oracle_access, holds the
+attempt's Guards.host_compute_not_checked code, null where none is recorded.
 
 The output_stats table (task P4.4) has one row per OutputStats: those of
 the references' agreement (Trial.reference_agreement), with attempt_index
@@ -166,6 +168,7 @@ SCHEMAS = {
             ("guards_host_compute", _BOOL),
             ("guards_harness_tamper", _BOOL),
             ("guards_oracle_access", _BOOL),
+            ("guards_host_compute_not_checked", _STRING),
             ("score_components", _STRING),
             ("score_scalar", _DOUBLE),
         ]
@@ -358,6 +361,7 @@ def _attempt_row(attempt: Attempt, key: dict[str, str]) -> dict[str, Any]:
         "guards_host_compute": guards.host_compute,
         "guards_harness_tamper": guards.harness_tamper,
         "guards_oracle_access": guards.oracle_access,
+        "guards_host_compute_not_checked": guards.host_compute_not_checked,
         "score_components": json.dumps(attempt.score.components, sort_keys=True, ensure_ascii=True),
         "score_scalar": attempt.score.scalar,
     }

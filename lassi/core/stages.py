@@ -86,7 +86,13 @@ The runner checks either kind before any model is asked.
   warnings or notes after the build's diagnostics. It never changes a
   stage or asks for a correction, and every later copy of the attempt
   keeps it. A guard's diagnostics (codes starting with "guard-") never
-  enter a correction prompt (prompt_diagnostics).
+  enter a correction prompt (prompt_diagnostics). Attempt.guards.host_compute_not_checked
+  (task P17.14) says why host_compute is null: generate and each
+  correction set `not-built` when they append an attempt, or `no-guard`
+  when the target toolchain declares no guard (it wins over the rest);
+  a build with no program sets `no-program` (or keeps no-guard); and a
+  build with one takes the reading's: `guard-not-checked` for a null
+  reading, None for a true or false one. No prompt reads it.
 - run_loop continues compile_loop's loop (it runs compile_loop first, which
   changes nothing when compile_loop already ran) and, when the executor runs
   programs (capability `runs_code`), runs each compiling attempt from its
@@ -295,9 +301,14 @@ from lassi.core.interfaces import (
 from lassi.core.progress import ATTEMPT, REQUEST_SENT, Observer, notify
 from lassi.core.recipe import Recipe
 from lassi.core.record import (
+    GUARD_NOT_CHECKED,
+    NO_GUARD,
+    NO_PROGRAM,
+    NOT_BUILT,
     Attempt,
     Diagnostic,
     EndReason,
+    Guards,
     Profile,
     Request,
     RequestMessage,
@@ -853,10 +864,36 @@ def _fenced_attempt(index: int, prompt_ref: TextRef, reply: str, expected: Seque
 def _reply_attempt(
     context: RunContext, index: int, prompt_ref: TextRef, reply: str, expected: Sequence[str]
 ) -> Attempt:
-    """Return the attempt for one reply: FILE blocks with fixes.fence_tag on, the first fenced block with it off."""
+    """Return the attempt for one reply: FILE blocks with fixes.fence_tag on, the first fenced block with it off.
+
+    The attempt is not built yet, so its guards say why host_compute is
+    null (_unbuilt_guards); compile_loop changes that when it builds it.
+    """
     if fix_on(context, "fence_tag"):
-        return _parsed_attempt(index, prompt_ref, reply, expected)
-    return _fenced_attempt(index, prompt_ref, reply, expected)
+        attempt = _parsed_attempt(index, prompt_ref, reply, expected)
+    else:
+        attempt = _fenced_attempt(index, prompt_ref, reply, expected)
+    return dataclasses.replace(attempt, guards=_unbuilt_guards(context))
+
+
+def _target_guarded(context: RunContext) -> bool:
+    """Return True when the target language's toolchain is bound and declares host_compute_guard (by capability)."""
+    toolchain = context.toolchains.get(context.direction.target)
+    return toolchain is not None and declares(toolchain, HOST_COMPUTE_GUARD)
+
+
+def _unbuilt_guards(context: RunContext) -> Guards:
+    """Return the guards of an attempt not built yet: not-built, or no-guard for a target without a guard (P17.14).
+
+    no-guard wins because no build of that target is ever read
+    (_target_guarded; found by capability, never by name).
+    """
+    return Guards(host_compute_not_checked=NOT_BUILT if _target_guarded(context) else NO_GUARD)
+
+
+def _with_reason(attempt: Attempt, reason: str | None) -> Attempt:
+    """Return `attempt` with Attempt.guards.host_compute_not_checked set to `reason`."""
+    return dataclasses.replace(attempt, guards=dataclasses.replace(attempt.guards, host_compute_not_checked=reason))
 
 
 def _send(
@@ -1341,7 +1378,9 @@ class CompileLoopStage:
         The trial comes back unchanged, with None, when the last attempt is
         not buildable. A built program is kept in RunContext.artifacts under
         the attempt's index, and the attempt gains the target toolchain's
-        host-compute reading (_guarded) before the attempt event. The stderr
+        host-compute reading (_guarded) before the attempt event; with no
+        program its host_compute_not_checked becomes no-program, or no-guard
+        for a target without a guard (task P17.14). The stderr
         is read only with fixes.parsed_diagnostics off, the one case a
         prompt carries it, and is None otherwise or when the build kept no
         attachment (BuildResult.stderr_ref).
@@ -1364,6 +1403,8 @@ class CompileLoopStage:
         )
         if result.artifact is not None:
             built = self._guarded(built)
+        else:
+            built = _with_reason(built, NO_PROGRAM if _target_guarded(self.context) else NO_GUARD)
         trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], built])
         notify(self.context.observer, ATTEMPT, trial, self.name)
         if fix_on(self.context, "parsed_diagnostics"):
@@ -1371,22 +1412,25 @@ class CompileLoopStage:
         return trial, _attachment_text(workdir, result.stderr_ref)
 
     def _guarded(self, attempt: Attempt) -> Attempt:
-        """Return `attempt` with the target toolchain's host-compute reading (task P4.12); unchanged without one.
+        """Return `attempt` with the target toolchain's host-compute reading (task P4.12); no-guard without one.
 
         The toolchain is found by capability (host_compute_reading), never by
         name, and is given the attempt's files and the item's support files
         for the target language.
         The reading sets Attempt.guards.host_compute, and its diagnostics
-        follow the parse and build diagnostics. A reading outside the guard
-        contract raises ValueError, which stops the run before the attempt
-        is recorded.
+        follow the parse and build diagnostics. Attempt.guards.host_compute_not_checked
+        (task P17.14) becomes no-guard without a reading, guard-not-checked
+        for a null reading, and None for a true or false one. A reading
+        outside the guard contract raises ValueError, which stops the run
+        before the attempt is recorded.
         """
         context = self.context
         toolchain = _toolchain(context, context.direction.target)
         reading = host_compute_reading(toolchain, attempt.files, _support_files(context, context.direction.target))
         if reading is None:
-            return attempt
-        guards = dataclasses.replace(attempt.guards, host_compute=reading.host_compute)
+            return _with_reason(attempt, NO_GUARD)
+        reason = GUARD_NOT_CHECKED if reading.host_compute is None else None
+        guards = dataclasses.replace(attempt.guards, host_compute=reading.host_compute, host_compute_not_checked=reason)
         return dataclasses.replace(attempt, guards=guards, diagnostics=[*attempt.diagnostics, *reading.diagnostics])
 
     def _build(self, files: Mapping[str, str], workdir: Path) -> BuildResult:

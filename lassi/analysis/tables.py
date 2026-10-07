@@ -10,18 +10,28 @@ with the arm and direction, the trial and scenario counts, the devices,
 the compile-stage label where it applies, else the B0 criterion's interval
 (a paper value), one Markdown line per metric row (first cell the row
 name), and the stage-reached and corrections distributions, one line per
-key. Its paper columns are labeled `Paper published (for reference only)`
-and `Paper recount (reference)` (OQ-021, option (c)); the Parquet columns
-keep the names paper_published and paper_recount and their order, and the
-recount is the reference in every row. metrics_markdown joins every table
-under a legend. The Markdown is plain ASCII and holds only names, counts,
-rates, and notes, never prompt, source, context, or model text (OQ-018).
+key, then, when the table carries its guard coverage (task P17.14), a
+line naming the table's target language (or its direction when the
+target cannot be read) and a one-row table of the guard coverage counts
+(lassi.analysis.guard_coverage coverage_cells). Its paper columns are
+labeled `Paper published (for reference only)` and `Paper recount
+(reference)` (OQ-021, option (c)); the Parquet columns keep the names
+paper_published and paper_recount and their order, and the recount is
+the reference in every row. metrics_markdown joins every table under a
+legend and, when any table carries its guard coverage, ends with a
+"## Guard coverage" section: one row for every arm and direction together
+and one per target language (summary_rows). The Markdown is plain ASCII
+and holds only names, counts, rates, and notes, never prompt, source,
+context, or model text (OQ-018).
 
-write_metrics_parquet writes three tables, metrics, stage_reached, and
-corrections, as Hive-partitioned Parquet under
+write_metrics_parquet writes four tables, metrics, stage_reached,
+corrections, and guard_coverage (task P17.14: one row per table that
+carries its guard coverage), as Hive-partitioned Parquet under
 `<out_dir>/<table>/arm=.../direction=.../part-0.parquet`, as
-lassi.core.parquet does for trials; read_metrics_parquet reads them back.
-It is metrics_arrow, which builds the three Arrow tables in memory and
+lassi.core.parquet does for trials; read_metrics_parquet reads them back,
+a missing table directory as no rows, so a score tree written before a
+table existed still loads.
+It is metrics_arrow, which builds the four Arrow tables in memory and
 raises for any value a column cannot hold, then write_metrics_arrow, which
 only writes them; a caller that must refuse before creating a directory
 builds first and writes later.
@@ -37,9 +47,18 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.dataset as ds
 
+from lassi.analysis.guard_coverage import (
+    COLUMNS,
+    GuardCoverage,
+    coverage_cells,
+    coverage_markdown,
+    summary_rows,
+    table_lines,
+    target_language,
+)
 from lassi.analysis.metrics import B0_NOTE, COMPILE_STAGE, MetricRow, MetricTable
 
-TABLES = ("metrics", "stage_reached", "corrections")
+TABLES = ("metrics", "stage_reached", "corrections", "guard_coverage")
 PARTITION_COLUMNS = ("arm", "direction")
 ROW_FIELDS = (
     "name", "value", "numerator", "denominator", "wilson_low", "wilson_high",
@@ -79,11 +98,27 @@ SCHEMAS = {
     ),
     "stage_reached": pa.schema([*_KEYS, ("ordinal", _INT), ("stage", _STRING), ("count", _INT)]),
     "corrections": pa.schema([*_KEYS, ("corrections", _INT), ("count", _INT)]),
+    "guard_coverage": pa.schema(
+        [
+            *_KEYS,
+            ("target", _STRING),
+            ("attempts", _INT),
+            ("checked", _INT),
+            ("not_checked", _INT),
+            ("not_checked_rate", _DOUBLE),
+            ("not_built", _INT),
+            ("no_program", _INT),
+            ("no_guard", _INT),
+            ("guard_not_checked", _INT),
+            ("not_recorded", _INT),
+        ]
+    ),
 }
 _SORT_KEYS = {
     "metrics": ("arm", "direction", "ordinal"),
     "stage_reached": ("arm", "direction", "ordinal"),
     "corrections": ("arm", "direction", "corrections"),
+    "guard_coverage": ("arm", "direction"),
 }
 
 LEGEND = (
@@ -103,7 +138,9 @@ LEGEND = (
     "Sim-T used ([OPEN], OQ-022, OQ-031): one Sim-T row compares the faithful Python-tokenize sim_t and the other "
     "the tiktoken cl100k_base sim_t_tiktoken, each formatted to two decimals, as the notebooks store them, while "
     "each Score keeps the unrounded value; both stand beside the paper's one Sim-T recount, and neither is marked "
-    "reproduced."
+    "reproduced. Guard coverage (task P17.14) counts attempts, not trials: every attempt of the table's trials, "
+    "checked when its host_compute is true or false, else not checked under its host_compute_not_checked code or "
+    "under not recorded; its not-checked rate, not checked over attempts, has no interval."
 )
 
 
@@ -176,14 +213,36 @@ def table_markdown(table: MetricTable) -> str:
         "| Corrections | Trials |",
         "| --- | --- |",
         *(f"| {value} | {count} |" for value, count in table.corrections.items()),
+        *_guard_lines(table),
     ]
     return "\n".join(lines) + "\n"
 
 
+def _guard_scope(direction: str) -> str:
+    """Return the guard coverage scope of a direction: `target <language>`, or `direction <name>` when unreadable."""
+    target = target_language(direction)
+    return f"direction {direction}" if target is None else f"target {target}"
+
+
+def _guard_lines(table: MetricTable) -> list[str]:
+    """Return the lines of a table's guard coverage block, after its corrections; none without guard coverage."""
+    if table.guard is None:
+        return []
+    intro = f"Guard coverage of every attempt of these trials ({_guard_scope(table.direction)}):"
+    return ["", _cell(intro), "", *table_lines(COLUMNS[1:], [coverage_cells(table.guard)])]
+
+
 def metrics_markdown(tables: Sequence[MetricTable]) -> str:
-    """Return a plain ASCII Markdown document with the legend and every table, sorted by arm and direction."""
+    """Return a plain ASCII Markdown document with the legend and every table, sorted by arm and direction.
+
+    When any table carries its guard coverage, the document ends with the
+    Guard coverage section over those tables: the run, then each target.
+    """
     ordered = sorted(tables, key=lambda table: (table.arm, table.direction))
     sections = [table_markdown(table) for table in ordered] or ["No trials were scored.\n"]
+    groups = [(table.direction, table.guard) for table in ordered if table.guard is not None]
+    if groups:
+        sections.append(coverage_markdown(summary_rows(groups)))
     return "\n".join(["# Run metrics\n", LEGEND + "\n", *sections])
 
 
@@ -192,7 +251,7 @@ def metrics_markdown(tables: Sequence[MetricTable]) -> str:
 
 
 def metrics_rows(tables: Sequence[MetricTable]) -> dict[str, list[dict[str, Any]]]:
-    """Return the rows of the three Parquet tables, in column order and sort order."""
+    """Return the rows of the four Parquet tables (TABLES), in column order and sort order."""
     rows: dict[str, list[dict[str, Any]]] = {name: [] for name in TABLES}
     for table in tables:
         key = {"arm": table.arm, "direction": table.direction}
@@ -214,7 +273,22 @@ def metrics_rows(tables: Sequence[MetricTable]) -> dict[str, list[dict[str, Any]
             rows["stage_reached"].append({**key, "ordinal": ordinal, "stage": stage, "count": count})
         for value, count in table.corrections.items():
             rows["corrections"].append({**key, "corrections": value, "count": count})
+        if table.guard is not None:
+            rows["guard_coverage"].append({**key, **_guard_row(table.direction, table.guard)})
     return {name: _sorted_rows(name, found) for name, found in rows.items()}
+
+
+def _guard_row(direction: str, guard: GuardCoverage) -> dict[str, Any]:
+    """Return the guard_coverage columns after arm and direction: the target, the counts, and each reason count."""
+    reasons = {key.replace("-", "_").replace(" ", "_"): count for key, count in guard.reasons.items()}
+    return {
+        "target": target_language(direction),
+        "attempts": guard.attempts,
+        "checked": guard.checked,
+        "not_checked": guard.not_checked,
+        "not_checked_rate": guard.rate,
+        **reasons,
+    }
 
 
 def _sorted_rows(table: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -252,7 +326,7 @@ def check_partition_dirs(tables: Sequence[MetricTable]) -> None:
 
 
 def metrics_arrow(tables: Sequence[MetricTable]) -> dict[str, pa.Table]:
-    """Return the metrics, stage_reached, and corrections tables of `tables` as Arrow tables, keyed by name.
+    """Return every TABLES table of `tables` as an Arrow table, keyed by name.
 
     Nothing is written. Raises ValueError from check_partition_dirs, and
     whatever pyarrow raises for a value its column cannot hold, such as
@@ -291,7 +365,7 @@ def write_metrics_arrow(arrow: Mapping[str, pa.Table], out_dir: Path) -> None:
 
 
 def write_metrics_parquet(tables: Sequence[MetricTable], out_dir: Path) -> None:
-    """Write the metrics, stage_reached, and corrections tables of `tables` as Parquet under `out_dir`.
+    """Write every TABLES table of `tables` as Parquet under `out_dir`.
 
     Each table directory is removed first, so the result holds only these
     tables; other files in `out_dir` are kept, and a table with no rows gets
@@ -304,7 +378,7 @@ def write_metrics_parquet(tables: Sequence[MetricTable], out_dir: Path) -> None:
 
 
 def read_metrics_parquet(out_dir: Path) -> dict[str, list[dict[str, Any]]]:
-    """Read the tables written by write_metrics_parquet back into rows, keyed metrics, stage_reached, corrections.
+    """Read the tables written by write_metrics_parquet back into rows, keyed by TABLES name.
 
     A missing table directory reads as no rows.
     """

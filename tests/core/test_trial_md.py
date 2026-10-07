@@ -43,6 +43,13 @@ field named as the field, each value formatted as provenance values are
 (fmt_provenance: an unknown one reads "-", indices as the list prints). Not
 recorded (None) and no devices ([]) add nothing, so the golden trial, whose
 provenance records none, renders as before.
+
+Since P17.14 an attempt's Guards table keeps one row per guard outcome
+(host_compute, harness_tamper, oracle_access) and adds a last row,
+`host_compute_not_checked`, with the code as recorded, only when one is
+recorded. Not recorded (None) adds nothing, so the golden trial, whose
+attempts record no code, renders as before, and so does the same trial read
+from a trial.json written before the field.
 """
 
 from __future__ import annotations
@@ -846,6 +853,55 @@ def test_value_formatting_in_tables(text_store: store.TextStore) -> None:
         "| alpha | PLACEHOLDER |\n| zeta | 0.5 |\n| scalar | -1.0 |\n"
     )
     assert run + "\n" + alignment + "\n" + profile + "\n" + guards + "\n" + score == md[md.index("### Run") :]
+
+
+GUARD_REASON_CODES = ("not-built", "no-program", "no-guard", "guard-not-checked")
+
+
+@pytest.mark.parametrize("code", GUARD_REASON_CODES)
+def test_guards_table_shows_the_reason_when_recorded(text_store: store.TextStore, code: str) -> None:
+    md = render_attempt(text_store, guards=record.Guards(harness_tamper=False, host_compute_not_checked=code))
+    guards = (
+        "### Guards\n\n| Field | Value |\n| --- | --- |\n"
+        "| host_compute | PLACEHOLDER |\n| harness_tamper | false |\n| oracle_access | PLACEHOLDER |\n"
+        f"| host_compute_not_checked | {code} |\n"
+        "\n### Score breakdown\n"
+    )
+    assert guards in md
+    assert md.count("host_compute_not_checked") == 1, "the reason shows once, in the Guards table"
+
+
+@pytest.mark.parametrize(
+    "guards",
+    [record.Guards(), record.Guards(host_compute=True), record.Guards(host_compute=False, oracle_access=False)],
+    ids=["none-checked", "violation", "clear"],
+)
+def test_guards_table_has_no_reason_row_when_none_is_recorded(text_store: store.TextStore, guards: Any) -> None:
+    md = render_attempt(text_store, guards=guards)
+    assert "host_compute_not_checked" not in md
+    table = md.split("### Guards\n", 1)[1].split("###", 1)[0]
+    assert [line.split(" | ")[0] for line in table.strip().split("\n")[2:]] == [
+        "| host_compute",
+        "| harness_tamper",
+        "| oracle_access",
+    ]
+
+
+def test_a_trial_read_from_an_older_trial_json_renders_the_golden_page(text_store: store.TextStore) -> None:
+    data = record.to_dict(golden_trial(text_store))
+    for attempt in data["attempts"]:
+        attempt["guards"].pop("host_compute_not_checked", None)
+        assert list(attempt["guards"]) == ["host_compute", "harness_tamper", "oracle_access"]
+    loaded = record.from_dict(record.Trial, data)
+    assert trial_md.render_trial_md(loaded, text_store) == read_golden(), "an older record renders as before"
+
+
+# The sha256 of tests/core/golden/trial.md as committed before task P17.14, which leaves the page byte-identical.
+GOLDEN_SHA256 = "2967e42d8f6dce83f9a8ee3abef7c829064abf7e13e9fac563541c5898804e06"
+
+
+def test_the_golden_page_is_byte_identical_to_the_one_before_the_guard_reason() -> None:
+    assert hashlib.sha256(GOLDEN.read_bytes()).hexdigest() == GOLDEN_SHA256
 
 
 def test_header_rows_format_values(text_store: store.TextStore) -> None:

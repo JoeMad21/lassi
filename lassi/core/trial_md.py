@@ -58,6 +58,12 @@ request's diagnostics. Each distinct message text is fenced once on the
 page: an attempt's prompt under that attempt, any other text at its first
 request. A record whose requests were not recorded (None) shows "Not
 recorded."; a trial that asked no model shows "None.".
+
+Guard reasons (task P17.14): an attempt's Guards table has one row per guard
+outcome (GUARD_OUTCOMES) and then, only when the attempt records why
+host_compute is null, a host_compute_not_checked row with the code. A code
+not recorded (None, as on an attempt recorded before task P17.14) adds no
+row, so such a page renders as before.
 """
 
 from __future__ import annotations
@@ -68,12 +74,14 @@ from typing import TYPE_CHECKING
 
 from lassi.core.files import fence_for, language_for
 from lassi.core.record import (
+    GUARD_OUTCOMES,
     TOOLCHAIN_PIN_NAMES,
     Attempt,
     Context,
     DeviceRecord,
     Diagnostic,
     EndReason,
+    Guards,
     OutputStats,
     Provenance,
     Request,
@@ -151,6 +159,14 @@ def _field_rows(record: object) -> list[tuple[str, str]]:
     for spec in dataclasses.fields(record):
         value = getattr(record, spec.name)
         rows.append((spec.name, f"{len(value)} file(s)" if isinstance(value, dict) else fmt(value)))
+    return rows
+
+
+def _guard_rows(guards: Guards) -> list[tuple[str, str]]:
+    """Return one row per guard outcome, then the host_compute_not_checked row only when a code is recorded."""
+    rows = [(name, fmt(getattr(guards, name))) for name in GUARD_OUTCOMES]
+    if guards.host_compute_not_checked is not None:
+        rows.append(("host_compute_not_checked", guards.host_compute_not_checked))
     return rows
 
 
@@ -387,7 +403,7 @@ def _measurement_blocks(attempt: Attempt, simulator: bool = False) -> list[str]:
         "### Profile\n",
         _table(fields, _field_rows(attempt.profile)),
         "### Guards\n",
-        _table(fields, _field_rows(attempt.guards)),
+        _table(fields, _guard_rows(attempt.guards)),
         "### Score breakdown\n",
         _table(("Component", "Value"), score_rows),
     ]

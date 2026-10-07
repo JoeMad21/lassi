@@ -47,6 +47,32 @@ The contract these tests fix:
   R = guard_violation and a violation on any attempt as
   multi_turn = guard_violation - correction_penalty x corrections.
 
+Task P17.14 (OQ-028, the owner's condition of 2026-10-05) adds why
+host_compute is null, Attempt.guards.host_compute_not_checked, one code of
+lassi.core.record.HOST_COMPUTE_NOT_CHECKED, set by the stages from what they
+know:
+
+- `no-guard`: the target language's toolchain does not declare the
+  capability (found by capability, never by name). It wins over the other
+  three codes, so every attempt of such a target records it, built or not.
+- `not-built`: generate and each correction set it when they append the
+  attempt (an S0 reply under fixes.fence_tag on, an S1 reply with a
+  missing-file error, or a recipe without compile_loop), so the attempt
+  event after the reply carries it.
+- `no-program`: compile_loop replaces not-built with it after a build that
+  gave no program (a build error or no artifact).
+- `guard-not-checked`: the guard ran and gave a null reading; the guard's
+  own guard-not-checked note on the attempt still names the cause.
+
+A true or false reading records no code. A kernel JIT failure, a simulator
+gap, the execution gate's stale-output copy, and a compile-only executor
+keep the code as they keep host_compute. No correction prompt holds the
+field's name or a code (OQ-041). The trial's trial.json, trial.md Guards
+table, and Parquet attempts table show the code, and run.md gains a
+"## Guard coverage" section after the Trials section, with one row for the
+run and one per target language: attempts, checked, not checked, the
+not-checked rate, and the count of each code and of `not recorded`.
+
 The fake toolchains compile nothing and return SYNTHETIC readings (the last
 test uses the real reader on the hand-written fixtures); the fake executors
 start no process and open no device. The suite manifest, sources, replies,
@@ -219,7 +245,8 @@ class World:
 
     `builds` holds the kind of each attempt build in order ("ok", "warn":
     an artifact and a compile warning, "fail": no artifact and a compile
-    error), "ok" past the script; a reference build is always "ok".
+    error, "none": no artifact and no diagnostic), "ok" past the script; a
+    reference build is always "ok".
     `readings` holds each guard answer in order; a call past the script
     fails the test. `guard_calls` records each call's (files, harness).
     """
@@ -254,6 +281,8 @@ def toolchain_class(registered_as: str, declared: frozenset[str], world: World, 
             kind = "ok" if reference or not world.builds else world.builds.pop(0)
             if kind == "fail":
                 return BuildResult(artifact=None, diagnostics=[COMPILE_ERROR])
+            if kind == "none":
+                return BuildResult(artifact=None, diagnostics=[])
             artifact = Path(workdir) / "main"
             artifact.write_bytes(b"PLACEHOLDER artifact of the fake toolchain\n")
             return BuildResult(artifact=artifact, diagnostics=[COMPILE_WARNING] if kind == "warn" else [])
@@ -659,7 +688,8 @@ def test_a_violation_after_corrections_scores_the_penalty_on_top(
     trial = run_one(tmp_path, monkeypatch, world, recipe_data(score="df-v0")).trial
     first, second = trial.attempts
     assert (first.stage_reached, second.stage_reached) == ("S1", "S5")
-    assert first.guards == Guards() and "guard-host-compute" not in codes(first), "a failed build is not checked"
+    assert "guard-host-compute" not in codes(first), "a failed build is not checked"
+    assert first.guards == Guards(host_compute_not_checked="no-program"), "P17.14: the build gave no program"
     assert second.guards.host_compute is True and len(world.guard_calls) == 1
     rules = weights()
     assert first.score.scalar == pytest.approx(rules.stage_base["S1"])
@@ -690,7 +720,8 @@ def test_tag_changes_no_stage_warning_count_or_correction(tmp_path: Path, monkey
 def test_no_reading_without_the_capability(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     world = World(replies=[REPLY], references=references(), attempt_runs=[clean_run()], readings=[reading(True)])
     trial = run_one(tmp_path, monkeypatch, world, recipe_data(tt=PLAIN_TT)).trial
-    assert trial.attempts[0].guards == Guards() and world.guard_calls == [], "found by capability, never by method"
+    assert world.guard_calls == [], "found by capability, never by method"
+    assert trial.attempts[0].guards == Guards(host_compute_not_checked="no-guard"), "P17.14: no guard declared"
 
 
 def test_no_reading_in_the_tt_to_cpu_direction(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -698,7 +729,8 @@ def test_no_reading_in_the_tt_to_cpu_direction(tmp_path: Path, monkeypatch: pyte
     data = recipe_data(directions=[{"source": TARGET, "target": SOURCE}])
     trial = run_one(tmp_path, monkeypatch, world, data, direction=f"{TARGET}-{SOURCE}").trial
     assert trial.attempts[0].stage_reached == "S5"
-    assert trial.attempts[0].guards == Guards() and world.guard_calls == [], "the cpu toolchain declares no guard"
+    assert world.guard_calls == [], "the cpu toolchain declares no guard"
+    assert trial.attempts[0].guards == Guards(host_compute_not_checked="no-guard"), "P17.14: no guard declared"
 
 
 def test_guard_receives_attempt_files_and_support_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -975,3 +1007,320 @@ def test_end_to_end_with_real_reader(
     guard_codes = [item["code"] for item in attempt["diagnostics"] if str(item["code"]).startswith("guard-")]
     assert guard_codes == expected_codes
     assert attempt["stage_reached"] == "S5", "a guard reading never changes the stage"
+
+
+# ---------------------------------------------------------------------------
+# Why host_compute is null (task P17.14; OQ-028, the owner's condition of 2026-10-05)
+
+REASON = "host_compute_not_checked"
+NOT_BUILT, NO_PROGRAM, NO_GUARD, NOT_CHECKED = "not-built", "no-program", "no-guard", "guard-not-checked"
+NOT_CHECKED_CODES = (NOT_BUILT, NO_PROGRAM, NO_GUARD, NOT_CHECKED)
+# A SYNTHETIC note as the real reader gives it with a null reading (lassi.toolchains.ttmetal_guard).
+NOT_CHECKED_NOTE = Diagnostic(
+    stage="parse", severity="note", code="guard-not-checked", file=TARGET_FILE,
+    message="SYNTHETIC guard note: the host text could not be read",
+)
+# SYNTHETIC replies that leave out the target's main.cpp: an S1 reply with a missing-file error, and an S0 reply.
+PARTIAL_REPLY = render_file_blocks({"kernels/reader.cpp": "// SYNTHETIC kernel placeholder\nvoid kernel_main() {}\n"})
+NO_BLOCK_REPLY = "SYNTHETIC reply that holds no FILE block\n"
+CPU_PARTIAL_REPLY = render_file_blocks({"helper.h": "// SYNTHETIC helper header\n"})
+# The run.md section and the columns of its table, by header cell.
+COVERAGE_HEADING = "## Guard coverage"
+COVERAGE_COLUMNS = (
+    "Scope", "Attempts", "Checked", "Not checked", "Not-checked rate", *NOT_CHECKED_CODES, "not recorded",
+)
+
+
+def reason(code: str | None) -> Guards:
+    """Return the Guards of an attempt whose host_compute is null for `code`."""
+    return Guards(host_compute_not_checked=code)
+
+
+def reasons(trial: Trial) -> list[str | None]:
+    """Return each attempt's recorded code, in order."""
+    return [attempt.guards.host_compute_not_checked for attempt in trial.attempts]
+
+
+def jit_failed_run() -> RunResult:
+    """Return a SYNTHETIC attempt run whose kernel JIT failed."""
+    return RunResult(exit_code=1, hang=False, stdout="", stderr="", sim_ub=False, diagnostics=[JIT_ERROR])
+
+
+@pytest.mark.parametrize("value", [True, False], ids=["violation", "clear"])
+def test_a_set_reading_records_no_reason(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: bool) -> None:
+    world = World(replies=[REPLY], references=references(), attempt_runs=[clean_run()], readings=[reading(value)])
+    (attempt,) = run_one(tmp_path, monkeypatch, world, recipe_data()).trial.attempts
+    assert attempt.guards == Guards(host_compute=value)
+    assert attempt.guards.host_compute_not_checked is None, "a reading of true or false records no code"
+
+
+def test_a_null_reading_records_guard_not_checked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    world = World(
+        replies=[REPLY], references=references(), attempt_runs=[clean_run()], readings=[reading(None, NOT_CHECKED_NOTE)]
+    )
+    trial = run_one(tmp_path, monkeypatch, world, recipe_data(score="df-v0")).trial
+    (attempt,) = trial.attempts
+    assert attempt.stage_reached == "S5" and len(world.guard_calls) == 1, "precondition: built, read, and run"
+    assert attempt.diagnostics[-1] == NOT_CHECKED_NOTE, "the guard's note still names the cause"
+    assert attempt.guards == reason(NOT_CHECKED)
+    assert attempt.score.components["guard"] is None, "not checked, as before the code existed"
+
+
+@pytest.mark.parametrize("reply", [PARTIAL_REPLY, NO_BLOCK_REPLY], ids=["missing-file", "no-block"])
+def test_an_unbuilt_attempt_records_not_built(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reply: str) -> None:
+    world = World(
+        replies=[reply, FIXED_REPLY], references=references(), attempt_runs=[clean_run()], readings=[reading(False)]
+    )
+    trial = run_one(tmp_path, monkeypatch, world, recipe_data()).trial
+    first, second = trial.attempts
+    assert first.stage_reached in ("S0", "S1") and "missing-file" in codes(first), "precondition: never built"
+    assert len(world.guard_calls) == 1, "only the corrected attempt is built and read"
+    assert first.guards == reason(NOT_BUILT)
+    assert second.guards == Guards(host_compute=False)
+
+
+def test_an_attempt_of_a_recipe_without_compile_loop_records_not_built(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = World(replies=[REPLY], references=references())
+    trial = run_one(tmp_path, monkeypatch, world, recipe_data(stages=["baseline", "generate"])).trial
+    (attempt,) = trial.attempts
+    assert attempt.stage_reached == "S1" and world.guard_calls == [], "precondition: parsed, never built"
+    assert attempt.guards == reason(NOT_BUILT)
+
+
+@pytest.mark.parametrize("build", ["fail", "none"], ids=["build-error", "no-artifact"])
+def test_a_build_with_no_program_records_no_program(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, build: str
+) -> None:
+    world = World(
+        replies=[REPLY, FIXED_REPLY], references=references(), attempt_runs=[clean_run()], builds=[build, "ok"],
+        readings=[reading(True, GUARD_NOTE)],
+    )
+    trial = run_one(tmp_path, monkeypatch, world, recipe_data()).trial
+    first, second = trial.attempts
+    assert first.stage_reached == "S1" and len(world.guard_calls) == 1, "precondition: built with no program"
+    assert ("no-artifact" in codes(first)) is (build == "none")
+    assert first.guards == reason(NO_PROGRAM)
+    assert second.guards == Guards(host_compute=True)
+
+
+def no_guard_case(case: str) -> tuple[World, dict[str, Any], str]:
+    """Return the world, recipe, and direction of a target whose toolchain declares no guard.
+
+    Each run gives three attempts: a reply that leaves out main.cpp (never
+    built), a build with no program, and a clean build and run.
+    """
+    if case == "tt-to-cpu":
+        replies = [CPU_PARTIAL_REPLY, CPU_REPLY, CPU_REPLY]
+        data = recipe_data(directions=[{"source": TARGET, "target": SOURCE}])
+        direction = f"{TARGET}-{SOURCE}"
+    else:
+        replies, data, direction = [PARTIAL_REPLY, REPLY, FIXED_REPLY], recipe_data(tt=PLAIN_TT), DIRECTION
+    world = World(
+        replies=replies, references=references(), attempt_runs=[clean_run()], builds=["fail", "ok"],
+        readings=[reading(True)],
+    )
+    return world, data, direction
+
+
+@pytest.mark.parametrize("case", ["tt-to-cpu", "cpu-to-plain-tt"])
+def test_every_attempt_of_a_target_without_a_guard_records_no_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    world, data, direction = no_guard_case(case)
+    events: list[ProgressEvent] = []
+    trial = run_one(tmp_path, monkeypatch, world, data, direction=direction, observer=events.append).trial
+    assert [attempt.stage_reached for attempt in trial.attempts] == ["S1", "S1", "S5"], "precondition"
+    assert world.guard_calls == [], "no guard is ever asked"
+    assert [attempt.guards for attempt in trial.attempts] == [reason(NO_GUARD)] * 3, "no-guard wins over the rest"
+    sent = [event.trial.attempts[-1].guards for event in events if event.kind == ATTEMPT and event.trial.attempts]
+    assert sent and all(guards == reason(NO_GUARD) for guards in sent), "every attempt event carries no-guard"
+
+
+def test_the_attempt_events_carry_the_reason(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[ProgressEvent] = []
+    world = World(
+        replies=[REPLY, FIXED_REPLY], references=references(), attempt_runs=[clean_run()], builds=["fail", "ok"],
+        readings=[reading(None, NOT_CHECKED_NOTE)],
+    )
+    run_one(tmp_path, monkeypatch, world, recipe_data(), observer=events.append)
+    attempt_events = [event for event in events if event.kind == ATTEMPT]
+    generated = [event.trial.attempts[-1] for event in attempt_events if event.stage == "generate"]
+    assert [(attempt.index, attempt.guards) for attempt in generated] == [(0, reason(NOT_BUILT))]
+    looped = [event.trial.attempts[-1] for event in attempt_events if event.stage == "compile_loop"]
+    assert [(attempt.index, attempt.guards) for attempt in looped] == [
+        (0, reason(NO_PROGRAM)),  # the build of attempt 0 gave no program
+        (1, reason(NOT_BUILT)),  # the correction's reply, appended
+        (1, reason(NOT_CHECKED)),  # its build, read as null
+    ]
+
+
+def kept_case(case: str) -> tuple[World, dict[str, Any]]:
+    """Return the world and recipe of a run whose attempt read null is later copied or left unrun."""
+    null = reading(None, NOT_CHECKED_NOTE)
+    if case == "jit":
+        world = World(
+            replies=[REPLY, FIXED_REPLY], references=references(), attempt_runs=[jit_failed_run(), clean_run()],
+            readings=[null, reading(False)],
+        )
+        return world, recipe_data()
+    if case == "gap":
+        world = World(replies=[REPLY], references=references(), attempt_runs=[gap_run()], readings=[null])
+        return world, recipe_data()
+    if case == "compile-only":
+        return World(replies=[REPLY], readings=[null]), recipe_data(executor=COMPILE_ONLY)
+    gate = 7
+    world = World(
+        replies=[REPLY] + [FIXED_REPLY] * (gate + 1), references=references(),
+        attempt_runs=[failed_run() for _ in range(gate + 1)], readings=[reading(False)] * (gate + 1) + [null],
+    )
+    return world, recipe_data(fixes={"baseline_both": False, "execution_gate": False}, loop={"max_corrections": 10})
+
+
+@pytest.mark.parametrize("case", ["jit", "gap", "compile-only", "stale-output"])
+def test_a_null_reading_keeps_its_reason_on_every_later_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    world, data = kept_case(case)
+    trial = run_one(tmp_path, monkeypatch, world, data).trial
+    attempt = trial.attempts[0] if case == "jit" else trial.attempts[-1]
+    expected = {"jit": "S1", "gap": "S4", "compile-only": "S4", "stale-output": "S4"}[case]
+    assert attempt.stage_reached == expected and NOT_CHECKED_NOTE in attempt.diagnostics, "precondition"
+    assert attempt.guards == reason(NOT_CHECKED)
+
+
+def test_a_run_with_every_reason_sends_none_of_them_to_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = World(
+        replies=[PARTIAL_REPLY, REPLY, REPLY, FIXED_REPLY], references=references(),
+        attempt_runs=[jit_failed_run(), clean_run()], builds=["fail", "ok", "ok"],
+        readings=[reading(None, NOT_CHECKED_NOTE), reading(False)],
+    )
+    outcome = run_one(tmp_path, monkeypatch, world, recipe_data())
+    assert reasons(outcome.trial) == [NOT_BUILT, NO_PROGRAM, NOT_CHECKED, None], "precondition: each code recorded"
+    requests = outcome.trial.requests or []
+    texts = [outcome.text(message.ref) for request in requests for message in request.messages]
+    assert len(requests) == 4 and texts, "precondition: generate and three corrections"
+    for text in texts:
+        held = [name for name in (REASON, *NOT_CHECKED_CODES) if name in text]
+        assert held == [], f"a request message holds {held} (OQ-041)"
+    sent = [message.content for messages in world.requests for message in messages]
+    assert not [name for text in sent for name in (REASON, *NOT_CHECKED_CODES) if name in text], "OQ-041"
+
+
+@pytest.mark.parametrize("prompt_set", ["template", "fragment"])
+@pytest.mark.parametrize("code", NOT_CHECKED_CODES)
+def test_no_correction_prompt_holds_the_reason_under_both_prompt_sets(
+    tmp_path: Path, prompt_set: str, code: str
+) -> None:
+    world = World(replies=[FIXED_REPLY], readings=[reading(False)])
+    tt = toolchain_class(GUARDED, frozenset({"diagnostics", CAPABILITY}), world)
+    context = stage_context(tmp_path, world, tt, FRAGMENTS if prompt_set == "fragment" else None)
+    failed = Attempt(
+        index=0, prompt_ref=context.store.put("SYNTHETIC prompt 0\n"), response_text=REPLY,
+        files={TARGET_FILE: "// SYNTHETIC host program\nint main() { return 0; }\n"}, stage_reached="S1",
+        diagnostics=[COMPILE_ERROR], guards=reason(code),
+    )
+    trial = CompileLoopStage(context=context)(one_attempt_trial(context, failed))
+    first, second = trial.attempts
+    assert first == failed, "the corrected attempt is kept as it was, its code included"
+    ((*system, user),) = world.requests
+    assert COMPILE_ERROR.message in user.content, "precondition: the compile error is fed back"
+    sent = "\n".join(message.content for message in [*system, user])
+    assert [name for name in (REASON, *NOT_CHECKED_CODES) if name in sent] == [], "OQ-041"
+    assert second.guards == Guards(host_compute=False)
+
+
+def test_the_reason_reaches_trial_json_trial_md_and_parquet(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    world = World(
+        replies=[REPLY], references=references(), attempt_runs=[clean_run()], readings=[reading(None, NOT_CHECKED_NOTE)]
+    )
+    outcome = run_one(tmp_path, monkeypatch, world, recipe_data())
+    data = json.loads((outcome.trial_path / "trial.json").read_bytes().decode("utf-8"))
+    assert data["attempts"][0]["guards"] == {
+        "host_compute": None, "harness_tamper": None, "oracle_access": None, REASON: NOT_CHECKED,
+    }
+    page = (outcome.trial_path / "trial.md").read_bytes().decode("utf-8")
+    guards_table = page.split("### Guards\n", 1)[1].split("###", 1)[0]
+    assert f"| oracle_access | PLACEHOLDER |\n| {REASON} | {NOT_CHECKED} |\n" in guards_table
+    (row,) = read_run_parquet(outcome.run_dir / "parquet")["attempts"]
+    assert row["guards_host_compute"] is None and row["guards_host_compute_not_checked"] == NOT_CHECKED
+
+
+def coverage_rows(run_md: str) -> dict[str, dict[str, str]]:
+    """Return run.md's Guard coverage table as {scope: {column: cell}} without the Scope cell.
+
+    The section must appear once, after the Trials section; it ends at the
+    next second-level heading or at the end of run.md.
+    """
+    lines = run_md.split("\n")
+    assert lines.count(COVERAGE_HEADING) == 1, f"run.md has {lines.count(COVERAGE_HEADING)} {COVERAGE_HEADING!r} lines"
+    start = lines.index(COVERAGE_HEADING)
+    assert lines.index("## Trials") < start, "the Guard coverage section follows the Trials section"
+    end = next((index for index in range(start + 1, len(lines)) if lines[index].startswith("## ")), len(lines))
+    table = [line.strip() for line in lines[start:end] if line.startswith("|")]
+    cells = [[cell.strip() for cell in line[1:-1].split("|")] for line in table]
+    header, rows = cells[0], cells[2:]
+    assert tuple(header) == COVERAGE_COLUMNS
+    return {row[0]: dict(zip(header[1:], row[1:], strict=True)) for row in rows}
+
+
+def coverage(attempts: int, checked: int, rate: str, **counts: int) -> dict[str, str]:
+    """Return the expected cells of one Guard coverage row, without its scope; `counts` are keyed by code.
+
+    A code's key is the code with each hyphen or space as an underscore
+    (not_built, no_program, no_guard, guard_not_checked, not_recorded); a
+    code not given counts 0.
+    """
+    cells = {
+        "Attempts": str(attempts), "Checked": str(checked), "Not checked": str(attempts - checked),
+        "Not-checked rate": rate,
+    }
+    for name in (*NOT_CHECKED_CODES, "not recorded"):
+        cells[name] = str(counts.get(name.replace("-", "_").replace(" ", "_"), 0))
+    return cells
+
+
+def run_md_of(outcome: Outcome) -> str:
+    """Return the run's run.md as ASCII text."""
+    return (outcome.run_dir / "run.md").read_bytes().decode("ascii")
+
+
+def test_run_md_reports_guard_coverage_per_run_and_target(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # cpu -> tt: never built, no program, read null then a kernel JIT failure, and read false: 1 checked of 4.
+    world = World(
+        replies=[PARTIAL_REPLY, REPLY, REPLY, FIXED_REPLY], references=references(),
+        attempt_runs=[jit_failed_run(), clean_run()], builds=["fail", "ok", "ok"],
+        readings=[reading(None, NOT_CHECKED_NOTE), reading(False)],
+    )
+    outcome = run_one(tmp_path, monkeypatch, world, recipe_data())
+    assert reasons(outcome.trial) == [NOT_BUILT, NO_PROGRAM, NOT_CHECKED, None], "precondition"
+    rows = coverage_rows(run_md_of(outcome))
+    # Hand counts: 4 attempts, 1 checked, 3 not checked (one each of not-built, no-program, guard-not-checked).
+    want = coverage(4, 1, "0.750", not_built=1, no_program=1, guard_not_checked=1)
+    assert rows == {"run": want, f"target {TARGET}": want}
+    assert list(rows) == ["run", f"target {TARGET}"], "the run row, then each target"
+
+
+def test_run_md_reports_every_attempt_of_a_target_without_a_guard_as_no_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world, data, direction = no_guard_case("tt-to-cpu")
+    outcome = run_one(tmp_path, monkeypatch, world, data, direction=direction)
+    rows = coverage_rows(run_md_of(outcome))
+    # Hand counts: 3 attempts, none checked, all no-guard.
+    want = coverage(3, 0, "1.000", no_guard=3)
+    assert rows == {"run": want, f"target {SOURCE}": want}
+
+
+def test_run_md_reports_a_run_with_no_attempt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    failed_reference = RunResult(
+        exit_code=1, hang=False, stdout="", stderr="SYNTHETIC failure\n", wall_s=0.5, sim_ub=False
+    )
+    world = World(references={SOURCE: references()[SOURCE], TARGET: failed_reference})
+    outcome = run_one(tmp_path, monkeypatch, world, recipe_data())
+    assert outcome.trial.attempts == [] and outcome.trial.final.end_reason is not None, "precondition"
+    rows = coverage_rows(run_md_of(outcome))
+    assert rows["run"] == coverage(0, 0, "-"), "a run with no attempt has no rate"
