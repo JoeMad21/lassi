@@ -113,7 +113,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.13 | BLOCKED | GPU runs: executor, profilers, hf_local, training | P17.4,P17.7,P17.9,P17.12 | no GPU host: the owner will not grant the MI300Xs (OQ-040, 2026-10-06) |
 | P17.G | BLOCKED | Phase gate: part (a) rerun and part (b) on a GPU host | P17.11,P17.13 | no GPU host for part (b) (OQ-040, 2026-10-06); part (a) runs as P17.11 |
 | P5.0 | DONE | Plan phase P5 into plans/p5-ir.md and add its tasks here | - | plan plans/p5-ir.md; base p17-portable at 7f920d7 (P17 stalled, not merged); OQ-048 and OQ-049 filed |
-| P5.1 | READY | Spike: Polygeist and tt-mlir pins, builds, and budget | - |  |
+| P5.1 | ACTIVE | Spike: Polygeist and tt-mlir pins, builds, and budget | - | draft spike committed (plans/spikes/p5-mlir-pins.md): one review round and one fix pass done; pending: the commit audit, the bible edit in the report's Proposed bible edit section, and the master update. Polygeist 77c04bb2, two LLVMs; budget does not fit (OQ-049 Response) |
 | P5.2 | READY | Spike: the v0 corpus pipeline on alpha01 (question 8) | - |  |
 | P5.3 | READY | Spike: Tier B sources at the joint pin | - |  |
 | P5.11 | READY | lassi/corpus: the v0 migration and corpus records | P5.2 |  |
