@@ -113,11 +113,11 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.13 | BLOCKED | GPU runs: executor, profilers, hf_local, training | P17.4,P17.7,P17.9,P17.12 | no GPU host for now: no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
 | P17.G | BLOCKED | Phase gate: part (a) rerun and part (b) on a GPU host | P17.11,P17.13 | no GPU host for part (b) (OQ-040, 2026-10-06); part (a) runs as P17.11 |
 | P5.0 | DONE | Plan phase P5 into plans/p5-ir.md and add its tasks here | - | plan plans/p5-ir.md; base p17-portable at 7f920d7 (P17 stalled, not merged); OQ-048 and OQ-049 filed |
-| P5.1 | ACTIVE | Spike: Polygeist and tt-mlir pins, builds, and budget | - | draft spike committed (plans/spikes/p5-mlir-pins.md): one review round and one fix pass done; pending: the commit audit, the bible edit in the report's Proposed bible edit section, and the master update. Polygeist 77c04bb2, two LLVMs; budget does not fit (OQ-049 Response) |
-| P5.2 | READY | Spike: the v0 corpus pipeline on alpha01 (question 8) | - |  |
+| P5.1 | DONE | Spike: Polygeist and tt-mlir pins, builds, and budget | - | plans/spikes/p5-mlir-pins.md: Polygeist 77c04bb2 (llvm-project 26eb4285), two LLVMs; tt-mlir 5f396fd6 runtime off, Python 3.10; the raiser links Polygeist's clang; both stacks PROJECTED 24-43 GiB static, 13-28 shared, against 17.1 GiB under the stop line: does not fit (OQ-049 Response); bible mirror edit in plans/BIBLE-SYNC.md (master unreachable) |
+| P5.2 | ACTIVE | Spike: the v0 corpus pipeline on alpha01 (question 8) | - |  |
 | P5.3 | READY | Spike: Tier B sources at the joint pin | - |  |
 | P5.11 | READY | lassi/corpus: the v0 migration and corpus records | P5.2 |  |
-| P5.4 | OWNER | Install tt-mlir and its LLVM at the joint pin | P5.1 | OQ-049: even the low end of the projected budget passes the 115G stop line; READY when the owner's answer frees space or P5.1's projection for both stacks together fits |
+| P5.4 | OWNER | Install tt-mlir and its LLVM at the joint pin | P5.1 | OQ-049: P5.1's projection for both stacks together (about 24 to 43 GiB static, 13 to 28 GiB shared) does not fit under the 115G stop line; READY when the owner's answer frees space |
 | P5.5 | OWNER | Install Polygeist (cgeist) | P5.1,P5.4 | OQ-049, as P5.4; the job starts after P5.4's jobs end (one big job at a time) |
 | P5.6 | READY | IR levels: parse, verify, normalize | P5.4,P5.5,P5.11 |  |
 | P5.7 | READY | C and C++ frontend (cgeist) and the CPU target | P5.5,P5.6 |  |
