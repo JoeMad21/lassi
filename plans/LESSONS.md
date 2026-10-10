@@ -8,6 +8,8 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - Record inefficiencies and hang-ups here as they happen (owner, 2026-09-25).
 - The owner cannot monitor on 2026-09-26: work unattended, push each commit, and take the recommendation of every owner-queue item the owner does not answer personally, recording it on the item as the owner's standing direction and marking it for review later (owner, 2026-09-26).
 - The owner cannot answer owner-queue items for a while (owner, 2026-09-27): take the recommendation of every OPEN item the owner has not answered personally, apply it, and flag it for the owner's review in the next phase (plans/PHASE-NOTES.md: P17 under OQ-038, option (a), else P5). An item whose recommendation needs the owner's own action stays OPEN.
+- The Tenstorrent cards are back online on alpha01 (owner, 2026-10-10). A check the owner approved found eight Wormhole devices on PCI and the gate's tt_silicon device class disabled (rx 20261010-154619-exec-4750; bible, Environment State). Silicon runs still wait for the owner to enable tt_silicon, and then stay evaluation runs a human starts (Agent Rule 9).
+- No use of the Furiosa RNGD cards before 9pm EST on 2026-10-10 (the owner's words; read as the later of the two readings, 22:00 EDT, until the owner says which), and ask the owner before launching anything on them, at any time (owner, 2026-10-10). A read-only probe that queries them, such as `rx devcheck` (it runs furiosa-smi info), counts: leave it out or ask first.
 
 ## Audits and the bible
 
