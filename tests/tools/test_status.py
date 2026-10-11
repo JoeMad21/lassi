@@ -76,3 +76,29 @@ def test_phase_add(tmp_path):
             continue
         raise AssertionError(f"phase-add {args} accepted")
     assert f.read_bytes() == before
+
+
+def test_set_changes_a_title_and_dependencies(tmp_path):
+    """set --title and --depends rewrite those cells; '-' clears the dependencies."""
+    f = fresh(tmp_path)
+    run = lambda *a: status.main(["--file", str(f), *a])  # noqa: E731
+    assert run("add", "P0.1", "a", "--depends", "P0.0") == 0
+    assert run("add", "P0.G", "Phase gate: A and B", "--depends", "P0.0,P0.1") == 0
+    assert run("set", "P0.G", "READY", "--title", "Phase gate: A", "--depends", "P0.0") == 0
+    assert [r for r in status.load(f).tasks.rows if r[0] == "P0.G"] == [["P0.G", "READY", "Phase gate: A", "P0.0", ""]]
+    assert run("set", "P0.1", "BLOCKED", "--depends", "-", "--note", "moved") == 0
+    assert [r for r in status.load(f).tasks.rows if r[0] == "P0.1"] == [["P0.1", "BLOCKED", "a", "-", "moved"]]
+
+
+def test_set_refuses_a_bad_title_or_dependency_and_changes_nothing(tmp_path):
+    """An unknown dependency, the task itself, or an empty title is refused before anything is written."""
+    f = fresh(tmp_path)
+    status.main(["--file", str(f), "add", "P0.1", "a", "--depends", "P0.0"])
+    before = f.read_bytes()
+    for extra in (["--depends", "P0.9"], ["--depends", "P0.1"], ["--depends", "P0.0,P9.9"], ["--title", " "]):
+        try:
+            status.main(["--file", str(f), "set", "P0.1", "READY", *extra])
+        except SystemExit:
+            continue
+        raise AssertionError(f"set {extra} accepted")
+    assert f.read_bytes() == before

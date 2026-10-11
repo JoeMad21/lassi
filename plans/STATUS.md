@@ -13,7 +13,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2 Scoring | p2-scoring | DONE | base: p1-faithful at 5d5fd0c; plan plans/p2-scoring.md; gate evidence results/p2-gate; owner review OQ-024 accepted with option (b), review questions moved to P4.15; PR 3 merged |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
 | P4 ttsim Execution | p4-ttsim | DONE | base: main at 75eceef (P2 DONE, PR 3 merged); plan plans/p4-ttsim.md; gate passed 2026-10-05 (results/p4-gate); PR 4 merged at 0dcc261 |
-| P5 IR Levels | p5-ir | ACTIVE | base: p17-portable at 7f920d7 (P17 stalled, not merged: P17.11 OWNER on OQ-047; GPU half BLOCKED, OQ-040); plan plans/p5-ir.md; OQ-048 and OQ-049 filed |
+| P5 IR Levels | p5-ir | ACTIVE | base: p17-portable at 7f920d7 (P17 stalled, not merged: P17.11 OWNER on OQ-047; GPU half BLOCKED, OQ-040); plan plans/p5-ir.md; OQ-049 answered (cap 150G) and OQ-048 answered (Tier B moved to P18), 2026-10-11 |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
 | P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
 | P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
@@ -26,6 +26,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
 | P16 Adversarial | p16-adversarial | BLOCKED | P4, P8 for training |
 | P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; GPU half has no host: no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07), focus on Tenstorrent and CPU; stalled since 2026-10-06: P17.11 OWNER on OQ-047 (Agent Rule 17), so part (a) has not run and no PR is open (OQ-038); P5 started 2026-10-07 from p17-portable at 7f920d7 |
+| P18 TurboQuant Tier B | p18-turboquant | BLOCKED | moved from P5 by the owner, 2026-10-11 (OQ-048): waits past the current phases for the owner's word that TurboQuant Hotswap, a separate project, is ready; takes over P5.13 and P5.14 |
 
 ## Tasks
 
@@ -125,6 +126,6 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P5.9 | READY | Program spec: extraction and host generator | P5.8 |  |
 | P5.10 | READY | Tenstorrent target: ttkernel to Metalium C++ on ttsim | P5.4,P5.6,P5.9 |  |
 | P5.12 | READY | Execution gate and the round-trip driver | P5.7,P5.10,P5.11 |  |
-| P5.13 | OWNER | Tier B of tt-pairs-v0 | P5.3,P5.12 | waits for the owner's answer to OQ-048 (Tier B sources, items, holding); P5.3 adds its evidence there |
-| P5.14 | READY | Tier B through the round trip: raiser, spec, and frontend coverage | P5.12,P5.13 |  |
-| P5.G | READY | Phase gate: Tier A and B pairs round-trip on ttsim; per-kernel gate rates | P5.12,P5.14 |  |
+| P5.13 | BLOCKED | Tier B of tt-pairs-v0 | P5.3,P5.12 | moved to P18 by the owner, 2026-10-11 (OQ-048): Tier B waits for TurboQuant Hotswap; P18's plan takes it over |
+| P5.14 | BLOCKED | Tier B through the round trip: raiser, spec, and frontend coverage | P5.12,P5.13 | moved to P18 by the owner, 2026-10-11 (OQ-048); P18's plan takes it over |
+| P5.G | READY | Phase gate: Tier A pairs round-trip on ttsim; per-kernel gate rates | P5.12 |  |

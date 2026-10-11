@@ -12,7 +12,8 @@ Task states:  READY, ACTIVE, DONE, BLOCKED, OWNER.
 Commands:
   summary [--json]                 counts and the next item
   next [--json]                    the next item: task, advance, or none
-  set ID STATE [--note TEXT]       set a task state
+  set ID STATE [--note TEXT] [--title TEXT] [--depends A,B]
+                                   set a task state, and its note, title, or dependencies
   add ID TITLE [--depends A,B] [--state S] [--note TEXT]
   phase PN STATE [--note TEXT]     set a phase state
   phase-add PN NAME BRANCH [--state S] [--note TEXT]
@@ -184,7 +185,14 @@ def summary(st: Status) -> dict:
     return {"phases": phase_state(st), "task_counts": counts, "next": next_item(st), "errors": st.errors}
 
 
-def cmd_set(st: Status, tid: str, state: str, note: Optional[str]) -> None:
+def cmd_set(st: Status, tid: str, state: str, note: Optional[str], title: Optional[str] = None,
+            depends: Optional[str] = None) -> None:
+    """Set a task's state, and its note, title, or dependencies when given.
+
+    A title must be non-empty with no control character ('|' becomes '/').
+    Dependencies are a comma list of existing task ids other than the task
+    itself, or '-' for none. Anything else is refused, changing nothing.
+    """
     if state not in TASK_STATES:
         raise SystemExit(f"status: unknown task state {state}")
     for r in st.tasks.rows:
@@ -193,11 +201,31 @@ def cmd_set(st: Status, tid: str, state: str, note: Optional[str]) -> None:
                 for other in st.tasks.rows:
                     if other[1] == "ACTIVE" and other[0] != tid:
                         raise SystemExit(f"status: {other[0]} is already ACTIVE")
+            if title is not None and (not title.strip() or not title.isprintable()):
+                raise SystemExit("status: the title must be non-empty and hold no control character")
+            if depends is not None:
+                depends = _checked_depends(st, tid, depends)
             r[1] = state
             if note is not None:
                 r[4] = note.replace("|", "/")
+            if title is not None:
+                r[2] = title.strip().replace("|", "/")
+            if depends is not None:
+                r[3] = depends
             return
     raise SystemExit(f"status: task {tid} not found")
+
+
+def _checked_depends(st: Status, tid: str, depends: str) -> str:
+    """Return `depends` as written in the table; refuse an unknown task id or the task itself."""
+    ids = [d.strip() for d in depends.split(",") if d.strip()]
+    if ids in ([], ["-"]):
+        return "-"
+    known = {r[0] for r in st.tasks.rows}
+    for d in ids:
+        if d == tid or d not in known:
+            raise SystemExit(f"status: dependency {d} of {tid} must be another existing task")
+    return ",".join(ids)
 
 
 def cmd_add(st: Status, tid: str, title: str, depends: str, state: str, note: str) -> None:
@@ -257,6 +285,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("id")
     s.add_argument("state")
     s.add_argument("--note")
+    s.add_argument("--title")
+    s.add_argument("--depends")
     s = sub.add_parser("add")
     s.add_argument("id")
     s.add_argument("title")
@@ -298,7 +328,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("status: " + e, file=sys.stderr)
         return 1
     if a.cmd == "set":
-        cmd_set(st, a.id, a.state, a.note)
+        cmd_set(st, a.id, a.state, a.note, a.title, a.depends)
     elif a.cmd == "add":
         cmd_add(st, a.id, a.title, a.depends, a.state, a.note)
     elif a.cmd == "phase":
