@@ -719,7 +719,7 @@ SPACE_STUBS = """du() { if [ -n "$DU_KIB" ]; then printf '%s\\t%s\\n' "$DU_KIB" 
 df() { printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n/dev/x 1 1 %s 1%% /mnt\\n' "$DF_KIB"; }
 LASSI_SCRATCH=/mnt/nvme10/scratch
 """
-STOP_KIB = 115 * 1024 * 1024
+STOP_KIB = 145 * 1024 * 1024
 
 
 @needs_bash

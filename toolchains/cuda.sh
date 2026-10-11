@@ -65,10 +65,10 @@ if [ -x "$nvcc" ] && reports_pinned_version "$nvcc" && [ -f "$prefix/$record_nam
 fi
 
 # check_space <planned KiB>: refuse when the planned bytes do not fit in the free space of the scratch disk,
-# or when, added to what the scratch root holds now (du -s), they would pass the owner's cap of 120 GiB on
-# the scratch root (plans/p0-core.md, P0.19).
+# or when, added to what the scratch root holds now (du -s), they would pass the owner's cap of 150 GiB on
+# the scratch root (OQ-049, 2026-10-11; 120 GiB before, plans/p0-core.md, P0.19).
 check_space() {
-  local planned="$1" cap=$((120 * 1024 * 1024)) used free value
+  local planned="$1" cap=$((150 * 1024 * 1024)) used free value
   used="$( (du -sk "$LASSI_SCRATCH" 2>/dev/null || true) | cut -f1)"
   free="$(df -Pk "$LASSI_SCRATCH" | awk 'NR == 2 { print $4 }')"
   for value in "$used" "$free"; do
@@ -80,7 +80,7 @@ check_space() {
     esac
   done
   if [ $((used + planned)) -gt "$cap" ]; then
-    echo "cuda: $LASSI_SCRATCH holds $used KiB; the planned $planned KiB would pass the 120 GiB cap ($cap KiB)" >&2
+    echo "cuda: $LASSI_SCRATCH holds $used KiB; the planned $planned KiB would pass the 150 GiB cap ($cap KiB)" >&2
     echo "cuda: free space through the owner queue before installing" >&2
     return 1
   fi

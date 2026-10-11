@@ -226,7 +226,7 @@ def test_cuda_script_refuses_when_the_planned_bytes_do_not_fit_before_any_downlo
     text = script_text("cuda")
     space = bash_function(text, "check_space")
     assert 'du -sk "$LASSI_SCRATCH"' in space
-    assert "120 * 1024 * 1024" in space, "the owner's 120 GiB cap on the scratch root"
+    assert "150 * 1024 * 1024" in space, "the owner's 150 GiB cap on the scratch root (OQ-049)"
     assert 'df -Pk "$LASSI_SCRATCH"' in space
     main = text[text.index("already holds the pinned") :]
     assert main.index('check_space "$planned_kib"') < main.index('fetch "$'), "checked before the first download"
@@ -409,7 +409,7 @@ SPACE_STUBS = """du() { if [ -n "$DU_KIB" ]; then printf '%s\\t%s\\n' "$DU_KIB" 
 df() { printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n/dev/x 1 1 %s 1%% /mnt\\n' "$DF_KIB"; }
 LASSI_SCRATCH=/mnt/nvme10/scratch
 """
-CAP_KIB = 120 * 1024 * 1024
+CAP_KIB = 150 * 1024 * 1024
 
 
 @needs_bash

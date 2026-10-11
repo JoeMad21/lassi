@@ -173,10 +173,11 @@ check_host() {
 }
 
 # check_space <planned KiB>: refuse when the planned bytes do not fit in the free space of the scratch disk,
-# or when, added to what the scratch root holds now (du -s), they would pass the P4 plan's stop line of
-# 115 GiB, which keeps the scratch root under the owner's cap of 120 GiB (plans/p4-ttsim.md).
+# or when, added to what the scratch root holds now (du -s), they would pass the stop line of 145 GiB,
+# which keeps the scratch root under the owner's cap of 150 GiB (OQ-049, 2026-10-11; the P4 plan's 115
+# and 120 GiB before, plans/p4-ttsim.md).
 check_space() {
-  local planned="$1" stop=$((115 * 1024 * 1024)) used free value
+  local planned="$1" stop=$((145 * 1024 * 1024)) used free value
   used="$( (du -sk "$LASSI_SCRATCH" 2>/dev/null || true) | cut -f1)"
   free="$(df -Pk "$LASSI_SCRATCH" | awk 'NR == 2 { print $4 }')"
   for value in "$used" "$free"; do
@@ -188,7 +189,7 @@ check_space() {
     esac
   done
   if [ $((used + planned)) -gt "$stop" ]; then
-    echo "tt-metal: $LASSI_SCRATCH holds $used KiB; the planned $planned KiB would pass the 115 GiB stop line" \
+    echo "tt-metal: $LASSI_SCRATCH holds $used KiB; the planned $planned KiB would pass the 145 GiB stop line" \
       "($stop KiB)" >&2
     echo "tt-metal: queue backup or deletion candidates in the owner queue before installing" >&2
     return 1
