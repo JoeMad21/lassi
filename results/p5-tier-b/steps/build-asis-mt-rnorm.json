@@ -1,0 +1,29 @@
+{
+ "artifact": true,
+ "artifact_path": "/mnt/nvme10/joseph_ufl/lassi-runs/p53-tier-b/20261010-184351-p53-tier-b-e64d/raw/asis-mt-rnorm/main",
+ "build_s": 8.0,
+ "built_sha256": "72c6621acc23156d2a6c6a298cb9eae6eab50515e6a0db24f5095edadfdcab82",
+ "data_formats": [
+  "Float16_b"
+ ],
+ "diagnostics": {
+  "by_severity": {},
+  "first_errors": [],
+  "warning_codes": {}
+ },
+ "host": "multi_tile/host/turboquant_multi_tile_rnorm.cpp",
+ "host_sha256": "72c6621acc23156d2a6c6a298cb9eae6eab50515e6a0db24f5095edadfdcab82",
+ "kernels": [
+  "multi_tile/kernels/rsquare_reader.cpp",
+  "multi_tile/kernels/rsquare_writer.cpp",
+  "multi_tile/kernels/rsquare_compute.cpp",
+  "multi_tile/kernels/rnorm_matmul_reader.cpp",
+  "multi_tile/kernels/rnorm_matmul_writer.cpp",
+  "multi_tile/kernels/rnorm_matmul_compute.cpp"
+ ],
+ "names_fp32_dest_acc_en": false,
+ "names_unpack_to_dest": false,
+ "program": "mt-rnorm",
+ "step": "build",
+ "variant": "asis"
+}

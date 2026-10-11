@@ -1,0 +1,55 @@
+{
+ "exit_code": 0,
+ "finding_count": 0,
+ "findings": [],
+ "hang": false,
+ "inputs": {
+  "dump_r_tile.bin": {
+   "bytes": 8192,
+   "sha256": "5d6c719c4adec4b9ddf4c03393f48cef6c0ca5eac5d9beef2eae0288880126f8",
+   "source": "output of the dev0 run (dev0-mt-residual)"
+  }
+ },
+ "jit_error_count": 0,
+ "jit_errors": [],
+ "outputs": {
+  "_other_new_files": [],
+  "dump_b_tile.bin": {
+   "bytes": 8192,
+   "sha256": "ab05922ba226e8c9c8afe166652728cf1be3578c7e69dcaeea763072d80e8948"
+  },
+  "dump_bits_tile.bin": {
+   "bytes": 512,
+   "sha256": "f5a72ed0d0b01797b2f6975115cba6fda06dd909dca6aae61975733016babf94"
+  }
+ },
+ "patch": "create_unit_mesh(6) -> create_unit_mesh(0) (one occurrence)",
+ "program": "mt-qjl-projection",
+ "sim_gap": null,
+ "sim_ub": false,
+ "stderr_kind": [],
+ "stdout_truncated": false,
+ "step": "run",
+ "tensix_unpacr": false,
+ "unpack_to_dest": {
+  "descriptor_headers": 6,
+  "dst_accum_mode": [
+   "false"
+  ],
+  "issue18_path_possible": false,
+  "unpack_dst_format": [
+   5
+  ],
+  "unpack_src_format": [
+   5
+  ]
+ },
+ "variant": "dev0",
+ "wall_s": {
+  "label": "simulator wall time, exploratory, sizing only, never performance",
+  "limit": 300.0,
+  "value": 1.68
+ },
+ "watcher_note": false,
+ "workdir_incomplete": false
+}

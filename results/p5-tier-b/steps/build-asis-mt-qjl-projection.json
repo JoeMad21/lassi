@@ -1,0 +1,26 @@
+{
+ "artifact": true,
+ "artifact_path": "/mnt/nvme10/joseph_ufl/lassi-runs/p53-tier-b/20261010-184351-p53-tier-b-e64d/raw/asis-mt-qjl-projection/main",
+ "build_s": 7.8,
+ "built_sha256": "3ce7ce0d8b9a655de44c1c547cfe97ef7a821e6c858f6f2bdcbdc0f24aa72808",
+ "data_formats": [
+  "Float16_b"
+ ],
+ "diagnostics": {
+  "by_severity": {},
+  "first_errors": [],
+  "warning_codes": {}
+ },
+ "host": "multi_tile/host/turboquant_multi_tile_proj.cpp",
+ "host_sha256": "3ce7ce0d8b9a655de44c1c547cfe97ef7a821e6c858f6f2bdcbdc0f24aa72808",
+ "kernels": [
+  "multi_tile/kernels/qjl_project_reader.cpp",
+  "multi_tile/kernels/qjl_project_writer.cpp",
+  "multi_tile/kernels/qjl_project_compute.cpp"
+ ],
+ "names_fp32_dest_acc_en": false,
+ "names_unpack_to_dest": false,
+ "program": "mt-qjl-projection",
+ "step": "build",
+ "variant": "asis"
+}

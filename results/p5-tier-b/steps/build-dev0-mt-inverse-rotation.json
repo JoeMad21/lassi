@@ -1,0 +1,27 @@
+{
+ "artifact": true,
+ "artifact_path": "/mnt/nvme10/joseph_ufl/lassi-runs/p53-tier-b/20261010-184351-p53-tier-b-e64d/raw/dev0-mt-inverse-rotation/main",
+ "build_s": 8.0,
+ "built_sha256": "13572b38c4b1a26df567c2a5dde54bb166550424739250ebe2926dcac5abcf19",
+ "data_formats": [
+  "Float16_b"
+ ],
+ "diagnostics": {
+  "by_severity": {},
+  "first_errors": [],
+  "warning_codes": {}
+ },
+ "host": "multi_tile/host/turboquant_multi_tile_ir.cpp",
+ "host_sha256": "bae1f25d1c1d6028a7e8c0e0e9abe71ad7524fdaa29aaa7517b5625fd0b33cbb",
+ "kernels": [
+  "multi_tile/kernels/inverse_rotation_reader.cpp",
+  "multi_tile/kernels/inverse_rotation_writer.cpp",
+  "multi_tile/kernels/inverse_rotation_compute.cpp"
+ ],
+ "names_fp32_dest_acc_en": false,
+ "names_unpack_to_dest": false,
+ "patch": "create_unit_mesh(6) -> create_unit_mesh(0) (one occurrence)",
+ "program": "mt-inverse-rotation",
+ "step": "build",
+ "variant": "dev0"
+}

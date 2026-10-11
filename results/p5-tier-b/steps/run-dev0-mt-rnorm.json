@@ -1,0 +1,51 @@
+{
+ "exit_code": 0,
+ "finding_count": 0,
+ "findings": [],
+ "hang": false,
+ "inputs": {
+  "dump_r_tile.bin": {
+   "bytes": 8192,
+   "sha256": "5d6c719c4adec4b9ddf4c03393f48cef6c0ca5eac5d9beef2eae0288880126f8",
+   "source": "output of the dev0 run (dev0-mt-residual)"
+  }
+ },
+ "jit_error_count": 0,
+ "jit_errors": [],
+ "outputs": {
+  "_other_new_files": [],
+  "dump_rnorm_tile.bin": {
+   "bytes": 64,
+   "sha256": "2b3b48f299b7d7106427f392b71ce473871e6181afe1c6574ddf60eace71dda3"
+  }
+ },
+ "patch": "create_unit_mesh(6) -> create_unit_mesh(0) (one occurrence)",
+ "program": "mt-rnorm",
+ "sim_gap": null,
+ "sim_ub": false,
+ "stderr_kind": [],
+ "stdout_truncated": false,
+ "step": "run",
+ "tensix_unpacr": false,
+ "unpack_to_dest": {
+  "descriptor_headers": 12,
+  "dst_accum_mode": [
+   "false"
+  ],
+  "issue18_path_possible": false,
+  "unpack_dst_format": [
+   5
+  ],
+  "unpack_src_format": [
+   5
+  ]
+ },
+ "variant": "dev0",
+ "wall_s": {
+  "label": "simulator wall time, exploratory, sizing only, never performance",
+  "limit": 300.0,
+  "value": 2.38
+ },
+ "watcher_note": false,
+ "workdir_incomplete": false
+}

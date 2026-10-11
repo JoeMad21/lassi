@@ -1,0 +1,27 @@
+{
+ "artifact": true,
+ "artifact_path": "/mnt/nvme10/joseph_ufl/lassi-runs/p53-tier-b/20261010-184351-p53-tier-b-e64d/raw/dev0-mt-residual/main",
+ "build_s": 8.1,
+ "built_sha256": "7647525f68204add0a9ab19bdbf8dd5c34bc840d43c96ecc3f401d98ffc151d1",
+ "data_formats": [
+  "Float16_b"
+ ],
+ "diagnostics": {
+  "by_severity": {},
+  "first_errors": [],
+  "warning_codes": {}
+ },
+ "host": "multi_tile/host/turboquant_multi_tile_resid.cpp",
+ "host_sha256": "495eb0e666d540c72fc6ea636b60ec4c9cfb70d23e6150c4abd43e60adcd60eb",
+ "kernels": [
+  "multi_tile/kernels/residual_reader.cpp",
+  "multi_tile/kernels/residual_writer.cpp",
+  "multi_tile/kernels/residual_compute.cpp"
+ ],
+ "names_fp32_dest_acc_en": false,
+ "names_unpack_to_dest": false,
+ "patch": "create_unit_mesh(6) -> create_unit_mesh(0) (one occurrence)",
+ "program": "mt-residual",
+ "step": "build",
+ "variant": "dev0"
+}

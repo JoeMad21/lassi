@@ -1,0 +1,27 @@
+{
+ "artifact": true,
+ "artifact_path": "/mnt/nvme10/joseph_ufl/lassi-runs/p53-tier-b/20261010-184351-p53-tier-b-e64d/raw/dev0-mt-qjl-projection/main",
+ "build_s": 8.0,
+ "built_sha256": "d960f9ba83779db6bafd1197adfedc8b9e77c219f2c44c04c43db9f6236d6be5",
+ "data_formats": [
+  "Float16_b"
+ ],
+ "diagnostics": {
+  "by_severity": {},
+  "first_errors": [],
+  "warning_codes": {}
+ },
+ "host": "multi_tile/host/turboquant_multi_tile_proj.cpp",
+ "host_sha256": "3ce7ce0d8b9a655de44c1c547cfe97ef7a821e6c858f6f2bdcbdc0f24aa72808",
+ "kernels": [
+  "multi_tile/kernels/qjl_project_reader.cpp",
+  "multi_tile/kernels/qjl_project_writer.cpp",
+  "multi_tile/kernels/qjl_project_compute.cpp"
+ ],
+ "names_fp32_dest_acc_en": false,
+ "names_unpack_to_dest": false,
+ "patch": "create_unit_mesh(6) -> create_unit_mesh(0) (one occurrence)",
+ "program": "mt-qjl-projection",
+ "step": "build",
+ "variant": "dev0"
+}

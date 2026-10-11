@@ -1,0 +1,51 @@
+{
+ "exit_code": 0,
+ "finding_count": 0,
+ "findings": [],
+ "hang": false,
+ "inputs": {
+  "dump_quant_centroids.bin": {
+   "bytes": 8192,
+   "sha256": "f17e7f02f7d4e032e62144916358bfbf6ecacda6e7328910010020a096bc3488",
+   "source": "the codec's committed dump_quant_centroids.bin"
+  }
+ },
+ "jit_error_count": 0,
+ "jit_errors": [],
+ "outputs": {
+  "_other_new_files": [],
+  "dump_xhat_tile.bin": {
+   "bytes": 8192,
+   "sha256": "dbd785ae83aca46d853b609568e6b65c4e1d47305003031671e46a2fba9c9184"
+  }
+ },
+ "patch": "create_unit_mesh(6) -> create_unit_mesh(0) (one occurrence)",
+ "program": "mt-inverse-rotation",
+ "sim_gap": null,
+ "sim_ub": false,
+ "stderr_kind": [],
+ "stdout_truncated": false,
+ "step": "run",
+ "tensix_unpacr": false,
+ "unpack_to_dest": {
+  "descriptor_headers": 6,
+  "dst_accum_mode": [
+   "false"
+  ],
+  "issue18_path_possible": false,
+  "unpack_dst_format": [
+   5
+  ],
+  "unpack_src_format": [
+   5
+  ]
+ },
+ "variant": "dev0",
+ "wall_s": {
+  "label": "simulator wall time, exploratory, sizing only, never performance",
+  "limit": 300.0,
+  "value": 1.73
+ },
+ "watcher_note": false,
+ "workdir_incomplete": false
+}

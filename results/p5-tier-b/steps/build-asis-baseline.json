@@ -1,0 +1,34 @@
+{
+ "artifact": true,
+ "artifact_path": "/mnt/nvme10/joseph_ufl/lassi-runs/p53-tier-b/20261010-184351-p53-tier-b-e64d/raw/asis-baseline/main",
+ "build_s": 8.1,
+ "built_sha256": "7044cd4c3ec12b5b0e06314f6e448c0d5413085ddead2da312e19e0d244ef08f",
+ "data_formats": [
+  "Float16_b",
+  "RawUInt8"
+ ],
+ "diagnostics": {
+  "by_severity": {
+   "warning": 3
+  },
+  "first_errors": [],
+  "warning_codes": {
+   "-Wcomment": 1,
+   "-Wunused-function": 1,
+   "-Wunused-variable": 1
+  }
+ },
+ "host": "host/turboquant_host.cpp",
+ "host_sha256": "7044cd4c3ec12b5b0e06314f6e448c0d5413085ddead2da312e19e0d244ef08f",
+ "kernels": [
+  "kernels/rotation_kernel.cpp",
+  "kernels/polarquant_kernel.cpp",
+  "kernels/qjl_kernel.cpp",
+  "kernels/dataflow/stage_dump_writer.cpp"
+ ],
+ "names_fp32_dest_acc_en": false,
+ "names_unpack_to_dest": false,
+ "program": "baseline",
+ "step": "build",
+ "variant": "asis"
+}

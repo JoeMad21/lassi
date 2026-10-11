@@ -1,0 +1,6 @@
+root-fs: 0 path(s) this account changed under /tmp, /var/tmp, /dev/shm since the start (this batch or another of the account's projects; list in local/)
+pinned trees: 0 path(s) changed since the start (a find stopped at 120 s counts fewer)
+default JIT cache root .cache/tt-metal-cache: 0 top entries changed since the start
+default JIT cache root /tmp/tt-metal-cache: absent
+scratch du -sk: before 102689076, after 102741484 KiB
+run directory du -sk: 51436 KiB (cap 1048576 KiB)

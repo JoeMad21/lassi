@@ -1,0 +1,24 @@
+{
+ "dev_entries": [
+  "fd",
+  "full",
+  "null",
+  "ptmx",
+  "pts",
+  "random",
+  "shm",
+  "stderr",
+  "stdin",
+  "stdout",
+  "tty",
+  "urandom",
+  "zero"
+ ],
+ "exit_code": 0,
+ "ok": true,
+ "proc_bus_pci": "present, 161 entries",
+ "proc_bus_pci_note": "readable in the sandbox, a known limit (lassi/executors/sandbox.py); it lists PCI devices and opens none; recorded, not gated",
+ "sys_checked": 33,
+ "sys_nonempty": [],
+ "unexpected_dev": []
+}

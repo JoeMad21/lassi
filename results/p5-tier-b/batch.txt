@@ -1,0 +1,12 @@
+commit e505af741be22360f814ee52a0c28033d9a3d45a (dirty=false, changed paths 0); rx id 20261010-184351-p53-tier-b-e64d
+start 2026-10-10T18:43:58-07:00; host alpha01; codec https://github.com/JoeMad21/TurboQuant-Tenstorrent.git at 81817eb09076d17b29491c6646b54c6927cac0bd
+device: ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf
+  (both from toolchains/ttsim.pin and tt-metal.pin); a simulator, not silicon; every wall time is
+  simulator wall time, sizing only, never performance
+tt-metal install: tt-metal 5280a9cfb00998fd49667a29523d03aee905c129 https://github.com/tenstorrent/tt-metal.git
+ttsim: sha256 7b10aa05a5297c4a28f274e39526bfe6c69373661d1b4d4e47c4257e44b79507
+core limit (RLIMIT_CORE): 1 byte, set with prlimit --core=1:1 and verified by getrlimit
+limits: budget 3000s; wall scale 1; run directory cap 1 GiB; stop files /mnt/nvme10/joseph_ufl/lassi-runs/p53-tier-b/20261010-184351-p53-tier-b-e64d/STOP and the owner's gate STOP
+alpha01 copy compared (read only): no
+tools: git version 2.34.1; uv 0.12.17 (x86_64-unknown-linux-gnu); python3 3.10.12
+compare python: python3 -I -B

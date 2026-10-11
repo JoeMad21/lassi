@@ -1,0 +1,31 @@
+{
+ "artifact": true,
+ "artifact_path": "/mnt/nvme10/joseph_ufl/lassi-runs/p53-tier-b/20261010-184351-p53-tier-b-e64d/raw/dev0-mt-rotation/main",
+ "build_s": 8.2,
+ "built_sha256": "0835273313f070d02911b307cb4c43ed599b16636ba1d38ea49af2c1aeafab32",
+ "data_formats": [
+  "Float16_b"
+ ],
+ "diagnostics": {
+  "by_severity": {
+   "warning": 1
+  },
+  "first_errors": [],
+  "warning_codes": {
+   "-Wunused-function": 1
+  }
+ },
+ "host": "multi_tile/host/turboquant_multi_tile.cpp",
+ "host_sha256": "dff696022c4d7dc106ebf02df22b32f5202e60d62012defaa7ef4b4a3b5ef3d0",
+ "kernels": [
+  "multi_tile/kernels/rotation_reader.cpp",
+  "multi_tile/kernels/rotation_writer.cpp",
+  "multi_tile/kernels/rotation_compute.cpp"
+ ],
+ "names_fp32_dest_acc_en": false,
+ "names_unpack_to_dest": false,
+ "patch": "create_unit_mesh(6) -> create_unit_mesh(0) (one occurrence)",
+ "program": "mt-rotation",
+ "step": "build",
+ "variant": "dev0"
+}

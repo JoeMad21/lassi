@@ -1,0 +1,44 @@
+{
+ "exit_code": 134,
+ "finding_count": 0,
+ "findings": [],
+ "hang": false,
+ "inputs": {
+  "dump_quant_centroids.bin": {
+   "bytes": 8192,
+   "sha256": "f17e7f02f7d4e032e62144916358bfbf6ecacda6e7328910010020a096bc3488",
+   "source": "the codec's committed dump_quant_centroids.bin"
+  }
+ },
+ "jit_error_count": 0,
+ "jit_errors": [],
+ "outputs": {
+  "_other_new_files": [],
+  "dump_xhat_tile.bin": "absent"
+ },
+ "program": "mt-inverse-rotation",
+ "sim_gap": null,
+ "sim_ub": false,
+ "stderr_kind": [
+  "tt-fatal",
+  "terminate"
+ ],
+ "stdout_truncated": false,
+ "step": "run",
+ "tensix_unpacr": false,
+ "unpack_to_dest": {
+  "descriptor_headers": 0,
+  "dst_accum_mode": [],
+  "issue18_path_possible": false,
+  "unpack_dst_format": [],
+  "unpack_src_format": []
+ },
+ "variant": "asis",
+ "wall_s": {
+  "label": "simulator wall time, exploratory, sizing only, never performance",
+  "limit": 120.0,
+  "value": 0.42
+ },
+ "watcher_note": false,
+ "workdir_incomplete": false
+}

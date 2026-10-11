@@ -1,0 +1,51 @@
+{
+ "exit_code": 0,
+ "finding_count": 0,
+ "findings": [],
+ "hang": false,
+ "inputs": {
+  "dump_rotated_tile.bin": {
+   "bytes": 8192,
+   "sha256": "b7a1867a1dd2230545c94d2f24b12ca3ec8852d8acf639a02cbc36e2f02c418f",
+   "source": "output of the dev0 run (dev0-mt-rotation)"
+  }
+ },
+ "jit_error_count": 0,
+ "jit_errors": [],
+ "outputs": {
+  "_other_new_files": [],
+  "dump_centroids_tile.bin": {
+   "bytes": 8192,
+   "sha256": "cca5013cafa9954c17c17536be6f04af883b29f9f2bc886414803ff8703d96ee"
+  }
+ },
+ "patch": "create_unit_mesh(6) -> create_unit_mesh(0) (one occurrence)",
+ "program": "mt-polarquant",
+ "sim_gap": null,
+ "sim_ub": false,
+ "stderr_kind": [],
+ "stdout_truncated": false,
+ "step": "run",
+ "tensix_unpacr": false,
+ "unpack_to_dest": {
+  "descriptor_headers": 6,
+  "dst_accum_mode": [
+   "false"
+  ],
+  "issue18_path_possible": false,
+  "unpack_dst_format": [
+   5
+  ],
+  "unpack_src_format": [
+   5
+  ]
+ },
+ "variant": "dev0",
+ "wall_s": {
+  "label": "simulator wall time, exploratory, sizing only, never performance",
+  "limit": 300.0,
+  "value": 1.98
+ },
+ "watcher_note": false,
+ "workdir_incomplete": false
+}

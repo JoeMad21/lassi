@@ -1,0 +1,1 @@
+ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon

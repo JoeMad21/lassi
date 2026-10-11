@@ -1,0 +1,67 @@
+{
+ "exit_code": 0,
+ "finding_count": 0,
+ "findings": [],
+ "hang": false,
+ "inputs": {},
+ "jit_error_count": 0,
+ "jit_errors": [],
+ "outputs": {
+  "_other_new_files": [],
+  "dump_input.bin": {
+   "bytes": 8192,
+   "sha256": "3752f429dada463df3ef2cf166441f2c708e83481454fec9da3669c3f755dca7"
+  },
+  "dump_output.bin": {
+   "bytes": 3072,
+   "sha256": "3d683016cee885acf1822e18e0e1b0d854427b644ca6c6ad11d69b6ae8f190fa"
+  },
+  "dump_qjl.bin": {
+   "bytes": 576,
+   "sha256": "c4f45a42864fdb6251716081cb235f2cb4f902a043bb8d5f08bebd8cd84c4069"
+  },
+  "dump_quant_centroids.bin": {
+   "bytes": 8192,
+   "sha256": "f17e7f02f7d4e032e62144916358bfbf6ecacda6e7328910010020a096bc3488"
+  },
+  "dump_quant_indices.bin": {
+   "bytes": 2048,
+   "sha256": "c23f342240c8db7dc8189f76776f08f0bf5d032cd2a7c3c9264d42dcfe114713"
+  },
+  "dump_rotated.bin": {
+   "bytes": 8192,
+   "sha256": "e5159ce9d9338907d75376ba34600138b53f2c4e48ab8e57dbbb1ab888e094be"
+  }
+ },
+ "patch": "create_unit_mesh(6) -> create_unit_mesh(0) (one occurrence)",
+ "program": "baseline",
+ "sim_gap": null,
+ "sim_ub": false,
+ "stderr_kind": [],
+ "stdout_truncated": false,
+ "step": "run",
+ "tensix_unpacr": false,
+ "unpack_to_dest": {
+  "descriptor_headers": 12,
+  "dst_accum_mode": [
+   "false"
+  ],
+  "issue18_path_possible": false,
+  "unpack_dst_format": [
+   5,
+   10
+  ],
+  "unpack_src_format": [
+   5,
+   10
+  ]
+ },
+ "variant": "dev0",
+ "wall_s": {
+  "label": "simulator wall time, exploratory, sizing only, never performance",
+  "limit": 900.0,
+  "value": 27.35
+ },
+ "watcher_note": false,
+ "workdir_incomplete": false
+}

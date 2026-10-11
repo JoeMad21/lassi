@@ -29,7 +29,8 @@ joint pin: tt-metal 5280a9cf on ttsim v1.3.4, a simulator, never silicon (Agent 
 Every file under report/ is plain ASCII and holds no tt-metal or codec source text: counts, hashes, identifiers,
 paths, verdicts, and simulator messages. Program streams, compiler stderr, and anything else that may quote source
 go to local/ (pulled only into the untracked .rx/pulls/). Output dumps go to outputs/ (binary numbers; small).
-Nothing here deletes a file it did not create, and nothing writes outside the run directory it is given.
+Nothing here deletes a file it did not create, and tier_b.py's own writes stay inside the run directory it is given;
+the lassi code that batch calls also makes, and removes, the --version check's directory under TMPDIR.
 """
 
 from __future__ import annotations
@@ -62,7 +63,8 @@ ASIS_NOTE = f"asis = the codec's host program as written ({DEVICE_ASIS})"
 # sha256 of reference/turboquant.py at CODEC_COMMIT (report/source.tsv of the dry run's real fetch); compare
 # imports that file on the host, outside the sandbox, so it refuses any other bytes.
 REFERENCE_SHA256 = "a4a79ca85104ecb26fc822d24cf66ed6d3f1ad9011bb62fe354c34839a3cf0b0"
-# The run directory's cap: a step starts only while the run directory's blocks total at most this (OQ-050's 1 GB).
+# The run directory's start gate (messages call it a cap): a step starts only while the run directory's blocks total
+# at most this (OQ-050's 1 GB). It bounds no step, so a step that starts under it can pass it.
 RUN_CAP_BYTES = 1 << 30
 # The batch's exit status when a stop file or the run directory cap skipped a step (run.sh exits with it).
 HALTED_RC = 5
@@ -700,8 +702,8 @@ def save(batch: Batch, record: dict[str, Any]) -> bool:
 def cmd_batch(args: argparse.Namespace) -> int:
     """Probe the sandbox, then build and run every program (see the module docstring for the order).
 
-    Returns 0, 2 (lassi's install checks refused), 3 (the probe failed), or HALTED_RC (a stop file or the run
-    directory cap skipped a step, the probe included).
+    Returns 0, 2 (lassi's install checks refused), 3 (the probe failed), 4 (the budget could not hold the probe),
+    or HALTED_RC (a stop file or the run directory's start gate skipped a step, the probe included).
     """
     run = Path(args.run)
     batch = Batch(run=run, src=run / "src", report=run / "report", local=run / "local", raw=run / "raw",

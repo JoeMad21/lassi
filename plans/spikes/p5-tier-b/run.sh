@@ -20,8 +20,11 @@
 # Stop: touch $run/STOP (never rx job kill); the owner's gate STOP is honored too. run.sh checks both before the
 # fetch, prepare, the copy comparison, the uv warmup, the batch, the NumPy probes, compare, and the scratch du; the
 # first one it sees skips that step and every later one ("stop file"), while summarize and the other host checks,
-# read only and bounded, still run. Inside the batch, tier_b.py checks both, and the run directory's 1 GiB cap,
-# before the probe and before every build and run. The exit status is the batch's, and 5 after any stop or the cap.
+# read only and bounded, still run. Inside the batch, tier_b.py checks both, and the run directory's 1 GiB start
+# gate (a step starts only while the run directory holds at most 1 GiB, so a step that starts under it can pass it),
+# before the probe and before every build and run. The exit status is the batch's: 5 when a stop file or the gate
+# ended it early, and a stop run.sh sees after it turns a 0 into 5 (a 2, 3, or 4 stays); the batch step's outer
+# timeout gives 124, or 137 after its kill grace, and an uncaught error in tier_b.py gives 1.
 # Bounds: `timeout -k K T` ends its step by T + K seconds.
 #   - before the budget: the scratch du, 610;
 #   - from the budget's start (SECONDS=0) to the batch step's end, 3930: the fetch (310), prepare (610), the copy
@@ -278,7 +281,7 @@ batch_rc=0
 if stop_check "the batch"; then
   batch_rc=5
 elif [ "$remaining" -lt 300 ]; then
-  echo "p53: ${remaining}s of the budget left after the fetch; the batch step does not start"
+  echo "p53: ${remaining}s of the budget left after the steps before the batch; the batch step does not start"
   batch_rc=4
 else
   # The step's own bound allows one Watcher rerun (a wall limit, at most 900 s) past the budget it is given.

@@ -1,0 +1,17 @@
+== device: ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon
+   every wall time in report/steps is simulator wall time, exploratory, sizing only, never performance
+   dev0 = a changed copy: create_unit_mesh(6) -> create_unit_mesh(0) in the run directory only, not the codec's program
+program              build asis/dev0  dev0 run (exit hang ub gap jit outs)     asis run       reference checks (dev0)
+baseline             ok/ok            0 - False - 0 6/6                        134 - False - 0 1/6 rotation=P indices=P centroids=P qjl_bits=P qjl_rnorm=P
+mt-rotation          ok/ok            0 - False - 0 1/1                        134 - False - 0 0/1 mt_rotation=P
+mt-polarquant        ok/ok            0 - False - 0 1/1                        134 - False - 0 0/1 mt_polarquant=P
+mt-inverse-rotation  ok/ok            0 - False - 0 1/1                        134 - False - 0 0/1 mt_inverse_rotation=P
+mt-residual          ok/ok            0 - False - 0 1/1                        134 - False - 0 0/1 mt_residual=P
+mt-qjl-projection    ok/ok            0 - False - 0 2/2                        134 - False - 0 0/2 mt_qjl_projection=P
+mt-rnorm             ok/ok            0 - False - 0 1/1                        134 - False - 0 0/1 mt_rnorm=P
+unpack_to_dest: 7 dev0 runs read; DST_ACCUM_MODE values ['false']; unpack formats [5, 10]; issue #18 path possible in: none
+asis runs (device id 6): 7 ran; exit statuses 134; stderr kinds terminate tt-fatal; output files written 1
+probe: ok=True; /dev entries 13, unexpected none; /sys directories checked 33, not empty none; /proc/bus/pci present, 161 entries (recorded, not gated)
+reference checks: 11 run, failed: none; sign table = make_sign_diagonal(128, 0): True
+asis-baseline vs the codec's committed dumps: dump_input.bin=same
+dev0-baseline vs the codec's committed dumps: dump_input.bin=same dump_quant_indices.bin=same dump_quant_centroids.bin=same dump_qjl.bin=same dump_output.bin=same

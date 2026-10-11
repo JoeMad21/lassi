@@ -1,0 +1,173 @@
+{
+ "committed_dumps": {
+  "asis": [
+   {
+    "bytes": [
+     8192,
+     8192
+    ],
+    "differing_bytes": 0,
+    "file": "dump_input.bin",
+    "identical": true
+   }
+  ],
+  "dev0": [
+   {
+    "bytes": [
+     8192,
+     8192
+    ],
+    "differing_bytes": 0,
+    "file": "dump_input.bin",
+    "identical": true
+   },
+   {
+    "bytes": [
+     2048,
+     2048
+    ],
+    "differing_bytes": 0,
+    "file": "dump_quant_indices.bin",
+    "identical": true
+   },
+   {
+    "bytes": [
+     8192,
+     8192
+    ],
+    "differing_bytes": 0,
+    "file": "dump_quant_centroids.bin",
+    "identical": true
+   },
+   {
+    "bytes": [
+     576,
+     576
+    ],
+    "differing_bytes": 0,
+    "file": "dump_qjl.bin",
+    "identical": true
+   },
+   {
+    "bytes": [
+     3072,
+     3072
+    ],
+    "differing_bytes": 0,
+    "file": "dump_output.bin",
+    "identical": true
+   }
+  ]
+ },
+ "numpy": "2.2.6",
+ "programs": {
+  "dev0-baseline": {
+   "checks": [
+    {
+     "check": "rotation",
+     "max_abs": 0.00192165,
+     "mean_abs": 0.00019842,
+     "pass": true,
+     "threshold_source": "tests/test_rotation.py:184,188 (max_abs < 0.005 and mean_abs < 0.001)"
+    },
+    {
+     "check": "indices",
+     "match": 1.0,
+     "pass": true,
+     "threshold_source": "tests/test_polarquant.py:229 (match >= 0.99; the test builds its codebook at :217, this check uses the kernels' own include/codebooks.h b4 d128 table)"
+    },
+    {
+     "check": "centroids",
+     "max_abs": 0.00090341,
+     "pass": true,
+     "threshold_source": "tests/test_polarquant.py:277 (max_abs < 0.005)"
+    },
+    {
+     "check": "qjl_bits",
+     "match": 1.0,
+     "pass": true,
+     "threshold_source": "tests/test_qjl.py:251 (match >= 0.98; LFSR sign rows as tests/test_qjl.py:178-196)"
+    },
+    {
+     "check": "qjl_rnorm",
+     "max_rel": 0.00486621,
+     "pass": true,
+     "threshold_source": "tests/test_qjl.py:289 (max relative error < 0.01)"
+    }
+   ]
+  },
+  "dev0-mt-inverse-rotation": {
+   "checks": [
+    {
+     "check": "mt_inverse_rotation",
+     "max_abs": 0.00245726,
+     "mean_abs": 0.00037717,
+     "pass": true,
+     "threshold_source": "multi_tile/tests/test_inverse_rotation_tile.py:84 (max_abs < 0.01)"
+    }
+   ]
+  },
+  "dev0-mt-polarquant": {
+   "checks": [
+    {
+     "check": "mt_polarquant",
+     "max_abs": 0.0015383,
+     "max_abs_vs_reference_encode": 0.0015383,
+     "pass": true,
+     "threshold_source": "multi_tile/tests/test_polarquant_tile.py:45,89-90 (max_abs < 0.01 against searchsorted side='right')"
+    }
+   ]
+  },
+  "dev0-mt-qjl-projection": {
+   "checks": [
+    {
+     "b_max_abs": 0.00305176,
+     "check": "mt_qjl_projection",
+     "overall": 0.99902344,
+     "pass": true,
+     "strict": 1.0,
+     "threshold_source": "multi_tile/tests/test_qjl_project_tile.py:65,71 (strict match >= 0.998 where |B| >= 0.01, overall >= 0.95; the test compares with the baseline's bits and masks by |B_dev|, this check compares with the reference and masks by |B_ref|)"
+    }
+   ]
+  },
+  "dev0-mt-residual": {
+   "checks": [
+    {
+     "check": "mt_residual",
+     "max_abs": 6.104e-05,
+     "mean_abs": 7.5e-07,
+     "pass": true,
+     "threshold_source": "multi_tile/tests/test_residual_tile.py:27 (max_abs < 0.001)"
+    }
+   ]
+  },
+  "dev0-mt-rnorm": {
+   "checks": [
+    {
+     "check": "mt_rnorm",
+     "max_rel": 0.00460621,
+     "pass": true,
+     "threshold_source": "multi_tile/tests/test_rnorm_tile.py:48 (max relative error < 0.02)"
+    }
+   ]
+  },
+  "dev0-mt-rotation": {
+   "checks": [
+    {
+     "check": "mt_rotation",
+     "max_abs": 0.00381117,
+     "mean_abs": 0.0003722,
+     "pass": true,
+     "threshold_source": "multi_tile/tests/test_rotation_tile.py:47 (max_abs < 0.01; the test compares with the baseline's dump_rotated.bin, this check with the reference)"
+    }
+   ]
+  }
+ },
+ "python": "3.10.12",
+ "reference_sha256": "a4a79ca85104ecb26fc822d24cf66ed6d3f1ad9011bb62fe354c34839a3cf0b0",
+ "sign_table_equals_make_sign_diagonal_128_seed0": true,
+ "variants": {
+  "asis": "asis = the codec's host program as written (create_unit_mesh(6))",
+  "dev0": "dev0 = a changed copy: create_unit_mesh(6) -> create_unit_mesh(0) in the run directory only, not the codec's program"
+ }
+}

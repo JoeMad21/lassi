@@ -1,0 +1,3 @@
+license files in the tree at 81817eb09076d17b29491c6646b54c6927cac0bd: none
+license file names the README mentions: LICENSE.txt
+README names a license file the tree lacks: True

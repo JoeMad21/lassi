@@ -1,0 +1,13 @@
+dev0 = a changed copy: create_unit_mesh(6) -> create_unit_mesh(0) in the run directory only, not the codec's program
+numpy 2.2.6; sign table = make_sign_diagonal(128, 0): True
+dev0-baseline rotation: PASS {"max_abs": 0.00192165, "mean_abs": 0.00019842}
+dev0-baseline indices: PASS {"match": 1.0}
+dev0-baseline centroids: PASS {"max_abs": 0.00090341}
+dev0-baseline qjl_bits: PASS {"match": 1.0}
+dev0-baseline qjl_rnorm: PASS {"max_rel": 0.00486621}
+dev0-mt-rotation mt_rotation: PASS {"max_abs": 0.00381117, "mean_abs": 0.0003722}
+dev0-mt-polarquant mt_polarquant: PASS {"max_abs": 0.0015383, "max_abs_vs_reference_encode": 0.0015383}
+dev0-mt-inverse-rotation mt_inverse_rotation: PASS {"max_abs": 0.00245726, "mean_abs": 0.00037717}
+dev0-mt-residual mt_residual: PASS {"max_abs": 6.104e-05, "mean_abs": 7.5e-07}
+dev0-mt-qjl-projection mt_qjl_projection: PASS {"overall": 0.99902344, "strict": 1.0, "b_max_abs": 0.00305176}
+dev0-mt-rnorm mt_rnorm: PASS {"max_rel": 0.00460621}

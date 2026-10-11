@@ -1,0 +1,27 @@
+{
+ "artifact": true,
+ "artifact_path": "/mnt/nvme10/joseph_ufl/lassi-runs/p53-tier-b/20261010-184351-p53-tier-b-e64d/raw/dev0-mt-polarquant/main",
+ "build_s": 8.0,
+ "built_sha256": "49dbc227ef7ab1d8d079ccdd6b516a597f0e99625ccf80b56fb29e274c402963",
+ "data_formats": [
+  "Float16_b"
+ ],
+ "diagnostics": {
+  "by_severity": {},
+  "first_errors": [],
+  "warning_codes": {}
+ },
+ "host": "multi_tile/host/turboquant_multi_tile_pq.cpp",
+ "host_sha256": "5390da4edeb7234e57afd215829167bf9f587f07a7826b26696809c4b224312c",
+ "kernels": [
+  "multi_tile/kernels/polarquant_reader.cpp",
+  "multi_tile/kernels/polarquant_writer.cpp",
+  "multi_tile/kernels/polarquant_compute.cpp"
+ ],
+ "names_fp32_dest_acc_en": false,
+ "names_unpack_to_dest": false,
+ "patch": "create_unit_mesh(6) -> create_unit_mesh(0) (one occurrence)",
+ "program": "mt-polarquant",
+ "step": "build",
+ "variant": "dev0"
+}
