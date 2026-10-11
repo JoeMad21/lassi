@@ -49,6 +49,8 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 
 - Several agents staging at once can leave `.git/index.lock` for a moment; retry once. Commit a task with `git commit -m ... -- <its paths>`, which commits those paths' working-tree content and leaves other staged work alone, and never edit a path another pending commit holds.
 - Python's Path.write_text on the workstation writes CRLF line endings (text mode on Windows). A scratch script that rewrites a tracked file writes bytes, or passes newline="\n"; the P17 audit fixes turned six files CRLF, and git normalized only the staged copies.
+- Run a WSL command as `wsl -d <distro> --exec bash -lc '<command>'`, never `wsl -- <command>`: the latter expands variables before bash sees them, and P5.3's dry run once turned an empty `$V` into a Python venv at the repository root (bin/, lib/, lib64, include/, pyvenv.cfg; untracked, removed) (2026-10-10).
+- WSL's newer `mount` breaks the sandbox inside a user namespace (exit 16 on `mount --move`), so a WSL dry run of a batch must wrap the sandbox; alpha01's older mount works (P4). The same may affect any WSL test run that reaches the sandbox (P5.3, 2026-10-10).
 
 ## alpha01
 
