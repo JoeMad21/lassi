@@ -1,10 +1,11 @@
-"""The `lassi` command line: `lassi run` runs a recipe, `lassi score` scores a finished run, and `lassi train` trains.
+"""The `lassi` command line: run a recipe, score a finished run, change settings, train, and read corpus tables.
 
     lassi [--graphics on|off] run <recipe> [--runs-root P] [--run-id ID] [--bench-root P]
     lassi [--graphics on|off] score <run dir> --profile NAME [--profile NAME ...] [--score-id ID]
           [--bench-root P] [--runs-root P]
     lassi [--graphics on|off] settings graphics [on|off]
     lassi [--graphics on|off] train <train.yaml> [--runs-root P] [--train-id ID]
+    lassi [--graphics on|off] corpus summary <dir>
 
 Every command first decides terminal graphics (lassi.present.settings,
 choose_graphics: the --graphics option, LASSI_GRAPHICS, off without an
@@ -78,6 +79,18 @@ error the Trainer raises also leaves it failed and propagates, as a
 component's does under `lassi run`. With graphics on it prints the banner
 and nothing more: no live table, since the training table is P7's.
 
+`lassi corpus summary <dir>` (task P5.11) reads the corpus tables that
+lassi.corpus writes under <dir> (corpus/, verification/, and pairs/) and
+prints plain lines for each table present (lassi.corpus.tables
+summarize): `table <name>`, `records: <n>`, `gated: <n>`, one
+`split <split>: <n>` line per split present, and one `status <code>: <n>`
+line per gate status failure code present. It exits 0, or 2 with
+`lassi corpus: <message>` on stderr when <dir> is not a directory, holds
+no corpus table, or holds a table that does not read back (a record
+lassi.corpus refuses, a file it cannot read, or an unfinished table, whose
+_complete file is missing or malformed or whose count differs). With
+graphics on it prints the banner and nothing more.
+
 Importing this module registers every component, since it imports the runner,
 the scoring package, and the train package.
 """
@@ -95,6 +108,7 @@ from pathlib import Path
 from lassi.core.progress import mute_stderr
 from lassi.core.recipe import RecipeError
 from lassi.core.runner import RunError, RunOptions, run_recipe
+from lassi.corpus import summarize
 from lassi.executors import SandboxUnavailableError
 from lassi.present.banner import print_banner
 from lassi.present.live import LiveTable, ticking
@@ -111,9 +125,9 @@ from lassi.train.run import TrainOptions, run_training
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Return the argument parser: the global --graphics option and the run, score, settings, and train commands."""
+    """Return the argument parser: the --graphics option and the run, score, settings, train, and corpus commands."""
     parser = argparse.ArgumentParser(
-        prog="lassi", description="Run LASSI recipes, score finished runs, and run train recipes."
+        prog="lassi", description="Run LASSI recipes, score finished runs, run train recipes, and read corpus tables."
     )
     parser.add_argument(
         "--graphics", choices=("on", "off"),
@@ -149,6 +163,10 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("recipe", type=Path, help="the train recipe file to run")
     train.add_argument("--runs-root", type=Path, help="the runs root (default: $LASSI_RUNS_ROOT, then the recipe's)")
     train.add_argument("--train-id", help="the train directory's name (default: the UTC start time, YYYYMMDD-HHMMSS)")
+    corpus = commands.add_parser("corpus", help="read the corpus tables lassi.corpus writes")
+    actions = corpus.add_subparsers(dest="corpus_action", required=True, metavar="action")
+    summary = actions.add_parser("summary", help="count the records of the corpus tables under a directory")
+    summary.add_argument("directory", type=Path, help="the directory that holds corpus/, verification/, or pairs/")
     return parser
 
 
@@ -168,6 +186,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _score(args)
     if args.command == "train":
         return _train(args)
+    if args.command == "corpus":
+        return _corpus(args)
     return _run(args, graphics=on)
 
 
@@ -284,6 +304,17 @@ def _train(args: argparse.Namespace) -> int:
     except (RecipeError, RunError) as error:
         print(f"lassi {args.command}: {error}", file=sys.stderr)
         return 2
+    return 0
+
+
+def _corpus(args: argparse.Namespace) -> int:
+    """Run `lassi corpus summary` and return 0, or 2 with `lassi corpus: <message>` on stderr; plain lines only."""
+    try:
+        lines = summarize(args.directory)
+    except (ValueError, OSError) as error:
+        print(f"lassi {args.command}: {' '.join(str(error).split())}", file=sys.stderr)
+        return 2
+    print("\n".join(lines))
     return 0
 
 
