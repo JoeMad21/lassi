@@ -547,6 +547,7 @@ Recommendation: (a): delete the variable, and remove every slot except the curre
 Answer:
 Owner's choice (asked in the working session, 2026-10-05; recorded by the agent): (a): an agent removes the stale alpha01 slots; the owner deletes the TEXT_POLICY_PATTERNS Actions variable and the old run trees.
 Applied in part: 2026-10-05. 20 slots were removed with `rx slot-rm` (every desktop-8r113ei-* and p413-* slot); demo-live, demo-proxy, demo-run, and rngd-serve are kept, since they may back the owner's demo and RNGD serving setups. The owner deleted the variable the same day: `gh variable list -R JoeMad21/lassi` prints no variables, and `gh secret list` still shows the TEXT_POLICY_PATTERNS secret the workflow reads. Only the run trees wait for the owner (under $LASSI_RUNS_ROOT on 2026-10-05: fixture-captures, lassi-p413-eltwise_sfpu.25wa5td2, p020-measure, p411-smoke, p413-mmc-compile._7w0d01s, p49-ttsim-runtime, runs, scores, and ttsim-smoke; rx 20261005-194025-exec-4f38); a later session lists them and closes this item.
+Asked again in the working session, 2026-10-12, by a session that had missed the record above (it offered deleting the variable, which the owner had already done on 2026-10-05): the owner chose (a) again, "(a) Clean up (Recommended)" (recorded by the agent, in the owner's words). Applied 2026-10-12: four more slots removed with `rx slot-rm` (desktop-8r113ei-detached-bf98a813, desktop-8r113ei-detached-e805c6d4, desktop-8r113ei-detached-f03fa62a, and desktop-8r113ei-detached-7f920d71 after P17.11's pulls); desktop-8r113ei-p5-ir, demo-live, demo-proxy, demo-run, and rngd-serve are kept. The run trees still wait for the owner, so the item stays open.
 
 ## OQ-045 The Real-Model Tier A Run On RNGD: Prompts, Metric, Trials, And Results
 State: OPEN
@@ -563,7 +564,7 @@ Applied: 2026-10-06. The set is tt-host-v0 (the drafting session's name; the bib
 Owner's choice (asked in the working session, 2026-10-06; recorded by the agent): not yet, although every RNGD card read 0.00 GiB in `furiosa-smi status` (rx 20261006-142503-exec-a889). The session's estimate in that question, about 3 to 5 hours with both recipes at once, was lower than this item's projection of 7 to 10 hours for the 50 trials in sequence (PHASE-NOTES, All Phases), and was corrected to the owner: running both at once, the 30-trial max_abs run sets the length, about 4 to 6 hours.
 
 ## OQ-046 hipcc --version Without A Target On alpha01: A Possible OQ-002 Event (2026-10-05)
-State: OPEN
+State: CLOSED
 Kind: review
 Blocks: none
 Evidence: rx 20261006-115446-exec-bd6f (read-only: `grep -c rocm_agent_enumerator` on the hipcc binary, `ls` of target.lst beside it, and a listing and readability test of /sys/class/kfd/kfd/topology/nodes); docs/BIBLE.md (Host Facts, ROCm; Toolchain Pins, the HIP build); results/p17-frameworks/hip.json (steps[0], argv [hipcc, --version]); tools/server/gate.py (verb_exec, wrap); upstream source, read and not run: ROCm/llvm-project tag therock-7.12 (commit c849bc16b0e4, the commit alpha01's clang names) amd/hipcc/src/hipBin_amd.h:475, :568-581, :779-792, :914-916, and ROCm/rocm-systems tag therock-7.12 projects/rocminfo/rocm_agent_enumerator:121-138, :140-155, :184-189, :207-211, :281-290
@@ -571,6 +572,8 @@ Question: OQ-002 and OQ-043 entry 15 allow AMD software work that opens no GPU d
 Options: (a) Record it and go on: from P17.6 on every hipcc command LASSI runs names its target, and the remote test checks the version check and a build. (b) As (a), and the gate also refuses command text that runs hipcc without `--offload-arch=`, so no rx exec repeats it; a gate configuration change the owner makes. (c) As (a), and ask the host's administrator whether a device query from joseph_ufl was logged on 2026-10-05.
 Recommendation: (a). Neither run opened a GPU device node: the host run most likely read only the KFD topology in sysfs, and the sandboxed run most likely read PCI device data through lspci. The cause is fixed in code and checked by a remote test; hiding /proc/bus/pci from compiles is a PHASE-NOTES candidate (P17 section). Choose (c) to have the host's administrator check for a logged device query.
 Answer:
+Owner's choice (asked in the working session, 2026-10-12; recorded by the agent, in the owner's words): "(a) Record and go on (Recommended)".
+Closed 2026-10-12: recorded here. The cause is fixed in code since task P17.6: every hipcc command LASSI runs names its target (toolchains/hipcc.pin FLAGS and the version check with --offload-arch=gfx942), and its remote test (tests/toolchains/test_hipcc_remote.py) checks the version check and a build: 6 passed in results/p17-hipcc-fixtures (rx 20261006-121638-desktop-8r113ei-detached-f03fa62a-961a, clean tree).
 
 ## OQ-047 Approval To Run P17.11's Gate Part (a) Batch On alpha01 (Agent Rule 17)
 State: CLOSED
@@ -585,6 +588,7 @@ Owner's choice (asked in the working session, 2026-10-06; recorded by the agent)
 Pending the owner's yes. P17.11 is OWNER; the prep is committed and nothing has run on alpha01.
 Owner's choice (asked again in the working session, 2026-10-11; recorded by the agent, in the owner's words): "Run with speed check (Recommended)", option (a).
 Closed 2026-10-11: the approval covers the steps named above. Launched from the detached clean worktree at 7f920d7 (p17-portable's tip, the reviewed prep) after `rx doctor` (no running job, scratch free 321.7 GB, no stop): rx job 20261010-235501-p17-gate-a-8980 in slot desktop-8r113ei-detached-7f920d71. Any other server step asks again.
+Approved 2026-10-12 in the working session (recorded by the agent, in the owner's words): the pull of the report and the pull request, "Yes, pull and open the PR (Recommended)"; then two pulls in place of the one first asked, the report and the job record that writes provenance.json, "Yes, both pulls (Recommended)". Done 2026-10-12: the two pulls wrote results/p17-gate-a on branch p17-portable.
 
 ## OQ-048 Tier B Sources For tt-pairs-v0: Pin, Items, Holding, And Kernels That Fail At The Pin
 State: CLOSED
@@ -637,6 +641,7 @@ Answer:
 Owner's choice (asked in the working session, 2026-10-07; recorded by the agent): (a). The reads are ratified, so P5.2's figures that rest on them stand. The owner removes the empty directory, revokes the token on GitHub, and resets the copy's remote URL; no agent runs that write, which would need its own approval.
 Correction (2026-10-10, P5.2's commit audit; recorded by the agent, the Question and Answer above unchanged): rx 20261007-123525-exec-d345 read no main.ll file, since its awk stopped at a missing first operand, so five probes, not six, read past first lines; and the run manifests rx 20261007-123756-exec-b195 read number 251 or 252, not 252 (plans/spikes/p5-v0-corpus.md). No figure the owner ratified rests on d345.
 Pending the owner's actions (revoke the token, reset the remote, remove the directory); the item closes when the owner confirms them.
+Asked again on 2026-10-11 by a session that had missed the record above; the owner answered "Suspend all work for now and ask this question later." and, of the remote URL, "I'll do it myself later. Suspend all work for now." Asked again on 2026-10-12: the owner chose "(a) Ratify; dir removed (Recommended)" again (recorded by the agent, in the owner's words); the label names option (a), under which the owner removes the directory, and no removal is confirmed. Still pending the owner's actions: revoke the token on GitHub, reset the copy's remote URL, and remove the empty directory.
 
 ## OQ-052 The LASSI Demo For 2026-10-08: Scope And Server Access (Agent Rule 17)
 State: CLOSED
