@@ -45,6 +45,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 
 - The owner's editor can overwrite items appended while the file is open in it (OQ-025 was lost once). Re-read plans/OWNER-QUEUE.md just before committing, and prefer asking in the session when the owner is present.
 - An answer given in the session is recorded on its own line, "Owner's choice (asked in the working session, <date>; recorded by the agent)", never in the owner's Answer field. An ambiguous written answer is settled by asking at once in an attended session, never by reading one option into it; an unattended session records the ambiguity as a Response and leaves the item OPEN.
+- Before putting an owner-queue item to the owner, read its whole current text, every Answer and Response line included: an OPEN item can hold earlier answers that leave one point open. On 2026-10-12 a session worked from a summary and put OQ-044, OQ-045, and OQ-051 to the owner as undecided, though each had been answered on 2026-10-05 to 2026-10-07, and had to correct itself twice.
 
 ## Status and planning
 
