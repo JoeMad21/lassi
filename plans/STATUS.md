@@ -25,7 +25,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
 | P16 Adversarial | p16-adversarial | BLOCKED | P4, P8 for training |
-| P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; GPU half has no host: the owner said 2026-10-06 the MI300Xs will not be granted, focus on Tenstorrent and CPU (OQ-040); part (a) opens a PR, then P5 may start (OQ-038) |
+| P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; GPU half has no host (OQ-040), focus on Tenstorrent and CPU; part (a) passed 2026-10-11 (results/p17-gate-a) and its PR is open (OQ-038); stalled with only the GPU tasks BLOCKED |
 
 ## Tasks
 
@@ -108,7 +108,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.9 | DONE | TRL backend: sft, dpo, and grpo on PyTorch | P17.1,P17.8 | trl Trainer: sft, dpo, grpo on the CPU with full and lora weights; Trainer.check; TrainView; checkpoint records; trl, peft, accelerate pinned in the three extras; also touches lassi/core/interfaces.py, lassi/bench/registry.py, lassi/llm/hf_local.py (check hook, train-only view, one hub_offline); bible rev 262 |
 | P17.10 | DONE | CI on the CPU | P17.4,P17.9 | cpu-tests.yml: cpu extra from the lock, device-neutral P17.2-P17.9 tests incl. slow, remote excluded, ubuntu-latest, no GPU; green at a988ef8: https://github.com/JoeMad21/lassi/actions/runs/37552096412 (2763 passed, 2 skipped) |
 | P17.14 | DONE | Guard not-run reasons and not-checked rates | - | Guards.host_compute_not_checked (not-built, no-program, no-guard, guard-not-checked); guard coverage per run and per target in run.md, metrics.md, metric tables, Parquet guard_coverage; older records load unchanged; also touches runner.py (run.md) and df_v0.py (guard_state by name); bible rev 264 |
-| P17.11 | OWNER | Gate part (a): recipes and the hardware-free evidence | P17.3,P17.4,P17.5,P17.7,P17.9,P17.10,P17.14 | prep committed (recipes, plans/runs/p17-gate-a batch, WSL dry run, tests); the launch waits for the owner's Agent Rule 17 yes (OQ-047; asked 2026-10-06: not yet); nothing has run on alpha01 |
+| P17.11 | DONE | Gate part (a): recipes and the hardware-free evidence | P17.3,P17.4,P17.5,P17.7,P17.9,P17.10,P17.14 | gate part (a) PASS, 12 of 12 (results/p17-gate-a; rx job 20261010-235501-p17-gate-a-8980 from 7f920d7, approved by the owner 2026-10-11, OQ-047); PR P17 Portable Stack, part (a) |
 | P17.12 | BLOCKED | Spike on the first GPU host | P17.5 | no GPU host: the owner will not grant the MI300Xs (OQ-040, 2026-10-06) |
 | P17.13 | BLOCKED | GPU runs: executor, profilers, hf_local, training | P17.4,P17.7,P17.9,P17.12 | no GPU host: the owner will not grant the MI300Xs (OQ-040, 2026-10-06) |
 | P17.G | BLOCKED | Phase gate: part (a) rerun and part (b) on a GPU host | P17.11,P17.13 | no GPU host for part (b) (OQ-040, 2026-10-06); part (a) runs as P17.11 |

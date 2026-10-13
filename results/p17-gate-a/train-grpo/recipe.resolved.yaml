@@ -1,0 +1,22 @@
+# Resolved recipe p17-train-grpo (chain: p17-train-grpo)
+# recipe_hash: b9d982f7eae2266e597f40dc7a504fe4fbee6d29ec7912e16eb1f9b973aed05b is the sha256 of the YAML below these comment lines
+base_model: fixture:tiny-causal-lm
+data:
+  synthetic: grpo-smoke.jsonl
+lora:
+  r: 8
+  targets: all-linear
+method: grpo
+rollout:
+  engine: transformers
+  group_size: 2
+trainer:
+  batch_size: 4
+  device:
+    kind: cpu
+  kind: trl
+  learning_rate: 0.001
+  max_completion_length: 8
+  seed: 7
+  steps: 2
+weights: lora

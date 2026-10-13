@@ -1,0 +1,18 @@
+# Resolved recipe p17-train-dpo (chain: p17-train-dpo)
+# recipe_hash: d21bd120f17cc9a83d2d0289167a79c5f2c5c7eee0508bab92c55062ba29d65f is the sha256 of the YAML below these comment lines
+base_model: fixture:tiny-causal-lm
+data:
+  synthetic: dpo-smoke.jsonl
+lora:
+  r: 8
+  targets: all-linear
+method: dpo
+trainer:
+  batch_size: 2
+  device:
+    kind: cpu
+  kind: trl
+  learning_rate: 0.001
+  seed: 7
+  steps: 2
+weights: lora

@@ -1,0 +1,67 @@
+{
+  "run_id": "p17-gate-a-20261010-235501-p17-gate-a-8980",
+  "status": "complete",
+  "recipe": "p17-cpu-hf",
+  "recipe_path": "tests/fixtures/recipes/p17-cpu-hf.yaml",
+  "recipe_chain": [
+    "base",
+    "rngd-compile",
+    "rngd-cpu",
+    "p17-cpu-hf"
+  ],
+  "recipe_hash": "8fce889957267983bfb58212ede4bdbe82d45809e938a63d7e6116e7d3b0199a",
+  "commit": "7f920d71f7558b3b849dc78f1e90b58eceda0afe",
+  "dirty": false,
+  "host": "alpha01",
+  "platform": "Linux-6.6.29+main+3.0.0r1-amd64-gio-epilmore-dev+-x86_64-with-glibc2.35",
+  "python": "3.10.12",
+  "executor": {
+    "cuda": "none",
+    "omp": "native"
+  },
+  "devices": {
+    "cuda": "none (compile only)",
+    "omp": "host CPU (native): AMD EPYC 9534 64-Core Processor"
+  },
+  "driver": null,
+  "device_records": [
+    {
+      "key": "model.device",
+      "kind": "cpu",
+      "indices": [],
+      "name": "AMD EPYC 9534 64-Core Processor",
+      "count": 256,
+      "memory_bytes": 3245629136896,
+      "driver": null,
+      "runtime": null,
+      "framework": "torch",
+      "framework_version": "2.14.1+cpu"
+    }
+  ],
+  "serving": {
+    "model": "Qwen/Qwen2.5-Coder-0.5B-Instruct",
+    "revision": "ea3f2471cf1b1f0db85067f1ef93848e38e88c25",
+    "max_position_embeddings": 32768,
+    "dtype": "bfloat16",
+    "device": "cpu",
+    "threads": 16,
+    "seed": 0,
+    "stop_token_ids": [
+      151645,
+      151643
+    ],
+    "versions": {
+      "torch": "2.14.1+cpu",
+      "transformers": "5.18.0",
+      "tokenizers": "0.23.2",
+      "huggingface-hub": "1.33.0",
+      "safetensors": "0.8.0"
+    }
+  },
+  "started_utc": "2026-10-11T06:55:56+00:00",
+  "finished_utc": "2026-10-11T07:04:07+00:00",
+  "pins": {
+    "cuda": "12.6.3",
+    "nvhpc": "24.11"
+  }
+}

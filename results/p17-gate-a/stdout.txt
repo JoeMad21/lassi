@@ -1,0 +1,28 @@
+mode: real
+rx id 20261010-235501-p17-gate-a-8980; run /mnt/nvme10/joseph_ufl/lassi-runs/p17-gate-a/20261010-235501-p17-gate-a-8980
+date (UTC): 2026-10-11T06:55:04Z; host alpha01; kernel 6.6.29+main+3.0.0r1-amd64-gio-epilmore-dev+; nproc 16
+load: 4.82 8.74 11.34; commit 7f920d71f7558b3b849dc78f1e90b58eceda0afe; tree clean
+python3: Python 3.10.12; uv: uv 0.12.17 (x86_64-unknown-linux-gnu); strace: strace -- version 5.16
+du before (KiB): scratch root 102752868 (stop line 120586240); HF_HOME 0; uv cache 1231812
+core limit 1 byte; unset: none; HF_HUB_DISABLE_XET=1; OMP_NUM_THREADS=16
+venv /mnt/nvme10/joseph_ufl/lassi-wt/desktop-8r113ei-detached-7f920d71/build/p17-gate-a-venv-20261010-235501-p17-gate-a-8980; HF_HOME /mnt/nvme10/joseph_ufl/hf; TMPDIR /mnt/nvme10/joseph_ufl/tmp; HOME /mnt/nvme10/joseph_ufl
+hf recipe tests/fixtures/recipes/p17-cpu-hf.yaml
+env: 63 packages; venv 1180184 KiB; uv cache 1231812 -> 1231864 KiB; pins match
+fetch-model: fetched; 10 files, 999604233 bytes; the pin matches
+inputs: fetch-bench 0, fetch-upstream 0, extract-assets 0; prompt files 59
+speed: load 6.647 s; dtype bfloat16; torch threads 16
+  decode 256 tokens in 7.668 s; prefill 12291 tokens in 13.751 s
+hf-run: 2 trials: cuda-omp correction-cap (3 attempts), omp-cuda none (1 attempts)
+  checks: all pass
+train-sft: steps 2, train_runtime 0.0548 s; checks pass
+train-dpo: steps 2, train_runtime 0.0773 s; checks pass
+train-grpo: steps 2, train_runtime 0.1278 s; checks pass
+refuse p17-gpu-hf-cuda: rc 2; refused as expected
+refuse p17-gpu-hf-rocm: rc 2; refused as expected
+refuse p17-gpu-exec-cuda: rc 2; refused as expected
+refuse p17-gpu-exec-rocm: rc 2; refused as expected
+du: hf_home_kib 976248 (before 0); venv_kib 1180184; scratch_root_kib 103772604 (before 102752868)
+du-new: HF_HOME changed under ['hub']; new scratch entries: .cache/lassi-p17-torchinductor, hf
+close: slot tree clean after the batch (0 paths); report 152 KiB
+verdict: PASS (12 of 12 checks pass)
+ascii: 29 report files; rewritten to ASCII escapes: none

@@ -1,0 +1,2 @@
+{"loss": 5.573842525482178, "grad_norm": 2.1678357124328613, "learning_rate": 0.001, "entropy": 5.54982852935791, "num_tokens": 74.0, "mean_token_accuracy": 0.0, "epoch": 0.5, "step": 1}
+{"loss": 5.525205135345459, "grad_norm": 2.1381030082702637, "learning_rate": 0.0005, "entropy": 5.5498199462890625, "num_tokens": 148.0, "mean_token_accuracy": 0.0, "epoch": 1.0, "step": 2}

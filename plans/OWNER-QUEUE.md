@@ -572,7 +572,7 @@ Recommendation: (a). Neither run opened a GPU device node: the host run most lik
 Answer:
 
 ## OQ-047 Approval To Run P17.11's Gate Part (a) Batch On alpha01 (Agent Rule 17)
-State: OPEN
+State: CLOSED
 Kind: access
 Blocks: P17.11 (the launch, its evidence commit, and the pull request "P17 Portable Stack, part (a)")
 Evidence: AGENTS.md hard rule 17 and the bible's Decision Log of 2026-10-06; plans/runs/p17-gate-a/run.sh (header: steps, limits, the stop procedure); tests/fixtures/recipes/p17-*.yaml; plans/p17-portable.md, P17.11
@@ -582,3 +582,6 @@ Recommendation: (a), for the early warning on run time.
 Answer:
 Owner's choice (asked in the working session, 2026-10-06; recorded by the agent): (c), not yet.
 Pending the owner's yes. P17.11 is OWNER; the prep is committed and nothing has run on alpha01.
+Owner's choice (asked again in the working session, 2026-10-11; recorded by the agent, in the owner's words): "Run with speed check (Recommended)", option (a).
+Closed 2026-10-11: the approval covers the steps named above. Launched from the detached clean worktree at 7f920d7 (p17-portable's tip, the reviewed prep) after `rx doctor` (no running job, scratch free 321.7 GB, no stop): rx job 20261010-235501-p17-gate-a-8980 in slot desktop-8r113ei-detached-7f920d71. Any other server step asks again.
+Approved 2026-10-12 in the working session (recorded by the agent, in the owner's words): the pull of the report and the pull request, "Yes, pull and open the PR (Recommended)"; then two pulls in place of the one first asked, the report and the job record that writes provenance.json, "Yes, both pulls (Recommended)". Done 2026-10-12: the two pulls wrote results/p17-gate-a on branch p17-portable.

@@ -1,0 +1,62 @@
+{
+  "train_id": "p17-gate-a-sft-20261010-235501-p17-gate-a-8980",
+  "status": "complete",
+  "recipe": "p17-train-sft",
+  "recipe_path": "tests/fixtures/recipes/p17-train-sft.yaml",
+  "recipe_chain": [
+    "p17-train-sft"
+  ],
+  "recipe_hash": "8c93eb3a8db217aa170b3613217564d952546b26d5a82746cc77e6f6bc928bdf",
+  "commit": "7f920d71f7558b3b849dc78f1e90b58eceda0afe",
+  "dirty": false,
+  "host": "alpha01",
+  "platform": "Linux-6.6.29+main+3.0.0r1-amd64-gio-epilmore-dev+-x86_64-with-glibc2.35",
+  "python": "3.10.12",
+  "trainer": "trl",
+  "device_records": [
+    {
+      "key": "trainer.device",
+      "kind": "cpu",
+      "indices": [],
+      "name": "AMD EPYC 9534 64-Core Processor",
+      "count": 256,
+      "memory_bytes": 3245629136896,
+      "driver": null,
+      "runtime": null,
+      "framework": "torch",
+      "framework_version": "2.14.1+cpu"
+    }
+  ],
+  "driver": null,
+  "framework_pins": {
+    "build": {
+      "name": "torch",
+      "version": "2.14.1+cpu",
+      "cuda": null,
+      "hip": null
+    },
+    "packages": {
+      "torch": "2.14.1+cpu",
+      "transformers": "5.18.0",
+      "trl": "1.14.1",
+      "peft": "0.21.2",
+      "accelerate": "1.15.0",
+      "datasets": "5.1.0",
+      "tokenizers": "0.23.2",
+      "huggingface-hub": "1.33.0",
+      "safetensors": "0.8.0"
+    }
+  },
+  "data": {
+    "source": "synthetic",
+    "name": "sft-smoke.jsonl",
+    "record_count": 4,
+    "split_hash": "a82e1fd57f48cbcdd65dd4b33968d051d713c31aef0f75cbc26996f45dde2233"
+  },
+  "started_utc": "2026-10-11T07:04:10+00:00",
+  "finished_utc": "2026-10-11T07:04:17+00:00",
+  "steps": 2,
+  "checkpoints": [
+    "checkpoint-2"
+  ]
+}

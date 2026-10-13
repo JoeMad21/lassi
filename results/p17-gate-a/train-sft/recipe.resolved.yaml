@@ -1,0 +1,15 @@
+# Resolved recipe p17-train-sft (chain: p17-train-sft)
+# recipe_hash: 8c93eb3a8db217aa170b3613217564d952546b26d5a82746cc77e6f6bc928bdf is the sha256 of the YAML below these comment lines
+base_model: fixture:tiny-causal-lm
+data:
+  synthetic: sft-smoke.jsonl
+method: sft
+trainer:
+  batch_size: 2
+  device:
+    kind: cpu
+  kind: trl
+  learning_rate: 0.001
+  seed: 7
+  steps: 2
+weights: full
