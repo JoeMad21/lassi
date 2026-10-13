@@ -118,7 +118,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P5.2 | DONE | Spike: the v0 corpus pipeline on alpha01 (question 8) | - | spike closed after its commit audit (text fixes: probe d345 read no file, axhelm-cuda's 6 files, 251 or 252 run manifests); bible synced to master revision 269 |
 | P5.3 | DONE | Spike: Tier B sources at the joint pin | - | Tier B spike: 7 of 7 codec host programs build at the pin, run clean on ttsim as chip-0 copies, 11 of 11 reference checks pass (rx 20261010-184351-p53-tier-b-e64d); OQ-048 Response filed |
 | P5.11 | DONE | lassi/corpus: the v0 migration and corpus records | P5.2 | lassi/corpus (records, gate status, provenance chain, Parquet tables with an exclusive claim and _complete, dedup, registry input) and lassi/ir/form.py (the Agent Rule 11 refusal); lassi corpus summary; master rev 272 |
-| P5.4 | ACTIVE | Install tt-mlir and its LLVM at the joint pin | P5.1 | pin, install script, requirements, and tests committed; the install job (rx job p5-tt-mlir) waits for the owner's approval (Agent Rule 17) |
+| P5.4 | OWNER | Install tt-mlir and its LLVM at the joint pin | P5.1 | pin, script, and tests committed (d0c7533); the install waits for the owner's approval (OQ-054; 2026-10-12: not yet) |
 | P5.5 | READY | Install Polygeist (cgeist) | P5.1,P5.4 | OQ-049 answered 2026-10-11: cap 150G, stop line 145G; after P5.4's jobs; each build job waits for the owner's approval (Agent Rule 17) |
 | P5.6 | READY | IR levels: parse, verify, normalize | P5.4,P5.5,P5.11 |  |
 | P5.7 | READY | C and C++ frontend (cgeist) and the CPU target | P5.5,P5.6 |  |
