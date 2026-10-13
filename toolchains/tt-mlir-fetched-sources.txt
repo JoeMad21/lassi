@@ -1,0 +1,13 @@
+# The sources the configures of the pinned tt-mlir install fetched (task P5.4; bible Toolchain Pins): a line for line
+# copy of the install's lassi-fetched-sources.txt, which toolchains/tt-mlir.sh (record_fetched_sources) writes after
+# tt-mlir's configure. It lists FetchContent's and ExternalProject's source directories in the three build trees
+# (flatbuffers, LLVM, tt-mlir) and those tt-mlir's ExternalProject places in its own source tree (third_party/).
+# Each line is <path in the install> git <commit> changed=<tracked files that differ from the commit>, or <path in the
+# install> files-sha256 <sha256 of the unpacked files>, the two forms of toolchains/tt-metal-cpm-sources.txt; the one
+# line none means the configures fetched nothing, which plans/spikes/p5-mlir-pins.md (Results 2) expects with
+# tt-mlir's runtime and OpModel off.
+# PLACEHOLDER until the first install records the list. That install compares nothing; until its list is copied
+# here and committed, every later run of the script refuses the install (check_fetched_sources), and so do the
+# remote tests (tests/toolchains/test_tt_mlir_remote.py). A change here is a pin change, recorded in the bible's
+# Decision Log.
+PLACEHOLDER

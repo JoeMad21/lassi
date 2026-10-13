@@ -1,0 +1,111 @@
+# tt-mlir pin (task P5.4; bible Toolchain Pins, joint pin and MLIR stacks; plans/spikes/p5-mlir-pins.md, Results 2,
+# 4, and 5). Shell-sourced by toolchains/tt-mlir.sh, which builds in place at $LASSI_TOOLCHAINS/$PREFIX_NAME:
+# flatbuffers into TOOLCHAIN_DIR, the venv, LLVM with tt-mlir's patch, and tt-mlir's TARGETS against LLVM's build
+# tree, with no LLVM install (the space plan of OQ-049). The tree is an install once it holds lassi-install.txt.
+# The script never runs tt-mlir's env/CMakeLists.txt, which would make a Python 3.12 venv with torch and run
+# tt-metal's debugger installer (spike, Results 2), or env/activate, whose variables it sets itself. Values read
+# from upstream with `gh api` on 2026-10-12; file:line citations are at COMMIT unless they name another commit.
+NAME=tt-mlir
+# The joint pin's release, tag 0.9.0.dev20260221, whose commit is COMMIT. PREFIX_NAME is <NAME>@<VERSION>
+# (lassi/toolchains/pins.py); the script checks COMMIT.
+VERSION=0.9.0.dev20260221
+PREFIX_NAME=tt-mlir@0.9.0.dev20260221
+COMMIT=5f396fd6ef85780bf1b6b85bef9c7d2f84a85f3c
+URL=https://github.com/tenstorrent/tt-mlir.git
+# cmake/modules/TTMLIRVersion.cmake lists the local tags matching v[0-9]*.[0-9]* (:10-15), fetches every tag from an
+# "upstream" remote when there is none (:17-40), and describes the newest (:44-49), which :60 needs. tt-mlir's only
+# such tag is v0.0, a lightweight tag on VERSION_TAG_COMMIT, 2995 commits before COMMIT (the matching-refs and
+# compare APIs). The script fetches COMMIT with its history and this tag alone, so the configure fetches no tags.
+VERSION_TAG=v0.0
+VERSION_TAG_COMMIT=a637748e5521f78546027114fabf2023be63901a
+# LLVM and flatbuffers at the commits env/CMakeLists.txt pins (:4-5) from the repositories it names (:41, :72). The
+# script fetches each by commit at depth 1 (upstream clones them whole; the files are the same).
+LLVM_COMMIT=4efe170d858eb54432f520abb4e7f0086236748b
+LLVM_URL=https://github.com/llvm/llvm-project.git
+FLATBUFFERS_COMMIT=fb9afbafc7dfe226b9db54d4923bfb8839635274
+FLATBUFFERS_URL=https://github.com/google/flatbuffers.git
+# The patch env/CMakeLists.txt:55 applies to LLVM, read from the tt-mlir tree and checked before it is applied: its
+# git blob (the contents API) and the sha256 of its 1089 bytes. Upstream commits it in the LLVM tree; the script
+# leaves it uncommitted, so the tree's HEAD stays LLVM_COMMIT and its changes are exactly the patch's.
+LLVM_PATCH=env/patches/affine-allow-symbol-vars.patch
+LLVM_PATCH_BLOB=2ffdae14d2bcb8244189d8eb044dd093642fa436
+LLVM_PATCH_SHA256=61e8ae545e956551b87dc7fb63067d570035becbcf0636ce81ca0971e30f3aac
+# The venv's packages, each pinned by version and sha256; the file's header says why each is there.
+PYTHON_REQUIREMENTS=tt-mlir-requirements.txt
+# flatbuffers as env/CMakeLists.txt:33-40 configures it. The script installs it into TOOLCHAIN_DIR, as :38 does,
+# where cmake/modules/BuildFlatbuffers.cmake:1 finds flatc and CMakeLists.txt:165 the headers.
+FLATBUFFERS_CMAKE_FLAGS="-G Ninja -DCMAKE_BUILD_TYPE=Release -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON"
+# LLVM as env/CMakeLists.txt:56-71 configures it, with four changes. CMAKE_BUILD_TYPE is Release, the P5 plan's
+# planning decision (plans/p5-ir.md, "One LLVM or two": the tools P5 calls, Release, the host target only, no tests
+# or bindings); upstream's default is MinSizeRel (:8), and the spike's space projection allows for Release (Results
+# 5). The MLIR Python bindings are off (:68 has them on): tt-mlir's are off too, and upstream installs their Python
+# requirements before LLVM's configure (:55), which the script does not. LLVM_TARGETS_TO_BUILD is host, as tt-mlir
+# main builds it since its pull request 7130 (tt-mlir links the host's X86 libraries alone,
+# lib/Target/LLVM/CMakeLists.txt:11-16, :37); LLVM keeps "host" in its cache and turns it into X86 in a variable
+# (llvm/cmake/config-ix.cmake:588-596 at LLVM_COMMIT). LLVM_INCLUDE_TESTS is off, by the same planning decision and
+# as the spike's configuration A has it (Results 5). Upstream sets nothing, so LLVM's default, on, holds, and MLIR's
+# and LLD's tests follow it; off, no test, unittest, or gtest target of LLVM, MLIR, or LLD is configured, and MLIR's
+# list of translation libraries no longer names its two test translations (at LLVM_COMMIT: llvm/CMakeLists.txt:864,
+# :1342-1346, :1390-1416; mlir/CMakeLists.txt:160-162, :247-257; lld/CMakeLists.txt:193-200;
+# mlir/test/lib/Dialect/Test/CMakeLists.txt:99, :116). tt-mlir needs none of them. Outside its test directories and
+# python/ (the bindings, off; CMakeLists.txt:200-204), no source or CMake file names an MLIR test library, dialect,
+# or registration, or gtest. TTMLIRCompilerStatic links MLIR's list of translation libraries (lib/CMakeLists.txt:21-27,
+# :70-81), and the two tools link it and them as static archives, which give a link only what it references; the
+# whole-archive link is the shared TTMLIRCompiler's (lib/CMakeLists.txt:93-112), never built here.
+# LLVM_LIT_TOOLS_DIR (CMakeLists.txt:159) is read by test/lit.site.cfg.py.in:4 alone, and the runtime tests, off
+# (CMakeLists.txt:59; runtime/CMakeLists.txt:37-41), fetch their own googletest (runtime/test/CMakeLists.txt:6-12).
+# FileCheck, count, not, and llvm-lit stay, under LLVM_INCLUDE_UTILS, which stays on (llvm/CMakeLists.txt:848,
+# :1332-1336, :1425-1427 at LLVM_COMMIT). Kept as upstream sets them (env/CMakeLists.txt): projects mlir and lld
+# (:64, a CMake list through the separator of :71), assertions on (:67), the C flag (:69), Python3_FIND_VIRTUALENV
+# (:59), and LLVM_INSTALL_UTILS and LLVM_INSTALL_GTEST (:65-66), which shape only an install, never run here (with
+# the tests off, LLVM configures no gtest at all). The script adds the compilers, Ninja, and the venv's Python
+# (upstream's Python3_EXECUTABLE, :60), and builds LLVM's default target in place. It names no linker, as upstream
+# does, so LLVM links with the compiler's default linker.
+LLVM_CMAKE_FLAGS="-G Ninja -DCMAKE_BUILD_TYPE=Release -DPython3_FIND_VIRTUALENV=ONLY -DLLVM_ENABLE_PROJECTS=mlir;lld -DLLVM_INSTALL_UTILS=ON -DLLVM_INSTALL_GTEST=ON -DLLVM_ENABLE_ASSERTIONS=ON -DMLIR_ENABLE_BINDINGS_PYTHON=OFF -DCMAKE_C_FLAGS=-D_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION -DLLVM_TARGETS_TO_BUILD=host -DLLVM_INCLUDE_TESTS=OFF"
+# tt-mlir with only its tools: the runtime (CMakeLists.txt:33) and OpModel (:39) off, so no tt-metal is fetched or
+# built (third_party/CMakeLists.txt:87, :323-334); the Python bindings off (:84), which skips python/ (:200-204) and
+# the builder, explorer, and ttrt tools (tools/CMakeLists.txt:6-27); the tests (:43; test/ at :205-207), the explorer
+# (:42), ttrt (:36), and alchemist (:45; tools/CMakeLists.txt:35-37) off. TTMLIR_ENABLE_TOOLS (:44) stays on.
+# Release, as the P5 plan decides (upstream's docs give no build type, docs/src/getting-started.md:105). The script
+# adds the compilers, Ninja, LLVM's build tree (LLVM_DIR, MLIR_DIR, LLD_DIR, for cmake/modules/FindMLIR.cmake:2-3),
+# LLD's header directory (see toolchains/tt-mlir.sh, ttmlir_settings), and flatc by path.
+CMAKE_FLAGS="-G Ninja -DCMAKE_BUILD_TYPE=Release -DTTMLIR_ENABLE_RUNTIME=OFF -DTTMLIR_ENABLE_OPMODEL=OFF -DTTMLIR_ENABLE_BINDINGS_PYTHON=OFF -DTTMLIR_ENABLE_TESTS=OFF -DTTMLIR_ENABLE_EXPLORER=OFF -DTTMLIR_ENABLE_TTRT=OFF -DTTMLIR_ENABLE_ALCHEMIST=OFF"
+# Built instead of all or install: the two tools P5 calls (tools/CMakeLists.txt:1-4, :29-32; each tool's
+# CMakeLists.txt:1), not the shared TTMLIRCompiler, ttmlir-lsp-server, or ttnn-standalone.
+TARGETS="ttmlir-opt ttmlir-translate"
+# Host tools on the build host (plans/spikes/p5-mlir-pins.md, Results 4; rx 20261006-214920-exec-4a93); the script
+# refuses others. CMake by path, the one toolchains/tt-metal.pin also names (/usr/local/bin/cmake, first on PATH);
+# Ninja; clang-17, tt-mlir's CI compiler (.github/Dockerfile.base:54-59), named since tt-mlir defaults to an
+# unversioned clang (CMakeLists.txt:3-8); ld.lld-17, which tt-mlir links with when its major matches the compiler's
+# (CMakeLists.txt:110-125); and Python 3.10, which has distutils (cmake/modules/TTMLIRPythonSitePackages.cmake:1-5)
+# and serves with the bindings off (spike, Results 2).
+CMAKE=/usr/local/bin/cmake
+CMAKE_EXPECT="cmake version 3.31.6"
+NINJA=/usr/bin/ninja
+NINJA_EXPECT=1.10.1
+CLANG_C=clang-17
+CLANG_CXX=clang++-17
+CLANG_EXPECT="clang version 17.0.6"
+LINKER=ld.lld-17
+LINKER_EXPECT="LLD 17.0.6"
+PYTHON=/usr/bin/python3.10
+PYTHON_EXPECT="Python 3.10.12"
+# The layout, relative to the prefix. TOOLCHAIN_DIR is env/activate's TTMLIR_TOOLCHAIN_DIR, whose default,
+# /opt/ttmlir-toolchain (:1-4), lies outside the scratch root; VENV_DIR its TTMLIR_VENV_DIR, at its default place
+# inside the toolchain directory (:11-14). The tools are built in tt-mlir's build tree's bin directory
+# (cmake/modules/FindMLIR.cmake:7), where lassi.toolchains will run them (task P5.6, the MLIR tool wrappers).
+TOOLCHAIN_DIR=toolchain
+VENV_DIR=toolchain/venv
+TTMLIR_OPT=build/tt-mlir/bin/ttmlir-opt
+TTMLIR_TRANSLATE=build/tt-mlir/bin/ttmlir-translate
+# Text the tools' --version output holds. tools/ttmlir-opt/ttmlir-opt.cpp:21-22 adds no version printer, so LLVM's
+# prints "<PACKAGE_NAME> version <PACKAGE_VERSION>" on its second line (llvm/lib/Support/CommandLine.cpp:2565-2570 at
+# LLVM_COMMIT), PACKAGE_NAME LLVM (llvm/CMakeLists.txt:423) and PACKAGE_VERSION 22.0.0git (llvm/CMakeLists.txt:23-26;
+# cmake/Modules/LLVMVersion.cmake:3-14). It names LLVM, not tt-mlir; COMMIT and lassi-install.txt name tt-mlir.
+EXPECT_VERSION="LLVM version 22.0.0git"
+# Space, PROJECTED, not measured (plans/spikes/p5-mlir-pins.md, Results 5, configuration A, upper ends, rounded up to
+# whole KiB): INSTALL_KIB is the tt-mlir stack, 23.30 GiB, and RESERVE_KIB the Polygeist stack, 19.15 GiB, held for
+# task P5.5, so the space check plans for both stacks together, 42.45 GiB, under the 145 GiB stop line (bible,
+# Toolchain Pins, MLIR stacks; OQ-049). The install's du before and after measures this stack.
+INSTALL_KIB=24431821
+RESERVE_KIB=20080231
