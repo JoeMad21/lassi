@@ -1,10 +1,13 @@
-"""Tests for the lassi package skeleton and the twelve component interfaces (P0.1).
+"""Tests for the lassi package skeleton and the thirteen component interfaces (P0.1; P17.8).
 
 The expected interface names come from the Component Interfaces table in
 docs/BIBLE.md. The tests check that lassi/core/interfaces.py defines exactly
 those Protocols, each documented and type hinted, that every interface can
 declare capabilities through lassi/core/capabilities.py, and that no module
 under lassi/ imports the projects package (Agent Rule 3, Design Principle 9).
+Task P17.8 adds the thirteenth, Trainer (the P17 plan's planning decision
+"Trainer (P17.8)", confirmed by the owner, OQ-043, entry 14); its own tests
+are in tests/core/test_trainer_interface.py.
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ REPO = Path(__file__).resolve().parents[2]
 BIBLE = REPO / "docs" / "BIBLE.md"
 PACKAGE_DIR = REPO / "lassi"
 INTERFACES_MODULE = "lassi.core.interfaces"
-EXPECTED_COUNT = 12
+EXPECTED_COUNT = 13
 
 
 def bible_interface_names() -> list[str]:
@@ -86,7 +89,7 @@ def protocols(interfaces: ModuleType) -> dict[str, type]:
     return {name: getattr(interfaces, name) for name in bible_interface_names()}
 
 
-def test_bible_table_names_twelve_interfaces() -> None:
+def test_bible_table_names_thirteen_interfaces() -> None:
     names = bible_interface_names()
     assert len(names) == EXPECTED_COUNT, names
     assert len(set(names)) == EXPECTED_COUNT, names

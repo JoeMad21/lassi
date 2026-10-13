@@ -39,6 +39,11 @@ The contract these tests fix, from the P2.10 acceptance criteria
   (OQ-018).
 - Importing lassi.core.runner registers both ScoreProfiles, so `lassi run`
   binds them from the command line.
+- Task P17.14 puts run.md's Guard coverage section (every run, metrics
+  or not) after the Trials section and before the Metrics section, and each
+  metric table shown there ends with its own guard coverage block
+  (table_markdown). The fake toolchains here declare no host_compute_guard,
+  so every attempt counts under no-guard.
 
 Oracle style: the expected scores and tables are what the registered
 profiles and lassi.analysis give for the trials read back from the run
@@ -796,3 +801,31 @@ def test_no_source_or_reply_text_reaches_the_metrics_section_or_metric_values(tm
         assert any(sentinel in text for text in stored), f"precondition: the text store holds {sentinel}"
         assert sentinel not in section, f"run.md's Metrics section holds {sentinel}"
         assert not any(sentinel in cell for cell in cells), f"{METRIC_VALUES} holds {sentinel}"
+
+
+# ---------------------------------------------------------------------------
+# Task P17.14: the Guard coverage section sits between the Trials and the Metrics sections
+
+
+def test_run_md_puts_guard_coverage_between_the_trials_and_the_metrics(tmp_path: Path) -> None:
+    data, log = compile_only(metrics=REPRO_METRICS)
+    outcome = run_scenario(tmp_path, "guard-coverage", data, log)
+    text = outcome.run_md()
+    lines = text.split("\n")
+    assert lines.count("## Guard coverage") == 1
+    assert lines.index("## Trials") < lines.index("## Guard coverage") < lines.index(METRICS_HEADING)
+    tables = expected_tables(outcome)
+    assert all(table.guard is not None for table in tables), "each table carries its guard coverage"
+    section = metrics_section(text)
+    assert section is not None and "## Guard coverage" not in section.split("\n"), "the run section stays out"
+    assert_tables_shown(section, tables)
+    start = lines.index("## Guard coverage")
+    table = [line for line in lines[start : lines.index(METRICS_HEADING)] if line.startswith("|")]
+    rows = {cells[0]: cells[1:] for cells in ([cell.strip() for cell in line[1:-1].split("|")] for line in table[2:])}
+    # Two attempts, one per direction, each built (S4) by a toolchain that declares no guard: both no-guard.
+    # Columns: attempts, checked, not checked, rate, not-built, no-program, no-guard, guard-not-checked, not recorded.
+    assert rows == {
+        "run": ["2", "0", "2", "1.000", "0", "0", "2", "0", "0"],
+        "target cuda": ["1", "0", "1", "1.000", "0", "0", "1", "0", "0"],
+        "target omp": ["1", "0", "1", "1.000", "0", "0", "1", "0", "0"],
+    }

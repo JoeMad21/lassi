@@ -1,0 +1,10 @@
+venv_kib 1174712
+venv_apparent_kib 1117109
+uv_cache_before_kib 201824
+uv_cache_after_kib 1231436
+uv_cache_growth_kib 1029612
+cache_and_venv_kib 1244224
+disk_added_kib 1042400
+venv_files 24734
+venv_files_hard_linked 24503
+install_s 6

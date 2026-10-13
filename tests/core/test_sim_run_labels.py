@@ -19,7 +19,10 @@ The contract these tests fix:
   `| wall_s | <value> |` and run.md's trials table keeps its header row,
   with no simulator label on either page.
 - A simulator run fills no performance field: Attempt.profile.runtime_s
-  stays null (no profiler exists, and a simulator wall time is never one).
+  stays null (these recipes bind no profiler, the runner refuses a profiler
+  whose profiled executor declares `simulator` (task P17.7;
+  tests/core/test_runner_profiler.py), and a simulator wall time is never a
+  runtime).
 
 The fake executors run nothing and return SYNTHETIC RunResults built without
 any field this task adds, so these tests read the capability alone. The

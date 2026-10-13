@@ -63,19 +63,21 @@ The runner checks either kind before any model is asked.
   request followed by the source. The reply fills
   Trial.context.source_description.
 - generate appends attempt 0. With a template set it sends generate.txt,
-  filled with the source files in FILE blocks, as the only message; with a
-  fragment set it sends the direction's system prompt and the generation
-  prompt (lassi.core.fragments.generation_prompt), the source read as text
-  mode reads it.
+  filled with the source files and the item's kernels (kernel_files) in
+  FILE blocks, as the only message; with a fragment set it sends the
+  direction's system prompt and the generation prompt
+  (lassi.core.fragments.generation_prompt), the source read as text mode
+  reads it.
 - compile_loop builds the last attempt and, while an error remains, asks
   for a correction and builds that, up to loop.max_corrections (none when
   uncapped). A cap hit with an error remaining ends the trial with
   final.end_reason `correction-cap`. With a template set the correction
-  prompt is correct.txt, sent as the only message; with a fragment set it
-  is upstream's (lassi.core.fragments.correction_prompt), sent after the
-  direction's system prompt. Its error text is the parsed diagnostics,
-  capped at DIAGNOSTIC_COUNT_CAP diagnostics and DIAGNOSTIC_BYTES_CAP bytes
-  of whole lines, with a line saying how many were left out when any were
+  prompt is correct.txt, with the item's kernels (kernel_files), sent as
+  the only message; with a fragment set it is upstream's
+  (lassi.core.fragments.correction_prompt), sent after the direction's
+  system prompt. Its error text is the parsed diagnostics, capped at
+  DIAGNOSTIC_COUNT_CAP diagnostics and DIAGNOSTIC_BYTES_CAP bytes of whole
+  lines, with a line saying how many were left out when any were
   (diagnostics_text). After every build that gave a program, the target
   language's toolchain, when it declares host_compute_guard
   (lassi.core.capabilities, task P4.12; found by capability, never by
@@ -84,7 +86,13 @@ The runner checks either kind before any model is asked.
   warnings or notes after the build's diagnostics. It never changes a
   stage or asks for a correction, and every later copy of the attempt
   keeps it. A guard's diagnostics (codes starting with "guard-") never
-  enter a correction prompt (prompt_diagnostics).
+  enter a correction prompt (prompt_diagnostics). Attempt.guards.host_compute_not_checked
+  (task P17.14) says why host_compute is null: generate and each
+  correction set `not-built` when they append an attempt, or `no-guard`
+  when the target toolchain declares no guard (it wins over the rest);
+  a build with no program sets `no-program` (or keeps no-guard); and a
+  build with one takes the reading's: `guard-not-checked` for a null
+  reading, None for a true or false one. No prompt reads it.
 - run_loop continues compile_loop's loop (it runs compile_loop first, which
   changes nothing when compile_loop already ran) and, when the executor runs
   programs (capability `runs_code`), runs each compiling attempt from its
@@ -113,6 +121,15 @@ The runner checks either kind before any model is asked.
   start. compile_loop hands each built program to run_loop through the
   trial's RunContext (RunContext.artifacts), in memory and not in the
   record, so an attempt cannot be run again from the record alone.
+
+  Profiles (task P17.7). When the recipe binds a profiler
+  (RunContext.profiler), every attempt run is profiled, whatever its
+  outcome (profiled_run): start() right after the backend's unload, then
+  the run, then stop() in a finally block, so stop() runs when the
+  executor raises too. Attempt.profile is stop()'s Profile, which
+  checked_profile holds to the contract; an attempt that never ran keeps
+  Profile() (all null), and the baseline's reference runs are not
+  profiled.
 
   Simulator readings (task P4.6; RunResult's findings, never the
   executor's name). The attempt also gains the executor's diagnostics of
@@ -158,6 +175,15 @@ run_loop for a failed run. An
 attempt's own `invalid-text` warning stays on the attempt; Trial.context
 carries no diagnostics, so a context reply that held a lone surrogate gives
 its request one parse-stage `invalid-text` warning.
+
+A request the backend refuses as past the model's context
+(lassi.core.interfaces ContextExceeded, task P17.4) ends the trial with
+`context-exceeded` (_context_end), the message naming the stage: generate,
+summarize_context, describe_source, and the correction of compile_loop and
+run_loop each catch it around their one model call. Every earlier attempt
+and request stays, no attempt or request is added for the refused call, and
+nothing is built or run again; the runner then runs no later stage and goes
+on to the next trial.
 
 Progress events (lassi.core.progress, task P4.8) go to RunContext.observer
 when there is one, and nothing a stage does depends on them: before each
@@ -242,7 +268,7 @@ import errno
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import cast
 
 from lassi.bench import Direction, Suite, stage_inputs
@@ -252,6 +278,7 @@ from lassi.core.capabilities import (
     GUARD_CODE_PREFIX,
     HOST_COMPUTE_GUARD,
     SIMULATOR,
+    SUPPORTS_POWER,
     WATCHER_CODE,
     OutputFileOracle,
     declares,
@@ -259,13 +286,30 @@ from lassi.core.capabilities import (
     unload_before_run,
 )
 from lassi.core.files import parse_file_blocks, render_file_blocks
-from lassi.core.interfaces import BuildResult, Executor, Limits, LLMBackend, Message, RunResult, Sampling, Toolchain
+from lassi.core.interfaces import (
+    BuildResult,
+    ContextExceeded,
+    Executor,
+    Limits,
+    LLMBackend,
+    Message,
+    Profiler,
+    RunResult,
+    Sampling,
+    Toolchain,
+)
 from lassi.core.progress import ATTEMPT, REQUEST_SENT, Observer, notify
 from lassi.core.recipe import Recipe
 from lassi.core.record import (
+    GUARD_NOT_CHECKED,
+    NO_GUARD,
+    NO_PROGRAM,
+    NOT_BUILT,
     Attempt,
     Diagnostic,
     EndReason,
+    Guards,
+    Profile,
     Request,
     RequestMessage,
     RunInfo,
@@ -298,6 +342,7 @@ BASELINE_DISAGREE = "baseline-disagree"
 CORRECTION_CAP = "correction-cap"
 UPSTREAM_CRASH = "upstream-crash"
 SIM_GAP = "sim-gap"
+CONTEXT_EXCEEDED = "context-exceeded"
 
 # The Diagnostic stage of kernel JIT messages, which an executor parses from a run (RunResult.diagnostics). A jit-stage
 # error means the program's kernels did not compile, so the attempt reached no more than S1 (see the module docstring).
@@ -403,8 +448,11 @@ RUN_LOOP_KEYS = (
 )
 
 # The fields each prompt template gets; a template may use any of them and no other.
-GENERATE_FIELDS = ("source_language", "target_language", "source_files", "target_files")
-CORRECT_FIELDS = ("target_language", "files", "diagnostics", "target_files")
+GENERATE_FIELDS = ("source_language", "target_language", "source_files", "target_files", "kernel_files")
+CORRECT_FIELDS = ("target_language", "files", "diagnostics", "target_files", "kernel_files")
+# A support file is a kernel when its build path has a directory of this name, where the kernel JIT finds it.
+# The TT host toolchain's is_kernel_source applies the same rule to place a kernel; change the two together.
+KERNEL_DIR = "kernels"
 
 # A lone surrogate code point: JSON can decode one from a reply ("\ud83d"), but it is not Unicode text.
 _SURROGATE = re.compile("[\ud800-\udfff]")
@@ -435,7 +483,9 @@ class RunContext:
     never carries an artifact from one trial to the next. `observer` gets the
     stages' progress events (lassi.core.progress: request-sent and attempt);
     the runner passes its GuardedObserver, or None when the run has no
-    observer, and no stage reads anything back from it.
+    observer, and no stage reads anything back from it. `profiler` is the
+    run's Profiler (task P17.7), built once per run, or None when the recipe
+    binds none; run_loop brackets each attempt run with it (profiled_run).
     """
 
     recipe: Recipe
@@ -456,6 +506,7 @@ class RunContext:
     artifacts: dict[int, Path] = field(default_factory=dict)
     executors: Mapping[str, Executor] = field(default_factory=dict)
     observer: Observer | None = None
+    profiler: Profiler | None = None
 
 
 def executor_for(context: RunContext, language: str) -> Executor:
@@ -606,6 +657,15 @@ def _ended(trial: Trial, code: str, message: str) -> Trial:
     return dataclasses.replace(trial, final=dataclasses.replace(trial.final, end_reason=reason))
 
 
+def _context_end(trial: Trial, stage: str, error: ContextExceeded) -> Trial:
+    """Return `trial` ended at CONTEXT_EXCEEDED: the backend refused `stage`'s request as past its context.
+
+    Every earlier attempt and request stays; the refused request adds none,
+    since no reply exists (task P17.4).
+    """
+    return _ended(trial, CONTEXT_EXCEEDED, f"{stage}: the request was refused: {error}")
+
+
 def _reference_run_end(run: RunResult, language: str) -> tuple[str, str] | None:
     """Return the end code and message of a reference run that ends the trial at the baseline, or None.
 
@@ -657,6 +717,29 @@ def _support_files(context: RunContext, language: str) -> dict[str, str]:
     P4.13), so a TT build gets its kernels and a C++ build does not.
     """
     return context.suite.support_files(context.item, context.sources_root, purpose=PURPOSE, language=language)
+
+
+def kernel_files(context: RunContext) -> str:
+    """Return the template field kernel_files: the item's kernels as FILE blocks, or "" when it has none.
+
+    A kernel is a support file of the direction's source or target language
+    (_support_files, so item-level ones count) whose build path has a
+    directory named KERNEL_DIR, tracked or upstream alike: the rule the TT
+    host toolchain's is_kernel_source applies to place a kernel for the
+    kernel JIT (Design Principle 8 keeps core from importing it). Each is
+    shown once, in path order (render_file_blocks); a path both languages
+    declare shows the target language's text. A prompt shows a kernel
+    read-only (the owner's decision of 2026-10-06): a model file at its
+    path is refused at any build whose harness files hold it (_unwritable
+    in lassi.toolchains._base), which every TT build does for its own
+    language's kernels and a C++ build only for item-level ones, so the
+    tt-host-v0 prompts ask never to return one.
+    """
+    kernels: dict[str, str] = {}
+    for language in (context.direction.source, context.direction.target):
+        files = _support_files(context, language)
+        kernels.update({path: text for path, text in files.items() if KERNEL_DIR in PurePosixPath(path).parts[:-1]})
+    return render_file_blocks(kernels) if kernels else ""
 
 
 def prompt_diagnostics(diagnostics: Sequence[Diagnostic]) -> list[Diagnostic]:
@@ -781,10 +864,36 @@ def _fenced_attempt(index: int, prompt_ref: TextRef, reply: str, expected: Seque
 def _reply_attempt(
     context: RunContext, index: int, prompt_ref: TextRef, reply: str, expected: Sequence[str]
 ) -> Attempt:
-    """Return the attempt for one reply: FILE blocks with fixes.fence_tag on, the first fenced block with it off."""
+    """Return the attempt for one reply: FILE blocks with fixes.fence_tag on, the first fenced block with it off.
+
+    The attempt is not built yet, so its guards say why host_compute is
+    null (_unbuilt_guards); compile_loop changes that when it builds it.
+    """
     if fix_on(context, "fence_tag"):
-        return _parsed_attempt(index, prompt_ref, reply, expected)
-    return _fenced_attempt(index, prompt_ref, reply, expected)
+        attempt = _parsed_attempt(index, prompt_ref, reply, expected)
+    else:
+        attempt = _fenced_attempt(index, prompt_ref, reply, expected)
+    return dataclasses.replace(attempt, guards=_unbuilt_guards(context))
+
+
+def _target_guarded(context: RunContext) -> bool:
+    """Return True when the target language's toolchain is bound and declares host_compute_guard (by capability)."""
+    toolchain = context.toolchains.get(context.direction.target)
+    return toolchain is not None and declares(toolchain, HOST_COMPUTE_GUARD)
+
+
+def _unbuilt_guards(context: RunContext) -> Guards:
+    """Return the guards of an attempt not built yet: not-built, or no-guard for a target without a guard (P17.14).
+
+    no-guard wins because no build of that target is ever read
+    (_target_guarded; found by capability, never by name).
+    """
+    return Guards(host_compute_not_checked=NOT_BUILT if _target_guarded(context) else NO_GUARD)
+
+
+def _with_reason(attempt: Attempt, reason: str | None) -> Attempt:
+    """Return `attempt` with Attempt.guards.host_compute_not_checked set to `reason`."""
+    return dataclasses.replace(attempt, guards=dataclasses.replace(attempt.guards, host_compute_not_checked=reason))
 
 
 def _send(
@@ -1054,7 +1163,10 @@ class GenerateStage:
         system, prompt = self._prompt(trial, expected)
         if not fix_on(context, "prompt_spaces"):
             prompt = fragment_text.collapse_spaces(prompt)
-        messages, reply = _send(context, trial, self.name, prompt, system)
+        try:
+            messages, reply = _send(context, trial, self.name, prompt, system)
+        except ContextExceeded as error:
+            return _context_end(trial, self.name, error)
         attempt = _reply_attempt(context, 0, messages[-1].ref, reply, expected)
         trial = _recorded(context, trial.with_attempt(attempt), self.name, 0, messages, attempt.response_text)
         notify(context.observer, ATTEMPT, trial, self.name)
@@ -1064,11 +1176,12 @@ class GenerateStage:
         """Return the system prompt (None for a template set) and the user prompt.
 
         A template set gives generate.txt, filled with the direction's
-        languages, the item's source files in FILE blocks, and the expected
-        target file names. A fragment set gives the direction's system prompt
-        and the generation prompt from the source (as text mode reads it),
-        the target language's context pack when the recipe has one, and the
-        trial's summary and description.
+        languages, the item's source files in FILE blocks, the expected
+        target file names, and the item's kernels (kernel_files). A fragment
+        set gives the direction's system prompt and the generation prompt
+        from the source (as text mode reads it), the target language's
+        context pack when the recipe has one, and the trial's summary and
+        description.
         """
         context = self.context
         if not context.fragments:
@@ -1080,6 +1193,7 @@ class GenerateStage:
                 "target_language": context.direction.target,
                 "source_files": render_file_blocks(sources),
                 "target_files": ", ".join(expected),
+                "kernel_files": kernel_files(context),
             }
             return None, render(context.prompts, "generate", fields)
         direction = context.direction
@@ -1129,7 +1243,10 @@ class SummarizeContextStage:
         context = self.context
         pack = context.packs[context.direction.target]
         prompt = fragment_text.summary_request(context.fragments, context.direction, pack)
-        messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        try:
+            messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        except ContextExceeded as error:
+            return _context_end(trial, self.name, error)
         return _context_reply(context, trial, self.name, "knowledge_summary", messages, reply)
 
     def describe(self) -> str:
@@ -1162,7 +1279,10 @@ class DescribeSourceStage:
         """
         context = self.context
         prompt = fragment_text.description_request(context.fragments, source_as_read(context))
-        messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        try:
+            messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+        except ContextExceeded as error:
+            return _context_end(trial, self.name, error)
         return _context_reply(context, trial, self.name, "source_description", messages, reply)
 
     def describe(self) -> str:
@@ -1211,7 +1331,10 @@ class CompileLoopStage:
             if cap is not None and len(trial.attempts) - 1 >= cap:
                 message = f"an error remained after {cap} correction(s), the cap loop.max_corrections sets"
                 return _ended(trial, CORRECTION_CAP, message)
-            trial, stderr = self._build_last(self._correction(trial, expected, stderr))
+            corrected = self._correction(trial, expected, stderr)
+            if corrected.final.end_reason is not None:
+                return corrected
+            trial, stderr = self._build_last(corrected)
         return trial
 
     def describe(self) -> str:
@@ -1255,7 +1378,9 @@ class CompileLoopStage:
         The trial comes back unchanged, with None, when the last attempt is
         not buildable. A built program is kept in RunContext.artifacts under
         the attempt's index, and the attempt gains the target toolchain's
-        host-compute reading (_guarded) before the attempt event. The stderr
+        host-compute reading (_guarded) before the attempt event; with no
+        program its host_compute_not_checked becomes no-program, or no-guard
+        for a target without a guard (task P17.14). The stderr
         is read only with fixes.parsed_diagnostics off, the one case a
         prompt carries it, and is None otherwise or when the build kept no
         attachment (BuildResult.stderr_ref).
@@ -1278,6 +1403,8 @@ class CompileLoopStage:
         )
         if result.artifact is not None:
             built = self._guarded(built)
+        else:
+            built = _with_reason(built, NO_PROGRAM if _target_guarded(self.context) else NO_GUARD)
         trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], built])
         notify(self.context.observer, ATTEMPT, trial, self.name)
         if fix_on(self.context, "parsed_diagnostics"):
@@ -1285,22 +1412,25 @@ class CompileLoopStage:
         return trial, _attachment_text(workdir, result.stderr_ref)
 
     def _guarded(self, attempt: Attempt) -> Attempt:
-        """Return `attempt` with the target toolchain's host-compute reading (task P4.12); unchanged without one.
+        """Return `attempt` with the target toolchain's host-compute reading (task P4.12); no-guard without one.
 
         The toolchain is found by capability (host_compute_reading), never by
         name, and is given the attempt's files and the item's support files
         for the target language.
         The reading sets Attempt.guards.host_compute, and its diagnostics
-        follow the parse and build diagnostics. A reading outside the guard
-        contract raises ValueError, which stops the run before the attempt
-        is recorded.
+        follow the parse and build diagnostics. Attempt.guards.host_compute_not_checked
+        (task P17.14) becomes no-guard without a reading, guard-not-checked
+        for a null reading, and None for a true or false one. A reading
+        outside the guard contract raises ValueError, which stops the run
+        before the attempt is recorded.
         """
         context = self.context
         toolchain = _toolchain(context, context.direction.target)
         reading = host_compute_reading(toolchain, attempt.files, _support_files(context, context.direction.target))
         if reading is None:
-            return attempt
-        guards = dataclasses.replace(attempt.guards, host_compute=reading.host_compute)
+            return _with_reason(attempt, NO_GUARD)
+        reason = GUARD_NOT_CHECKED if reading.host_compute is None else None
+        guards = dataclasses.replace(attempt.guards, host_compute=reading.host_compute, host_compute_not_checked=reason)
         return dataclasses.replace(attempt, guards=guards, diagnostics=[*attempt.diagnostics, *reading.diagnostics])
 
     def _build(self, files: Mapping[str, str], workdir: Path) -> BuildResult:
@@ -1413,7 +1543,10 @@ class RunLoopStage:
                 message = f"a run error remained after {cap} correction(s), the cap loop.max_corrections sets"
                 return _ended(trial, CORRECTION_CAP, message)
             errors = run_error_text(run, limits, context.fragments, simulator=simulator)
-            trial = compile_loop(_corrected(context, trial, self.name, target_files(context), errors, run_error=True))
+            corrected = _corrected(context, trial, self.name, target_files(context), errors, run_error=True)
+            if corrected.final.end_reason is not None:
+                return corrected
+            trial = compile_loop(corrected)
         return trial
 
     def describe(self) -> str:
@@ -1452,17 +1585,59 @@ class RunLoopStage:
         limits = attempt_limits(context, trial)
         run_args = stage_inputs(context.suite.item(context.item, purpose=PURPOSE), artifact.parent)
         unload_before_run(context.backend)
-        run = context.executor.run(artifact, run_args, limits)
+        run, profile = profiled_run(context, artifact, run_args, limits)
         info = _run_info(context, run, keep_outputs=self.keeps_outputs)
         diagnostics = [*attempt.diagnostics, *run.diagnostics, *_run_flag_warnings(run)]
         reached = run_stage(run)
         if reached == COMPILED and run.sim_gap is None:
             status = _run_status(run, limits, simulator=declares(context.executor, SIMULATOR))
             diagnostics.append(Diagnostic(stage="run", severity="error", code=RUN_ERROR, message=status))
-        ran = dataclasses.replace(attempt, run=info, diagnostics=diagnostics, stage_reached=reached)
+        ran = dataclasses.replace(attempt, run=info, profile=profile, diagnostics=diagnostics, stage_reached=reached)
         trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], ran])
         notify(context.observer, ATTEMPT, trial, self.name)
         return trial, run, limits
+
+
+def profiled_run(
+    context: RunContext, artifact: Path, inputs: Sequence[str], limits: Limits
+) -> tuple[RunResult, Profile]:
+    """Run `artifact` on context.executor, profiled by context.profiler when there is one; return the run and Profile.
+
+    Without a profiler the executor runs alone and the Profile is Profile()
+    (nothing measured). With one, start() comes right before the run and
+    stop() in a finally block right after it, so stop() runs, and a power
+    profiler's sampling thread ends, when the executor raises too; the
+    executor's error then propagates and stop()'s result is dropped. Only
+    context.profiler and context.executor are read.
+    """
+    profiler = context.profiler
+    if profiler is None:
+        return context.executor.run(artifact, inputs, limits), Profile()
+    profiler.start()
+    try:
+        run = context.executor.run(artifact, inputs, limits)
+    finally:
+        stopped = profiler.stop()
+    return run, checked_profile(profiler, stopped)
+
+
+def checked_profile(profiler: Profiler, value: object) -> Profile:
+    """Return `value`, a profiler's stop() result, when it is a Profile inside the Profiler contract.
+
+    Raises ValueError, naming the profiler, for a result that is not a
+    lassi.core.record.Profile, and for a Profile with avg_power_w or
+    energy_j set from a profiler that does not declare supports_power (only
+    a profiler that reads power telemetry may report power).
+    """
+    name = getattr(profiler, "name", type(profiler).__name__)
+    if not isinstance(value, Profile):
+        raise ValueError(f"Profiler {name!r} returned {type(value).__name__} from stop(), not a Profile")
+    if not declares(profiler, SUPPORTS_POWER) and (value.avg_power_w is not None or value.energy_j is not None):
+        raise ValueError(
+            f"Profiler {name!r} reported power, but it does not declare {SUPPORTS_POWER}: "
+            f"avg_power_w {value.avg_power_w!r}, energy_j {value.energy_j!r}"
+        )
+    return value
 
 
 def attempt_limits(context: RunContext, trial: Trial) -> Limits:
@@ -1637,13 +1812,18 @@ def _corrected(
     _correction_messages. With fixes.prompt_newlines off every line feed is
     removed from it before it is stored and sent. The reply is read as
     generate reads attempt 0 (_reply_attempt), and the attempt keeps its diff
-    from the last attempt's files.
+    from the last attempt's files. A request the backend refuses as past its
+    context (ContextExceeded) ends the trial at CONTEXT_EXCEEDED instead, with
+    no attempt appended (_context_end).
     """
     previous = trial.attempts[-1]
     system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error)
     if not fix_on(context, "prompt_newlines"):
         prompt = prompt.replace("\n", "")
-    messages, reply = _send(context, trial, stage, prompt, system)
+    try:
+        messages, reply = _send(context, trial, stage, prompt, system)
+    except ContextExceeded as error:
+        return _context_end(trial, stage, error)
     attempt = _reply_attempt(context, previous.index + 1, messages[-1].ref, reply, expected)
     attempt = dataclasses.replace(attempt, diff_from_previous=unified_diff(previous.files, attempt.files))
     trial = _recorded(context, trial.with_attempt(attempt), stage, attempt.index, messages, attempt.response_text)
@@ -1656,13 +1836,13 @@ def _correction_messages(
 ) -> tuple[str | None, str]:
     """Return the system prompt (None for a template set) and the correction prompt for `previous` with `errors`.
 
-    A template set gives correct.txt, with `errors` as its diagnostics. A
-    fragment set gives the direction's system prompt and upstream's
-    correction prompt, whose code is the previous target file (FILE blocks
-    when the target has more than one file): the compile-error form, or
-    with `run_error` the execute-error form, which joins the execute-error
-    lead (CORRECT_RUN_HEAD, CORRECT_RUN_TAIL) around the same compiler and
-    flag text.
+    A template set gives correct.txt, with `errors` as its diagnostics and
+    the item's kernels (kernel_files). A fragment set gives the direction's
+    system prompt and upstream's correction prompt, whose code is the
+    previous target file (FILE blocks when the target has more than one
+    file): the compile-error form, or with `run_error` the execute-error
+    form, which joins the execute-error lead (CORRECT_RUN_HEAD,
+    CORRECT_RUN_TAIL) around the same compiler and flag text.
     """
     if not context.fragments:
         fields = {
@@ -1670,6 +1850,7 @@ def _correction_messages(
             "files": render_file_blocks(previous.files) if previous.files else "",
             "diagnostics": errors,
             "target_files": ", ".join(expected),
+            "kernel_files": kernel_files(context),
         }
         return None, render(context.prompts, "correct", fields)
     direction, fragments = context.direction, context.fragments

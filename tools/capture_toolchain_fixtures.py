@@ -6,8 +6,10 @@ Usage (on the build host, through tools/rx.py):
 
 A fixture set is a directory holding scenarios.json and sources/: the
 default set is tests/toolchains/fixtures, and --fixtures DIR names another
-(tests/toolchains/fixtures/gcc holds the gcc-native set, task P4.5, and
-tests/toolchains/fixtures/ttmetal the ttmetal-host set, task P4.10). Its
+(tests/toolchains/fixtures/gcc holds the gcc-native set, task P4.5,
+tests/toolchains/fixtures/ttmetal the ttmetal-host set, task P4.10, and
+tests/toolchains/fixtures/hipcc the hipcc-gfx942 set, task P17.6, which
+overrides nothing, since that preset has no ARCH to override). Its
 scenarios.json names each scenario: its toolchain (a registry name), an
 optional override of the preset's ARCH ("arch") or GPU ("gpu") class
 attribute, and a one-line description. The files a scenario compiles are

@@ -1,0 +1,23 @@
+{
+  "derivation": "Eight lines. 'main.hip:9:19: error: no matching function for call to 'device_scale'' is one error: file main.hip and line 9 as printed; main.hip is a built file, so the column 19 is kept (line 9 is four blanks and 'float value = ' before 'device_scale', which starts at column 19); no trailing [option], so the code is null; the message is the text after 'error: '. 'main.hip:4:18: note: candidate function not viable: call to __device__ function from __host__ function' is one note: file main.hip, line 4, and column 18 kept (line 4 is '__device__ float ' before 'device_scale', which starts at column 18), code null, the message the text after 'note: '. The two source echoes, the two caret lines, and '1 error generated when compiling for gfx942.' give nothing; the error was printed by the gfx942 pass, and no host pass printed. The last line, 'failed to execute:' and the clang++ command hipcc ran, is hipcc's own report of the failed clang call, so nothing.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.hip",
+      "line": 9,
+      "column": 19,
+      "message": "no matching function for call to 'device_scale'"
+    },
+    {
+      "stage": "compile",
+      "severity": "note",
+      "code": null,
+      "file": "main.hip",
+      "line": 4,
+      "column": 18,
+      "message": "candidate function not viable: call to __device__ function from __host__ function"
+    }
+  ]
+}

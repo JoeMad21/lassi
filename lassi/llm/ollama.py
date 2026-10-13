@@ -10,7 +10,9 @@ never estimated. unload() asks Ollama to drop the model from memory (bible
 LASSI quirk table: Ollama unload before each execution, for Ollama arms only).
 The backend declares `unload_before_run` (lassi.core.capabilities), so the
 runner asks it to unload at trial start and run_loop right before each run of
-an attempt.
+an attempt. serving() returns what a run records about the server
+(lassi.llm._serving): the entry check() found, with no version, since no
+version route of Ollama's is read (task P17.3).
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ import copy
 from collections.abc import Sequence
 from typing import Any
 
-from lassi.core.capabilities import UNLOAD_BEFORE_RUN
+from lassi.core.capabilities import MODEL_CHECK, UNLOAD_BEFORE_RUN
 from lassi.core.interfaces import Completion, Message, Sampling
 from lassi.core.registry import register
 from lassi.llm._http import (
@@ -30,6 +32,7 @@ from lassi.llm._http import (
     served_entry,
     token_count,
 )
+from lassi.llm._serving import serving_record
 
 DEFAULT_BASE_URL = "http://127.0.0.1:11434"
 
@@ -43,7 +46,9 @@ class OllamaBackend:
     """
 
     name = "ollama"
-    capabilities = frozenset({"chat", "model_check", "unload", UNLOAD_BEFORE_RUN})
+    capabilities = frozenset({"chat", MODEL_CHECK, "unload", UNLOAD_BEFORE_RUN})
+    # The model-section keys a recipe may set; the runner passes them as keyword settings (task P17.3).
+    config_keys = frozenset({"base_url", "timeout_s"})
 
     def __init__(self, model_id: str, *, base_url: str = DEFAULT_BASE_URL, timeout_s: float = 600.0) -> None:
         """Keep the settings; base_url loses any trailing '/'.
@@ -99,6 +104,15 @@ class OllamaBackend:
             prompt_tokens=token_count(reply, "prompt_eval_count"),
             completion_tokens=token_count(reply, "eval_count"),
         )
+
+    def serving(self) -> dict[str, Any]:
+        """Return the serving record: check()'s entry, less its volatile fields, with version and version_from null.
+
+        Calls check() first, so it raises ServingError for a model the server
+        does not list. No version request is sent. Each call returns a fresh
+        record.
+        """
+        return serving_record(self.base_url, self.check(), None, None, ())
 
     def unload(self) -> None:
         """Ask Ollama to unload the model now: POST <base_url>/api/generate with keep_alive 0."""

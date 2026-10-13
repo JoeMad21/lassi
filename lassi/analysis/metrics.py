@@ -54,6 +54,11 @@ interval around the b0_model's correct count, a paper value that applies
 only to arm B0's pass@1; no verdict is computed (OQ-030, part 4). No table
 marks a headline metric reproduced or computes its gap: the P10 gate
 applies the test OQ-032 names.
+
+Each table also carries its guard coverage (task P17.14;
+lassi.analysis.guard_coverage): the host-compute guard's checked and
+not-checked counts over every attempt of its trials, the attempt being the
+unit. It reads only Attempt.guards and changes no row.
 """
 
 from __future__ import annotations
@@ -64,6 +69,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 
+from lassi.analysis.guard_coverage import GuardCoverage, count_attempts
 from lassi.analysis.paper import PaperCount, PaperMetric, PaperValues, load_paper, paper_interval
 from lassi.analysis.stats import pass_at_k, wilson_interval
 from lassi.core.interfaces import Score
@@ -167,7 +173,9 @@ class MetricTable:
     `b0_criterion` is the B0 criterion's interval in the table's direction
     (`<model> <count>/<denominator> = <rate> (Wilson 95% <low> to <high>)`),
     a paper value; None for a compile-stage reproduction or a direction the
-    paper values lack.
+    paper values lack. `guard` is the guard coverage of every attempt of
+    the table's trials (task P17.14); metric_tables always sets it, and
+    None (a table built by hand) shows none.
     """
 
     arm: str
@@ -180,6 +188,7 @@ class MetricTable:
     stage_reached: Mapping[str, int]
     corrections: Mapping[int, int]
     b0_criterion: str | None = None
+    guard: GuardCoverage | None = None
 
 
 def _none_row(name: str, note: str, *, placeholder: bool = False) -> MetricRow:
@@ -387,6 +396,7 @@ def _table(arm: str, direction: str, pairs: Sequence[Pair], paper: PaperValues) 
         rows=_rows(pairs, direction, compile_only, paper),
         stage_reached=MappingProxyType({key: stages.get(key, 0) for key in STAGE_KEYS}),
         corrections=MappingProxyType(dict(sorted(corrections.items()))),
+        guard=count_attempts(item for trial, _ in pairs for item in trial.attempts),
     )
 
 

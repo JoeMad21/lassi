@@ -1,0 +1,10 @@
+hf_home_kib 976248 (before 0)
+uv_cache_kib 1231864 (before 1231812)
+venv_kib 1180184
+run_tree_kib 2880
+train_sft_kib 120
+train_dpo_kib 88
+train_grpo_kib 92
+batch_dir_kib 26000
+torch_caches_kib 4
+scratch_root_kib 103772604 (before 102752868)

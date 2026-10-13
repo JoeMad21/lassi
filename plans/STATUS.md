@@ -12,12 +12,12 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P1 Faithful LASSI | p1-faithful | DONE | base: main at c3cf248 (P0 merged, PR 1); plan plans/p1-faithful.md; owner 2026-09-23: scope fixed at planning, P2 follows without pause; owner 2026-09-24: curated LASSI demo at 15:00 EDT |
 | P2 Scoring | p2-scoring | DONE | base: p1-faithful at 5d5fd0c; plan plans/p2-scoring.md; gate evidence results/p2-gate; owner review OQ-024 accepted with option (b), review questions moved to P4.15; PR 3 merged |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
-| P4 ttsim Execution | p4-ttsim | DONE | base: main at 75eceef (P2 DONE, PR 3 merged); plan plans/p4-ttsim.md; gate passed 2026-10-05 (results/p4-gate); PR P4 ttsim Execution open |
+| P4 ttsim Execution | p4-ttsim | DONE | base: main at 75eceef (P2 DONE, PR 3 merged); plan plans/p4-ttsim.md; gate passed 2026-10-05 (results/p4-gate); PR 4 merged at 0dcc261 |
 | P5 IR Levels | p5-ir | NOT-STARTED | - |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
 | P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
-| P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23) |
-| P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23) |
+| P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); the owner said 2026-10-06 the MI300Xs will not be granted (OQ-040) |
+| P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); the owner said 2026-10-06 the MI300Xs will not be granted (OQ-040) |
 | P10 Full LASSI | p10-full | BLOCKED | no NVIDIA host (OQ-003, 2026-09-23); compile-only tier and -mp=multicore proxy meanwhile |
 | P11 Dataflow Dialect | p11-df | NOT-STARTED | full scope needs P5; design notes may start earlier |
 | P12 Language Frontends | p12-frontends | NOT-STARTED | - |
@@ -25,7 +25,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
 | P16 Adversarial | p16-adversarial | BLOCKED | P4, P8 for training |
-| P17 Portable Stack | p17-portable | NOT-STARTED | owner request 2026-09-27 (working session): GPUs and standard frameworks; after P4, before P5 (OQ-038, option (a)); GPU half blocked: GPU host (OQ-040); draft plan plans/p17-portable.md, re-read at advance |
+| P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; GPU half has no host (OQ-040), focus on Tenstorrent and CPU; part (a) passed 2026-10-11 (results/p17-gate-a) and its PR is open (OQ-038); stalled with only the GPU tasks BLOCKED |
 
 ## Tasks
 
@@ -96,3 +96,19 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P4.14 | DONE | Apply the owner's Tier A splits (OQ-025) | P4.13 | OQ-025 (d) confirmed: every tt-pairs-v0 item unassigned and refused to training, prompt tuning, and harvest (tests/bench/test_tt_pairs.py); recipe hashes at 184f130 equal bc4c132's for every committed recipe |
 | P4.15 | DONE | Carry the P2 review questions (OQ-024) | - | P2 review questions closed (f0c4a85); OQ-028 to OQ-033 applied for review; sim_t_tiktoken; scoring pass rx 20260927-204249; bible rev 233 |
 | P4.G | DONE | Phase gate: add_2_integers on ttsim; Tier A references pass | P4.8,P4.11,P4.12,P4.13,P4.15 | gate passed: smoke rx 20261005-123001-desktop-8r113ei-detached-ec1c9a2b-2979; Tier A job 20261005-123023-p4-tier-a-c247; ec1c9a2 clean; results/p4-gate |
+| P17.0 | DONE | Plan phase P17 into plans/p17-portable.md and add its tasks here | - | plan plans/p17-portable.md; base main 0dcc261; owner answers OQ-027 to OQ-044 recorded; retrospective plans/runs/p4-retrospective.md |
+| P17.1 | DONE | Spike: framework pins, environments, and device assumptions | - | spike plans/spikes/p17-frameworks.md; batch rx 20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2 (clean e805c6d); CPU set 59 pkgs, venv 1,174,712 KiB; hipcc builds gfx942 without a GPU |
+| P17.2 | DONE | Device layer: selection, probes, provenance | - | device sections {kind, indices} by takes_device; probes in lassi/executors/devices.py (lstat and access(2) on the node, procfs and sysfs text otherwise; no node opened); provenance device_records and driver; files beyond the plan's list: lassi/executors and tests/executors (Design Principle 9) |
+| P17.3 | DONE | Served backends: recipe keys and serving provenance | P17.1,P17.2 | model.base_url and model.timeout_s reach openai_compat and ollama, model.api_key_env openai_compat only; model id checked before any directory; provenance serving record (stable entry fields, version from the server root, never a key); stubs for vLLM, SGLang, llama.cpp; also lassi/core/capabilities.py (MODEL_CHECK) and a registry docstring |
+| P17.4 | DONE | hf_local on Transformers and PyTorch | P17.1,P17.2,P17.3 | hf_local on Transformers 5.18.0 and torch 2.14.1 (extras cpu, cuda, rocm); model.revision and model.seed; offline load from HF_HOME with the hub library set offline; ContextExceeded ends a trial (context-exceeded); also lassi/core interfaces, record, runner, stages, lassi/llm/_serving, tests/core, tests/tiny_hf.py |
+| P17.5 | DONE | gpu executor and the sandbox's device access | P17.2 | change bf98a81; alpha01 remote tests 48 passed (stand-in nodes visible only when listed; no GPU node opened), rx 20261006-082332-desktop-8r113ei-detached-bf98a813-c6b6, clean; results/p17-gpu-sandbox |
+| P17.6 | DONE | hipcc toolchain, compile-only on alpha01 | P17.1 | hipcc-gfx942 and toolchains/hipcc.pin (f03fa62); alpha01 remote tests 6 passed and eight diagnostics captured, rx 20261006-121638-desktop-8r113ei-detached-f03fa62a-961a, clean; device lld pattern from the captures; results/p17-hipcc-fixtures |
+| P17.7 | DONE | Profilers: timing, nvml, rocm_smi | P17.2,P17.5 | timing, nvml, rocm_smi profilers; runner binds profiler, run_loop fills Attempt.profile; power profilers tested with fakes, unverified with no GPU host (OQ-040); bible rev 259 |
+| P17.8 | DONE | Trainer interface and the train recipe | P17.2 | Trainer Protocol, the thirteenth interface; train recipes (load_train_recipe, TRAIN_SCHEMA in lassi/core/recipe.py) and lassi train with a train tree under the runs root; refusals before any directory; also public runner helpers, tests/fixtures/train/layer-smoke.jsonl, tests/replay/notebook_replay.py |
+| P17.9 | DONE | TRL backend: sft, dpo, and grpo on PyTorch | P17.1,P17.8 | trl Trainer: sft, dpo, grpo on the CPU with full and lora weights; Trainer.check; TrainView; checkpoint records; trl, peft, accelerate pinned in the three extras; also touches lassi/core/interfaces.py, lassi/bench/registry.py, lassi/llm/hf_local.py (check hook, train-only view, one hub_offline); bible rev 262 |
+| P17.10 | DONE | CI on the CPU | P17.4,P17.9 | cpu-tests.yml: cpu extra from the lock, device-neutral P17.2-P17.9 tests incl. slow, remote excluded, ubuntu-latest, no GPU; green at a988ef8: https://github.com/JoeMad21/lassi/actions/runs/37552096412 (2763 passed, 2 skipped) |
+| P17.14 | DONE | Guard not-run reasons and not-checked rates | - | Guards.host_compute_not_checked (not-built, no-program, no-guard, guard-not-checked); guard coverage per run and per target in run.md, metrics.md, metric tables, Parquet guard_coverage; older records load unchanged; also touches runner.py (run.md) and df_v0.py (guard_state by name); bible rev 264 |
+| P17.11 | DONE | Gate part (a): recipes and the hardware-free evidence | P17.3,P17.4,P17.5,P17.7,P17.9,P17.10,P17.14 | gate part (a) PASS, 12 of 12 (results/p17-gate-a; rx job 20261010-235501-p17-gate-a-8980 from 7f920d7, approved by the owner 2026-10-11, OQ-047); PR P17 Portable Stack, part (a) |
+| P17.12 | BLOCKED | Spike on the first GPU host | P17.5 | no GPU host: the owner will not grant the MI300Xs (OQ-040, 2026-10-06) |
+| P17.13 | BLOCKED | GPU runs: executor, profilers, hf_local, training | P17.4,P17.7,P17.9,P17.12 | no GPU host: the owner will not grant the MI300Xs (OQ-040, 2026-10-06) |
+| P17.G | BLOCKED | Phase gate: part (a) rerun and part (b) on a GPU host | P17.11,P17.13 | no GPU host for part (b) (OQ-040, 2026-10-06); part (a) runs as P17.11 |

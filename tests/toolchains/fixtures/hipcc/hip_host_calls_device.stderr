@@ -1,0 +1,8 @@
+main.hip:9:19: error: no matching function for call to 'device_scale'
+    9 |     float value = device_scale(1.0f);
+      |                   ^~~~~~~~~~~~
+main.hip:4:18: note: candidate function not viable: call to __device__ function from __host__ function
+    4 | __device__ float device_scale(float x) {
+      |                  ^
+1 error generated when compiling for gfx942.
+failed to execute:/opt/rocm/core-7.12/lib/llvm/bin/clang++  --offload-arch=gfx942 --driver-mode=g++ --hip-link  -Wall -O3 -o "main" -x hip main.hip

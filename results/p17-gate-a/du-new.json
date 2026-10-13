@@ -1,0 +1,14 @@
+{
+  "hf_home": "/mnt/nvme10/joseph_ufl/hf",
+  "hf_home_new": {
+    "hub": {
+      "files": 32,
+      "bytes": 999606219
+    }
+  },
+  "scratch_entries_new": [
+    ".cache/lassi-p17-torchinductor",
+    "hf"
+  ],
+  "scratch_entries_gone": []
+}

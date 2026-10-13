@@ -1,0 +1,19 @@
+{
+  "train_dir": "/mnt/nvme10/joseph_ufl/lassi-runs/train/p17-gate-a-dpo-20261010-235501-p17-gate-a-8980",
+  "method": "dpo",
+  "checks": {
+    "status_complete": true,
+    "steps": true,
+    "device_record_cpu": true,
+    "framework_pins": true,
+    "checkpoint_records": true
+  },
+  "passed": true,
+  "train_runtime": 0.0773,
+  "global_step": 2,
+  "precision": {
+    "bf16": true,
+    "fp16": false,
+    "gradient_checkpointing": true
+  }
+}

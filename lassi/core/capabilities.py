@@ -22,6 +22,11 @@ if TYPE_CHECKING:
 # the backend's type.
 UNLOAD_BEFORE_RUN = "unload_before_run"
 
+# The capability of an LLM backend that confirms its model id on its server before any chat request (task P17.3;
+# bible Serving Rules). A backend that declares it provides check() and serving(); the runner calls serving() before
+# any directory exists and writes the record it returns to provenance.json as `serving`.
+MODEL_CHECK = "model_check"
+
 # The capability of a ScoreProfile that also scores each attempt: it provides score_attempts(trial), one Score per
 # attempt in attempt order. A scoring pass writes attempt scores only for a profile that declares it.
 SCORES_ATTEMPTS = "scores_attempts"
@@ -60,6 +65,22 @@ GUARD_CODE_PREFIX = "guard-"
 # A guard reads program text and never fails an attempt: its diagnostics are parse-stage warnings or notes.
 GUARD_STAGE = "parse"
 GUARD_SEVERITIES = frozenset({"warning", "note"})
+
+# The capability of a component that takes a device section (task P17.2; lassi.core.devices): its recipe section
+# must hold the key DEVICE_KEY, a mapping {kind, indices} that lassi.core.devices.parse_device reads at load, and
+# the loader never fills one in. The registry accepts DEVICE_KEY from such a component only, and refuses any
+# component that lists it among its config_keys. Before anything is built, the runner probes the named device and
+# records it in provenance; the component class may define framework(), a staticmethod or classmethod that returns
+# the lassi.core.devices.FrameworkBuild it runs on (or None), read from build metadata only.
+TAKES_DEVICE = "takes_device"
+# The key of a device section inside a component's recipe section.
+DEVICE_KEY = "device"
+
+# The capability of a Profiler that reads power telemetry (task P17.7): its stop() may fill a Profile's avg_power_w
+# and energy_j, and it must also declare TAKES_DEVICE, its device section naming the one GPU it reads. The runner
+# refuses, before any directory exists, such a profiler without TAKES_DEVICE, or one beside a profiled executor that
+# runs on another device; run_loop refuses power values from a profiler that does not declare it.
+SUPPORTS_POWER = "supports_power"
 
 
 @runtime_checkable

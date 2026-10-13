@@ -7,8 +7,14 @@ and model_info. Every backend has the LLMBackend shape: class attributes
 sampling)`. model_info builds the Trial `model` field (bible Result Record),
 which is how sampling parameters land in the record. The package docstring and
 the registry docstring state the construction convention the runner relies
-on. The package modules are documented, typed, plain ASCII, use only the
-standard library, and name no project (Agent Rule 3, Readability Standards).
+on, and the package docstring lists every backend importing it registers. The
+package modules are documented, typed, plain ASCII, import only the standard
+library and lassi at module level, and name no project (Agent Rule 3,
+Readability Standards). Since task P17.4, hf_local is registered too, with
+torch, transformers, and huggingface_hub imported only inside its functions
+(FRAMEWORK_IMPORTS), so lassi.llm imports and registers it without the
+framework extra (PHASE-NOTES P0, the registration rule); it cannot be built
+from a model id alone, so the three-backend tests below leave it out.
 No value in this module is a measurement.
 """
 
@@ -18,6 +24,9 @@ import ast
 import importlib
 import importlib.util
 import inspect
+import json
+import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -44,12 +53,18 @@ LLM_DIR = REPO / "lassi" / "llm"
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 PROJECT_NAMES = ("lassi-repro", "lassi-ee", "lassi-df", "hecbench", "qwen", "wizardcoder", "a100", "mi300x", "gpt-oss")
 
-# The modules the P0.4 contract names, plus any other module found in lassi/llm/.
+# The modules the P0.4 contract names, plus hf_local (task P17.4), plus any other module found in lassi/llm/.
 NAMED_MODULES = ("lassi.llm", "lassi.llm.mock", "lassi.llm.openai_compat", "lassi.llm.ollama", "lassi.llm._http")
+FRAMEWORK_MODULE = "lassi.llm.hf_local"
 FOUND_MODULES = tuple(
     "lassi.llm" if path.stem == "__init__" else f"lassi.llm.{path.stem}" for path in sorted(LLM_DIR.glob("*.py"))
 )
-LLM_MODULES = tuple(dict.fromkeys(NAMED_MODULES + FOUND_MODULES))
+LLM_MODULES = tuple(dict.fromkeys(NAMED_MODULES + (FRAMEWORK_MODULE,) + FOUND_MODULES))
+# The only imports outside the standard library and lassi that a lassi.llm module may hold, and only inside the
+# functions of FRAMEWORK_MODULE: the framework extra's packages, imported when hf_local loads (task P17.4), and
+# huggingface_hub, which transformers requires and whose offline flag hf_local sets.
+FRAMEWORK_IMPORTS = frozenset({"torch", "transformers", "huggingface_hub"})
+NUMBER_WORDS = {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
 
 BACKENDS = {"mock": MockBackend, "openai_compat": OpenAICompatBackend, "ollama": OllamaBackend}
 
@@ -116,6 +131,29 @@ def imported_roots(tree: ast.Module) -> set[str]:
     return roots
 
 
+def split_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
+    """Return the top-level packages of the absolute imports outside every function, and of those inside one."""
+    outside: set[str] = set()
+    inside: set[str] = set()
+
+    def visit(node: ast.AST, in_function: bool) -> None:
+        for child in ast.iter_child_nodes(node):
+            found = inside if in_function else outside
+            if isinstance(child, ast.Import):
+                found.update(alias.name.split(".")[0] for alias in child.names)
+            elif isinstance(child, ast.ImportFrom) and child.level == 0 and child.module:
+                found.add(child.module.split(".")[0])
+            visit(child, in_function or isinstance(child, (*FUNCTION_NODES, ast.Lambda)))
+
+    visit(tree, False)
+    return outside, inside
+
+
+def third_party(roots: set[str]) -> set[str]:
+    """Return the roots that are neither standard library modules nor lassi."""
+    return {root for root in roots if root not in sys.stdlib_module_names and root != "lassi"}
+
+
 def normalized(text: str | None) -> str:
     """Return text with every whitespace run collapsed to one space."""
     return " ".join((text or "").split())
@@ -132,6 +170,32 @@ def test_import_registers_all_three_backends() -> None:
         entry = DEFAULT_REGISTRY.get("LLMBackend", name)
         assert entry.factory is cls
         assert entry.capabilities == cls.capabilities
+
+
+def test_hf_local_is_registered() -> None:
+    assert "hf_local" in DEFAULT_REGISTRY.names("LLMBackend"), "importing lassi.llm registers hf_local (task P17.4)"
+    entry = DEFAULT_REGISTRY.get("LLMBackend", "hf_local")
+    assert entry.factory is getattr(llm, "HFLocalBackend", None)
+    assert entry.capabilities == frozenset({"chat", "model_check", "takes_device"})
+    assert entry.config_keys == frozenset({"revision", "seed"})
+    assert llm.hf_local is importlib.import_module(FRAMEWORK_MODULE)
+
+
+def test_package_docstring_lists_every_registered_backend() -> None:
+    # A fresh interpreter, so only what importing lassi.llm registers is listed.
+    code = (
+        "import json, lassi.llm\n"
+        "from lassi.core.registry import DEFAULT_REGISTRY as registry\n"
+        "names = registry.names('LLMBackend')\n"
+        "print(json.dumps({name: registry.get('LLMBackend', name).factory.__name__ for name in names}))\n"
+    )
+    done = subprocess.run([sys.executable, "-c", code], cwd=REPO, capture_output=True, text=True, timeout=300)
+    assert done.returncode == 0, done.stderr
+    registered = json.loads(done.stdout)
+    assert "hf_local" in registered, registered
+    listed = dict(re.findall(r'^- "(\w+)" \((\w+)\)', llm.__doc__ or "", re.MULTILINE))
+    assert listed == registered, "the docstring lists each registered backend once, with its class"
+    assert f"registers {NUMBER_WORDS[len(registered)]} backends" in normalized(llm.__doc__), llm.__doc__
 
 
 def test_package_reexports() -> None:
@@ -261,7 +325,20 @@ def test_llm_modules_hold_no_project_code(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", LLM_MODULES)
-def test_llm_modules_use_only_the_standard_library(name: str) -> None:
-    roots = imported_roots(ast.parse(module_source(name)))
-    third_party = sorted(root for root in roots if root not in sys.stdlib_module_names and root != "lassi")
-    assert not third_party, f"{name} imports {third_party}"
+def test_llm_modules_import_only_the_standard_library_at_module_level(name: str) -> None:
+    outside, _ = split_imports(ast.parse(module_source(name)))
+    found = sorted(third_party(outside))
+    assert not found, f"{name} imports {found} at module level, so lassi.llm would need it to register its backends"
+
+
+@pytest.mark.parametrize("name", LLM_MODULES)
+def test_only_hf_local_imports_the_framework_inside_its_functions(name: str) -> None:
+    _, inside = split_imports(ast.parse(module_source(name)))
+    allowed = FRAMEWORK_IMPORTS if name == FRAMEWORK_MODULE else frozenset()
+    found = sorted(third_party(inside) - allowed)
+    assert not found, f"{name} imports {found}; only {FRAMEWORK_MODULE} imports {sorted(FRAMEWORK_IMPORTS)}"
+
+
+def test_the_import_split_sees_imports_inside_functions() -> None:
+    source = "import os\nif os:\n    import json\ndef f():\n    import torch\n    from transformers import x\n"
+    assert split_imports(ast.parse(source)) == ({"os", "json"}, {"torch", "transformers"})

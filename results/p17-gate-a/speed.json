@@ -1,0 +1,30 @@
+{
+  "model": "Qwen/Qwen2.5-Coder-0.5B-Instruct",
+  "revision": "ea3f2471cf1b1f0db85067f1ef93848e38e88c25",
+  "load_s": 6.647,
+  "decode": {
+    "prompt_tokens": 45,
+    "completion_tokens": 256,
+    "seconds": 7.668,
+    "completion_tokens_per_s": 33.39,
+    "prompt_tokens_per_s": 5.87
+  },
+  "prefill": {
+    "prompt_tokens": 12291,
+    "completion_tokens": 1,
+    "seconds": 13.751,
+    "completion_tokens_per_s": 0.07,
+    "prompt_tokens_per_s": 893.85
+  },
+  "dtype": "bfloat16",
+  "threads": 16,
+  "device": "cpu",
+  "versions": {
+    "torch": "2.14.1+cpu",
+    "transformers": "5.18.0",
+    "tokenizers": "0.23.2",
+    "huggingface-hub": "1.33.0",
+    "safetensors": "0.8.0"
+  },
+  "omp_num_threads": "16"
+}

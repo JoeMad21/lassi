@@ -7,6 +7,9 @@
 - lassi.analysis.metrics: one metric table per arm and direction from the
   lassi profile's scores (bible Evaluation Protocol).
 - lassi.analysis.tables: those tables as Markdown and Parquet.
+- lassi.analysis.guard_coverage: how many attempts the host-compute guard
+  checked, and why the rest were not checked, per run and per target
+  language (task P17.14).
 """
 
 from lassi.analysis.metrics import METRIC_NAMES, MetricRow, MetricTable, metric_tables

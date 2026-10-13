@@ -49,6 +49,10 @@ the planning decisions on W and on final.score (plans/p2-scoring.md):
 - `apply(trial)` returns the trial with each Attempt.score holding its
   attempt's components and R, and final.score the multi-turn value; nothing
   else changes.
+- The guard component reads the three guard outcomes that
+  lassi.core.record.GUARD_OUTCOMES names, never Guards.host_compute_not_checked
+  (task P17.14): a recorded reason changes no component, R, or final score,
+  and three False outcomes still give 0.0.
 
 Every expected value below is hand-computed from the bible's formula and
 stage table, as its comment shows. The records are hand-made SYNTHETIC
@@ -70,6 +74,7 @@ from typing import Any
 import pytest
 import yaml
 
+from lassi.core import record as record_module
 from lassi.core.interfaces import Sampling
 from lassi.core.record import (
     STAGES,
@@ -554,6 +559,65 @@ def test_a_guard_that_is_none_counts_as_not_checked(guards: Guards, guard: float
     (score,) = attempt_scores(default_profile(), one_attempt(item))
     # Hand-computed: no violation, so R = 0.2 - 0.02 x 2 + 0.8 x 1.0 = 0.96.
     assert_attempt(score, 0.96, stage_base=0.2, warning_count=2.0, alignment_term=0.8, guard=guard)
+
+
+# Why host_compute is null (task P17.14): the codes lassi.core.record.HOST_COMPUTE_NOT_CHECKED holds.
+NOT_CHECKED_CODES = ("not-built", "no-program", "no-guard", "guard-not-checked")
+
+
+def with_reason(item: Attempt, code: str | None) -> Attempt:
+    """Return `item` with `code` recorded as why its host_compute is null (None: no code recorded)."""
+    assert item.guards.host_compute is None, "a code is recorded only beside a null host_compute"
+    return dataclasses.replace(item, guards=dataclasses.replace(item.guards, host_compute_not_checked=code))
+
+
+def test_guard_state_reads_the_three_guard_outcomes() -> None:
+    guard_state = importlib.import_module("lassi.scoring.df_v0").guard_state
+    assert record_module.GUARD_OUTCOMES == GUARD_NAMES
+    assert guard_state(Guards(host_compute=False, harness_tamper=False, oracle_access=False)) == 0.0
+    for code in NOT_CHECKED_CODES:
+        assert guard_state(Guards(harness_tamper=False, oracle_access=False, host_compute_not_checked=code)) is None
+        assert guard_state(Guards(oracle_access=True, host_compute_not_checked=code)) == 1.0
+
+
+@pytest.mark.parametrize("code", NOT_CHECKED_CODES)
+@pytest.mark.parametrize(
+    "outcomes",
+    [{}, {"harness_tamper": False, "oracle_access": False}, {"oracle_access": True}],
+    ids=["none-checked", "two-clear", "violation"],
+)
+def test_the_guard_reason_changes_no_attempt_score(code: str, outcomes: dict[str, bool]) -> None:
+    item = clean(0, 1.0, diagnostics=unique_warnings(2), guards=Guards(**outcomes))
+    profile = default_profile()
+    (without,) = attempt_scores(profile, one_attempt(item))
+    (with_code,) = attempt_scores(profile, one_attempt(with_reason(item, code)))
+    assert with_code == without
+    assert with_code.components[GUARD] == (1.0 if outcomes.get("oracle_access") else None)
+
+
+def test_the_guard_reason_changes_no_trial_score() -> None:
+    clear = Guards(host_compute=False, harness_tamper=False, oracle_access=False)
+    attempts = [
+        with_reason(attempt(0, "S0"), "not-built"),
+        with_reason(compile_failed(1), "no-program"),
+        with_reason(run_failed(2, 0.5), "guard-not-checked"),
+        with_reason(clean(3, 0.5), "no-guard"),
+        clean(4, 1.0, guards=clear),
+    ]
+    trial = hand_trial(attempts, final_alignment=1.0)
+    unrecorded = [with_reason(item, None) if item.guards.host_compute is None else item for item in attempts]
+    stripped = hand_trial(unrecorded, final_alignment=1.0)
+    profile = default_profile()
+    scores = attempt_scores(profile, trial)
+    assert scores == attempt_scores(profile, stripped)
+    assert profile.score(trial) == profile.score(stripped)
+    filled = profile.apply(trial)
+    assert filled.final.score == profile.apply(stripped).final.score
+    assert [item.guards for item in filled.attempts] == [item.guards for item in attempts], "apply keeps each code"
+    # Hand-computed: the last attempt is S5 with A 1.0, every guard checked and clear: guard 0.0, R = 0.2 + 0.8 = 1.0;
+    # no violation on any attempt, so multi turn = 1.0 - 0.05 x 4 = 0.8.
+    assert scores[-1].components[GUARD] == 0.0
+    assert filled.final.score == pytest.approx(0.8, abs=TOLERANCE)
 
 
 def stale_trial() -> Trial:

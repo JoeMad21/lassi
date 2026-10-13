@@ -6,13 +6,16 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
 2. refuses any key the schema below does not list, naming the file and dotted path;
 3. follows `extends` to the root ancestor;
 4. merges from the root down, the child winning (mappings merge, anything else is replaced, a
-   kind section that names a new kind replaces the inherited one, and an executor section that
-   switches between its two forms replaces the inherited one);
+   kind section that names a new kind replaces the inherited one, an executor section that
+   switches between its two forms replaces the inherited one, and a `device` mapping replaces the
+   inherited one whole, since a device is one choice);
 5. materializes the defaults (`project`: the loaded file's recipe name; `faithful: false`; every fix on);
 6. applies the faithful overrides (bible, Project Recipes Notes; Design Principle 4);
 7. checks types and required choices, never picking a value for a choice left open;
-8. binds components and checks their capabilities without constructing any (Component Interfaces), and
-   refuses a faithful recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES);
+8. binds components and checks their capabilities without constructing any (Component Interfaces),
+   refuses a faithful recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES),
+   and reads the device section of every component that declares `takes_device` (task P17.2): one is
+   required, never picked, and lassi.core.devices.parse_device refuses a bad one naming the key;
 9. serializes the resolved mapping to canonical YAML and hashes it.
 
 `executor` has two forms (task P4.5). The single form is a kind section, `{kind: <name>, <config>...}`,
@@ -28,6 +31,14 @@ and any other child entry replaces it.
 The canonical YAML, with a two-line header, is the resolved recipe every run saves
 and can be rerun from (Design Principle 5). It always holds `project`, the first
 trial id segment, so a rerun from it writes the same trial ids.
+
+Train recipes (task P17.8; bible Project Recipes, Notes, train recipes) load with
+load_train_recipe: steps 1 to 4, 7, 8, and 9 as above, against TRAIN_SCHEMA, with no
+default materialized and no faithful override, so each file of the chain must be a train
+recipe. A train recipe binds one Trainer at trainer.kind, whose section holds its device
+and config keys; it names exactly one data source, bench or data.synthetic; bench.split
+must be train (Agent Rule 5); and its method, weights, and data source must be among the
+names its Trainer declares (methods, weight_modes, data_sources), read without building it.
 """
 
 from __future__ import annotations
@@ -35,16 +46,27 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Callable, Mapping, Sequence
 
 import yaml
 
-from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry, RegistryError, check_bindings
+from lassi.bench.registry import FORBIDDEN_PURPOSES, HELD_SPLITS
+from lassi.core.capabilities import DEVICE_KEY, TAKES_DEVICE
+from lassi.core.devices import DeviceSectionError, parse_device
+from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry, RegistryError, check_bindings, device_path
 
 # The value of loop.max_corrections that means no cap (upstream LASSI's loop; bible LASSI quirk table).
 UNCAPPED = "uncapped"
+
+# The text of model.api_key_env: a variable name (task P17.3), stricter than a backend's own check for direct callers.
+_ENV_NAME_TEXT = re.compile(r"[A-Z_][A-Z0-9_]{0,63}")
+# The text of model.revision: a full commit id, the only pin (Agent Rule 10; task P17.4). A branch or tag is not one.
+_REVISION_TEXT = re.compile(r"[0-9a-f]{40}")
+# model.seed's bound: the seed of call k is seed + k (bible Serving Rules), far inside torch.manual_seed's range.
+_SEED_LIMIT = 2**32
 
 # Every named fix toggle and what turning it on changes. Fixes default to on; faithful: true turns them all off.
 FIXES: dict[str, str] = {
@@ -139,18 +161,27 @@ def _expect(value: Any, kind: type, expected: str, path: str) -> None:
 
 @dataclass(frozen=True)
 class _Leaf:
-    """A single value: `accepts` tests it and `expected` says in words what fits."""
+    """A single value: `accepts` tests it and `expected` says in words what fits.
+
+    With `shown` false, a refusal never quotes the value, since it may be a
+    key (Agent Rule 12): the message says what fits and that the value is not
+    shown.
+    """
 
     expected: str
     accepts: Callable[[Any], bool]
+    shown: bool = True
 
     def keys(self, value: Any, path: str) -> None:
         """A leaf holds no keys."""
 
     def check(self, value: Any, path: str) -> None:
         """Raise a type problem unless the value fits."""
-        if not self.accepts(value):
-            raise _SchemaError(f"{path} must be {self.expected}, not {_describe(value)}")
+        if self.accepts(value):
+            return
+        if not self.shown:
+            raise _SchemaError(f"{path} must be {self.expected}; the value is not shown, since it may be a key")
+        raise _SchemaError(f"{path} must be {self.expected}, not {_describe(value)}")
 
 
 @dataclass(frozen=True)
@@ -357,6 +388,21 @@ def _is_number(value: Any) -> bool:
     return _is_int(value)
 
 
+def _is_env_name(value: Any) -> bool:
+    """Return True for an environment variable name: uppercase letters, digits, and '_', no leading digit, <= 64."""
+    return isinstance(value, str) and _ENV_NAME_TEXT.fullmatch(value) is not None
+
+
+def _is_revision(value: Any) -> bool:
+    """Return True for a full commit id: 40 lowercase hexadecimal characters."""
+    return isinstance(value, str) and _REVISION_TEXT.fullmatch(value) is not None
+
+
+def _is_seed(value: Any) -> bool:
+    """Return True for an int that is not a bool, from 0 to 2**32 - 1."""
+    return _is_int(value) and 0 <= value < _SEED_LIMIT
+
+
 def _is_corrections(value: Any) -> bool:
     """Return True for a correction cap: an int of at least 0, or UNCAPPED."""
     if isinstance(value, str):
@@ -371,12 +417,25 @@ _NUMBER = _Leaf("a finite number", _is_number)
 _NUMBER_OR_STR = _Leaf("a finite number or a string", lambda value: _is_number(value) or isinstance(value, str))
 _AT_LEAST_ONE = _Leaf("an integer of at least 1", lambda value: _is_int(value) and value >= 1)
 _CORRECTIONS = _Leaf(f"an integer of at least 0 or {UNCAPPED!r}", _is_corrections)
+_POSITIVE = _Leaf("a finite number above zero", lambda value: _is_number(value) and value > 0)
+# model.api_key_env names the variable that holds a key, never the key (Agent Rule 12; task P17.3). A value that does
+# not fit is not shown, since it may be a key pasted in by mistake.
+_ENV_NAME = _Leaf(
+    "an environment variable name: uppercase letters, digits, and '_', not starting with a digit, "
+    "at most 64 characters",
+    _is_env_name,
+    shown=False,
+)
+# model.revision and model.seed: an in-process model's pin and sampling seed (task P17.4).
+_REVISION = _Leaf("a full commit id: 40 lowercase hexadecimal characters", _is_revision)
+_SEED = _Leaf(f"an integer from 0 to {_SEED_LIMIT - 1}", _is_seed)
 _STRINGS = _ListOf(_STR)
 _KIND = _KindSection()
 _EXECUTOR = _ExecutorSection()
 
 # Every key a run recipe may hold and its type. Inside a fixed mapping every key is optional unless REQUIRED
-# names it, and any other key is unknown. Train recipes are not run recipes; their keys are unknown here.
+# names it, and any other key is unknown. A train-only key (TRAIN_SCHEMA's base_model, method, trainer, data, and
+# the rest) is unknown here; bench, adversary, runs_root, and extends are in both schemas.
 # Entries of lists and open maps state every key they need: a direction both ends, an agent its model, and a judge
 # its model, rubric, and use (an agent's enabled and a judge's mode are optional).
 SCHEMA = _Fields(
@@ -403,7 +462,20 @@ SCHEMA = _Fields(
         "oracle": _KIND,
         "profiler": _KIND,
         "adversary": _KIND,
-        "model": _Fields({"backend": _STR, "id": _STR}),
+        # device: a device section (P17.2); base_url, timeout_s, api_key_env: a served backend's settings (P17.3);
+        # revision, seed: an in-process model's settings (P17.4)
+        "model": _Fields(
+            {
+                "backend": _STR,
+                "id": _STR,
+                "device": _KIND,
+                "base_url": _STR,
+                "timeout_s": _POSITIVE,
+                "api_key_env": _ENV_NAME,
+                "revision": _REVISION,
+                "seed": _SEED,
+            }
+        ),
         "arms": _STRINGS,
         "metrics": _STRINGS,
         "refine": _Fields({"counter_start": _NUMBER, "counter_step": _NUMBER, "max_iters": _INT}),
@@ -437,6 +509,9 @@ REQUIRED: tuple[str, ...] = (
     "executor.kind",  # in the single form; the per-language form names a kind in each entry instead
 )
 
+# The model section's own keys; every other model key is the backend's config (_bindings).
+_MODEL_OWN = ("backend", "id")
+
 # Kind sections in binding order, with the interface each binds.
 _KIND_SECTIONS: tuple[tuple[str, str], ...] = (
     ("executor", "Executor"),
@@ -444,6 +519,62 @@ _KIND_SECTIONS: tuple[tuple[str, str], ...] = (
     ("profiler", "Profiler"),
     ("adversary", "Agent"),
 )
+
+# The train recipe's names (bible Training Module, Algorithms and Weight Modes; the train.yaml block's comments),
+# and its two data sources: synthetic fixtures (data.synthetic) and bench items (bench).
+METHODS: tuple[str, ...] = ("sft", "rft", "dpo", "grpo", "gspo", "ppo", "adversarial")
+WEIGHT_MODES: tuple[str, ...] = ("full", "lora", "qlora", "dora")
+EPISODES: tuple[str, ...] = ("single_turn", "multi_turn")
+DATA_SOURCES: tuple[str, ...] = ("synthetic", "bench")
+# The one split a train recipe may read (Agent Rule 5).
+TRAIN_SPLIT = "train"
+# A synthetic fixture's file name: one plain name ending in .jsonl, read from the fixture directory.
+_SYNTHETIC_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.jsonl")
+# The Trainer's declarations the loader reads: the recipe key whose value must be among them, the attribute, and
+# what the value is called in a refusal.
+_DECLARATIONS = (("method", "methods", "method"), ("weights", "weight_modes", "weight mode"))
+
+
+def _one_of(names: Sequence[str]) -> _Leaf:
+    """Return a leaf that accepts exactly one of `names` as written."""
+    return _Leaf(f"one of {', '.join(names)}", lambda value: isinstance(value, str) and value in names)
+
+
+def _is_synthetic_name(value: Any) -> bool:
+    """Return True for a fixture file name: one plain name ending in .jsonl."""
+    return isinstance(value, str) and _SYNTHETIC_TEXT.fullmatch(value) is not None
+
+
+# Every key a train recipe may hold: the bible's train.yaml block, plus extends, runs_root (where the train tree
+# goes), trainer (a kind section binding the Trainer, with its device and config keys), and data (the synthetic
+# fixture). A run-only key (llm, stages, model, and the rest) is unknown here, as a train-only key is in SCHEMA.
+TRAIN_SCHEMA = _Fields(
+    {
+        "extends": _STR,  # recipe files only; never kept in the resolved mapping
+        "runs_root": _STR,
+        "base_model": _STR,
+        "method": _one_of(METHODS),
+        "episode": _one_of(EPISODES),
+        "weights": _one_of(WEIGHT_MODES),
+        "lora": _Fields({"r": _AT_LEAST_ONE, "targets": _STR}),
+        "bench": _Fields(
+            {"suite": _STR, "split": _STR, "items": _ListOf(_STR, non_empty=True)},
+            required=frozenset({"suite", "split"}),
+        ),
+        "reward": _Fields({"profile": _STR, "executor": _STR, "cache": _BOOL}),
+        "rollout": _Fields({"engine": _STR, "group_size": _AT_LEAST_ONE}),
+        "adversary": _KIND,
+        "export": _Fields({"merge": _BOOL, "fxb": _STR, "register_as": _STR}),
+        "trainer": _KIND,
+        "data": _Fields(
+            {"synthetic": _Leaf("a fixture file name: one plain name ending in .jsonl", _is_synthetic_name)},
+            required=frozenset({"synthetic"}),
+        ),
+    }
+)
+
+# Choices every resolved train recipe must state with a value; the loader never picks one.
+TRAIN_REQUIRED: tuple[str, ...] = ("base_model", "method", "weights", "trainer.kind")
 
 
 def default_roots() -> tuple[Path, ...]:
@@ -474,6 +605,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     except RegistryError as exc:
         raise RecipeError(f"{path}: {exc}") from exc
     _check_faithful_toolchains(path, data, bindings, registry)
+    _check_devices(path, bindings, registry)
     canonical = yaml.safe_dump(data, sort_keys=True, default_flow_style=False, allow_unicode=False, width=4096)
     return Recipe(
         name=_recipe_name(path),
@@ -484,6 +616,55 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
         recipe_hash=hashlib.sha256(canonical.encode("ascii")).hexdigest(),
         bindings=tuple(bindings),
     )
+
+
+def load_train_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Registry | None = None) -> Recipe:
+    """Load, resolve, and check the train recipe at `path`; construct no component and ask no framework.
+
+    Each file of the extends chain is read against TRAIN_SCHEMA and merged as
+    load_recipe merges; nothing is materialized. The checks, in order: types
+    and TRAIN_REQUIRED; one data source (_check_train_source); bench.split
+    (_check_train_split); the Trainer binding (check_bindings); the Trainer's
+    declarations (_check_trainer_declares); and its device section
+    (_check_devices). The hash is load_recipe's. `roots` and `registry`
+    default as for load_recipe. Every failure raises RecipeError.
+    """
+    path = Path(path)
+    search = tuple(Path(root) for root in (default_roots() if roots is None else roots))
+    chain = _load_chain(path, search, TRAIN_SCHEMA)
+    data = _fresh(_merged(chain))
+    try:
+        TRAIN_SCHEMA.check(data, "")
+        _check_required(data, TRAIN_REQUIRED)
+    except _SchemaError as exc:
+        raise RecipeError(f"{path}: {exc}") from None
+    _check_train_source(path, data)
+    _check_train_split(path, data)
+    trainer = data["trainer"]
+    config = {key: value for key, value in trainer.items() if key != "kind"}
+    bindings = [Binding(interface="Trainer", name=trainer["kind"], where="trainer.kind", config=_fresh(config))]
+    registry = DEFAULT_REGISTRY if registry is None else registry
+    try:
+        check_bindings(bindings, registry)
+    except RegistryError as exc:
+        raise RecipeError(f"{path}: {exc}") from exc
+    _check_trainer_declares(path, data, bindings[0], registry)
+    _check_devices(path, bindings, registry)
+    canonical = yaml.safe_dump(data, sort_keys=True, default_flow_style=False, allow_unicode=False, width=4096)
+    return Recipe(
+        name=_recipe_name(path),
+        path=path,
+        chain=tuple(_recipe_name(file) for file, _ in chain),
+        data=data,
+        canonical_yaml=canonical,
+        recipe_hash=hashlib.sha256(canonical.encode("ascii")).hexdigest(),
+        bindings=tuple(bindings),
+    )
+
+
+def train_data_source(data: Mapping[str, Any]) -> str:
+    """Return the data source of a loaded train recipe's mapping: "bench" or "synthetic" (DATA_SOURCES)."""
+    return "bench" if "bench" in data else "synthetic"
 
 
 def resolved_data(path: Path, *, roots: Sequence[Path] | None = None) -> dict[str, Any]:
@@ -525,8 +706,8 @@ def _recipe_name(path: Path) -> str:
 # Reading files and following extends (steps 1 to 3)
 
 
-def _load_chain(path: Path, roots: Sequence[Path]) -> list[tuple[Path, dict[str, Any]]]:
-    """Read `path` and every recipe it extends; return (file, own mapping) from the root ancestor down."""
+def _load_chain(path: Path, roots: Sequence[Path], schema: _Fields = SCHEMA) -> list[tuple[Path, dict[str, Any]]]:
+    """Read `path` and every recipe it extends against `schema`; return (file, own mapping) from the root down."""
     chain: list[tuple[Path, dict[str, Any]]] = []
     seen: set[str] = set()
     current: Path | None = path
@@ -539,15 +720,15 @@ def _load_chain(path: Path, roots: Sequence[Path]) -> list[tuple[Path, dict[str,
             names = " -> ".join([*(_recipe_name(file) for file, _ in chain), _recipe_name(current)])
             raise RecipeError(f"{chain[-1][0]}: extends makes a cycle: {names}")
         seen.add(identity)
-        data = _read_recipe_file(current)
+        data = _read_recipe_file(current, schema)
         chain.append((current, data))
         current = _parent_path(current, data, roots)
     chain.reverse()
     return chain
 
 
-def _read_recipe_file(path: Path) -> dict[str, Any]:
-    """Read one recipe file as UTF-8, parse it strictly, and refuse keys the schema does not list."""
+def _read_recipe_file(path: Path, schema: _Fields = SCHEMA) -> dict[str, Any]:
+    """Read one recipe file as UTF-8, parse it strictly, and refuse keys `schema` does not list."""
     try:
         text = path.read_bytes().decode("utf-8")
     except OSError as exc:
@@ -560,7 +741,7 @@ def _read_recipe_file(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise RecipeError(f"{path}: the top level must be a mapping of keys, not {_describe(data)}")
     try:
-        SCHEMA.keys(data, "")
+        schema.keys(data, "")
     except _SchemaError as exc:
         raise RecipeError(f"{path}: {exc}") from None
     return data
@@ -575,12 +756,13 @@ def _parse_yaml(text: str, path: Path) -> Any:
     """Parse one YAML document with the safe loader.
 
     It refuses repeated keys, self-containing aliases, deep nesting, and
-    aliases that expand to more than _MAX_VALUES values.
+    aliases that expand to more than _MAX_VALUES values. A YAML error's
+    message is _yaml_problem's, which quotes no source line.
     """
     try:
         loader = yaml.SafeLoader(text)
     except yaml.YAMLError as exc:
-        raise RecipeError(f"{path}: not valid YAML: {exc}") from exc
+        raise RecipeError(f"{path}: not valid YAML: {_yaml_problem(exc)}") from None
     loader.name = path.name
     try:
         node = loader.get_single_node()
@@ -591,11 +773,36 @@ def _parse_yaml(text: str, path: Path) -> Any:
     except _SchemaError as exc:
         raise RecipeError(f"{path}: {exc}") from None
     except yaml.YAMLError as exc:
-        raise RecipeError(f"{path}: not valid YAML: {exc}") from exc
+        raise RecipeError(f"{path}: not valid YAML: {_yaml_problem(exc)}") from None
     except RecursionError as exc:
         raise RecipeError(f"{path}: not valid YAML: mappings and lists nest too deep to parse") from exc
     finally:
         loader.dispose()
+
+
+def _yaml_problem(exc: yaml.YAMLError) -> str:
+    """Return a YAML error as its context, its problem, and the problem's line and column, quoting no source line.
+
+    PyYAML's own text (str(exc)) quotes the offending line, which could show
+    a mistyped value such as a key written into api_key_env (task P17.11), so
+    only exc.context, exc.problem, and the line and column (both from 1) of
+    exc.problem_mark, else exc.context_mark, are used, for every key, since
+    a syntax error comes before any key is known. Known cases, not
+    complete: a problem text can itself hold source text, such as an
+    unknown tag's name, and _construct's message for a scalar its explicit
+    tag cannot read quotes the constructor's error, which can hold the
+    scalar. A reader error gives its reason and character position, and any
+    other error its class name.
+    """
+    if isinstance(exc, yaml.reader.ReaderError):
+        return f"{exc.reason} at character {exc.position}"
+    if not isinstance(exc, yaml.MarkedYAMLError):
+        return type(exc).__name__
+    parts = [str(part) for part in (exc.context, exc.problem) if part]
+    mark = exc.problem_mark or exc.context_mark
+    if mark is not None:
+        parts.append(f"at line {mark.line + 1}, column {mark.column + 1}")
+    return " ".join(parts) or type(exc).__name__
 
 
 def _construct(loader: yaml.SafeLoader, node: yaml.Node, *, whole: bool = False) -> Any:
@@ -754,13 +961,18 @@ def _is_file_as_spelled(base: Path, relative: str) -> bool:
 
 def _resolve(chain: Sequence[tuple[Path, Mapping[str, Any]]]) -> dict[str, Any]:
     """Merge the chain from the root ancestor down, then materialize defaults and apply faithful (steps 4 to 6)."""
-    merged: dict[str, Any] = {}
-    for _, own in chain:
-        merged = _overlay(merged, {key: value for key, value in own.items() if key != "extends"})
-    data = _fresh(merged)
+    data = _fresh(_merged(chain))
     _materialize_defaults(data, _recipe_name(chain[-1][0]))
     _apply_faithful(data)
     return data
+
+
+def _merged(chain: Sequence[tuple[Path, Mapping[str, Any]]]) -> dict[str, Any]:
+    """Merge each file's own keys but extends over the chain so far, from the root ancestor down (step 4)."""
+    merged: dict[str, Any] = {}
+    for _, own in chain:
+        merged = _overlay(merged, {key: value for key, value in own.items() if key != "extends"})
+    return merged
 
 
 def _materialize_defaults(data: dict[str, Any], name: str) -> None:
@@ -802,11 +1014,13 @@ def _overlay(merged: Mapping[str, Any], child: Mapping[str, Any]) -> dict[str, A
     section instead of merging with it: the old component's config keys do not
     apply to the new one (the bible's tier-1 compile-only executor, `{kind: none}`,
     in place of a GPU executor with a host). Restating the same kind merges as usual.
-    An executor section that switches between the single and the per-language
-    form replaces the inherited one too, and two per-language sections merge
-    entry by entry (_merge_executors).
+    A train recipe's trainer section follows the same rule (task P17.8); run
+    recipes never hold one. An executor section that switches between the
+    single and the per-language form replaces the inherited one too, and two
+    per-language sections merge entry by entry (_merge_executors).
     """
-    switched = {section for section, _ in _KIND_SECTIONS if _names_other_kind(merged.get(section), child.get(section))}
+    sections = [section for section, _ in _KIND_SECTIONS] + ["trainer"]
+    switched = {section for section in sections if _names_other_kind(merged.get(section), child.get(section))}
     inherited, own = merged.get("executor"), child.get("executor")
     forms = (_executor_form(inherited), _executor_form(own))
     if None not in forms and forms[0] != forms[1]:
@@ -842,11 +1056,15 @@ def _names_other_kind(inherited: Any, value: Any) -> bool:
 
 
 def _merge(parent: Mapping[str, Any], child: Mapping[str, Any]) -> dict[str, Any]:
-    """Return `parent` overlaid by `child`: two mappings merge recursively, and anything else from the child wins."""
+    """Return `parent` overlaid by `child`: two mappings merge recursively, and anything else from the child wins.
+
+    A `device` value is one choice, so the child's replaces the inherited one
+    whole at any depth, never merged key by key.
+    """
     merged = dict(parent)
     for key, value in child.items():
         inherited = merged.get(key)
-        both_maps = isinstance(inherited, dict) and isinstance(value, dict)
+        both_maps = isinstance(inherited, dict) and isinstance(value, dict) and key != DEVICE_KEY
         merged[key] = _merge(inherited, value) if both_maps else value
     return merged
 
@@ -860,13 +1078,13 @@ def _fresh(value: Any) -> Any:
     return value
 
 
-def _check_required(data: Mapping[str, Any]) -> None:
-    """Raise a required-choice problem for the first REQUIRED key the resolved mapping does not state.
+def _check_required(data: Mapping[str, Any], required: Sequence[str] = REQUIRED) -> None:
+    """Raise a required-choice problem for the first `required` key the resolved mapping does not state.
 
     executor.kind is required of the single form only: the per-language form
     names a kind in each entry, which the schema check already required.
     """
-    for dotted in REQUIRED:
+    for dotted in required:
         if dotted == "executor.kind" and executor_languages(data):
             continue
         value: Any = data
@@ -901,12 +1119,106 @@ def _check_faithful_toolchains(
             )
 
 
+def _check_devices(path: Path, bindings: Sequence[Binding], registry: Registry) -> None:
+    """Refuse a component that declares takes_device without a device section, and any section parse_device refuses.
+
+    Runs after check_bindings, so every name is registered and a device key
+    sits only under a component that takes one. The loader never picks a
+    device; a per-language entry written as a bare name cannot carry one.
+    """
+    for binding in bindings:
+        entry = registry.get(binding.interface, binding.name)
+        if TAKES_DEVICE not in entry.capabilities:
+            continue
+        where = device_path(binding)
+        if DEVICE_KEY not in binding.config:
+            bare = binding.where.startswith("executor.") and not binding.where.endswith(".kind")
+            hint = "; a bare executor name cannot carry one, so write a kind section {kind, device}" if bare else ""
+            raise RecipeError(
+                f"{path}: {where} is a required choice with no value; {entry.interface} {entry.name!r} "
+                f"({binding.where}) takes a device section {{kind, indices}} and the loader never picks one{hint}"
+            )
+        try:
+            parse_device(binding.config[DEVICE_KEY], where)
+        except DeviceSectionError as error:
+            raise RecipeError(f"{path}: {error}") from None
+
+
+def _check_train_source(path: Path, data: Mapping[str, Any]) -> None:
+    """Refuse a train recipe that names both data sources, bench and data.synthetic, or neither."""
+    named = [key for key in ("bench", "data") if key in data]
+    if len(named) != 1:
+        found = "both" if named else "neither"
+        raise RecipeError(
+            f"{path}: a train recipe names exactly one data source, bench or data.synthetic; this one names {found}"
+        )
+
+
+def _check_train_split(path: Path, data: Mapping[str, Any]) -> None:
+    """Refuse a bench.split other than train; eval and unassigned with Agent Rule 5's words (lassi.bench.registry)."""
+    if "bench" not in data:
+        return
+    split = data["bench"]["split"]
+    if split in HELD_SPLITS:
+        raise RecipeError(
+            f"{path}: bench.split is {split!r}; the {split} split may never be used for "
+            f"{FORBIDDEN_PURPOSES['train']} (Agent Rule 5), so a train recipe reads only the split {TRAIN_SPLIT!r}"
+        )
+    if split != TRAIN_SPLIT:
+        raise RecipeError(f"{path}: bench.split is {split!r}; a train recipe reads only the split {TRAIN_SPLIT!r}")
+
+
+def _check_trainer_declares(path: Path, data: Mapping[str, Any], binding: Binding, registry: Registry) -> None:
+    """Refuse a Trainer without takes_device, a malformed declaration, or a recipe value it does not declare.
+
+    The Trainer must declare takes_device, since a train recipe names its
+    device with no default (bible Training Module, Compute). methods,
+    weight_modes, and data_sources must be collections of strings; the
+    recipe's method, weights, and data source must be among them. Each
+    refusal names the Trainer, and the key or the attribute. Runs after
+    check_bindings, so the Trainer is registered; nothing is built.
+    """
+    entry = registry.get(binding.interface, binding.name)
+    who = f"{entry.interface} {entry.name!r} ({binding.where})"
+    if TAKES_DEVICE not in entry.capabilities:
+        raise RecipeError(
+            f"{path}: {who} does not declare {TAKES_DEVICE!r}; a train recipe names its device at trainer.device "
+            "with no default, so its Trainer must take one"
+        )
+    source = train_data_source(data)
+    checks = [(key, data[key], attribute, noun) for key, attribute, noun in _DECLARATIONS]
+    checks.append(("bench" if source == "bench" else "data.synthetic", source, "data_sources", "data source"))
+    for key, value, attribute, noun in checks:
+        declared = _declared_names(path, who, entry.factory, attribute)
+        if value not in declared:
+            carried = ", ".join(sorted(declared)) or "nothing"
+            raise RecipeError(
+                f"{path}: {key}: {who} does not carry out the {noun} {value!r}; it carries out: {carried}"
+            )
+
+
+def _declared_names(path: Path, who: str, factory: type, attribute: str) -> frozenset[str]:
+    """Return a Trainer class's declared `attribute` as a frozenset; refuse one that is not a collection of strings."""
+    value = getattr(factory, attribute, None)
+    is_collection = isinstance(value, (list, tuple, set, frozenset))
+    if not is_collection or not all(isinstance(item, str) for item in value):
+        raise RecipeError(
+            f"{path}: {who} declares {attribute} as {value!r}; it must be a collection of strings, the names it "
+            "carries out"
+        )
+    return frozenset(value)
+
+
 def _bindings(data: Mapping[str, Any]) -> list[Binding]:
     """Return the components the resolved mapping binds, in the order below; absent sections bind nothing.
 
     A per-language executor section binds one Executor per language, in
     executor_languages order, at executor.<language> for a name and
-    executor.<language>.kind for a kind section.
+    executor.<language>.kind for a kind section. The LLMBackend's config holds
+    every key of the model section but backend and id: its device section,
+    when it has one, under `device`, any server setting (base_url,
+    timeout_s, api_key_env; task P17.3), and any in-process model setting
+    (revision, seed; task P17.4).
     """
     found: list[Binding] = []
 
@@ -914,7 +1226,9 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
         found.append(Binding(interface=interface, name=name, where=where, config=_fresh(dict(config or {}))))
 
     if "backend" in data.get("model", {}):
-        bind("LLMBackend", data["model"]["backend"], "model.backend")
+        model = data["model"]
+        model_config = {key: value for key, value in model.items() if key not in _MODEL_OWN}
+        bind("LLMBackend", model["backend"], "model.backend", model_config)
     for key in sorted(data.get("toolchain", {})):
         bind("Toolchain", data["toolchain"][key], f"toolchain.{key}")
     for section, interface in _KIND_SECTIONS:

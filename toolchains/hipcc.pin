@@ -1,0 +1,23 @@
+# Host hipcc pin (task P17.6; bible Toolchain Pins, Execution Backends gpu (AMD) row, Host Facts ROCm). The project
+# does not install this compiler: it is the build host's ROCm hipcc, pinned by version and path as toolchains/gcc.pin
+# pins g++, so there is no hipcc.sh and no PREFIX_NAME. lassi.core.runner runs EXECUTABLE --offload-arch=gfx942
+# --version (the class's VERSION_ARGS) in the compile sandbox before the first build and refuses output without
+# EXPECT_VERSION (Agent Rule 10).
+NAME=hipcc
+# HIP 7.12.60610 with its build hash, as hipcc --version printed it in the sandbox on alpha01
+# (plans/spikes/p17-frameworks.md, Results 5); Trial.toolchain_pins.hipcc records this value.
+VERSION=7.12.60610-2bd1678d3d
+# An ELF binary run by its absolute path; it finds its clang, lld, and device libraries relative to itself.
+EXECUTABLE=/opt/rocm/core-7.12/bin/hipcc
+# What lassi.toolchains.hipcc builds with (HIPCC_FLAGS; a unit test checks they are equal). The target is always
+# explicit, in every build and in the --version check, since hipcc given none runs rocm_agent_enumerator to choose one
+# (ROCm/llvm-project tag therock-7.12, amd/hipcc/src/hipBin_amd.h:475, :779-792; read from source), so no command
+# starts amdgpu-arch, offload-arch, rocm_agent_enumerator, or rocminfo (OQ-002).
+FLAGS="--offload-arch=gfx942 -Wall -O3"
+# The first line of hipcc --version in the sandbox (rx 20261005-204140-desktop-8r113ei-detached-e805c6d4-54d2,
+# Results 5, run without a target); hipcc prints it after a target too (hipBin_amd.h:914-916, read from source), which
+# the remote test checks. The second line it printed was
+# "AMD clang version 22.0.0git (https://github.com/ROCm/llvm-project.git c849bc16b0e49951d313756f20b73c2b28d321d7+PATCHED:9a6ac45c97a1e511db838c5b46257324d2de1780)".
+EXPECT_VERSION="HIP version: 7.12.60610-2bd1678d3d"
+# No key names a variable: the measured compile needed only the sandbox's PATH, LANG, LC_ALL, and TMPDIR. The ROCm
+# environment script is never sourced, and HIP_PATH and ROCM_PATH stay unset (bible Host Facts).

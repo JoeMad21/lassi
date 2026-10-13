@@ -1,0 +1,14 @@
+{
+  "derivation": "Five lines. 'main.hip:3:10: fatal error: 'p176_no_such_header.h' file not found' is one diagnostic, and a fatal error is read as an error: file main.hip and line 3 as printed; main.hip is a built file, so the column 10 is kept (line 3 is '#include ' and then the double quote that starts the header name, at column 10); no trailing [option], so the code is null; the message is the text after 'fatal error: '. The source echo, the caret line, and '1 error generated when compiling for gfx942.' give nothing; no host pass printed. The last line, 'failed to execute:' and the clang++ command hipcc ran, is hipcc's own report of the failed clang call, so nothing.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.hip",
+      "line": 3,
+      "column": 10,
+      "message": "'p176_no_such_header.h' file not found"
+    }
+  ]
+}

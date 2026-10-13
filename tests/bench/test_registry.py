@@ -15,13 +15,24 @@ which Suite.support_files reads from the pinned sources. tools/fetch_bench.py
 fetches the support files with the item files and refuses a fetch whose
 files differ from their sha256. The ten-app content of the real manifest is
 checked in tests/bench/test_hecbench10.py.
+
+P17.9 adds Suite.train_view(), the only bench view a Trainer gets
+(TrainData.suite; Agent Rule 5): a frozen TrainView holding the suite's
+name and commit, every train-split item (each fetched with
+Suite.item(purpose="train")) in a read-only mapping, and the eval and
+unassigned names with their splits, for the refusal only. TrainView.item
+returns a train item; an eval or unassigned name raises EvalSplitError with
+Suite.item's words, and an unknown name a plain ValueError. The view holds
+no eval or unassigned SuiteItem and no reference to the Suite.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import importlib.util
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
 
@@ -289,3 +300,139 @@ def test_fetch_refuses_files_whose_sha256_differs_from_the_manifest(
     assert fetch_bench.main([str(manifest)]) == 0
     assert fetched, "the checkout was fetched again"
     assert (dest / "src/saxpy-cuda/main.cu").read_bytes() == CUDA_TEXT.encode("utf-8")
+
+
+# ---------------------------------------------------------------------------
+# The train-only view a Trainer gets (task P17.9; Agent Rule 5)
+
+
+SPLIT_MANIFEST = (
+    "suite: split-suite\n"
+    "repo: https://example.invalid/split.git\n"
+    f"commit: {'b' * 40}\n"
+    "items:\n"
+    "  alpha:\n"
+    "    split: train\n"
+    "    languages:\n"
+    "      omp: {dir: src/alpha-omp, files: [main.cpp]}\n"
+    "  beta:\n"
+    "    split: train\n"
+    "    languages:\n"
+    "      omp: {dir: src/beta-omp, files: [main.cpp]}\n"
+    "  held:\n"
+    "    split: eval\n"
+    "    languages:\n"
+    "      omp: {dir: src/held-omp, files: [main.cpp]}\n"
+    "  open:\n"
+    "    split: unassigned\n"
+    "    languages:\n"
+    "      omp: {dir: src/open-omp, files: [main.cpp]}\n"
+)
+
+
+def split_suite(tmp_path: Path) -> bench.Suite:
+    """Load a SYNTHETIC suite with two train items, one eval item, and one unassigned item."""
+    return bench.load_suite(write(tmp_path / "split-suite.yaml", SPLIT_MANIFEST))
+
+
+def train_view(suite: bench.Suite) -> object:
+    """Return suite.train_view(), failing the test clearly while it does not exist (task P17.9)."""
+    if not hasattr(suite, "train_view"):
+        pytest.fail("Suite has no train_view() yet (task P17.9)")
+    return suite.train_view()
+
+
+def test_train_view_is_a_frozen_dataclass_of_the_train_split(tmp_path: Path) -> None:
+    registry = importlib.import_module("lassi.bench.registry")
+    if not hasattr(registry, "TrainView"):
+        pytest.fail("lassi.bench.registry has no TrainView yet (task P17.9)")
+    view_class = registry.TrainView
+    assert dataclasses.is_dataclass(view_class) and view_class.__dataclass_params__.frozen
+    assert [item.name for item in dataclasses.fields(view_class)] == ["name", "commit", "train_items", "held"]
+    assert (view_class.__doc__ or "").strip()
+    suite = split_suite(tmp_path)
+    view = train_view(suite)
+    assert isinstance(view, view_class)
+    assert (view.name, view.commit) == (suite.name, suite.commit)
+    assert sorted(view.train_items) == ["alpha", "beta"]
+    assert all(view.train_items[name] is suite.items[name] for name in ("alpha", "beta"))
+    assert dict(view.held) == {"held": "eval", "open": "unassigned"}
+
+
+def test_train_view_fetches_each_train_item_for_purpose_train(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    suite = split_suite(tmp_path)
+    calls: list[tuple[str, str]] = []
+    original = bench.Suite.item
+
+    def spy(self: bench.Suite, name: str, *, purpose: str) -> bench.SuiteItem:
+        calls.append((name, purpose))
+        return original(self, name, purpose=purpose)
+
+    monkeypatch.setattr(bench.Suite, "item", spy)
+    train_view(suite)
+    assert sorted(calls) == [("alpha", "train"), ("beta", "train")]
+
+
+def test_train_view_mappings_are_read_only(tmp_path: Path) -> None:
+    suite = split_suite(tmp_path)
+    view = train_view(suite)
+    with pytest.raises(TypeError):
+        view.train_items["held"] = suite.items["held"]  # type: ignore[index]
+    with pytest.raises(TypeError):
+        view.held["alpha"] = "train"  # type: ignore[index]
+
+
+def test_train_view_item_returns_a_train_item(tmp_path: Path) -> None:
+    suite = split_suite(tmp_path)
+    found = train_view(suite).item("alpha")
+    assert found is suite.items["alpha"] and found.split == "train"
+
+
+@pytest.mark.parametrize("name", ["held", "open"], ids=["eval", "unassigned"])
+def test_train_view_refuses_an_eval_or_unassigned_name_with_suite_items_words(name: str, tmp_path: Path) -> None:
+    suite = split_suite(tmp_path)
+    with pytest.raises(bench.EvalSplitError) as by_suite:
+        suite.item(name, purpose="train")
+    with pytest.raises(bench.EvalSplitError) as by_view:
+        train_view(suite).item(name)
+    assert str(by_view.value) == str(by_suite.value)
+    assert "Agent Rule 5" in str(by_view.value)
+
+
+def test_train_view_refuses_an_unknown_name_with_a_value_error(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="nosuch") as refused:
+        train_view(split_suite(tmp_path)).item("nosuch")
+    assert not isinstance(refused.value, bench.EvalSplitError)
+
+
+def test_train_view_holds_no_eval_item_and_no_suite(tmp_path: Path) -> None:
+    suite = split_suite(tmp_path)
+    view = train_view(suite)
+    found = reachable(view)
+    assert not [obj for obj in found if isinstance(obj, bench.Suite)], "the view holds the whole suite"
+    splits = sorted(obj.split for obj in found if isinstance(obj, bench.SuiteItem))
+    assert splits == ["train", "train"], splits
+
+
+def reachable(root: object) -> list[object]:
+    """Return every object reachable from `root` through attributes, mapping values and keys, and sequences."""
+    seen: dict[int, object] = {}
+    stack = [root]
+    while stack:
+        obj = stack.pop()
+        if id(obj) in seen or isinstance(obj, (str, bytes, int, float, bool, type(None), type, ModuleType)):
+            continue
+        seen[id(obj)] = obj
+        if isinstance(obj, Mapping):
+            stack.extend(obj.keys())
+            stack.extend(obj.values())
+        elif isinstance(obj, (list, tuple, set, frozenset)):
+            stack.extend(obj)
+        if hasattr(obj, "__dict__"):
+            stack.extend(vars(obj).values())
+        for slot in getattr(type(obj), "__slots__", ()):
+            if hasattr(obj, slot):
+                stack.append(getattr(obj, slot))
+    return list(seen.values())

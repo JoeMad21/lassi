@@ -1,0 +1,5 @@
+ld.lld: error: undefined symbol: helper(int)
+>>> referenced by main.hip
+>>>               /mnt/nvme10/joseph_ufl/lassi-runs/fixture-captures/20261006-121638-desktop-8r113ei-detached-f03fa62a-961a/work/hip_linker_error/@lassi-tmp/main-8098dc.o:(main)
+clang++: error: linker command failed with exit code 1 (use -v to see invocation)
+failed to execute:/opt/rocm/core-7.12/lib/llvm/bin/clang++  --offload-arch=gfx942 --driver-mode=g++ --hip-link  -Wall -O3 -o "main" -x hip main.hip

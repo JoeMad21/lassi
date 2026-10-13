@@ -14,7 +14,8 @@ and unassigned, a split that decides nothing until the owner assigns it.
 PURPOSES are train (training), eval (evaluation), prompt-tuning, and harvest
 (corpus harvest). Suite.item refuses an eval or unassigned item to train,
 prompt-tuning, and harvest with EvalSplitError; a train item serves every
-purpose.
+purpose. Suite.train_view() returns a TrainView, the train split alone, which
+is the only bench view a Trainer gets (task P17.9).
 
 Optional keys (P1.2), left out where a manifest does not need them:
 
@@ -70,6 +71,7 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from types import MappingProxyType
 from typing import Any, Mapping
 
 import yaml
@@ -182,6 +184,42 @@ class SuiteItem:
     unpack_to_dest: str | None = None
 
 
+def _held_message(suite: str, name: str, split: str, purpose: str) -> str:
+    """Return the EvalSplitError text for held item `name` of `split` asked for a FORBIDDEN_PURPOSES purpose."""
+    return (
+        f"{suite}/{name} is in the {split} split and may never be used for "
+        f"{FORBIDDEN_PURPOSES[purpose]} (Agent Rule 5)"
+    )
+
+
+@dataclass(frozen=True)
+class TrainView:
+    """A suite's train split: the only bench view a Trainer gets (Agent Rule 5; task P17.9).
+
+    `train_items` maps each train-split item's name to its SuiteItem, each
+    fetched with Suite.item(purpose="train"); `held` maps each eval and
+    unassigned name to its split, kept only so item() can refuse it with
+    Suite.item's words. Both mappings are read-only, and the view holds no
+    eval or unassigned SuiteItem and no reference to the Suite.
+    """
+
+    name: str
+    commit: str
+    train_items: Mapping[str, SuiteItem]
+    held: Mapping[str, str]
+
+    def item(self, name: str) -> SuiteItem:
+        """Return train item `name`; an eval or unassigned one raises EvalSplitError, an unknown one ValueError."""
+        if name in self.held:
+            raise EvalSplitError(_held_message(self.name, name, self.held[name], "train"))
+        found = self.train_items.get(name)
+        if found is None:
+            raise ValueError(
+                f"suite {self.name} has no train item {name!r}; train items: {', '.join(sorted(self.train_items))}"
+            )
+        return found
+
+
 @dataclass(frozen=True)
 class Suite:
     """A loaded suite manifest: the pinned repository, its items, and the pin of its installed copy, if any."""
@@ -205,11 +243,14 @@ class Suite:
         if found is None:
             raise ValueError(f"suite {self.name} has no item {name!r}; items: {', '.join(sorted(self.items))}")
         if purpose in FORBIDDEN_PURPOSES and found.split in HELD_SPLITS:
-            raise EvalSplitError(
-                f"{self.name}/{name} is in the {found.split} split and may never be used for "
-                f"{FORBIDDEN_PURPOSES[purpose]} (Agent Rule 5)"
-            )
+            raise EvalSplitError(_held_message(self.name, name, found.split, purpose))
         return found
+
+    def train_view(self) -> TrainView:
+        """Return the train-only view of this suite (TrainView; task P17.9), each train item fetched for train."""
+        train = {name: self.item(name, purpose="train") for name, spec in self.items.items() if spec.split == "train"}
+        held = {name: spec.split for name, spec in self.items.items() if spec.split in HELD_SPLITS}
+        return TrainView(self.name, self.commit, MappingProxyType(train), MappingProxyType(held))
 
     def reference_target(self, name: str, direction: Direction, root: Path, *, purpose: str) -> dict[str, str]:
         """Return the item's files in the direction's target language (file name -> text), read under `root`."""

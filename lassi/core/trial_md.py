@@ -34,6 +34,14 @@ and its note ("-" when none). A trial without them shows neither. A
 "## Baseline diagnostics" section after them shows Trial.baseline_diagnostics
 as a diagnostics table when the baseline noted anything.
 
+Device records (task P17.2): the Provenance table has one row per manifest
+field and leaves out Provenance.device_records. When the trial records
+devices (a non-empty list), a "### Device records" table follows it, before
+the toolchain pins: one row per DeviceRecord in order and one column per
+field, named as the field, each value formatted as a provenance value
+(fmt_provenance: an unknown one reads "-", indices as the list prints). Not
+recorded (None) and no devices ([]) add nothing.
+
 The page is a list of blocks (headings, lines, tables, fenced code), each
 ending with one newline and separated by one blank line. Fenced text goes
 inside a fence longer than any backtick run it contains and is copied as is,
@@ -50,6 +58,12 @@ request's diagnostics. Each distinct message text is fenced once on the
 page: an attempt's prompt under that attempt, any other text at its first
 request. A record whose requests were not recorded (None) shows "Not
 recorded."; a trial that asked no model shows "None.".
+
+Guard reasons (task P17.14): an attempt's Guards table has one row per guard
+outcome (GUARD_OUTCOMES) and then, only when the attempt records why
+host_compute is null, a host_compute_not_checked row with the code. A code
+not recorded (None, as on an attempt recorded before task P17.14) adds no
+row, so such a page renders as before.
 """
 
 from __future__ import annotations
@@ -60,11 +74,14 @@ from typing import TYPE_CHECKING
 
 from lassi.core.files import fence_for, language_for
 from lassi.core.record import (
+    GUARD_OUTCOMES,
     TOOLCHAIN_PIN_NAMES,
     Attempt,
     Context,
+    DeviceRecord,
     Diagnostic,
     EndReason,
+    Guards,
     OutputStats,
     Provenance,
     Request,
@@ -145,6 +162,14 @@ def _field_rows(record: object) -> list[tuple[str, str]]:
     return rows
 
 
+def _guard_rows(guards: Guards) -> list[tuple[str, str]]:
+    """Return one row per guard outcome, then the host_compute_not_checked row only when a code is recorded."""
+    rows = [(name, fmt(getattr(guards, name))) for name in GUARD_OUTCOMES]
+    if guards.host_compute_not_checked is not None:
+        rows.append(("host_compute_not_checked", guards.host_compute_not_checked))
+    return rows
+
+
 def _output_file_blocks(run: RunInfo) -> list[str]:
     """Return the table of a run's recorded output files (file, sha256 in the binary store); none when it has none."""
     if not run.outputs:
@@ -201,9 +226,23 @@ def _summary_blocks(trial: Trial) -> list[str]:
 
 
 def _provenance_blocks(provenance: Provenance) -> list[str]:
-    """Return the provenance table, one row per field in field order; an unknown value reads '-'."""
-    rows = [(spec.name, fmt_provenance(getattr(provenance, spec.name))) for spec in dataclasses.fields(provenance)]
-    return ["## Provenance\n", _table(("Field", "Value"), rows)]
+    """Return the provenance table, one row per manifest field in field order, then the device records table.
+
+    An unknown value reads '-'. device_records gets no row; when it is a
+    non-empty list, the "### Device records" table follows.
+    """
+    specs = [spec for spec in dataclasses.fields(provenance) if spec.name != "device_records"]
+    rows = [(spec.name, fmt_provenance(getattr(provenance, spec.name))) for spec in specs]
+    return ["## Provenance\n", _table(("Field", "Value"), rows), *_device_record_blocks(provenance.device_records)]
+
+
+def _device_record_blocks(records: Sequence[DeviceRecord] | None) -> list[str]:
+    """Return the device records table, one row per record and one column per field, or nothing without records."""
+    if not records:
+        return []
+    names = [spec.name for spec in dataclasses.fields(DeviceRecord)]
+    rows = [[fmt_provenance(getattr(item, name)) for name in names] for item in records]
+    return ["### Device records\n", _table(names, rows)]
 
 
 def _pins_blocks(trial: Trial) -> list[str]:
@@ -364,7 +403,7 @@ def _measurement_blocks(attempt: Attempt, simulator: bool = False) -> list[str]:
         "### Profile\n",
         _table(fields, _field_rows(attempt.profile)),
         "### Guards\n",
-        _table(fields, _field_rows(attempt.guards)),
+        _table(fields, _guard_rows(attempt.guards)),
         "### Score breakdown\n",
         _table(("Component", "Value"), score_rows),
     ]

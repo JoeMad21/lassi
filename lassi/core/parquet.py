@@ -10,7 +10,10 @@ read back as '+'. Response texts stay in the text store; the attempts table
 keeps only their sha256. Nested record fields become `<field>_<key>` columns,
 so the trials table carries each trial's provenance (its copy of the run
 manifest) as provenance_commit, provenance_dirty, provenance_device,
-provenance_sdk, and provenance_date, the target reference's baseline run as
+provenance_sdk, provenance_date, and provenance_device_records (task P17.2:
+Provenance.device_records as JSON text with sorted keys, "[]" for a run
+whose recipe names no device section, null when not recorded), the target
+reference's baseline run as
 reference_run_<key> columns, and the end reason as final_end_reason_code
 and final_end_reason_message (null when the trial ended normally). The run
 flags of Trial.reference_run and Attempt.run (lassi.core.record
@@ -19,7 +22,9 @@ after the run's outputs_ref columns, null where not recorded. RunInfo.outputs
 (task P4.4) follows them as the string column reference_run_outputs or
 run_outputs: the file -> sha256 mapping as JSON text with sorted keys, as
 the files and score_components columns hold theirs, null where not
-recorded.
+recorded. The attempts table's guards_host_compute_not_checked (task
+P17.14), a string column right after guards_oracle_access, holds the
+attempt's Guards.host_compute_not_checked code, null where none is recorded.
 
 The output_stats table (task P4.4) has one row per OutputStats: those of
 the references' agreement (Trial.reference_agreement), with attempt_index
@@ -43,6 +48,7 @@ asked no model.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import shutil
 from collections import Counter
@@ -57,6 +63,7 @@ from lassi.core.record import (
     RUN_FLAG_NAMES,
     TOOLCHAIN_PIN_NAMES,
     Attempt,
+    DeviceRecord,
     Diagnostic,
     OutputStats,
     Request,
@@ -96,6 +103,7 @@ SCHEMAS = {
             ("provenance_device", _STRING),
             ("provenance_sdk", _STRING),
             ("provenance_date", _STRING),
+            ("provenance_device_records", _STRING),
             ("bench_item_suite", _STRING),
             ("bench_item_item", _STRING),
             ("bench_item_split", _STRING),
@@ -160,6 +168,7 @@ SCHEMAS = {
             ("guards_host_compute", _BOOL),
             ("guards_harness_tamper", _BOOL),
             ("guards_oracle_access", _BOOL),
+            ("guards_host_compute_not_checked", _STRING),
             ("score_components", _STRING),
             ("score_scalar", _DOUBLE),
         ]
@@ -271,6 +280,13 @@ def _flag_and_output_columns(prefix: str, run: RunInfo) -> dict[str, bool | str 
     return columns
 
 
+def _device_records_cell(records: Sequence[DeviceRecord] | None) -> str | None:
+    """Return the provenance_device_records cell: the records as JSON with sorted keys, or None when not recorded."""
+    if records is None:
+        return None
+    return json.dumps([dataclasses.asdict(item) for item in records], sort_keys=True, ensure_ascii=True)
+
+
 def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
     """Return the trials row of one trial."""
     parsed = parse_trial_id(trial.trial_id)
@@ -288,6 +304,7 @@ def _trial_row(trial: Trial, key: dict[str, str]) -> dict[str, Any]:
         "provenance_device": provenance.device,
         "provenance_sdk": provenance.sdk,
         "provenance_date": provenance.date,
+        "provenance_device_records": _device_records_cell(provenance.device_records),
         "bench_item_suite": bench.suite,
         "bench_item_item": bench.item,
         "bench_item_split": bench.split,
@@ -344,6 +361,7 @@ def _attempt_row(attempt: Attempt, key: dict[str, str]) -> dict[str, Any]:
         "guards_host_compute": guards.host_compute,
         "guards_harness_tamper": guards.harness_tamper,
         "guards_oracle_access": guards.oracle_access,
+        "guards_host_compute_not_checked": guards.host_compute_not_checked,
         "score_components": json.dumps(attempt.score.components, sort_keys=True, ensure_ascii=True),
         "score_scalar": attempt.score.scalar,
     }

@@ -34,6 +34,22 @@ run flags (stdout_truncated, stderr_truncated, workdir_incomplete) after
 outputs_ref: true or false when recorded, PLACEHOLDER when not. The golden
 trial's attempt 1 ran and records every flag False; its reference run and
 attempt 0 record none.
+
+Since P17.2 the Provenance table keeps one row per manifest field and leaves
+out Provenance.device_records. When the trial records devices (a non-empty
+list), a "### Device records" table follows the Provenance table, before the
+toolchain pins: one row per record in order, one column per DeviceRecord
+field named as the field, each value formatted as provenance values are
+(fmt_provenance: an unknown one reads "-", indices as the list prints). Not
+recorded (None) and no devices ([]) add nothing, so the golden trial, whose
+provenance records none, renders as before.
+
+Since P17.14 an attempt's Guards table keeps one row per guard outcome
+(host_compute, harness_tamper, oracle_access) and adds a last row,
+`host_compute_not_checked`, with the code as recorded, only when one is
+recorded. Not recorded (None) adds nothing, so the golden trial, whose
+attempts record no code, renders as before, and so does the same trial read
+from a trial.json written before the field.
 """
 
 from __future__ import annotations
@@ -375,6 +391,66 @@ def test_golden_shows_the_provenance_before_the_pins_and_the_attempts() -> None:
     assert summary_end + PROVENANCE_BLOCK + "\n## Toolchain pins\n" in golden
     assert golden.count("## Provenance\n") == 1
     assert golden.index(PROVENANCE_BLOCK) < golden.index("## Attempt 0\n")
+
+
+DEVICE_RECORDS_HEADER = (
+    "| key | kind | indices | name | count | memory_bytes | driver | runtime | framework | framework_version |\n"
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+)
+
+
+def device_records() -> list[record.DeviceRecord]:
+    """Return two SYNTHETIC device records: the model's cpu and an executor's rocm with unknown values."""
+    return [
+        record.DeviceRecord(
+            key="model.device",
+            kind="cpu",
+            indices=[],
+            name="SYNTHETIC CPU model 9000",
+            count=8,
+            memory_bytes=4096,
+            driver=None,
+            runtime=None,
+            framework="torch",
+            framework_version="2.99.0+synthetic-cpu",
+        ),
+        record.DeviceRecord(
+            key="executor.device",
+            kind="rocm",
+            indices=[1, 0],
+            name=None,
+            count=2,
+            memory_bytes=None,
+            driver="SYNTHETIC-driver-6.8.5",
+            runtime="SYNTHETIC-runtime-9.9",
+            framework=None,
+            framework_version=None,
+        ),
+    ]
+
+
+def test_trial_md_shows_device_records(text_store: store.TextStore) -> None:
+    trial = base_trial([], provenance=fixture_provenance(device_records=device_records()))
+    md = trial_md.render_trial_md(trial, text_store)
+    table = (
+        DEVICE_RECORDS_HEADER
+        + "| model.device | cpu | [] | SYNTHETIC CPU model 9000 | 8 | 4096 | - | - | torch | 2.99.0+synthetic-cpu |\n"
+        + "| executor.device | rocm | [1, 0] | - | 2 | - | SYNTHETIC-driver-6.8.5 | SYNTHETIC-runtime-9.9 | - | - |\n"
+    )
+    assert PROVENANCE_BLOCK + "\n### Device records\n\n" + table + "\n## Toolchain pins\n" in md
+    assert "device_records" not in md, "the Provenance table keeps one row per manifest field"
+    assert md.count("### Device records\n") == 1
+    assert_layout(md)
+
+
+@pytest.mark.parametrize("records", [None, []], ids=["not-recorded", "none"])
+def test_trial_md_without_device_records_is_unchanged(text_store: store.TextStore, records: list | None) -> None:
+    before = trial_md.render_trial_md(base_trial([]), text_store)
+    trial = base_trial([], provenance=fixture_provenance(device_records=records))
+    md = trial_md.render_trial_md(trial, text_store)
+    assert md == before
+    assert "Device records" not in md and "device_records" not in md
+    assert PROVENANCE_BLOCK + "\n## Toolchain pins\n" in md
 
 
 def test_golden_contains_each_prompt() -> None:
@@ -777,6 +853,55 @@ def test_value_formatting_in_tables(text_store: store.TextStore) -> None:
         "| alpha | PLACEHOLDER |\n| zeta | 0.5 |\n| scalar | -1.0 |\n"
     )
     assert run + "\n" + alignment + "\n" + profile + "\n" + guards + "\n" + score == md[md.index("### Run") :]
+
+
+GUARD_REASON_CODES = ("not-built", "no-program", "no-guard", "guard-not-checked")
+
+
+@pytest.mark.parametrize("code", GUARD_REASON_CODES)
+def test_guards_table_shows_the_reason_when_recorded(text_store: store.TextStore, code: str) -> None:
+    md = render_attempt(text_store, guards=record.Guards(harness_tamper=False, host_compute_not_checked=code))
+    guards = (
+        "### Guards\n\n| Field | Value |\n| --- | --- |\n"
+        "| host_compute | PLACEHOLDER |\n| harness_tamper | false |\n| oracle_access | PLACEHOLDER |\n"
+        f"| host_compute_not_checked | {code} |\n"
+        "\n### Score breakdown\n"
+    )
+    assert guards in md
+    assert md.count("host_compute_not_checked") == 1, "the reason shows once, in the Guards table"
+
+
+@pytest.mark.parametrize(
+    "guards",
+    [record.Guards(), record.Guards(host_compute=True), record.Guards(host_compute=False, oracle_access=False)],
+    ids=["none-checked", "violation", "clear"],
+)
+def test_guards_table_has_no_reason_row_when_none_is_recorded(text_store: store.TextStore, guards: Any) -> None:
+    md = render_attempt(text_store, guards=guards)
+    assert "host_compute_not_checked" not in md
+    table = md.split("### Guards\n", 1)[1].split("###", 1)[0]
+    assert [line.split(" | ")[0] for line in table.strip().split("\n")[2:]] == [
+        "| host_compute",
+        "| harness_tamper",
+        "| oracle_access",
+    ]
+
+
+def test_a_trial_read_from_an_older_trial_json_renders_the_golden_page(text_store: store.TextStore) -> None:
+    data = record.to_dict(golden_trial(text_store))
+    for attempt in data["attempts"]:
+        attempt["guards"].pop("host_compute_not_checked", None)
+        assert list(attempt["guards"]) == ["host_compute", "harness_tamper", "oracle_access"]
+    loaded = record.from_dict(record.Trial, data)
+    assert trial_md.render_trial_md(loaded, text_store) == read_golden(), "an older record renders as before"
+
+
+# The sha256 of tests/core/golden/trial.md as committed before task P17.14, which leaves the page byte-identical.
+GOLDEN_SHA256 = "2967e42d8f6dce83f9a8ee3abef7c829064abf7e13e9fac563541c5898804e06"
+
+
+def test_the_golden_page_is_byte_identical_to_the_one_before_the_guard_reason() -> None:
+    assert hashlib.sha256(GOLDEN.read_bytes()).hexdigest() == GOLDEN_SHA256
 
 
 def test_header_rows_format_values(text_store: store.TextStore) -> None:

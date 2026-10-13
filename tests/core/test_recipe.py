@@ -469,14 +469,17 @@ def binding_tuples(bindings: Iterable[Any]) -> list[tuple[str, str, str, dict[st
 
 
 def bound_components(data: Mapping[str, Any]) -> dict[tuple[str, str], set[str]]:
-    """Return each (interface, name) the loader's binding rules bind in data, with each kind section's extra keys."""
+    """Return each (interface, name) the loader's binding rules bind in data, with each kind section's extra keys.
+
+    The extra keys include `device` where the section holds a device section.
+    """
     found: dict[tuple[str, str], set[str]] = {}
 
     def bind(interface: str, name: str, keys: Iterable[str] = ()) -> None:
         found.setdefault((interface, name), set()).update(keys)
 
     if "model" in data:
-        bind("LLMBackend", data["model"]["backend"])
+        bind("LLMBackend", data["model"]["backend"], set(data["model"]) - {"backend", "id"})
     for name in data.get("toolchain", {}).values():
         bind("Toolchain", name)
     for section, interface in KIND_SECTIONS.items():
@@ -494,14 +497,19 @@ def bound_components(data: Mapping[str, Any]) -> dict[tuple[str, str], set[str]]
 
 
 def permissive_registry(registry_module: ModuleType, *datas: Mapping[str, Any]) -> Any:
-    """Return a Registry holding a fake for every component the given recipe data binds, requiring nothing."""
+    """Return a Registry holding a fake for every component the given recipe data binds, requiring nothing.
+
+    A fake whose section holds a device section declares takes_device and
+    leaves `device` out of its config keys, as the registry requires (task P17.2).
+    """
     found: dict[tuple[str, str], set[str]] = {}
     for data in datas:
         for key, keys in bound_components(data).items():
             found.setdefault(key, set()).update(keys)
     registry = registry_module.Registry()
     for (interface, name), keys in sorted(found.items()):
-        registry.register(interface, name, fake(name, config_keys=keys))
+        capabilities = {"takes_device"} if "device" in keys else set()
+        registry.register(interface, name, fake(name, capabilities, config_keys=keys - {"device"}))
     return registry
 
 
@@ -677,9 +685,11 @@ def test_bible_recipe_blocks_are_found() -> None:
     assert list(bible_recipe_blocks()) == list(BIBLE_BLOCK_KEYS)
 
 
-def test_bible_names_twelve_interfaces() -> None:
+def test_bible_names_thirteen_interfaces() -> None:
+    # Task P17.8 adds Trainer, the thirteenth, as the table's last row (OQ-043, entry 14).
     names = bible_interface_names()
-    assert len(names) == 12 and len(set(names)) == 12, names
+    assert len(names) == 13 and len(set(names)) == 13, names
+    assert names[-1] == "Trainer", names
 
 
 def test_comment_scanner_flags_uncommented_values() -> None:
@@ -1346,6 +1356,18 @@ def test_python_tags_are_refused(load_error: Callable[..., str], tmp_path: Path,
     # Only the safe loader refuses these tags; an unsafe one would call os.getcwd or load a function.
     message = load_error(over_child(tmp_path, snippet, "unsafe.yaml"))
     assert "unsafe.yaml" in message and "python/" in message and "not valid YAML" in message, message
+
+
+def test_a_yaml_syntax_error_names_its_line_and_column_and_quotes_no_source_line(
+    load_error: Callable[..., str], tmp_path: Path
+) -> None:
+    # SYNTHETIC: a mistyped api_key_env line holding a key-like value. The message gives the problem, the line, and
+    # the column only, never the snippet of the line that PyYAML's own text quotes (task P17.11; PHASE-NOTES P17).
+    snippet = "model:\n  backend: fake\n  api_key_env: sk-SYNTHETIC-123: x"
+    message = load_error(over_child(tmp_path, snippet, "secret.yaml"))
+    assert "secret.yaml" in message and "not valid YAML" in message, message
+    assert "mapping values are not allowed here" in message and "line 4, column " in message, message
+    assert "sk-SYNTHETIC" not in message and "^" not in message, message
 
 
 DEEP_VALUES = [

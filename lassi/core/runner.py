@@ -4,9 +4,9 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
 
 1. loads the recipe with the registry (every component registers when this
    module is imported, since it imports lassi.llm, lassi.toolchains,
-   lassi.executors, lassi.core.stages, lassi.core.oracle_stage, which
-   imports lassi.oracles, and lassi.scoring, which registers every
-   ScoreProfile);
+   lassi.executors, lassi.profilers, lassi.core.stages,
+   lassi.core.oracle_stage, which imports lassi.oracles, and lassi.scoring,
+   which registers every ScoreProfile);
 2. refuses what it cannot run, before any directory is created or any model
    is asked: arms without a model (the model registry that maps arms to
    backends comes later) and arms beside a model; a recipe with no
@@ -62,11 +62,47 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    are not pin name -> pairs with a VERSION, that name a pin with no Trial
    toolchain_pins field, or that give a pin other pairs than a toolchain or
    an earlier executor gives the same pin name.
+   Right after the stage plan is checked, before any component is built
+   (the Oracle and the ScoreProfiles included), it probes the device of
+   every binding whose component declares `takes_device` (task P17.2;
+   lassi.core.devices), in binding order: the component class's optional
+   framework() (build metadata only) and then the kind's probe from
+   RunOptions.probes, and it refuses a device the host lacks (no probe for
+   the kind, a framework build that cannot reach it, a probe's refusal, or
+   an index past the host's count), naming the key; no run falls back to
+   another device. A framework() result that is neither a FrameworkBuild
+   nor None is refused too, and so is any error framework() raises (a
+   framework extra that is not installed among them), naming the key.
+   Right after the probes it refuses a run in which model.device and any
+   executor's device section (single or per language) name the same kind
+   and share an index, unless the backend declares `unload_before_run`
+   (one GPU, one role, task P17.5; _check_one_role).
+   Then, for a recipe that binds a profiler (task P17.7; _check_profiler),
+   it refuses one with nothing to profile (no listed stage declares
+   `runs_model_code`, or no target language's executor runs programs), one
+   whose profiled executor declares `simulator` (Agent Rule 2), one that
+   declares `supports_power` without `takes_device`, and a power profiler
+   beside a profiled executor (the single one, or each target language's
+   that runs programs) whose device section does not name the profiler's
+   kind and indices, naming profiler.device and that executor's key.
    A stage it does not implement already fails at load, unregistered;
-3. builds the components: the backend as factory(model.id), each toolchain
+3. builds the components: the backend as factory(model.id, **config), whose
+   config holds the model section's keys other than backend and id (its
+   device section, server settings such as model.base_url, and an
+   in-process model's model.revision and model.seed), a setting
+   the backend refuses being a RunError; then, for a backend that declares
+   `model_check` (lassi.core.capabilities MODEL_CHECK), it reads the serving
+   record with serving(), so a model the server does not list, a server
+   that does not answer, or a record that would hold the API key is a
+   RunError before any directory exists and before any unload or chat
+   request (task P17.3); each toolchain
    with its pinned compiler and a clean environment (below), each executor
-   as factory(**config) (one, or one per language), asking each for its
-   device() and reading the pins it declares, and the ScoreProfiles
+   as factory(**config) (one, or one per language; a DeviceUnavailable it
+   raises, as the gpu executor does for a node or an index this host lacks,
+   is a RunError naming the device key, task P17.5), asking each for its
+   device() and reading the pins it declares, then the profiler, once per
+   run, as factory(**config) (a setting it refuses, or telemetry this host
+   lacks, is a RunError; task P17.7), and the ScoreProfiles
    `score` and `metrics` need
    (lassi.scoring.profiles.build_profile, with the bench root for a profile
    that declares reads_bench_sources);
@@ -82,9 +118,10 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    unload (upstream's setup unload, lassi.core.capabilities), then the
    stages run in recipe order on a fresh RunContext (which carries the
    prompt set's fragments, the context packs by language, the target
-   language's executor, which runs every attempt, and, with executors per
-   language, every language's executor, so the baseline runs each reference
-   on its own language's), then the
+   language's executor, which runs every attempt, with executors per
+   language every language's executor, so the baseline runs each reference
+   on its own language's, and the run's profiler, which run_loop wraps
+   around every attempt run), then the
    trial's final block, whose alignment is that of the attempt whose output
    stands (_final). A stage that sets final.end_reason ends the trial:
    no later stage runs, and the final block keeps the end reason. With
@@ -120,25 +157,36 @@ host), resolve inside it (Agent Rule 7). The tree holds:
   single executor form records `executor` (its name) and
   `device` (its device(), null for an executor that names none); executors
   per language record `executor` and `devices`, each a mapping from language
-  to that language's executor name and device. It is
+  to that language's executor name and device. `device_records` holds
+  the record of each device section in binding order ([] without one), and
+  `driver` the distinct drivers they name, joined by "; " (null when none
+  does). It is
   written before the first trial with status "running", and again at the
   end with "complete", or with "failed" when a trial or a write raised, so
   every trial.json in the tree has a commit and a date beside it. Each
   trial's provenance copies the commit, dirty flag, device (the device of
   its target language with executors per language), driver (as sdk),
-  and started_utc (as date) of the manifest written first, and the final
+  started_utc (as date), and device_records of the manifest written first, and the final
   manifest is that same manifest with only its status and finish time
-  changed, so a trial and its manifest never disagree;
+  changed, so a trial and its manifest never disagree. For a backend that
+  declares `model_check`, `serving` holds its serving record
+  (lassi.llm._serving: base_url, the model entry less its volatile fields,
+  version, and version_from), which the trials do not copy;
 - run.md: the page a person reads (Readability Standards, Run row). Its
   summary shows the manifest's provenance, with an unknown value (null) as
   "-" as trial.md shows it, since provenance is not a measurement; with
-  executors per language, one Device row per language. When a direction's
+  executors per language, one Device row per language; with `serving`, a
+  Server row after the Driver row (lassi.llm.serving_line). When a direction's
   target language, or its source language when the baseline runs the
   source reference too, runs on an executor that declares `simulator`
   (lassi.core.capabilities SIMULATOR), its Trials section opens with a
   note naming those languages: their run wall times are simulator wall
   time, not performance, and the wall_s column is each trial's pipeline
-  wall time (task P4.6). With
+  wall time (task P4.6). A Guard coverage section follows the Trials
+  section in every run (task P17.14; lassi.analysis.guard_coverage): the
+  host-compute guard's checked and not-checked attempts, the not-checked
+  rate, and each host_compute_not_checked code's count, for the run and
+  per target language. With
   `metrics` it ends in a Metrics section
   (lassi.scoring.run_scoring.metrics_section);
 - one directory per trial (one level per trial_id segment) with trial.json,
@@ -185,9 +233,12 @@ compile layout is checked as the sandbox checks it, and `<executable>
 --version` runs once through the toolchain's own compile runner (so in the
 sandbox, with the builds' environment and view, in a fresh directory under
 TMPDIR) and must print the pin's EXPECT_VERSION; that also proves the
-compiler reachable in the compile's view. Every refusal comes before the
-run directory exists, and so does a SandboxUnavailableError from the
---version check. A class without PIN (a test fake) is built as factory().
+compiler reachable in the compile's view. A class may declare VERSION_ARGS,
+the check's arguments after the executable (hipcc-gfx942 names its target
+before --version); without it they are --version alone. Every refusal
+comes before the run directory exists, and so does a
+SandboxUnavailableError from the --version check. A class without PIN (a
+test fake) is built as factory().
 build_toolchain is that construction for one registry name, public so that
 a tool compiles exactly as a run does; the runner builds every bound
 toolchain with it. An executor may declare pins too (task P4.11; Agent
@@ -220,11 +271,31 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from lassi import profilers  # noqa: F401  (registers the Profilers timing, nvml, and rocm_smi)
+from lassi.analysis.guard_coverage import coverage_markdown, guard_coverage
 from lassi.bench import Direction, Suite, load_suite, sources_dir
 from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
-from lassi.core.capabilities import SIMULATOR, UNLOAD_BEFORE_RUN, declares, unload_before_run
+from lassi.core.capabilities import (
+    DEVICE_KEY,
+    MODEL_CHECK,
+    SIMULATOR,
+    SUPPORTS_POWER,
+    TAKES_DEVICE,
+    UNLOAD_BEFORE_RUN,
+    declares,
+    unload_before_run,
+)
+from lassi.core.devices import (
+    DEFAULT_PROBES,
+    DeviceProbe,
+    DeviceUnavailable,
+    FrameworkBuild,
+    device_driver,
+    parse_device,
+    probe_device,
+)
 from lassi.core.fragments import fragment_key, pack_language
-from lassi.core.interfaces import Executor, Sampling, Toolchain
+from lassi.core.interfaces import Executor, Profiler, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
 from lassi.core.progress import STAGE_START, TRIAL_END, TRIAL_START, GuardedObserver, Observer, ProgressEvent, notify
 from lassi.core.recipe import (
@@ -238,22 +309,24 @@ from lassi.core.recipe import (
 )
 from lassi.core.record import (
     TOOLCHAIN_PIN_NAMES,
+    DeviceRecord,
     Final,
     Provenance,
     ToolchainPins,
     Trial,
     arm_segment,
+    from_dict,
     json_text,
     make_trial_id,
     standing_attempt,
 )
-from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry
+from lassi.core.registry import DEFAULT_REGISTRY, Binding, Entry, Registry, device_path
 from lassi.core.stages import BASELINE_X10, PURPOSE, RUNS_CODE, SANDBOXED, RunContext
 from lassi.core.store import TextStore, write_trial
 from lassi.core.trial_md import fenced, fmt, fmt_provenance
 from lassi.executors import workdir
 from lassi.executors.sandbox import SandboxedCompileRunner
-from lassi.llm import model_info
+from lassi.llm import ServingError, model_info, serving_line
 from lassi.prompts import assets as prompt_assets
 from lassi.prompts import load_recipe_assets, render
 from lassi.scoring.run_scoring import (
@@ -289,13 +362,16 @@ _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
 # put its trial directories among the text store or the Parquet tables.
 _RUN_TREE_NAMES = frozenset({"texts", PARQUET_DIR, RESOLVED_RECIPE, TOOLCHAINS_JSON, PROVENANCE_JSON, RUN_MD})
 # Recipe sections this runner does not carry out; a recipe that sets one is refused, never run without it.
-_NOT_CARRIED_OUT = ("profiler", "adversary", "refine", "agents", "judges")
+_NOT_CARRIED_OUT = ("adversary", "refine", "agents", "judges")
 # How long git may take to report the commit or the dirty flag, in seconds.
 _GIT_TIMEOUT_S = 60.0
 # How long a pinned compiler's --version may take, in seconds, and the name prefix of the fresh directory under
 # TMPDIR it runs in.
 _VERSION_TIMEOUT_S = 120.0
 _VERSION_PROBE_PREFIX = "lassi-version-check."
+# The --version check's arguments after the executable, for a class that declares no VERSION_ARGS (hipcc-gfx942
+# declares its target before --version, since hipcc without one starts a program that asks for a GPU; OQ-002).
+_VERSION_ARGS = ("--version",)
 # The build dir, under the runs root, against which the compile layout is checked before a run (never created).
 _LAYOUT_PROBE = "lassi-layout-check"
 # The environment variables that name the roots every compile hides (P0.20), in order.
@@ -324,6 +400,9 @@ class RunOptions:
       means lassi.core.recipe.default_roots().
     - observer: gets the run's progress events (lassi.core.progress); None
       means none are sent. Nothing the run writes or returns depends on it.
+    - probes: the device probes by kind (lassi.core.devices, task P17.2);
+      None means lassi.core.devices.DEFAULT_PROBES, the host probes that
+      lassi.executors registers.
     """
 
     runs_root: Path | None = None
@@ -333,6 +412,7 @@ class RunOptions:
     registry: Registry | None = None
     roots: Sequence[Path] | None = None
     observer: Observer | None = None
+    probes: Mapping[str, DeviceProbe] | None = None
 
 
 # The options run_recipe uses when none are given: every field falls back as RunOptions says.
@@ -440,6 +520,11 @@ class _Run:
     (_run_pins). `scoring` holds the
     built ScoreProfiles of `score` and `metrics` (lassi.scoring.run_scoring).
     `observer` is RunOptions.observer in a GuardedObserver, or None.
+    `devices` holds the record of each device section, in binding order
+    (probe_devices). `serving` is the backend's serving record when it declares
+    model_check, else None (_served_model). `profiler` is the run's one
+    Profiler, built before the first trial (_built_profiler), or None when
+    the recipe binds none.
     """
 
     recipe: Recipe
@@ -458,6 +543,9 @@ class _Run:
     dirty: bool | None
     scoring: ScoringPlan
     observer: GuardedObserver | None = None
+    devices: tuple[DeviceRecord, ...] = ()
+    serving: Mapping[str, Any] | None = None
+    profiler: Profiler | None = None
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -465,7 +553,9 @@ def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
 
     Raises RecipeError when the recipe does not load and RunError when the
     run cannot start (see the module docstring); both come before any
-    directory is created or any model is asked. A component's own errors,
+    directory is created or any chat request is sent. A backend that
+    declares model_check has its model list and version read then
+    (_served_model). A component's own errors,
     such as SandboxUnavailableError from an executor or a sandboxed compile,
     propagate; one raised during the trials leaves provenance.json with
     status "failed", and so does a RunError from a ScoreProfile that cannot
@@ -501,21 +591,26 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     registry = DEFAULT_REGISTRY if options.registry is None else options.registry
     recipe = _load(path, options, registry)
     settings = _settings(recipe)
-    runs_root = _runs_root(options, recipe)
-    run_dir = runs_root / RUNS_DIR / _run_id(options, started)
-    _check_location(run_dir, f"the run directory {run_dir}")
+    runs_root = resolve_runs_root(options.runs_root, recipe)
+    run_dir = runs_root / RUNS_DIR / run_id_for(options.run_id, started)
+    check_location(run_dir, f"the run directory {run_dir}")
     if run_dir.exists():
         raise RunError(f"the run directory {run_dir} already exists; choose another run id")
     bench = _bench(recipe, settings, options)
     _check_plan(recipe, registry, settings, bench)
+    devices = probe_devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
+    _check_one_role(recipe, registry, devices)
+    _check_profiler(recipe, registry, settings, devices)
     _check_oracle(recipe, registry, bench)
     scoring = _scoring(recipe, registry, bench)
-    backend = registry.get("LLMBackend", settings.backend).factory(settings.model_id)
+    backend = _backend(recipe, registry, settings)
     _check_backend(recipe, settings, backend)
+    serving = _served_model(recipe, settings, backend)
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
     executors = _executors(recipe, registry, settings)
+    profiler = _built_profiler(recipe, registry)
     pins, target_pins = _run_pins(recipe, settings, toolchains, executors)
-    commit, dirty = _git_state()
+    commit, dirty = git_state()
     try:
         run_dir.mkdir(parents=True)
     except FileExistsError:
@@ -537,7 +632,283 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         dirty=dirty,
         scoring=scoring,
         observer=None if options.observer is None else GuardedObserver(options.observer),
+        devices=devices,
+        serving=serving,
+        profiler=profiler,
     )
+
+
+def probe_devices(recipe: Recipe, registry: Registry, probes: Mapping[str, DeviceProbe]) -> tuple[DeviceRecord, ...]:
+    """Probe the device of every binding whose component declares takes_device; RunError for one the host lacks.
+
+    Bindings go in recipe order (the model's first). For each, the section is
+    read (lassi.core.devices.parse_device), the component class's framework
+    build is asked for (framework_build), and then the kind's probe runs
+    (probe_device). It runs before any component is built and before any
+    directory exists, and builds the records in memory. A refusal names the
+    key, the kind, and the reason; no run falls back to another device.
+    """
+    records: list[DeviceRecord] = []
+    for binding in recipe.bindings:
+        entry = registry.get(binding.interface, binding.name)
+        if TAKES_DEVICE not in entry.capabilities:
+            continue
+        key = device_path(binding)
+        spec = parse_device(binding.config[DEVICE_KEY], key)
+        framework = framework_build(recipe, binding, entry)
+        try:
+            records.append(probe_device(key, spec, framework, probes))
+        except DeviceUnavailable as error:
+            named = " ".join([spec.kind, *(str(index) for index in spec.indices)])
+            raise RunError(
+                f"{recipe.path}: {key} names {named}, which this host cannot provide: {error}; "
+                "a run never falls back to another device"
+            ) from None
+    return tuple(records)
+
+
+def _check_one_role(recipe: Recipe, registry: Registry, devices: Sequence[DeviceRecord]) -> None:
+    """Refuse a run in which the model's GPU is also an executor's, unless the backend unloads before each run.
+
+    One GPU, one role (task P17.5; Agent Rule 13's intent for GPUs): the
+    LLMBackend binding's device record (model.device) and the record of
+    any Executor binding, single or per language, that name the same kind
+    and share an index are a RunError naming both keys, the kind, and the
+    shared indices. A model without a device section or on kind cpu, and a
+    backend that declares unload_before_run (the runner unloads it before
+    each run of generated code), pass. The records are compared as
+    written, kind and indices. It runs after every probe and before any
+    component is built.
+    """
+    records = {record.key: record for record in devices}
+    model = next(binding for binding in recipe.bindings if binding.interface == "LLMBackend")
+    held = records.get(device_path(model))
+    if held is None or held.kind == "cpu":
+        return
+    if UNLOAD_BEFORE_RUN in registry.get(model.interface, model.name).capabilities:
+        return
+    for binding in recipe.bindings:
+        record = records.get(device_path(binding)) if binding.interface == "Executor" else None
+        if record is None or record.kind != held.kind:
+            continue
+        shared = sorted(set(held.indices) & set(record.indices))
+        if shared:
+            named = ", ".join(str(index) for index in shared)
+            raise RunError(
+                f"{recipe.path}: {held.key} and {record.key} both name {held.kind} index {named}; a model's GPU "
+                f"never runs candidates unless its backend declares {UNLOAD_BEFORE_RUN!r} (one GPU, one role)"
+            )
+
+
+def _profiler_binding(recipe: Recipe) -> Binding | None:
+    """Return the recipe's Profiler binding (profiler.kind), or None when it binds no profiler."""
+    return next((binding for binding in recipe.bindings if binding.interface == "Profiler"), None)
+
+
+def _check_profiler(recipe: Recipe, registry: Registry, settings: _Settings, devices: Sequence[DeviceRecord]) -> None:
+    """Refuse a profiler the run cannot honor, before any component is built and before any directory exists.
+
+    Task P17.7. The profiled executors are those that run the attempts of
+    the directions' target languages and run programs
+    (_profiled_executors). Refused: a profiler with nothing to profile (no
+    listed stage declares runs_model_code, or no profiled executor), since
+    the runner never ignores a choice; a profiled executor that declares
+    simulator, whose timing is never performance (Agent Rule 2); a profiler
+    that declares supports_power without takes_device; and, for one that
+    declares supports_power, a profiled executor that does not run on the
+    profiler's device (_check_power_device). It runs after the probes, so
+    the profiler's own device (profiler.device) is one this host has.
+    """
+    binding = _profiler_binding(recipe)
+    if binding is None:
+        return
+    entry = registry.get(binding.interface, binding.name)
+    named = f"Profiler {entry.name!r} ({binding.where})"
+    stages = recipe.data["stages"]
+    if not any(getattr(registry.get("Stage", name).factory, "runs_model_code", False) for name in stages):
+        raise RunError(
+            f"{recipe.path}: {named} would profile nothing: no listed stage runs attempts (none declares "
+            "runs_model_code; run_loop does); list run_loop or remove the profiler section"
+        )
+    profiled = _profiled_executors(recipe, registry, settings)
+    if profiled is None:
+        return
+    if not profiled:
+        raise RunError(
+            f"{recipe.path}: {named} would profile nothing: no target language's executor runs programs "
+            f"(none declares {RUNS_CODE!r}); remove the profiler section"
+        )
+    for executor, executor_entry in profiled:
+        if SIMULATOR in executor_entry.capabilities:
+            raise RunError(
+                f"{recipe.path}: {named} would profile the runs of Executor {executor_entry.name!r} "
+                f"({executor.where}), which declares {SIMULATOR!r}; simulator timing is never performance "
+                "(Agent Rule 2)"
+            )
+    if SUPPORTS_POWER not in entry.capabilities:
+        return
+    if TAKES_DEVICE not in entry.capabilities:
+        raise RunError(
+            f"{recipe.path}: {named} declares {SUPPORTS_POWER!r} without {TAKES_DEVICE!r}; a power profiler names "
+            "the one GPU it reads in its device section"
+        )
+    records = {record.key: record for record in devices}
+    for executor, executor_entry in profiled:
+        _check_power_device(recipe, records[device_path(binding)], executor, executor_entry, records)
+
+
+def _profiled_executors(recipe: Recipe, registry: Registry, settings: _Settings) -> list[tuple[Binding, Entry]] | None:
+    """Return the Executor bindings whose runs a profiler profiles, with their entries, each once, in target order.
+
+    For each target language of the directions, that is the executor that
+    runs its attempts (the single one, or executor.<language> with
+    executors per language) when it declares runs_code; a compile-only
+    target never runs an attempt. A language that is only a source is not
+    profiled, since the baseline's reference runs are not. With executors
+    per language, it returns None when a target language has no executor:
+    _executors refuses that run, naming executor.<language>, before the
+    profiler is built.
+    """
+    bindings = [binding for binding in recipe.bindings if binding.interface == "Executor"]
+    languages = executor_languages(recipe.data)
+    by_language = dict(zip(languages, bindings, strict=True)) if languages else {}
+    found: dict[str, tuple[Binding, Entry]] = {}
+    for direction in settings.directions:
+        binding = by_language.get(direction.target) if languages else bindings[0]
+        if binding is None:
+            return None
+        entry = registry.get(binding.interface, binding.name)
+        if RUNS_CODE in entry.capabilities:
+            found.setdefault(binding.where, (binding, entry))
+    return list(found.values())
+
+
+def _check_power_device(
+    recipe: Recipe, held: DeviceRecord, executor: Binding, entry: Entry, records: Mapping[str, DeviceRecord]
+) -> None:
+    """Refuse a profiled executor that does not run on a power profiler's device (`held`, the profiler.device record).
+
+    The executor must declare takes_device, and its device record must name
+    the profiler's kind and the same indices, as written, so every attempt
+    run of the run is on the GPU whose power is read and none is measured on
+    one GPU while it runs on another. The message names profiler.device and
+    the executor's device key, or its binding path when it takes no device.
+    """
+    named = " ".join([held.kind, *(str(index) for index in held.indices)])
+    if TAKES_DEVICE not in entry.capabilities:
+        raise RunError(
+            f"{recipe.path}: {held.key} names {named}, but Executor {entry.name!r} ({executor.where}) takes no "
+            "device section, so its runs are not on the GPU whose power is read; a power profiler needs each "
+            "profiled executor on its device"
+        )
+    record = records[device_path(executor)]
+    if record.kind != held.kind or list(record.indices) != list(held.indices):
+        runs = " ".join([record.kind, *(str(index) for index in record.indices)])
+        raise RunError(
+            f"{recipe.path}: {held.key} names {named}, but {record.key} names {runs}; a power profiler reads the "
+            "GPU every profiled attempt runs on, so both name the same kind and indices"
+        )
+
+
+def _built_profiler(recipe: Recipe, registry: Registry) -> Profiler | None:
+    """Return the recipe's Profiler built as factory(**config), or None when it binds none; RunError before any mkdir.
+
+    Task P17.7. It is built once per run, after the executors and before
+    the first trial. A setting it refuses (ValueError, such as a missing
+    profiler.interval_ms) is a RunError naming the profiler and the
+    refusal; telemetry it cannot read on this host (a DeviceUnavailable,
+    which lassi.profilers.power.TelemetryUnavailable is) is a RunError
+    naming profiler.device and the run's lack of telemetry. Any other error
+    propagates as it is.
+    """
+    binding = _profiler_binding(recipe)
+    if binding is None:
+        return None
+    entry = registry.get(binding.interface, binding.name)
+    try:
+        return entry.factory(**binding.config)
+    except DeviceUnavailable as error:
+        raise RunError(
+            f"{recipe.path}: {device_path(binding)}: Profiler {entry.name!r} ({binding.where}) cannot read power "
+            f"on this host: {error}; the run lacks its telemetry"
+        ) from None
+    except ValueError as error:
+        raise RunError(
+            f"{recipe.path}: Profiler {entry.name!r} ({binding.where}) refused its settings: {error}"
+        ) from None
+
+
+def framework_build(recipe: Recipe, binding: Binding, entry: Entry) -> FrameworkBuild | None:
+    """Return the framework build a component class names with framework(), or None when it defines none.
+
+    framework() is called on the class, before anything is built, and reads
+    build metadata only. A result that is neither a FrameworkBuild nor None
+    is a RunError naming the component, and so is any error it raises (a
+    framework that is not installed, or a framework() the class cannot
+    call), naming the device key too.
+    """
+    method = getattr(entry.factory, "framework", None)
+    if not callable(method):
+        return None
+    try:
+        build = method()
+    except Exception as error:
+        raise RunError(
+            f"{recipe.path}: {device_path(binding)}: {entry.interface} {entry.name!r} ({binding.where}) could not "
+            f"report its framework build: {type(error).__name__}: {error}"
+        ) from None
+    if build is not None and not isinstance(build, FrameworkBuild):
+        raise RunError(
+            f"{recipe.path}: {entry.interface} {entry.name!r} ({binding.where}) framework() returned {build!r}; "
+            "it must return a FrameworkBuild or None"
+        )
+    return build
+
+
+def _backend_config(recipe: Recipe) -> Mapping[str, Any]:
+    """Return the config of the recipe's LLMBackend binding: the model section's keys other than backend and id."""
+    return next(binding.config for binding in recipe.bindings if binding.interface == "LLMBackend")
+
+
+def _backend(recipe: Recipe, registry: Registry, settings: _Settings) -> Any:
+    """Build the backend as factory(model.id, **config); a setting it refuses (ValueError) is a RunError.
+
+    The HTTP backends' ValueError messages name the setting and never quote its
+    value (lassi.llm._http.checked_base_url), and hf_local's quote only a
+    model.id, model.revision, model.seed, or model.device value, none a
+    secret, so the RunError quotes them. Construction sends no request.
+    """
+    factory = registry.get("LLMBackend", settings.backend).factory
+    try:
+        return factory(settings.model_id, **_backend_config(recipe))
+    except ValueError as error:
+        raise RunError(f"{recipe.path}: model: LLMBackend {settings.backend!r} refused its settings: {error}") from None
+
+
+def _served_model(recipe: Recipe, settings: _Settings, backend: Any) -> Mapping[str, Any] | None:
+    """Return the backend's serving record when it declares model_check, else None; RunError when it cannot.
+
+    serving() confirms the model id on the server and reads the record
+    (lassi.llm._serving) before any directory exists; the trials reuse the
+    entry it checked. Its ServingError (a model the server does not list, an
+    unreachable server, a timeout, an unset key variable, a record that would
+    hold the key) quotes no key and no base_url value. The record is rendered
+    as provenance.json writes it once here, so one that JSON cannot hold
+    (NaN) is refused before any directory too (plans/LESSONS.md, Audits).
+    The message names model.base_url only for a backend that takes it, so an
+    in-process backend's failed load (task P17.4) names model.id alone.
+    """
+    if not declares(backend, MODEL_CHECK):
+        return None
+    try:
+        record = backend.serving()
+        json_text(record)
+    except (ServingError, ValueError) as error:
+        where = " at model.base_url" if "base_url" in getattr(backend, "config_keys", ()) else ""
+        raise RunError(
+            f"{recipe.path}: model.id: LLMBackend {settings.backend!r} could not confirm its model{where}: {error}"
+        ) from None
+    return record
 
 
 def _scoring(recipe: Recipe, registry: Registry, bench: _Bench) -> ScoringPlan:
@@ -559,7 +930,8 @@ def _check_backend(recipe: Recipe, settings: _Settings, backend: Any) -> None:
     A backend that declares `needs_reference` gets each item's reference
     target through with_reference(), and, with fixes.fence_tag off, is asked
     for its faithful reply form, one untagged fence, through
-    with_untagged_fence(). One that declares `unload_before_run` needs unload().
+    with_untagged_fence(). One that declares `unload_before_run` needs unload(),
+    and one that declares `model_check` needs serving().
     """
     if "needs_reference" in backend.capabilities:
         if not hasattr(backend, "with_reference"):
@@ -569,6 +941,8 @@ def _check_backend(recipe: Recipe, settings: _Settings, backend: Any) -> None:
                 f"LLMBackend {settings.backend!r} needs the reference target, but fixes.fence_tag is off and it has "
                 "no with_untagged_fence() to answer in the one untagged fence that faithful extraction reads"
             )
+    if declares(backend, MODEL_CHECK) and not callable(getattr(backend, "serving", None)):
+        raise RunError(f"LLMBackend {settings.backend!r} declares {MODEL_CHECK!r} but has no serving()")
     if declares(backend, UNLOAD_BEFORE_RUN) and not callable(getattr(backend, "unload", None)):
         raise RunError(f"LLMBackend {settings.backend!r} declares {UNLOAD_BEFORE_RUN!r} but has no unload()")
 
@@ -713,21 +1087,30 @@ def _recipe_assets(recipe: Recipe) -> tuple[dict[str, str], dict[str, str]]:
     return dict(assets.fragments), packs
 
 
-def _runs_root(options: RunOptions, recipe: Recipe) -> Path:
-    """Return the runs root: the option, else $LASSI_RUNS_ROOT, else the recipe's; absolute and outside the repo."""
-    if options.runs_root is not None:
-        root, source = Path(options.runs_root), "the runs_root option"
+def resolve_runs_root(option: Path | None, recipe: Recipe) -> Path:
+    """Return the runs root: `option`, else $LASSI_RUNS_ROOT, else the recipe's runs_root; absolute, outside the repo.
+
+    The root is checked with check_location. A recipe without runs_root (a
+    train recipe may leave it out) and no other source is a RunError naming
+    the three sources. `lassi run` and `lassi train` share it (task P17.8).
+    """
+    if option is not None:
+        root, source = Path(option), "the runs_root option"
     elif os.environ.get("LASSI_RUNS_ROOT"):
         try:
             root = workdir.runs_root()
         except ValueError as error:
             raise RunError(str(error)) from error
         source = "$LASSI_RUNS_ROOT"
-    else:
+    elif "runs_root" in recipe.data:
         root, source = Path(recipe.data["runs_root"]), f"runs_root in {recipe.path}"
+    else:
+        raise RunError(
+            f"{recipe.path}: no runs root: pass --runs-root, set LASSI_RUNS_ROOT, or set runs_root in the recipe"
+        )
     if not root.is_absolute():
         raise RunError(f"the runs root {root} (from {source}) must be an absolute path")
-    _check_location(root, f"the runs root {root} (from {source})")
+    check_location(root, f"the runs root {root} (from {source})")
     return root
 
 
@@ -736,11 +1119,12 @@ def _within(path: Path, root: Path) -> bool:
     return path == root or root in path.parents
 
 
-def _check_location(path: Path, what: str) -> None:
+def check_location(path: Path, what: str) -> None:
     """Refuse a run path that resolves inside the repository, or outside $LASSI_SCRATCH when that is set.
 
     The path is resolved, so a link into the repository is refused too;
-    `what` names the path in the message (Agent Rule 7).
+    `what` names the path in the message (Agent Rule 7). Run trees and
+    train trees (task P17.8) follow it.
     """
     resolved = path.resolve()
     if _within(resolved, REPO):
@@ -753,9 +1137,9 @@ def _check_location(path: Path, what: str) -> None:
         )
 
 
-def _run_id(options: RunOptions, started: datetime) -> str:
-    """Return the run id: the option, else the UTC start time as YYYYMMDD-HHMMSS; it must be one plain name."""
-    run_id = started.strftime("%Y%m%d-%H%M%S") if options.run_id is None else options.run_id
+def run_id_for(option: str | None, started: datetime) -> str:
+    """Return a run or train id: `option`, else the UTC start time as YYYYMMDD-HHMMSS; it must be one plain name."""
+    run_id = started.strftime("%Y%m%d-%H%M%S") if option is None else option
     if not isinstance(run_id, str) or not _NAME.fullmatch(run_id):
         raise RunError(f"a run id must match {_NAME.pattern}, got {run_id!r}")
     return run_id
@@ -900,7 +1284,7 @@ def _executors(recipe: Recipe, registry: Registry, settings: _Settings) -> _Exec
     for binding, entry in zip(bindings, entries, strict=True):
         if RUNS_CODE in entry.capabilities:
             _check_sandboxed(recipe, registry, binding, entry.capabilities)
-    built = [entry.factory(**binding.config) for binding, entry in zip(bindings, entries, strict=True)]
+    built = [_built_executor(recipe, binding, entry) for binding, entry in zip(bindings, entries, strict=True)]
     devices = [_checked_device(_device(executor), binding) for executor, binding in zip(built, bindings, strict=True)]
     # The single form's one executor serves every language (None); each per-language executor serves its own.
     served: list[tuple[str, ...] | None] = [(language,) for language in languages] if languages else [None]
@@ -917,6 +1301,23 @@ def _executors(recipe: Recipe, registry: Registry, settings: _Settings) -> _Exec
     }
     by_language = dict(zip(languages, built, strict=True))
     return _Executors(single=None, by_language=by_language, record=record, declared=declared)
+
+
+def _built_executor(recipe: Recipe, binding: Binding, entry: Entry) -> Executor:
+    """Return factory(**config) for an Executor binding; a DeviceUnavailable it raises becomes a RunError.
+
+    The gpu executor raises DeviceUnavailable at construction for a node or
+    an index this host lacks (task P17.5); the RunError names the device
+    key, the executor, and the reason. Any other error propagates as it is,
+    so a refused setting stays a ValueError.
+    """
+    try:
+        return entry.factory(**binding.config)
+    except DeviceUnavailable as error:
+        raise RunError(
+            f"{recipe.path}: {device_path(binding)}: Executor {entry.name!r} ({binding.where}) cannot use its device "
+            f"on this host: {error}; a run never falls back to another device"
+        ) from None
 
 
 def _check_executor_languages(recipe: Recipe, registry: Registry, settings: _Settings, bound: set[str]) -> None:
@@ -1346,7 +1747,8 @@ def _pinned_toolchain(name: str, factory: type, root: Path | None, build_root: P
     the pin file, the root, the executable, the tree (or check_tree refuses
     it), TMPDIR (unset, or outside $LASSI_SCRATCH), a hidden root, a linked
     prefix, or a compile layout the sandbox refuses. Then
-    `<executable> --version` must print the pin's EXPECT_VERSION in the
+    `<executable> --version`, with the class's VERSION_ARGS if it declares
+    them (_version_argv), must print the pin's EXPECT_VERSION in the
     compile sandbox.
     """
     pin_name = factory.PIN
@@ -1363,7 +1765,7 @@ def _pinned_toolchain(name: str, factory: type, root: Path | None, build_root: P
     environment = _compile_environment()
     pins = {pin_name: pin, **_linked_pins(name, pin_name, pin, resolved, environment)}
     runner = _compile_runner(name, environment, resolved, hidden_roots, build_root)
-    version, status = _checked_version(name, executable, runner, Path(tmpdir), pin_name, pin)
+    version, status = _checked_version(name, _version_argv(factory, executable), runner, Path(tmpdir), pin_name, pin)
     toolchain = factory(executable=str(executable), runner=runner, **keywords)
     return BuiltToolchain(name, (), toolchain, str(executable), environment, pins, version, status)
 
@@ -1596,15 +1998,20 @@ def _compile_runner(
     return runner
 
 
+def _version_argv(factory: type, executable: Path | str) -> list[str]:
+    """Return the --version check's command: `executable`, then the class's VERSION_ARGS, else --version alone."""
+    return [str(executable), *getattr(factory, "VERSION_ARGS", _VERSION_ARGS)]
+
+
 def _checked_version(
     name: str,
-    executable: Path | str,
+    argv: Sequence[str],
     runner: SandboxedCompileRunner,
     tmpdir: Path,
     pin_name: str,
     pin: Mapping[str, str],
 ) -> tuple[tuple[str, ...], int]:
-    """Run `<executable> --version` once through `runner`; return its non-blank lines and its status.
+    """Run the --version check `argv` (_version_argv) once through `runner`; return its non-blank lines and status.
 
     It runs through the toolchain's own compile runner, so it runs the same
     executable with the same environment in the same view as every build,
@@ -1620,14 +2027,14 @@ def _checked_version(
     if not expected:
         raise RunError(
             f"toolchains/{pin_name}.pin has no EXPECT_VERSION, so toolchain {name!r} cannot check that "
-            f"{executable} is the pinned compiler (Agent Rule 10); add the --version text it must print"
+            f"{argv[0]} is the pinned compiler (Agent Rule 10); add the --version text it must print"
         )
     try:
         probe = Path(tempfile.mkdtemp(prefix=_VERSION_PROBE_PREFIX, dir=tmpdir))
     except OSError as error:
         raise RunError(f"toolchain {name!r}: cannot make the --version check's directory in TMPDIR: {error}") from error
     try:
-        result = runner([str(executable), "--version"], probe, _VERSION_TIMEOUT_S)
+        result = runner(list(argv), probe, _VERSION_TIMEOUT_S)
     except ValueError as error:
         raise RunError(
             f"toolchain {name!r}: the compile sandbox refuses the --version check's build dir {probe} under TMPDIR "
@@ -1638,7 +2045,7 @@ def _checked_version(
     output = result.stdout + result.stderr
     if result.returncode != 0 or expected not in output:
         raise RunError(
-            f"toolchain {name!r}: {executable} --version exited {result.returncode} and must print the "
+            f"toolchain {name!r}: {' '.join(argv)} exited {result.returncode} and must print the "
             f"EXPECT_VERSION of toolchains/{pin_name}.pin ({expected!r}); the compiler is not the pinned one, "
             "so the run would be labeled with a pin it does not use (Agent Rule 10)"
         )
@@ -1830,6 +2237,7 @@ def _context(run: _Run, backend: Any, direction: Direction, item: str) -> RunCon
         fragments=settings.fragments,
         packs=settings.packs,
         observer=run.observer,
+        profiler=run.profiler,
     )
 
 
@@ -1904,7 +2312,7 @@ def _final(trial: Trial, wall_s: float) -> Final:
 # Provenance and run.md
 
 
-def _git_state() -> tuple[str | None, bool | None]:
+def git_state() -> tuple[str | None, bool | None]:
     """Return the repository's commit and whether `git status --porcelain` lists anything; None when git fails."""
     head = _git("rev-parse", "HEAD")
     status = _git("status", "--porcelain")
@@ -1945,8 +2353,12 @@ def _provenance(run: _Run) -> dict[str, Any]:
     Its status is "running" and `finished_utc` is null until
     _final_provenance closes it. The executor keys are the run's
     (_Executors.record): executor and device, or, with executors per
-    language, executor and devices by language. `driver` (an SDK or driver
-    version) stays null until an executor that runs programs reports one.
+    language, executor and devices by language. `device_records` holds the
+    record of each device section in binding order ([] when the recipe names
+    none; task P17.2), and `driver` the distinct drivers those records name,
+    joined by "; " (lassi.core.devices.device_driver), null when none names
+    one. `serving` holds the backend's serving record when it declares
+    model_check (task P17.3; _served_model) and is absent otherwise.
     """
     pins = dataclasses.asdict(run.pins)
     return {
@@ -1962,7 +2374,9 @@ def _provenance(run: _Run) -> dict[str, Any]:
         "platform": platform.platform(),
         "python": platform.python_version(),
         **run.executors.record,
-        "driver": None,
+        "driver": device_driver(run.devices),
+        "device_records": [dataclasses.asdict(item) for item in run.devices],
+        **({} if run.serving is None else {"serving": dict(run.serving)}),
         "started_utc": _utc(run.started),
         "finished_utc": None,
         "pins": {name: version for name, version in pins.items() if version is not None},
@@ -1985,9 +2399,10 @@ def _trial_provenance(manifest: Mapping[str, Any], language: str) -> Provenance:
     Every trial carries a copy of provenance.json: commit and dirty keep
     their manifest keys; device is the manifest's "device", or, with
     executors per language, its "devices" entry for `language`; sdk is the
-    manifest's "driver" and date its "started_utc". A key the manifest lacks
-    raises KeyError, and a value of the wrong type raises ValueError: the
-    copy never fills in a value the manifest does not hold.
+    manifest's "driver", date its "started_utc", and device_records its
+    "device_records", the whole list. A key the manifest lacks raises
+    KeyError, and a value of the wrong type raises ValueError: the copy never
+    fills in a value the manifest does not hold.
     """
     device = manifest["devices"][language] if "devices" in manifest else manifest["device"]
     return Provenance(
@@ -1996,6 +2411,7 @@ def _trial_provenance(manifest: Mapping[str, Any], language: str) -> Provenance:
         device=device,
         sdk=manifest["driver"],
         date=manifest["started_utc"],
+        device_records=[from_dict(DeviceRecord, item) for item in manifest["device_records"]],
     )
 
 
@@ -2092,14 +2508,22 @@ def _executor_rows(provenance: Mapping[str, Any]) -> list[tuple[str, str]]:
     return [("Executor", names), *((f"Device ({language})", fmt_provenance(device)) for language, device in devices)]
 
 
+def _serving_rows(provenance: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Return run.md's Server row (lassi.llm.serving_line) when provenance has `serving`, else no row."""
+    if "serving" not in provenance:
+        return []
+    return [("Server", serving_line(provenance["serving"]))]
+
+
 def _run_md(
     run: _Run, provenance: Mapping[str, Any], trials: Sequence[Trial], metrics: RunMetrics | None = None
 ) -> str:
     """Return run.md: the run summary, the resolved recipe, the toolchain pins, and one trials table per arm.
 
-    The Trials section opens with _simulator_note when it applies. With
+    The Trials section opens with _simulator_note when it applies, and the
+    Guard coverage section (task P17.14) follows it. With
     `metrics` (the recipe names metrics), a Metrics section follows
-    the trials (lassi.scoring.run_scoring.metrics_section). It is
+    that (lassi.scoring.run_scoring.metrics_section). It is
     deterministic for given records, plain ASCII (non-ASCII becomes
     backslash escapes) with LF newlines, and names no absolute run path, so
     it reads the same wherever the run tree is copied.
@@ -2111,6 +2535,7 @@ def _run_md(
         ("Dirty", fmt_provenance(provenance["dirty"])),
         *_executor_rows(provenance),
         ("Driver", fmt_provenance(provenance["driver"])),
+        *_serving_rows(provenance),
         ("Started (UTC)", provenance["started_utc"]),
         ("Finished (UTC)", fmt(provenance["finished_utc"])),
         ("Trials", str(len(trials))),
@@ -2120,6 +2545,7 @@ def _run_md(
     pin_header = ("Toolchain", "Languages", "Pin", "Version", "Install prefix")
     blocks += ["## Toolchain pins\n", _md_table(pin_header, _pin_rows(run.toolchains))]
     blocks += ["## Trials\n", *_simulator_note(run, trials), *_trial_blocks(trials)]
+    blocks.append(coverage_markdown(guard_coverage(trials)))
     if metrics is not None:
         blocks.append(metrics_section(metrics, run.scoring.score))
     return "\n".join(blocks).encode("ascii", "backslashreplace").decode("ascii")

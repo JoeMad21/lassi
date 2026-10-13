@@ -1,0 +1,66 @@
+# Resolved recipe p17-cpu-hf (chain: base -> rngd-compile -> rngd-cpu -> p17-cpu-hf)
+# recipe_hash: 8fce889957267983bfb58212ede4bdbe82d45809e938a63d7e6116e7d3b0199a is the sha256 of the YAML below these comment lines
+bench:
+  items:
+  - matrix-rotate
+  split: eval
+  suite: lassi-hecbench-10
+context:
+- openmp-4.0-card
+- cuda-12.5-ch5
+directions:
+- source: omp
+  target: cuda
+- source: cuda
+  target: omp
+executor:
+  cuda: none
+  omp: native
+faithful: false
+fixes:
+  baseline_both: false
+  execution_gate: false
+  fence_tag: false
+  parsed_diagnostics: true
+  prompt_newlines: false
+  prompt_spaces: false
+llm:
+  sampling:
+    max_tokens: 2048
+    temperature: 0.2
+    top_p: 0.9
+loop:
+  max_corrections: 2
+model:
+  backend: hf_local
+  device:
+    kind: cpu
+  id: Qwen/Qwen2.5-Coder-0.5B-Instruct
+  revision: ea3f2471cf1b1f0db85067f1ef93848e38e88c25
+  seed: 0
+oracle:
+  kind: stdout_mask
+  passfail: true
+project: p17-cpu-hf
+prompts: lassi-2024
+report:
+  parquet: true
+  trial_md: true
+runs_root: /mnt/nvme10/joseph_ufl/lassi-runs
+sandbox:
+  mem_gb: 32
+  network: false
+  wall_s: baseline_x10
+stages:
+- baseline
+- summarize_context
+- describe_source
+- generate
+- compile_loop
+- run_loop
+- oracle
+toolchain:
+  cuda: nvcc-sm80
+  omp: nvcpp-multicore
+trials:
+  n: 1

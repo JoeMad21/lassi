@@ -1,0 +1,14 @@
+{
+  "derivation": "Five lines. 'main.hip:7:23: error: use of undeclared identifier 'undefined_var'' is one error: file main.hip and line 7 as printed; main.hip is a built file, so the column 23 is kept (line 7 is eight blanks and 'y[i] = y[i] * ' before 'undefined_var', which starts at column 23); no trailing [option], so the code is null; the message is the text after 'error: '. The source echo, the caret line, and '1 error generated when compiling for gfx942.' give nothing; the error in the kernel was printed once, by the gfx942 pass, and no host pass printed. The last line, 'failed to execute:' and the clang++ command hipcc ran, is hipcc's own report of the failed clang call, so nothing.",
+  "diagnostics": [
+    {
+      "stage": "compile",
+      "severity": "error",
+      "code": null,
+      "file": "main.hip",
+      "line": 7,
+      "column": 23,
+      "message": "use of undeclared identifier 'undefined_var'"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+pass  env synced from the lock with the cpu extra and the five pins
+pass  model fetched once at its revision and matching the pin
+pass  bench sources, upstream, and the slot's prompt files
+pass  hf_local on cpu: both directions past the baseline, device record and pins
+pass  lassi train sft: checkpoint with device and pins
+pass  lassi train dpo: checkpoint with device and pins
+pass  lassi train grpo: checkpoint with device and pins
+pass  p17-gpu-hf-cuda refused before any directory, no node opened
+pass  p17-gpu-hf-rocm refused before any directory, no node opened
+pass  p17-gpu-exec-cuda refused before any directory, no node opened
+pass  p17-gpu-exec-rocm refused before any directory, no node opened
+pass  slot tree clean after the batch
+verdict: PASS

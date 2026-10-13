@@ -10,6 +10,47 @@ dependencies = [
     "tiktoken==0.14.0",
 ]
 
+# Framework extras (bible Toolchain Pins, framework pins): one per torch build; they conflict, so an environment
+# holds exactly one. Each holds the same five pins (torch, transformers, and the training pins trl, peft, and
+# accelerate; task P17.9). A plain `uv sync` installs none of them.
+[project.optional-dependencies]
+cpu = ["torch==2.14.1", "transformers==5.18.0", "trl==1.14.1", "peft==0.21.2", "accelerate==1.15.0"]
+cuda = ["torch==2.14.1", "transformers==5.18.0", "trl==1.14.1", "peft==0.21.2", "accelerate==1.15.0"]
+rocm = [
+    "torch==2.14.1",
+    "transformers==5.18.0",
+    "trl==1.14.1",
+    "peft==0.21.2",
+    "accelerate==1.15.0",
+    "triton-rocm==3.8.0 ; sys_platform == 'linux'",
+]
+
+[tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "cuda" }, { extra = "rocm" }]]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu130", extra = "cuda", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { index = "pytorch-rocm", extra = "rocm", marker = "sys_platform == 'linux'" },
+]
+triton-rocm = [{ index = "pytorch-rocm", extra = "rocm", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm7.2"
+explicit = true
+
 [project.scripts]
 lassi = "lassi.cli:main"
 

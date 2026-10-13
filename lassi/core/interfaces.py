@@ -1,4 +1,4 @@
-"""The twelve component interfaces that carry every project difference.
+"""The thirteen component interfaces that carry every project difference.
 
 Each interface is a Protocol; recipes bind concrete components to them by
 registry name. Contract rules (bible, Component Interfaces):
@@ -10,24 +10,38 @@ registry name. Contract rules (bible, Component Interfaces):
   when they report any (RunResult); each names the device its programs run
   on (device()).
 - Oracles never trust a program's self-reported PASS as the only signal.
+- LLM backends never truncate a request: one that knows its model's context
+  raises ContextExceeded, defined here, before generating (task P17.4).
 - Stages are pure over the trial record: read fields, append an attempt or
   annotation, return. Side effects go through components.
+- A Trainer writes only under the output directory it is given and reads a
+  bench item only through TrainData.bench_item, which reads the suite's
+  train-only view (Agent Rule 5; tasks P17.8, P17.9). Before any directory
+  exists, its check(recipe, data) refuses every recipe key, value, and
+  record it does not carry out (task P17.9).
+- A Profiler brackets one attempt run with start() and stop() and returns
+  a Profile (task P17.7); power values come only from a profiler that
+  declares supports_power.
 - Every component declares its capabilities (see `capabilities.Component`).
 
-Trial, Attempt, and Diagnostic are the Result Record types in
-`lassi.core.record`; they are referenced here by name only.
+Trial, Attempt, Diagnostic, DeviceRecord, and Profile are Result Record types in
+`lassi.core.record`, FrameworkBuild is in `lassi.core.devices`, and
+SuiteItem and TrainView are in `lassi.bench.registry`; they are referenced
+here by name only.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Mapping, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Protocol, Sequence
 
 from lassi.core.capabilities import Component
 
 if TYPE_CHECKING:
-    from lassi.core.record import Attempt, Diagnostic, Trial
+    from lassi.bench.registry import SuiteItem, TrainView
+    from lassi.core.devices import FrameworkBuild
+    from lassi.core.record import Attempt, DeviceRecord, Diagnostic, Profile, Trial
 
 
 @dataclass(frozen=True)
@@ -143,11 +157,36 @@ class Score:
     notes: Mapping[str, str] = field(default_factory=dict)
 
 
+class ContextExceeded(Exception):
+    """A model request whose prompt tokens plus max_tokens pass the model's context; nothing was truncated.
+
+    An LLMBackend raises it before generating anything (task P17.4), and
+    the stages end the trial at the end reason context-exceeded instead of
+    failing the run. It keeps prompt_tokens, max_tokens, and context. It is
+    neither a ValueError nor a ServingError, so no handler written for those
+    catches it by accident.
+    """
+
+    def __init__(self, prompt_tokens: int, max_tokens: int, context: int) -> None:
+        """Keep the three numbers; the message names them."""
+        super().__init__(
+            f"the prompt holds {prompt_tokens} tokens and max_tokens asks for {max_tokens} more, past the model's "
+            f"context of {context} tokens; nothing was truncated"
+        )
+        self.prompt_tokens = prompt_tokens
+        self.max_tokens = max_tokens
+        self.context = context
+
+
 class LLMBackend(Component, Protocol):
     """Serves a model: messages plus sampling in, text plus token counts out."""
 
     def complete(self, messages: Sequence[Message], sampling: Sampling) -> Completion:
-        """Return the model's completion for `messages` under `sampling`."""
+        """Return the model's completion for `messages` under `sampling`.
+
+        A request past the model's context is never truncated: a backend that
+        knows its context raises ContextExceeded before generating.
+        """
         ...
 
 
@@ -232,14 +271,22 @@ class Oracle(Component, Protocol):
 
 
 class Profiler(Component, Protocol):
-    """Traces a run: timing, and power where telemetry exists."""
+    """Traces a run: timing, and power where telemetry exists (task P17.7).
+
+    run_loop calls start() right before one attempt run and stop() right
+    after it, in a finally block, so stop() also runs when the executor
+    raises. One profiler is built per run and profiles one window after
+    another. A profiler that declares supports_power reads power telemetry
+    and declares takes_device; one that does not leaves the power fields of
+    its Profile null.
+    """
 
     def start(self) -> None:
-        """Begin tracing."""
+        """Begin tracing one window; a second start() before stop() is a ValueError."""
         ...
 
-    def stop(self) -> Mapping[str, float]:
-        """End tracing and return measured values such as `runtime_s`."""
+    def stop(self) -> Profile:
+        """End the window and return its Profile; stop() without start() is a ValueError."""
         ...
 
 
@@ -282,4 +329,100 @@ class Stage(Component, Protocol):
 
     def describe(self) -> str:
         """Return a one-line description of the stage for run.md."""
+        ...
+
+
+@dataclass(frozen=True)
+class TrainData:
+    """The data a Trainer trains on, with its data split hash (task P17.8; lassi.train.data).
+
+    `source` is "synthetic" or "bench". `split_hash` is the sha256 the train
+    layer took over the data's identity. `records` holds the synthetic
+    records in file order (() for bench). `suite` is the bench suite's
+    train-only view (lassi.bench.registry TrainView, from Suite.train_view();
+    task P17.9), which holds no eval or unassigned item (Agent Rule 5), and
+    `items` the names of the selected items (None and () for synthetic
+    data). A Trainer reads a bench item through bench_item.
+    """
+
+    source: str
+    split_hash: str
+    records: tuple[Mapping[str, Any], ...]
+    suite: TrainView | None
+    items: tuple[str, ...]
+
+    def bench_item(self, name: str) -> SuiteItem:
+        """Return bench item `name` through the train-only view.
+
+        An eval or unassigned item raises EvalSplitError (Agent Rule 5); a
+        train item outside `items`, which the split hash does not cover, and
+        synthetic data, which has no suite, raise ValueError.
+        """
+        if self.suite is None:
+            raise ValueError(f"the train data is {self.source}, not bench, so it has no bench item {name!r}")
+        found = self.suite.item(name)
+        if name not in self.items:
+            raise ValueError(f"bench item {name!r} is not among the selected items {list(self.items)}")
+        return found
+
+
+@dataclass(frozen=True)
+class TrainJob:
+    """What a Trainer is given (task P17.8).
+
+    `recipe` is the resolved train recipe (treat it as read-only) and
+    `recipe_yaml` the text of recipe.resolved.yaml; `data` the TrainData;
+    `device` the DeviceRecord of trainer.device as probed; `provenance` the
+    train directory's provenance.json as first written; and `out_dir` the
+    train directory's output/, created empty, the only place the Trainer
+    writes.
+    """
+
+    recipe: Mapping[str, Any]
+    recipe_yaml: str
+    data: TrainData
+    device: DeviceRecord
+    provenance: Mapping[str, Any]
+    out_dir: Path
+
+
+@dataclass(frozen=True)
+class TrainResult:
+    """What a Trainer returns: the steps it ran and its checkpoint directories.
+
+    `checkpoints` are paths relative to the job's out_dir with "/"
+    separators, each an existing directory strictly inside it.
+    """
+
+    steps: int
+    checkpoints: tuple[str, ...]
+
+
+class Trainer(Component, Protocol):
+    """Trains a model from a train recipe on one device and writes its checkpoints (bible Training Module).
+
+    Declared class attributes, read by the loader and the train layer without
+    building anything: `methods`, `weight_modes`, and `data_sources`,
+    collections of the names it carries out (the Training Module's methods
+    and weight modes; synthetic and bench), and `packages`, the distribution
+    names whose installed versions are recorded as its framework pins. It
+    declares the capability takes_device and is built as factory(**config)
+    from its trainer section, device included; building it writes nothing
+    and loads no model. The train layer then calls check(recipe, data)
+    before any directory exists (task P17.9): a Trainer refuses there every
+    recipe key, value, and record it does not carry out, rather than train
+    without it.
+    """
+
+    @staticmethod
+    def framework() -> FrameworkBuild:
+        """Return the framework build it trains on, read from build metadata only; called on the class."""
+        ...
+
+    def check(self, recipe: Mapping[str, Any], data: TrainData) -> None:
+        """Raise ValueError naming any recipe key, value, or record it does not carry out; write and load nothing."""
+        ...
+
+    def train(self, job: TrainJob) -> TrainResult:
+        """Run the steps, writing every output under job.out_dir only; return the steps run and the checkpoints."""
         ...

@@ -1,0 +1,25 @@
+# Gate part (a) of P17 (task P17.11; bible Build Roadmap, P17 row): hf_local on PyTorch CPU, one HeCBench item in
+# both directions, on alpha01's CPU. Not faithful: OpenMP is built by the proxy nvcpp-multicore, which checks
+# outputs, never runtime (bible Harness Contract), and CUDA is compiled only, since there is no NVIDIA GPU (OQ-003).
+extends: ../../../projects/lassi-demo/rngd-cpu.yaml  # the proxy, the native executor, stdout_mask, upstream's stages
+model:
+  backend: hf_local  # Transformers on PyTorch in process (bible Serving Rules); needs the cpu extra
+  id: Qwen/Qwen2.5-Coder-0.5B-Instruct  # the gate model (bible Toolchain Pins, gate model; task P17.1)
+  revision: ea3f2471cf1b1f0db85067f1ef93848e38e88c25  # its pinned commit; fetched once under HF_HOME
+  seed: 0  # request k samples under seed + k; any fixed value repeats the run
+  device: {kind: cpu}  # explicit device, no default (bible Project Recipes, Notes, device sections)
+llm:
+  sampling:
+    max_tokens: 2048  # bounds CPU generation time; the gate checks the pipeline, not the model's quality
+loop:
+  max_corrections: 2  # at most 5 model calls per trial on the CPU
+fixes:
+  parsed_diagnostics: true  # caps compile text at 50 diagnostics and 16,384 bytes, so correction prompts fit 32768
+bench:
+  items: [matrix-rotate]  # its references pass under the proxy (results/p2-proxy-stability); the smallest sources
+directions:
+  - {source: omp, target: cuda}  # the CUDA reference and candidates are compiled only (executor.cuda none)
+  - {source: cuda, target: omp}  # the OpenMP reference and candidates run in the sandbox on the host CPU
+executor:
+  cuda: none  # compile only: no NVIDIA GPU here (OQ-003)
+  omp: native  # the sandboxed native executor; switching forms replaces rngd-cpu's single {kind: native}

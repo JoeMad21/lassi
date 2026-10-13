@@ -1,0 +1,180 @@
+{
+  "commit": "f03fa62a5207436bbd8131911576a9382a0e0d42",
+  "date": "2026-10-06T12:16:45-07:00",
+  "dirty": false,
+  "host": "alpha01",
+  "rx_run_id": "20261006-121638-desktop-8r113ei-detached-f03fa62a-961a",
+  "scenarios": {
+    "hip_clean": {
+      "argv": [
+        "/opt/rocm/core-7.12/bin/hipcc",
+        "--offload-arch=gfx942",
+        "-Wall",
+        "-O3",
+        "-o",
+        "main",
+        "main.hip"
+      ],
+      "diagnostics": 0,
+      "exit_status": 0,
+      "overrides": {},
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "toolchain": "hipcc-gfx942"
+    },
+    "hip_device_undefined": {
+      "argv": [
+        "/opt/rocm/core-7.12/bin/hipcc",
+        "--offload-arch=gfx942",
+        "-Wall",
+        "-O3",
+        "-o",
+        "main",
+        "main.hip"
+      ],
+      "diagnostics": 1,
+      "exit_status": 1,
+      "overrides": {},
+      "stderr_bytes": 693,
+      "stderr_sha256": "167e2b92586a815fe1109f068269d224a2dbbd2facf6d0fe49e15670ab513df2",
+      "toolchain": "hipcc-gfx942"
+    },
+    "hip_host_calls_device": {
+      "argv": [
+        "/opt/rocm/core-7.12/bin/hipcc",
+        "--offload-arch=gfx942",
+        "-Wall",
+        "-O3",
+        "-o",
+        "main",
+        "main.hip"
+      ],
+      "diagnostics": 2,
+      "exit_status": 1,
+      "overrides": {},
+      "stderr_bytes": 527,
+      "stderr_sha256": "64b9669d93adcbf4812d247ed2acb404609dc5db74a31da2c726e32f660cfc85",
+      "toolchain": "hipcc-gfx942"
+    },
+    "hip_kernel_calls_host": {
+      "argv": [
+        "/opt/rocm/core-7.12/bin/hipcc",
+        "--offload-arch=gfx942",
+        "-Wall",
+        "-O3",
+        "-o",
+        "main",
+        "main.hip"
+      ],
+      "diagnostics": 2,
+      "exit_status": 1,
+      "overrides": {},
+      "stderr_bytes": 491,
+      "stderr_sha256": "d11b507c4ef477992133262708234c38591ae2771ab04d44efb611876fbdb8b1",
+      "toolchain": "hipcc-gfx942"
+    },
+    "hip_linker_error": {
+      "argv": [
+        "/opt/rocm/core-7.12/bin/hipcc",
+        "--offload-arch=gfx942",
+        "-Wall",
+        "-O3",
+        "-o",
+        "main",
+        "main.hip"
+      ],
+      "diagnostics": 2,
+      "exit_status": 1,
+      "overrides": {},
+      "stderr_bytes": 480,
+      "stderr_sha256": "78caa2810c40ffaf0332a7fe89840dcb3c44339eddab08aba15c0a4c76ddc5af",
+      "toolchain": "hipcc-gfx942"
+    },
+    "hip_missing_header": {
+      "argv": [
+        "/opt/rocm/core-7.12/bin/hipcc",
+        "--offload-arch=gfx942",
+        "-Wall",
+        "-O3",
+        "-o",
+        "main",
+        "main.hip"
+      ],
+      "diagnostics": 1,
+      "exit_status": 1,
+      "overrides": {},
+      "stderr_bytes": 342,
+      "stderr_sha256": "635526b3fd59719fbb03977a50af640bc0919499259d169fdd8388be88abfa0b",
+      "toolchain": "hipcc-gfx942"
+    },
+    "hip_undeclared_identifier": {
+      "argv": [
+        "/opt/rocm/core-7.12/bin/hipcc",
+        "--offload-arch=gfx942",
+        "-Wall",
+        "-O3",
+        "-o",
+        "main",
+        "main.hip"
+      ],
+      "diagnostics": 1,
+      "exit_status": 1,
+      "overrides": {},
+      "stderr_bytes": 349,
+      "stderr_sha256": "405f8bcb460d09a0739303fabf3fba4c099cd6194c61e58ca3d2f449130decb2",
+      "toolchain": "hipcc-gfx942"
+    },
+    "hip_unused_variable": {
+      "argv": [
+        "/opt/rocm/core-7.12/bin/hipcc",
+        "--offload-arch=gfx942",
+        "-Wall",
+        "-O3",
+        "-o",
+        "main",
+        "main.hip"
+      ],
+      "diagnostics": 2,
+      "exit_status": 0,
+      "overrides": {},
+      "stderr_bytes": 330,
+      "stderr_sha256": "b4c4a8de28c5c2f92506a72fd64cb909a2d84883576bae15713bac1f5a828ee8",
+      "toolchain": "hipcc-gfx942"
+    }
+  },
+  "snapshot_of": null,
+  "toolchains": {
+    "hipcc-gfx942": {
+      "environment": [
+        "LANG",
+        "LC_ALL",
+        "PATH"
+      ],
+      "executable": "/opt/rocm/core-7.12/bin/hipcc",
+      "locale": {
+        "LANG": "C",
+        "LC_ALL": "C"
+      },
+      "pin_files": {
+        "hipcc": {
+          "EXECUTABLE": "/opt/rocm/core-7.12/bin/hipcc",
+          "EXPECT_VERSION": "HIP version: 7.12.60610-2bd1678d3d",
+          "FLAGS": "--offload-arch=gfx942 -Wall -O3",
+          "NAME": "hipcc",
+          "VERSION": "7.12.60610-2bd1678d3d"
+        }
+      },
+      "pins": {
+        "hipcc": "7.12.60610-2bd1678d3d"
+      },
+      "version": [
+        "HIP version: 7.12.60610-2bd1678d3d",
+        "AMD clang version 22.0.0git (https://github.com/ROCm/llvm-project.git c849bc16b0e49951d313756f20b73c2b28d321d7+PATCHED:9a6ac45c97a1e511db838c5b46257324d2de1780)",
+        "Target: x86_64-unknown-linux-gnu",
+        "Thread model: posix",
+        "InstalledDir: /opt/rocm/core-7.12/lib/llvm/bin"
+      ],
+      "version_exit_status": 0
+    }
+  }
+}

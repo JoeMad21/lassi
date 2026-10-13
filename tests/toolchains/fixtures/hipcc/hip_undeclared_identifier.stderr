@@ -1,0 +1,5 @@
+main.hip:7:23: error: use of undeclared identifier 'undefined_var'
+    7 |         y[i] = y[i] * undefined_var;
+      |                       ^~~~~~~~~~~~~
+1 error generated when compiling for gfx942.
+failed to execute:/opt/rocm/core-7.12/lib/llvm/bin/clang++  --offload-arch=gfx942 --driver-mode=g++ --hip-link  -Wall -O3 -o "main" -x hip main.hip

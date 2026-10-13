@@ -1,0 +1,57 @@
+Translate the program below from $source_language to $target_language.
+
+The language ids mean:
+- cpp: a C++ program for the host CPU, built by g++ 12 with -O3 -fopenmp.
+- tt: a tt-metal host program in C++20 for tt-metal commit 5280a9cf, built by clang++-20. It opens the
+  device, creates the buffers (DRAM, and L1 where a kernel needs scratch), the program, the circular
+  buffers its kernels use, and its kernels, moves the inputs to the device, runs the program, reads the
+  results back, closes the device, and writes the outputs. Every output value must be computed by the
+  device kernels, never by the host.
+
+Both kinds of program take the same arguments: the input files, then the output files, in the order the
+source program takes them. Both read inputs and write outputs only through the harness header:
+  #include "lassi_io.h"
+  lassi_io_array x = {};  lassi_io_read(path, &x)  ...  lassi_io_free(&x);
+  lassi_io_write(path, name, dtype, rank, dims, data)
+lassi_io_read and lassi_io_write return 0 on success. Each output must keep the array name, dtype code
+(such as LASSI_IO_BF16 or LASSI_IO_F32), and shape the source program writes. A bf16 value is the upper
+16 bits of the f32 of the same value. The harness provides lassi_io.h; never return it.
+
+A tt program uses tt-metal calls such as these, after the includes <tt-metalium/host_api.hpp>,
+<tt-metalium/distributed.hpp>, and <tt-metalium/tensor_accessor_args.hpp> and using namespace tt::tt_metal;
+- distributed::MeshDevice::create_unit_mesh(0), then device->mesh_command_queue();
+- distributed::MeshBuffer::create(ReplicatedBufferConfig{.size}, DeviceLocalBufferConfig{.page_size,
+  .buffer_type}, device.get()), both configs in distributed::, with BufferType::DRAM, or BufferType::L1
+  for a kernel's scratch;
+- distributed::EnqueueWriteMeshBuffer(queue, buffer, host_vector, false);
+- CreateProgram(); for circular buffers, CircularBufferConfig with tt::DataFormat::Float16_b and
+  CreateCircularBuffer, tt::CBIndex::c_0 and c_1 for inputs and c_16 for the output;
+- TensorAccessorArgs(*buffer).append_to(compile_args);
+- CreateKernel(program, "<kernel path>", core, DataMovementConfig{...}) for readers and writers, and
+  CreateKernel(program, "<kernel path>", core, ComputeConfig{...}) for compute; SetRuntimeArgs(program,
+  kernel, core, args), whose args are buffer addresses (buffer->address()) and counts; a single-core
+  program uses CoreCoord core = {0, 0};
+- distributed::MeshWorkload workload; workload.add_program(distributed::MeshCoordinateRange(device->shape()),
+  std::move(program)); distributed::EnqueueMeshWorkload(queue, workload, false); distributed::Finish(queue);
+- distributed::EnqueueReadMeshBuffer(queue, host_vector, buffer, true); device->close().
+Device data is bf16 in 32x32 tiles: one tile is a 2048-byte page of a buffer and of a circular buffer. A
+matmul's kernels work on tiles, so its host program tilizes the inputs with tilize_nfaces and untilizes
+the output with untilize_nfaces (<tt-metalium/tilize_utils.hpp>).
+
+The harness provides the kernel files below at these paths, read-only; never return a file at one of
+these paths. A tt program launches each kernel by its path here, in CreateKernel, and passes the compile
+and runtime arguments in the order the kernel reads them. A cpp program must reproduce the math the
+kernels compute.
+
+$kernel_files
+The $source_language program to translate follows, each file in a fenced code block whose first line is
+// FILE: <path>
+
+$source_files
+Write the complete $target_language program as these files: $target_files.
+Keep the program's behavior and output unchanged.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

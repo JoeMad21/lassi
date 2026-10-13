@@ -37,6 +37,29 @@ from its third round: any OSError that keeps the command from starting is
 SandboxUnavailableError, the hang test reads the program's own time from the
 clock readings in the done line, and the keyring syscalls are refused.
 
+Task P17.5 adds device access for the gpu executor, and only for it:
+SandboxSpec.devices, a DeviceExposure of DeviceBinds (host source, path
+inside) for device nodes and for /sys directories, is None unless set. A
+spec without one builds exactly the earlier command, with SETUP_SCRIPT
+byte for byte as it stood before the task (its sha256 is pinned), so every
+remote measurement of the script still describes native, ttsim, and compile
+runs. A spec with one builds the command from DEVICE_SETUP_SCRIPT, which is
+SETUP_SCRIPT with two steps added (DEVICE_NODES_STEP right after the
+private /dev's six binds, DEVICE_SYS_STEP right after the /sys and /var
+covers), and three positional blocks: the nodes (count, then source and
+target pairs) and the /sys sources (count, then sources) after the root
+count, and the /sys targets (count, then target and cover pairs) after the
+hidden roots. The setup binds each node into the private /dev, stages each
+/sys source while the host /sys is still visible, and binds it under its
+cover once the covers are in place (the cover reopened for the mkdir and
+the bind, then read-only again, each time naming its type and source, so
+mount does not read its options back from mountinfo). The spec refuses an exposure without a
+node, a path that is relative, holds NUL or a "..", or a segment outside
+[A-Za-z0-9][A-Za-z0-9._:-]*, a node outside /dev or on a name the private
+/dev holds, a /sys directory outside /sys or not strictly below a covered
+entry, and a target named twice; GPU_VISIBILITY_NAMES join
+ENVIRONMENT_NAMES and are refused without an exposure.
+
 Every test that runs something uses a fake CommandRunner (or a trapped
 subprocess.Popen), so no sandbox and no generated code ever starts. The
 setup-script tests run SETUP_SCRIPT under sh with stub commands on a PATH
@@ -61,10 +84,12 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import hashlib
 import importlib.util
 import inspect
 import math
 import os
+import posixpath
 import re
 import shutil
 import stat
@@ -76,6 +101,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -93,7 +119,7 @@ ONE_SECOND = Limits(wall_s=1.0, memory_mb=64, cpus=1)
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 PROJECT_NAMES = ("lassi-repro", "lassi-ee", "lassi-df", "hecbench", "qwen", "wizardcoder", "a100", "mi300x")
 # The executor modules the P0.10 contract names; any other module found in the package is scanned too.
-NAMED_EXECUTOR_MODULES = ("__init__", "native", "none", "sandbox", "workdir")
+NAMED_EXECUTOR_MODULES = ("__init__", "native", "none", "sandbox", "workdir", "gpu")
 RUNNER_NAMES = ("CommandResult", "CommandRunner", "subprocess_runner", "capped_runner")
 # The only modules in lassi/ that may start a process, and why.
 PROCESS_MODULES = {
@@ -383,16 +409,21 @@ def write_stub(directory: Path, name: str, body: str) -> None:
     path.chmod(0o755)
 
 
-def stub_script(sandbox: ModuleType, userns_target: Path, core_target: Path, uptime: Path) -> str:
-    """Return SETUP_SCRIPT with its writes to the user namespace limit and the core dump filter pointed at files.
+def stub_script(
+    sandbox: ModuleType, userns_target: Path, core_target: Path, uptime: Path, script: str | None = None
+) -> str:
+    """Return the setup script with its writes to the user namespace limit and the core dump filter pointed at files.
 
-    Its two reads of /proc/uptime read the file `uptime` instead.
+    The script is `script`, by default SETUP_SCRIPT (DEVICE_SETUP_SCRIPT for
+    the device steps). Its two reads of /proc/uptime read the file `uptime`
+    instead.
     """
-    assert sandbox.SETUP_SCRIPT.count(USERNS_LIMIT) == 1
-    assert sandbox.SETUP_SCRIPT.count(CORE_FILTER) == 1
-    assert sandbox.SETUP_SCRIPT.count(UPTIME) == 2
+    text = sandbox.SETUP_SCRIPT if script is None else script
+    assert text.count(USERNS_LIMIT) == 1
+    assert text.count(CORE_FILTER) == 1
+    assert text.count(UPTIME) == 2
     assert "'" not in f"{userns_target}{core_target}{uptime}"
-    script = sandbox.SETUP_SCRIPT.replace(USERNS_LIMIT, f"'{userns_target.as_posix()}'")
+    script = text.replace(USERNS_LIMIT, f"'{userns_target.as_posix()}'")
     script = script.replace(UPTIME, f"'{uptime.as_posix()}'")
     return script.replace(CORE_FILTER, f"'{core_target.as_posix()}'")
 
@@ -465,8 +496,9 @@ def run_setup_with_stubs(
     missing: str = "",
     userns_target: Path | None = None,
     program: StubProgram | None = None,
+    script: str | None = None,
 ) -> StubRun:
-    """Run SETUP_SCRIPT under sh with only stub commands on PATH; nothing is mounted and no program runs.
+    """Run SETUP_SCRIPT (or `script`) under sh with only stub commands on PATH; nothing is mounted and no program runs.
 
     Every stub records its call in one shared log and exits 0, except: the
     stub `mount` exits 32 when its last argument is `fail_target`; the stub
@@ -491,7 +523,8 @@ def run_setup_with_stubs(
         pytest.skip("sh is not on PATH")
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         pytest.skip("never run the setup script as root, even with stubs")
-    assert not re.search(r"/s?bin/", sandbox.SETUP_SCRIPT), "the script must find every command through PATH"
+    text = sandbox.SETUP_SCRIPT if script is None else script
+    assert not re.search(r"/s?bin/", text), "the script must find every command through PATH"
     target = tmp_path / "max_user_namespaces" if userns_target is None else userns_target
     core = tmp_path / "coredump_filter"
     uptime = tmp_path / "uptime"
@@ -511,9 +544,9 @@ def run_setup_with_stubs(
         (stubs / missing).unlink()
     # The script goes in a file, not after -c: MSYS sh on Windows cuts a command-line argument at about 8 KiB,
     # where Linux allows 128 KiB per argument. The positional parameters are the same either way.
-    script = tmp_path / "setup.sh"
-    script.write_text(stub_script(sandbox, target, core, uptime), encoding="ascii", newline="\n")
-    argv = [shell, script.as_posix(), *layout]
+    script_file = tmp_path / "setup.sh"
+    script_file.write_text(stub_script(sandbox, target, core, uptime, text), encoding="ascii", newline="\n")
+    argv = [shell, script_file.as_posix(), *layout]
     done = subprocess.run(argv, env={"PATH": str(stubs)}, capture_output=True, timeout=120, check=False)
     records = read_calls(log)
     return StubRun(
@@ -651,9 +684,12 @@ def test_sandbox_spec_is_frozen_with_defaults(sandbox: ModuleType) -> None:
     assert spec.hidden_roots == (SCRATCH,)
     # P0.20 adds `environment`, the program's allowlisted environment; None keeps the program defaults.
     assert spec.environment is None
+    # P17.5 adds `devices`, the gpu executor's device exposure; None exposes no device beyond the private /dev's six.
+    assert getattr(spec, "devices", "missing") is None, "SandboxSpec.devices (task P17.5) defaults to None"
     assert {f.name for f in dataclasses.fields(sandbox.SandboxSpec)} == {
-        "workdir", "hidden_roots", "harness", "toolchains", "tasks_max", "disk_mb", "environment"
+        "workdir", "hidden_roots", "harness", "toolchains", "tasks_max", "disk_mb", "environment", "devices"
     }
+    assert [f.name for f in dataclasses.fields(sandbox.SandboxSpec)][-1] == "devices", "the new field comes last"
     with pytest.raises(dataclasses.FrozenInstanceError):
         spec.workdir = HOME  # type: ignore[misc]
 
@@ -2590,6 +2626,404 @@ def test_sandbox_takes_its_runner_by_keyword_only(sandbox: ModuleType) -> None:
     assert list(parameters) == ["runner"]
     assert parameters["runner"].kind is inspect.Parameter.KEYWORD_ONLY
     assert parameters["runner"].default is None
+
+
+# ---------------------------------------------------------------------------
+# Device access for the gpu executor (task P17.5): an exposure only on request, SETUP_SCRIPT unchanged
+
+# SETUP_SCRIPT as it stood before task P17.5 (516bf8e): runs without an exposure keep these exact bytes, so every
+# remote measurement of the script (P0.16, P0.20, P4.11) still describes what native, ttsim, and compile runs run.
+SETUP_SCRIPT_SHA256 = "3ec98d452e7677a8c45a0b7046ca85ce66a394235d7bb3441a65e4e243c942b5"
+SETUP_SCRIPT_LENGTH = 10901
+# The names only the gpu executor sets, in the sandbox's order, and the names the private /dev already holds.
+GPU_VISIBILITY_NAMES = ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES")
+RESERVED_DEV_NAMES = frozenset({*DEV_NODES, "pts", "shm", *DEV_LINKS})
+# Stand-in exposures: harmless host nodes at targets that name no GPU node (one nested, one not), and two /sys
+# directories under covered entries, each (source, target, the covered entry it lies under). The stubs touch none.
+STANDIN_NODES = (("/dev/zero", "/dev/lassi-standin/a"), ("/dev/full", "/dev/lassi-full"))
+STANDIN_SYS = (
+    ("/sys/devices/system/cpu", "/sys/devices/virtual/lassi-standin/topology", "/sys/devices/virtual"),
+    ("/sys/devices/system/node", "/sys/class/lassi-standin", "/sys/class"),
+)
+# The covered entry of each SYNTHETIC /sys target (sys_cover).
+SYS_COVERS = {
+    "/sys/devices/virtual/kfd/kfd/topology": "/sys/devices/virtual",
+    "/sys/devices/virtual/lassi-standin/topology": "/sys/devices/virtual",
+    "/sys/class/drm/renderD128": "/sys/class",
+    "/sys/bus/pci/devices": "/sys/bus",
+    "/sys/devices/pci0000:00/0000:00:01.0": "/sys/devices/pci0000:00",
+}
+# A valid node and /sys directory for the refusal cases that change the other half.
+GOOD_NODE = ("/dev/zero", "/dev/lassi-a")
+GOOD_SYS = ("/sys/devices/system/cpu", "/sys/devices/virtual/lassi-a")
+# Exposures the spec refuses: case -> (nodes, sys_dirs), each a (source, target) pair.
+BAD_EXPOSURES: dict[str, tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]]] = {
+    "no-node": ((), (GOOD_SYS,)),
+    "relative-node-source": ((("dev/zero", "/dev/lassi-a"),), ()),
+    "relative-node-target": ((("/dev/zero", "dev/lassi-a"),), ()),
+    "dot-dot-in-node-target": ((("/dev/zero", "/dev/../etc/lassi-a"),), ()),
+    "dot-dot-in-node-source": ((("/dev/../etc/passwd", "/dev/lassi-a"),), ()),
+    "nul-in-node-target": ((("/dev/zero", "/dev/lassi\0a"),), ()),
+    "node-source-outside-dev": ((("/sys/lassi-a", "/dev/lassi-a"),), ()),
+    "node-target-outside-dev": ((("/dev/zero", "/run/lassi-a"),), ()),
+    "node-target-is-dev": ((("/dev/zero", "/dev"),), ()),
+    "node-target-null": ((("/dev/zero", "/dev/null"),), ()),
+    "node-target-in-pts": ((("/dev/zero", "/dev/pts/9"),), ()),
+    "node-target-in-shm": ((("/dev/zero", "/dev/shm/lassi-a"),), ()),
+    "node-target-stdin": ((("/dev/zero", "/dev/stdin"),), ()),
+    "node-target-with-a-blank": ((("/dev/zero", "/dev/lassi a"),), ()),
+    "node-target-hidden-name": ((("/dev/zero", "/dev/.lassi-a"),), ()),
+    "node-target-with-a-dollar": ((("/dev/zero", "/dev/lassi$a"),), ()),
+    "node-target-twice": ((GOOD_NODE, ("/dev/full", GOOD_NODE[1])), ()),
+    "sys-source-outside-sys": ((GOOD_NODE,), (("/proc/cpuinfo", "/sys/devices/virtual/lassi-a"),)),
+    "relative-sys-source": ((GOOD_NODE,), (("sys/devices/system/cpu", "/sys/devices/virtual/lassi-a"),)),
+    "sys-target-outside-sys": ((GOOD_NODE,), (("/sys/devices/system/cpu", "/proc/lassi-a"),)),
+    "sys-target-under-devices-system": ((GOOD_NODE,), (("/sys/devices/system/cpu", "/sys/devices/system/lassi-a"),)),
+    "sys-target-under-fs": ((GOOD_NODE,), (("/sys/devices/system/cpu", "/sys/fs/lassi-a"),)),
+    "sys-target-is-a-cover": ((GOOD_NODE,), (("/sys/devices/system/cpu", "/sys/devices/virtual"),)),
+    "sys-target-is-class": ((GOOD_NODE,), (("/sys/devices/system/cpu", "/sys/class"),)),
+    "sys-target-is-sys": ((GOOD_NODE,), (("/sys/devices/system/cpu", "/sys"),)),
+    "dot-dot-in-sys-target": ((GOOD_NODE,), (("/sys/devices/system/cpu", "/sys/class/../fs/lassi-a"),)),
+    "sys-target-twice": ((GOOD_NODE,), (GOOD_SYS, ("/sys/devices/system/node", GOOD_SYS[1]))),
+}
+
+
+def device_attribute(sandbox: ModuleType, name: str) -> Any:
+    """Return sandbox.<name>, failing the test clearly while task P17.5 has not added it."""
+    if not hasattr(sandbox, name):
+        pytest.fail(f"lassi.executors.sandbox has no {name} yet (task P17.5)")
+    return getattr(sandbox, name)
+
+
+def device_script(sandbox: ModuleType) -> str:
+    """Return DEVICE_SETUP_SCRIPT, failing the test clearly while it does not exist."""
+    script = device_attribute(sandbox, "DEVICE_SETUP_SCRIPT")
+    assert isinstance(script, str)
+    return script
+
+
+def make_exposure(sandbox: ModuleType, nodes: Sequence[Sequence[str]], sys_dirs: Sequence[Sequence[str]] = ()) -> Any:
+    """Return a DeviceExposure of DeviceBinds from (source, target) pairs; a /sys entry's third item is ignored."""
+    bind = device_attribute(sandbox, "DeviceBind")
+    return device_attribute(sandbox, "DeviceExposure")(
+        nodes=tuple(bind(PurePosixPath(item[0]), PurePosixPath(item[1])) for item in nodes),
+        sys_dirs=tuple(bind(PurePosixPath(item[0]), PurePosixPath(item[1])) for item in sys_dirs),
+    )
+
+
+def device_blocks(
+    nodes: Sequence[tuple[str, str]], sys_dirs: Sequence[tuple[str, str, str]]
+) -> tuple[list[str], list[str], list[str]]:
+    """Return the device script's positional blocks: the nodes, the /sys sources, and the /sys targets with covers.
+
+    The nodes block follows the root count, the sources block follows it,
+    and the targets block follows the hidden roots: each block is its count
+    and then its values, every value one element.
+    """
+    node_block = [str(len(nodes)), *(part for pair in nodes for part in pair)]
+    sources = [str(len(sys_dirs)), *(source for source, _target, _cover in sys_dirs)]
+    targets = [str(len(sys_dirs)), *(part for _source, target, cover in sys_dirs for part in (target, cover))]
+    return node_block, sources, targets
+
+
+def with_device_blocks(
+    layout: list[str], nodes: Sequence[tuple[str, str]], sys_dirs: Sequence[tuple[str, str, str]], roots: int = 2
+) -> list[str]:
+    """Return a stub layout (stub_layout's, with `roots` hidden roots) with the device blocks put in their places."""
+    node_block, sources, targets = device_blocks(nodes, sys_dirs)
+    return [*layout[:5], *node_block, *sources, *layout[5 : 5 + roots], *targets, *layout[5 + roots :]]
+
+
+def cover_remounts(calls: list[list[str]], point: str) -> list[tuple[int, list[str]]]:
+    """Return (index, option list) of each remount of `point`, in either form mount takes.
+
+    The forms are `mount -o remount,... <point>` and `mount -t tmpfs -o
+    remount,... <source> <point>`. The device script must use the second:
+    given a source and a point, mount does not read the cover's options
+    back from mountinfo. Both are found, so a check that no cover is
+    reopened sees either.
+    """
+    found = []
+    for index, call in enumerate(calls):
+        if call[0] == "mount" and call[-1] == point and "-o" in call[:-1]:
+            options = call[call.index("-o") + 1].split(",")
+            if "remount" in options:
+                found.append((index, options))
+    return found
+
+
+def tree_paths(path: str, top: str) -> set[str]:
+    """Return `path` and each of its parents strictly below `top` (POSIX text)."""
+    found = set()
+    while path not in (top, "/", "") and path.startswith(top + "/"):
+        found.add(path)
+        path = posixpath.dirname(path)
+    return found
+
+
+def device_call_indices(calls: list[list[str]], dev: str) -> list[int]:
+    """Return the indices of the calls the device steps add to a stub run of STANDIN_NODES and STANDIN_SYS.
+
+    They are each node's bind into the private /dev `dev` (its touch and any
+    mkdir of a parent), each /sys source's staging bind (and any mkdir of its
+    staging dirs under /tmp), and each /sys target's mkdir, bind, and its
+    cover's remounts.
+    """
+    points = {f"{dev}/{target[len('/dev/') :]}" for _source, target in STANDIN_NODES}
+    staged = {dst for _i, src, dst in moves(calls, "--bind") if src in {s for s, _t, _c in STANDIN_SYS}}
+    targets = {target for _source, target, _cover in STANDIN_SYS}
+    covers = {cover for _source, _target, cover in STANDIN_SYS}
+    made = set().union(*(tree_paths(posixpath.dirname(point), dev) for point in points))
+    made |= set().union(*(tree_paths(stage, "/tmp") for stage in staged))
+    made |= set().union(*(tree_paths(target, cover) for _source, target, cover in STANDIN_SYS))
+    marked = []
+    for index, call in enumerate(calls):
+        paths = [part for part in call[1:] if not part.startswith("-")]
+        if call[0] == "mkdir" and paths and set(paths) <= made:
+            marked.append(index)
+        elif set(call[1:]) & (points | staged | targets):
+            marked.append(index)
+        elif any(cover_remounts([call], cover) for cover in covers):
+            marked.append(index)
+    return marked
+
+
+def without_stub_path(calls: list[list[str]]) -> list[list[str]]:
+    """Return `calls` with each PATH=... element (the program chain's PATH, each run's own stub directory) blanked."""
+    return [["PATH=" if part.startswith("PATH=") else part for part in call] for call in calls]
+
+
+def run_with_and_without_devices(sandbox: ModuleType, tmp_path: Path) -> tuple[StubRun, StubRun, dict[str, str]]:
+    """Run SETUP_SCRIPT and DEVICE_SETUP_SCRIPT under stubs on the same layout, the second with the device blocks.
+
+    Both programs exit 7; the named values are stub_layout's.
+    """
+    script = device_script(sandbox)
+    shared, plain_dir, device_dir = tmp_path / "layout", tmp_path / "plain", tmp_path / "device"
+    for directory in (shared, plain_dir, device_dir):
+        directory.mkdir()
+    layout, values = stub_layout(shared)
+    plain = run_setup_with_stubs(sandbox, plain_dir, layout, program_status=7)
+    device = with_device_blocks(layout, STANDIN_NODES, STANDIN_SYS)
+    exposed = run_setup_with_stubs(sandbox, device_dir, device, program_status=7, script=script)
+    return plain, exposed, values
+
+
+def test_setup_script_is_unchanged_for_runs_without_devices(sandbox: ModuleType) -> None:
+    script = sandbox.SETUP_SCRIPT
+    assert hashlib.sha256(script.encode("ascii")).hexdigest() == SETUP_SCRIPT_SHA256
+    assert len(script) == SETUP_SCRIPT_LENGTH
+
+
+def test_the_device_script_is_the_setup_script_with_two_device_steps(sandbox: ModuleType) -> None:
+    script = device_script(sandbox)
+    nodes_step = device_attribute(sandbox, "DEVICE_NODES_STEP")
+    sys_step = device_attribute(sandbox, "DEVICE_SYS_STEP")
+    assert isinstance(nodes_step, str) and isinstance(sys_step, str)
+    assert script.count(nodes_step) == 1 and script.count(sys_step) == 1
+    assert script.replace(nodes_step, "", 1).replace(sys_step, "", 1) == sandbox.SETUP_SCRIPT
+    # The node step comes right after the six binds of the private /dev (before it turns read-only and moves onto
+    # /dev, while the host /sys is still visible); the /sys step right after the covers, before the private dirs.
+    six_binds = 'mount --bind "/dev/$node" "/tmp/dev/$node"\ndone\n'
+    assert script.index(nodes_step) == script.index(six_binds) + len(six_binds)
+    covers = 'lassi-sys "$dir"\n      fi\n      ;;\n  esac\ndone\n'
+    assert script.index(sys_step) == script.index(covers) + len(covers)
+    for step in (nodes_step, sys_step):
+        assert step and step.endswith("\n") and step.isascii(), step
+        assert "$(" not in step and "`" not in step, "no command or arithmetic substitution"
+        assert not re.search(r"/s?bin/", step), "every command comes through PATH"
+        assert READY_LINE.strip() not in step and "awk" not in step
+    assert script.count(USERNS_LIMIT) == 1 and script.count(UPTIME) == 2 and script.count(CORE_FILTER) == 1
+
+
+def test_a_spec_without_devices_builds_the_same_command_as_before(
+    sandbox: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in sandbox.PASSED_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    environment = {"PATH": sandbox.SANDBOX_PATH, "LANG": "C.UTF-8", "TMPDIR": "/tmp", "OMP_NUM_THREADS": "2"}
+    for overrides in ({}, {"environment": environment}):
+        implicit = sandbox.sandbox_command(sample_spec(sandbox, **overrides), PROGRAM, ONE_SECOND)
+        explicit = sandbox.sandbox_command(sample_spec(sandbox, devices=None, **overrides), PROGRAM, ONE_SECOND)
+        assert implicit == explicit and script_of(implicit) == sandbox.SETUP_SCRIPT
+        assert device_script(sandbox) not in implicit
+    start = implicit.index(sandbox.SETUP_SCRIPT)
+    marker = [sandbox.ENVIRONMENT_MARKER, *(f"{name}={environment[name]}" for name in sorted(environment))]
+    layout = [str(WORK), str(HARNESS), str(TOOLCHAINS), str(32 << 20), "2", str(SCRATCH), str(HOME), "4", "1", "2"]
+    assert implicit[start + 1 :] == ["sh", *layout, *marker, *PROGRAM], "the P0.16 layout, no device block"
+
+
+def test_a_device_spec_uses_the_device_script_and_its_layout(
+    sandbox: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in sandbox.PASSED_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    environment = {"PATH": sandbox.SANDBOX_PATH, "LANG": "C.UTF-8", "TMPDIR": "/tmp", "ROCR_VISIBLE_DEVICES": "0"}
+    plain = sandbox.sandbox_command(sample_spec(sandbox), PROGRAM, ONE_SECOND)
+    for sys_dirs in (STANDIN_SYS, ()):
+        spec = sample_spec(sandbox, devices=make_exposure(sandbox, STANDIN_NODES, sys_dirs), environment=environment)
+        command = sandbox.sandbox_command(spec, PROGRAM, ONE_SECOND)
+        start = command.index(device_script(sandbox))
+        assert command[:start] == plain[: plain.index(sandbox.SETUP_SCRIPT)], "only the script and layout differ"
+        assert sandbox.SETUP_SCRIPT not in command
+        nodes, sources, targets = device_blocks(STANDIN_NODES, sys_dirs)
+        head = [str(WORK), str(HARNESS), str(TOOLCHAINS), str(32 << 20), "2"]
+        marker = [sandbox.ENVIRONMENT_MARKER, *(f"{name}={environment[name]}" for name in sorted(environment))]
+        layout = [*head, *nodes, *sources, str(SCRATCH), str(HOME), *targets, "4", "1", "2", *marker]
+        assert command[start + 1 :] == ["sh", *layout, *PROGRAM], command[start + 1 :]
+        assert all(isinstance(part, str) for part in command)
+
+
+def test_device_bind_and_exposure_are_frozen_dataclasses(sandbox: ModuleType) -> None:
+    bind, exposure = device_attribute(sandbox, "DeviceBind"), device_attribute(sandbox, "DeviceExposure")
+    assert [item.name for item in dataclasses.fields(bind)] == ["source", "target"]
+    assert [item.name for item in dataclasses.fields(exposure)] == ["nodes", "sys_dirs"]
+    one = bind(PurePosixPath("/dev/zero"), PurePosixPath("/dev/lassi-a"))
+    made = exposure(nodes=(one,))
+    assert made.sys_dirs == ()
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        one.target = PurePosixPath("/dev/lassi-b")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        made.nodes = ()
+
+
+def test_a_spec_keeps_a_valid_exposure(sandbox: ModuleType) -> None:
+    # The gpu executor's shapes (each node at its own path, the KFD topology under a cover) and the remote test's
+    # stand-ins: only strings here, nothing is touched.
+    gpu_like = make_exposure(
+        sandbox,
+        [(path, path) for path in ("/dev/kfd", "/dev/dri/renderD128", "/dev/nvidia-uvm", "/dev/nvidia0")],
+        [("/sys/devices/virtual/kfd/kfd/topology", "/sys/devices/virtual/kfd/kfd/topology")],
+    )
+    for exposure in (gpu_like, make_exposure(sandbox, STANDIN_NODES, STANDIN_SYS)):
+        spec = sample_spec(sandbox, devices=exposure)
+        assert spec.devices == exposure
+
+
+@pytest.mark.parametrize("case", sorted(BAD_EXPOSURES))
+def test_device_binds_are_checked(sandbox: ModuleType, case: str) -> None:
+    nodes, sys_dirs = BAD_EXPOSURES[case]
+    with pytest.raises(ValueError):
+        sample_spec(sandbox, devices=make_exposure(sandbox, nodes, sys_dirs))
+
+
+@pytest.mark.parametrize(("target", "cover"), sorted(SYS_COVERS.items()))
+def test_sys_cover_names_the_covered_entry_a_target_lies_under(sandbox: ModuleType, target: str, cover: str) -> None:
+    sys_cover = device_attribute(sandbox, "sys_cover")
+    assert sys_cover(PurePosixPath(target)) == cover
+
+
+@pytest.mark.parametrize("name", GPU_VISIBILITY_NAMES)
+def test_visibility_names_need_a_device_exposure(sandbox: ModuleType, name: str) -> None:
+    environment = {"PATH": sandbox.SANDBOX_PATH, "LANG": "C.UTF-8", name: "0"}
+    with pytest.raises(ValueError) as caught:
+        sample_spec(sandbox, environment=environment)
+    assert name in str(caught.value), str(caught.value)
+    spec = sample_spec(sandbox, environment=environment, devices=make_exposure(sandbox, [GOOD_NODE]))
+    assert dict(spec.environment) == environment
+    # A compile never gets one: its spec carries no exposure.
+    with pytest.raises(ValueError):
+        compile_environment = {"PATH": "/usr/bin", name: "0"}
+        runner = sandbox.SandboxedCompileRunner(
+            environment=compile_environment, toolchains=TOOLCHAINS, hidden_roots=(SCRATCH, HOME)
+        )
+        runner.spec(WORK)
+
+
+def test_environment_names_hold_the_visibility_names_with_a_comment_naming_the_gpu_executor(
+    sandbox: ModuleType,
+) -> None:
+    assert device_attribute(sandbox, "GPU_VISIBILITY_NAMES") == GPU_VISIBILITY_NAMES
+    assert set(GPU_VISIBILITY_NAMES) <= sandbox.ENVIRONMENT_NAMES
+    lines = inspect.getsource(sandbox).splitlines()
+    start = next(number for number, line in enumerate(lines) if line.startswith("ENVIRONMENT_NAMES ="))
+    comment: list[str] = []
+    for line in reversed(lines[:start]):
+        if not line.startswith("#"):
+            break
+        comment.insert(0, line)
+    text = " ".join(line.lstrip("# ") for line in comment)
+    assert "GPU_VISIBILITY_NAMES" in text and re.search(r"\bgpu executor\b", text), text
+
+
+def test_reserved_dev_names_are_what_the_private_dev_holds(sandbox: ModuleType) -> None:
+    assert set(device_attribute(sandbox, "RESERVED_DEV_NAMES")) == RESERVED_DEV_NAMES
+
+
+def test_device_setup_binds_nodes_and_sys_dirs_in_order(sandbox: ModuleType, tmp_path: Path) -> None:
+    plain, exposed, values = run_with_and_without_devices(sandbox, tmp_path)
+    assert (exposed.returncode, exposed.stderr) == (plain.returncode, plain.stderr) == (7, STUB_ORDER), exposed
+    calls = exposed.calls
+    dev = only(typed_mounts(calls, "tmpfs", "lassi-dev"), "the lassi-dev tmpfs")[1][5]
+    marked = device_call_indices(calls, dev)
+    rest = [call for index, call in enumerate(calls) if index not in marked]
+    assert without_stub_path(rest) == without_stub_path(plain.calls), "every other call is SETUP_SCRIPT's"
+    readonly = [index for index, options in remounts(calls, dev) if "ro" in options]
+    moved = [index for index, src, dst in moves(calls, "--move") if (src, dst) == (dev, "/dev")]
+    for source, target in STANDIN_NODES:
+        point = f"{dev}/{target[len('/dev/') :]}"
+        touched, bound = index_of(calls, ["touch", point]), index_of(calls, ["mount", "--bind", source, point])
+        assert touched < bound < readonly[0] < moved[0], (source, target)
+        parent = posixpath.dirname(point)
+        if parent != dev:
+            assert [i for i, call in enumerate(calls[:touched]) if call[0] == "mkdir" and parent in call], calls
+    first_hide = typed_mounts(calls, "tmpfs", "lassi-hide")[0][0]
+    covers_made = [i for i, args in typed_mounts(calls, "tmpfs", "lassi-sys") if "remount" not in args[3].split(",")]
+    private = [i for kind in ("lassi-private", "lassi-tmp") for i, _args in typed_mounts(calls, "tmpfs", kind)]
+    last_hidden = max(index for index, options in remounts(calls, values["root_b"]) if "ro" in options)
+    stages = []
+    for source, target, cover in STANDIN_SYS:
+        ((stage_index, _src, stage),) = [found for found in moves(calls, "--bind") if found[1] == source]
+        assert stage.startswith("/tmp/") and not stage.startswith(dev + "/") and stage not in stages, stage
+        assert stage_index < first_hide and all(stage_index < index for index in covers_made), "staged before covers"
+        stages.append(stage)
+        opened = [index for index, options in cover_remounts(calls, cover) if "rw" in options]
+        closed = [index for index, options in cover_remounts(calls, cover) if "ro" in options]
+        made = [i for i, call in enumerate(calls) if call[0] == "mkdir" and "-p" in call and target in call]
+        bound = index_of(calls, ["mount", "--bind", stage, target])
+        assert len(opened) == len(closed) == len(made) == 1, (cover, calls)
+        assert max([last_hidden, *covers_made]) < opened[0] < made[0] < bound < closed[0] < min(private), cover
+        # Type and source named: given the point alone, mount reads the cover's options back from mountinfo, where
+        # tmpfs prints uid= and gid= as the host sees them, and the user namespace refuses those ids (status 32).
+        for index, mode in ((opened[0], "rw"), (closed[0], "ro")):
+            assert calls[index] == ["mount", "-t", "tmpfs", "-o", f"remount,{mode}", "lassi-sys", cover], calls[index]
+    assert max(private) < the_check_call(calls)
+
+
+def test_device_setup_without_sys_dirs_binds_only_nodes(sandbox: ModuleType, tmp_path: Path) -> None:
+    layout, _values = stub_layout(tmp_path)
+    run = run_setup_with_stubs(
+        sandbox, tmp_path, with_device_blocks(layout, STANDIN_NODES, ()), script=device_script(sandbox)
+    )
+    assert (run.returncode, run.stderr) == (0, STUB_ORDER), run
+    dev = only(typed_mounts(run.calls, "tmpfs", "lassi-dev"), "the lassi-dev tmpfs")[1][5]
+    for source, target in STANDIN_NODES:
+        index_of(run.calls, ["mount", "--bind", source, f"{dev}/{target[len('/dev/') :]}"])
+    before = run.calls[: the_program_call(run.calls)]
+    options = [call[call.index("-o") + 1].split(",") for call in before if call[0] == "mount" and "-o" in call]
+    reopened = [found for found in options if "rw" in found]
+    assert reopened == [], "no cover is reopened without a /sys directory"
+    assert not [call for call in before if call[0] == "mount" and "--bind" in call and call[2].startswith("/sys")]
+
+
+@pytest.mark.parametrize("value", ["", "01", "x", "-1"], ids=["empty", "padded", "letter", "negative"])
+@pytest.mark.parametrize("block", ["nodes", "sources", "targets"])
+def test_device_setup_refuses_a_bad_count(sandbox: ModuleType, tmp_path: Path, block: str, value: str) -> None:
+    layout, _values = stub_layout(tmp_path)
+    device = with_device_blocks(layout, STANDIN_NODES, STANDIN_SYS)
+    node_block, sources, _targets = device_blocks(STANDIN_NODES, STANDIN_SYS)
+    position = {"nodes": 5, "sources": 5 + len(node_block), "targets": 5 + len(node_block) + len(sources) + 2}[block]
+    device[position] = value
+    run = run_setup_with_stubs(sandbox, tmp_path, device, script=device_script(sandbox))
+    assert run.returncode == 2, run
+    assert sandbox.READY_MARKER not in run.stderr and not [call for call in run.calls if call[0] == "unshare"], run
+    binds = [(src, dst) for _i, src, dst in moves(run.calls, "--bind")]
+    if block == "nodes":
+        assert not [dst for _src, dst in binds if dst.endswith(("/lassi-standin/a", "/lassi-full"))], binds
+    if block in ("nodes", "sources"):
+        assert not [src for src, _dst in binds if src.startswith("/sys/")], binds
+    covers = {cover for _source, _target, cover in STANDIN_SYS}
+    assert not [cover for cover in covers if cover_remounts(run.calls, cover)], run.calls
 
 
 # ---------------------------------------------------------------------------

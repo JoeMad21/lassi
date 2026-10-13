@@ -25,8 +25,9 @@ Readings of the Result Record (task P2.6):
   never aligned (mean None, as when the reference stdout was cut) holds no
   evidence of correct output: its alignment term is 0.0 and its component
   alignment_missing is 1.0 (0.0 on every other attempt).
-- The guard component is 1.0 when any Guards field is True, 0.0 when every
-  field is False, and None otherwise: a None field was not checked.
+- The guard component is 1.0 when any guard outcome (GUARD_OUTCOMES) is
+  True, 0.0 when every outcome is False, and None otherwise: a None outcome
+  was not checked; host_compute_not_checked is never read (task P17.14).
 - The trial's single_turn component is attempt 0's R. Its multi_turn
   component, which is also its scalar and final.score, is R_final minus
   correction_penalty x final.corrections, where R_final is the R of the
@@ -70,7 +71,7 @@ import yaml
 
 from lassi.core.capabilities import SCORES_ATTEMPTS
 from lassi.core.interfaces import Score
-from lassi.core.record import STAGES, Attempt, Guards, ScoreBreakdown, Trial
+from lassi.core.record import GUARD_OUTCOMES, STAGES, Attempt, Guards, ScoreBreakdown, Trial
 from lassi.core.registry import register
 
 # The weights file a recipe's `score: df-v0` reads.
@@ -173,8 +174,12 @@ def warning_count(attempt: Attempt) -> int:
 
 
 def guard_state(guards: Guards) -> float | None:
-    """Return 1.0 when any guard is True, 0.0 when every guard is False, and None otherwise (not all checked)."""
-    outcomes = [getattr(guards, item.name) for item in dataclasses.fields(guards)]
+    """Return 1.0 when any guard is True, 0.0 when every guard is False, and None otherwise (not all checked).
+
+    Only the three outcomes GUARD_OUTCOMES names are read; why host_compute
+    is null (host_compute_not_checked, task P17.14) changes no score.
+    """
+    outcomes = [getattr(guards, name) for name in GUARD_OUTCOMES]
     if any(outcome is True for outcome in outcomes):
         return 1.0
     if all(outcome is False for outcome in outcomes):

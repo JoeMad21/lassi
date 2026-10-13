@@ -1,0 +1,45 @@
+{
+  "run_dir": "/mnt/nvme10/joseph_ufl/lassi-runs/runs/p17-gate-a-20261010-235501-p17-gate-a-8980",
+  "trials": [
+    {
+      "trial_id": "p17-cpu-hf/Qwen--Qwen2.5-Coder-0.5B-Instruct/lassi-hecbench-10/cuda-omp/matrix-rotate/run01",
+      "direction": "cuda-omp",
+      "end_reason": "correction-cap",
+      "end_message": "an error remained after 2 correction(s), the cap loop.max_corrections sets",
+      "attempts": 3,
+      "last_attempt_stage": "S1",
+      "final_stage": "S1",
+      "corrections": 2,
+      "reference_exit_code": 0,
+      "reference_wall_s": 1.0729197000036947,
+      "final_alignment": null,
+      "wall_s": 391.44400699000107,
+      "requests": 5
+    },
+    {
+      "trial_id": "p17-cpu-hf/Qwen--Qwen2.5-Coder-0.5B-Instruct/lassi-hecbench-10/omp-cuda/matrix-rotate/run01",
+      "direction": "omp-cuda",
+      "end_reason": null,
+      "end_message": null,
+      "attempts": 1,
+      "last_attempt_stage": "S4",
+      "final_stage": "S4",
+      "corrections": 0,
+      "reference_exit_code": null,
+      "reference_wall_s": null,
+      "final_alignment": null,
+      "wall_s": 92.9940556809961,
+      "requests": 3
+    }
+  ],
+  "checks": {
+    "status_complete": true,
+    "both_directions_once": true,
+    "every_trial_past_the_baseline": true,
+    "model_device_record_cpu": true,
+    "serving_versions_recorded": true,
+    "serving_revision_pinned": true
+  },
+  "passed": true,
+  "progress_lines_on_stderr": 2
+}

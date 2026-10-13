@@ -1,0 +1,10 @@
+# P17.5 remote test: the gpu executor's device exposure on alpha01
+
+What ran: `LASSI_REQUIRE_SANDBOX=1 uv run pytest -q -p no:cacheprovider -m remote tests/executors/test_gpu_remote.py tests/executors/test_sandbox_remote.py`, through `rx run` from clean commit bf98a81 (task P17.5's change commit) on alpha01 (Ubuntu 22.04.5 LTS, kernel 6.6.29, Python 3.10.12), rx 20261006-082332-desktop-8r113ei-detached-bf98a813-c6b6, started 2026-10-06T08:23:32-07:00. provenance.json is the rx record: commit bf98a813910c20d1d5f3864285b467d5fbd06b43, dirty false, rc 0, state done. Under LASSI_REQUIRE_SANDBOX=1 a skip would have been a failure.
+
+Result [MEASURED 2026-10-06: rx 20261006-082332-desktop-8r113ei-detached-bf98a813-c6b6, clean bf98a81]: 48 passed in 66.95 s, the run's last line `48 passed in 66.95s (0:01:06)`. The 48 are the two tests of tests/executors/test_gpu_remote.py and the 46 of tests/executors/test_sandbox_remote.py:
+
+- test_gpu_remote.py runs the real sandbox with harmless stand-ins: the host's /dev/zero and /dev/full bound at /dev/lassi-standin/a and /dev/lassi-standin/b in separate runs, and /sys/devices/system/cpu below /sys/devices/virtual. Each run saw its listed node, with the host's device number, and not the other; the /sys stand-in and its reopened cover were read-only; /dev/kfd, /dev/dri, and /dev/nvidiactl were absent inside the private /dev; and a run with no exposure saw none of them, even with the visibility variables set by the caller.
+- test_sandbox_remote.py is the existing sandbox suite, run as a check that the setup script every run without an exposure uses is unchanged in effect on alpha01's util-linux 2.37.2.
+
+Device: alpha01's host CPU only. No GPU node was opened: the stand-ins are /dev/zero and /dev/full, the AMD paths were only checked for absence inside the sandbox's private /dev, and the gate's rocm_gpu class stayed disabled (OQ-002, OQ-040). What this does not show: the vendor tables, the index-to-node mapping, and what a GPU runtime needs inside the sandbox, which wait for a GPU host (task P17.12).

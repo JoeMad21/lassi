@@ -35,8 +35,20 @@ STAGES = ("S0", "S1", "S2", "S3", "S4", "S5")
 DIAGNOSTIC_STAGES = ("parse", "verify", "lower", "compile", "jit", "run")
 SEVERITIES = ("error", "warning", "note")
 TOOLCHAIN_PIN_NAMES = (
-    "llvm", "polygeist", "tt_mlir", "tt_metal", "ttsim", "furiosa_sdk", "cuda", "nvhpc", "rocm", "gcc"
+    "llvm",
+    "polygeist",
+    "tt_mlir",
+    "tt_metal",
+    "ttsim",
+    "furiosa_sdk",
+    "cuda",
+    "nvhpc",
+    "rocm",
+    "gcc",
+    "hipcc",
 )
+# The device kinds a device section may name and a DeviceRecord records (task P17.2; lassi.core.devices).
+DEVICE_KINDS = ("cpu", "cuda", "rocm")
 # The run flags RunInfo records, named as the RunResult flags they copy, in field order.
 RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # The fixed codes of Final.end_reason: why a trial ended early. baseline-compile and baseline-run end a trial
@@ -48,8 +60,29 @@ RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # sim-gap (task P4.6) means a run stopped at a simulator gap (RunResult.sim_gap), a program the simulator cannot run:
 # a reference run's gap ends the trial before any model call, and an attempt run's gap ends it right after that
 # attempt, unless the same run reported a kernel JIT error, which is corrected first (lassi.core.stages run_stage).
+# context-exceeded (task P17.4) means the backend refused a model request whose prompt tokens plus max_tokens pass
+# the model's context (lassi.core.interfaces ContextExceeded); nothing was truncated, and every earlier attempt stays.
 # Every code is spelled with hyphens; RunResult.sim_gap is a field, not a code.
-END_REASONS = ("baseline-compile", "baseline-run", "baseline-disagree", "correction-cap", "upstream-crash", "sim-gap")
+END_REASONS = (
+    "baseline-compile",
+    "baseline-run",
+    "baseline-disagree",
+    "correction-cap",
+    "upstream-crash",
+    "sim-gap",
+    "context-exceeded",
+)
+# The three guard outcomes of Guards, by field name: what a score reads (lassi.scoring.df_v0 guard_state).
+GUARD_OUTCOMES = ("host_compute", "harness_tamper", "oracle_access")
+# The codes of Guards.host_compute_not_checked (task P17.14; OQ-028): why host_compute is null. not-built means the
+# attempt was never built; no-program means its build gave no program; no-guard means the target language's
+# toolchain declares no host_compute_guard (or none is bound), set on every attempt of that target, built or not;
+# guard-not-checked means the guard ran and gave null, and its guard-not-checked note on the attempt says why.
+NOT_BUILT = "not-built"
+NO_PROGRAM = "no-program"
+NO_GUARD = "no-guard"
+GUARD_NOT_CHECKED = "guard-not-checked"
+HOST_COMPUTE_NOT_CHECKED = (NOT_BUILT, NO_PROGRAM, NO_GUARD, GUARD_NOT_CHECKED)
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -356,15 +389,26 @@ class Profile:
 
 @dataclass(frozen=True, kw_only=True)
 class Guards:
-    """Guard outcomes: host compute, harness tampering, oracle access; None means not checked."""
+    """Guard outcomes: host compute, harness tampering, oracle access; None means not checked.
+
+    host_compute_not_checked (task P17.14) is why host_compute is None: one of HOST_COMPUTE_NOT_CHECKED, or None
+    when host_compute is set or when the record does not say (an attempt recorded before task P17.14).
+    """
 
     host_compute: bool | None = None
     harness_tamper: bool | None = None
     oracle_access: bool | None = None
+    host_compute_not_checked: str | None = None
 
     def __post_init__(self) -> None:
-        """Check that every outcome is a bool or None."""
+        """Check that every outcome is a bool or None, and that a reason is a code beside a null host_compute."""
         _check_fields(self)
+        reason = self.host_compute_not_checked
+        if reason is None:
+            return
+        _check_choice("Guards", "host_compute_not_checked", reason, HOST_COMPUTE_NOT_CHECKED)
+        if self.host_compute is not None:
+            _fail("Guards", "host_compute_not_checked", reason, "must be null when host_compute is set")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -463,10 +507,57 @@ class ToolchainPins:
     nvhpc: str | None = None
     rocm: str | None = None
     gcc: str | None = None
+    hipcc: str | None = None
 
     def __post_init__(self) -> None:
         """Check that every pin is a string or None."""
         _check_fields(self)
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeviceRecord:
+    """One device a recipe's device section named, as the run probed it (task P17.2; lassi.core.devices).
+
+    `key` is the section's recipe path (such as model.device), `kind` one of
+    DEVICE_KINDS, and `indices` the indices as written ([] exactly for cpu,
+    otherwise distinct integers of at least 0). name, count, memory_bytes,
+    driver, and runtime are what the host probe read and the framework build
+    gave; framework and framework_version name the framework the component
+    runs on. None means not read, never a guess. A known count is at least 1,
+    a known memory_bytes at least 0, a known string is non-empty, and
+    framework and framework_version are both set or both None. Every field is
+    required.
+    """
+
+    key: str
+    kind: str
+    indices: list[int]
+    name: str | None
+    count: int | None
+    memory_bytes: int | None
+    driver: str | None
+    runtime: str | None
+    framework: str | None
+    framework_version: str | None
+
+    def __post_init__(self) -> None:
+        """Check the field types, the key, the kind, the indices, the known values, and the framework pair."""
+        _check_fields(self)
+        _check_non_empty("DeviceRecord", "key", self.key)
+        _check_choice("DeviceRecord", "kind", self.kind, DEVICE_KINDS)
+        if (self.kind == "cpu") != (not self.indices):
+            _fail("DeviceRecord", "indices", self.indices, "must be [] for cpu and non-empty for any other kind")
+        if len(set(self.indices)) != len(self.indices) or any(index < 0 for index in self.indices):
+            _fail("DeviceRecord", "indices", self.indices, "must be distinct integers of at least 0")
+        if self.count is not None and self.count < 1:
+            _fail("DeviceRecord", "count", self.count, "must be >= 1 when known")
+        if self.memory_bytes is not None:
+            _check_non_negative("DeviceRecord", "memory_bytes", self.memory_bytes)
+        for name in ("name", "driver", "runtime", "framework", "framework_version"):
+            if getattr(self, name) is not None:
+                _check_non_empty("DeviceRecord", name, getattr(self, name))
+        if (self.framework is None) != (self.framework_version is None):
+            _fail("DeviceRecord", "framework", self.framework, "and framework_version must be both set or both None")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -479,12 +570,18 @@ class Provenance:
     executors per language, from "devices" at the trial's target language,
     sdk from "driver", and date from "started_utc". The types are what the
     manifest holds: commit and dirty are None when git is unavailable, device
-    is None when the executor names no device, sdk is None until an executor
-    reports an SDK or driver version, and date (the run's start, ISO 8601 UTC
-    with seconds) is always set. A known commit is a full git object id (40 or 64
+    is None when the executor names no device, sdk is the manifest's driver
+    (the distinct drivers of its device records, task P17.2) and None when
+    none names one, and date (the run's start, ISO 8601 UTC with seconds) is
+    always set. A known commit is a full git object id (40 or 64
     lowercase hex characters), a known device or sdk is a non-empty string,
-    and date must parse as an ISO 8601 time in UTC. Every field is required,
-    so a missing value is never read as unknown.
+    and date must parse as an ISO 8601 time in UTC. The five manifest fields
+    are required, so a missing value is never read as unknown.
+
+    device_records (task P17.2) copies the manifest's "device_records": one
+    DeviceRecord per device section the recipe names, in binding order, and
+    [] when it names none. It is the one field with a default: None means not
+    recorded, so a trial.json written before the field loads with None.
     """
 
     commit: str | None
@@ -492,6 +589,7 @@ class Provenance:
     device: str | None
     sdk: str | None
     date: str
+    device_records: list[DeviceRecord] | None = None
 
     def __post_init__(self) -> None:
         """Check the field types the run manifest gives, a known commit, device, and sdk, and the date."""

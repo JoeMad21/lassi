@@ -40,6 +40,7 @@
 | nvhpc | fixture-nvhpc |
 | rocm | not used |
 | gcc | not used |
+| hipcc | not used |
 
 ## Reference run
 

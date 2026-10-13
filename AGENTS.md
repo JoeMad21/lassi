@@ -40,6 +40,7 @@ Hard rules:
 14. Measured beats judged. A judge never overrides an oracle outcome or a profiler measurement, and judged values carry [JUDGED].
 15. Every repository surface follows the Attribution Policy: no reference to any AI vendor, assistant, or coding tool, or to AI assistance in design or implementation, in commits, branch names, docs, comments, PRs, issues, or releases.
 16. The repository keeps a vendor-neutral `AGENTS.md` at the root, with nested ones where useful. Vendor-named agent files and tool config directories stay local and uncommitted.
+17. No model inference on alpha01 without the owner's approval in the working session. File uploads and compiler work need none; serving a model (RNGD included), loading one in process (hf_local), and any training run wait for the owner's yes, asked with what runs, for how long, and what it touches.
 
 ## Operating Mode
 
@@ -63,7 +64,7 @@ A dirty tree at session start is unfinished work from an interrupted session: in
 3. Tests first (test-writer role): encode the acceptance criteria as tests; confirm they fail for the right reason.
 4. Implement the smallest change that passes. Follow the bible's Readability Standards: docstrings on public interfaces, type hints, functions under about 60 lines, plain ASCII.
 5. Check: `uv run pytest -q` (the fast suite; mark long tests `slow`, remote tests `remote`) and `uv run ruff check .`.
-6. Audit (rules-auditor role) over `git diff --cached`; it must end with `VERDICT: PASS`. On FAIL, fix and re-audit.
+6. Audit (rules-auditor role) over `git diff --cached`; it must end with `VERDICT: PASS`. On FAIL, fix and re-audit; a fix that changes only text or a label is committed without a re-audit, and the commit body lists it (plans/runs/p0-retrospective.md).
 7. Commit once per task: subject `P<N>.<k>: <imperative summary>` (72 characters or fewer), optional body describing the change. The message describes the change and nothing else: no trailers, footers, session links, or tool names.
 8. `uv run tools/status.py set <ID> DONE --note "<commit or one-line result>"`, include `plans/STATUS.md` in the task commit, and push the phase branch to origin.
 
@@ -136,7 +137,7 @@ The remote build host is alpha01 on the I/ONX cluster. Reach it only through `uv
 - `rx exec -- '<cmd>'` inspects the host from the scratch root without a checkout.
 - `rx doctor` before big work; the gate enforces free-space floors, one big job at a time, and a cap on running jobs. Remove stale slots with `rx slot-rm`.
 - Keep `du -sh /mnt/nvme10/joseph_ufl` under 120G as far as you can (owner decision, bible Decision Log). Check it before installs and big jobs. Never delete files there. To save space, back files up to the workstation (zipped); a large folder moves off the host only after the owner approves its backup, and removing any host copy after a backup needs the owner's approval. Recommend deletions through the owner queue.
-- The gate sets a scratch-only environment: TMPDIR, caches, CARGO_HOME, RUSTUP_HOME, HF_HOME under `/mnt/nvme10/joseph_ufl`, plus `LASSI_SCRATCH`, `LASSI_RUNS_ROOT`, `LASSI_TOOLCHAINS`, and `LASSI_JOBS` (use it for `-j`).
+- The gate sets a scratch-only environment: TMPDIR, caches, CARGO_HOME, RUSTUP_HOME, HF_HOME, TIKTOKEN_CACHE_DIR under `/mnt/nvme10/joseph_ufl`, plus `LASSI_SCRATCH`, `LASSI_RUNS_ROOT`, `LASSI_TOOLCHAINS`, and `LASSI_JOBS` (use it for `-j`).
 - Toolchains install under `$LASSI_TOOLCHAINS/<name>@<pin>` through scripts in `toolchains/`, never inside a slot. Each has `toolchains/<name>.pin` recording commit or version, build flags, and install path (bible, Toolchain Pins).
 - Device classes (RNGD, Tenstorrent silicon, AMD and NVIDIA GPUs) are enabled or disabled in the gate by the owner only; check `rx doctor` (devices_enabled) before device work. A device refusal is final; record the need in the owner queue. `rx devcheck` is the read-only inventory for re-verifying the bible's Environment State.
 - Raw run trees go under `$LASSI_RUNS_ROOT`; only summaries and provenance come back into `results/`.
@@ -150,7 +151,9 @@ The remote build host is alpha01 on the I/ONX cluster. Reach it only through `uv
 ## Repository Checks
 
 - `git config core.hooksPath .githooks` in every clone. The commit-msg, pre-commit, and pre-push hooks run `tools/check_text_policy.py`: owner pattern list (kept outside git), plain ASCII, branch names, commit identities.
-- CI runs the same checker on every push and pull request.
+- CI runs the same checker on every push and pull request (`.github/workflows/text-policy.yml`).
+- CI also runs the device-neutral tests of P17.2 to P17.9, slow framework tests included and remote tests excluded, with the cpu extra on a Linux runner with no GPU (`.github/workflows/cpu-tests.yml`; task P17.10). Its test list is explicit: a new test file for the device layer, served or in-process models, the gpu executor, profilers, or training joins it there, unless it sits in tests/profilers or tests/train, which the list names whole. The test step sets TMPDIR to the runner's temp directory, since the sandbox refuses a workdir under /tmp.
+- Framework tests run with `uv run --extra cpu pytest ...`. A bare `uv run` leaves an installed extra in place, so run a plain `uv sync` before a run meant to skip the framework tests, and before ending a session.
 - Before ending a session: `uv run pytest -q` passes and `uv run tools/status.py check` passes.
 
 ## Roles

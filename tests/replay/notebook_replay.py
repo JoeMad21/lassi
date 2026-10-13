@@ -924,7 +924,7 @@ def run_ours(case: Case, root: Path, *, on_build: Callable[[], None] | None = No
     options = RunOptions(runs_root=root / "runs-root", run_id="replay", bench_root=bench, registry=registry)
     warm_platform_cache()
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(runner_module, "_git_state", lambda: (None, None))
+        patch.setattr(runner_module, "git_state", lambda: (None, None))
         with UpstreamGuard("our side"):
             run_dir = run_recipe(recipe, options)
     found = sorted(run_dir.rglob("trial.json"))

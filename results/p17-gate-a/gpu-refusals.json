@@ -1,0 +1,75 @@
+{
+  "p17-gpu-hf-cuda": {
+    "recipe": "tests/fixtures/recipes/p17-gpu-hf-cuda.yaml",
+    "rc": 2,
+    "message": "lassi run: tests/fixtures/recipes/p17-gpu-hf-cuda.yaml: model.device names cuda 0, which this host cannot provide: torch 2.14.1+cpu is not a CUDA build, so it cannot reach a cuda device; a run never falls back to another device",
+    "run_dir": "/mnt/nvme10/joseph_ufl/lassi-runs/runs/p17-gate-a-p17-gpu-hf-cuda-20261010-235501-p17-gate-a-8980",
+    "strace_lines": 33581,
+    "gpu_node_opens": [],
+    "gpu_node_metadata": [],
+    "checks": {
+      "exit_status_2": true,
+      "names_the_device": true,
+      "no_run_directory": true,
+      "no_gpu_node_opened": true,
+      "strace_log_read": true
+    },
+    "passed": true
+  },
+  "p17-gpu-hf-rocm": {
+    "recipe": "tests/fixtures/recipes/p17-gpu-hf-rocm.yaml",
+    "rc": 2,
+    "message": "lassi run: tests/fixtures/recipes/p17-gpu-hf-rocm.yaml: model.device names rocm 0, which this host cannot provide: torch 2.14.1+cpu is not a HIP build, so it cannot reach a rocm device; a run never falls back to another device",
+    "run_dir": "/mnt/nvme10/joseph_ufl/lassi-runs/runs/p17-gate-a-p17-gpu-hf-rocm-20261010-235501-p17-gate-a-8980",
+    "strace_lines": 33581,
+    "gpu_node_opens": [],
+    "gpu_node_metadata": [],
+    "checks": {
+      "exit_status_2": true,
+      "names_the_device": true,
+      "no_run_directory": true,
+      "no_gpu_node_opened": true,
+      "strace_log_read": true
+    },
+    "passed": true
+  },
+  "p17-gpu-exec-cuda": {
+    "recipe": "tests/fixtures/recipes/p17-gpu-exec-cuda.yaml",
+    "rc": 2,
+    "message": "lassi run: tests/fixtures/recipes/p17-gpu-exec-cuda.yaml: executor.cuda.device names cuda 0, which this host cannot provide: /dev/nvidiactl does not exist on this host; a run never falls back to another device",
+    "run_dir": "/mnt/nvme10/joseph_ufl/lassi-runs/runs/p17-gate-a-p17-gpu-exec-cuda-20261010-235501-p17-gate-a-8980",
+    "strace_lines": 33588,
+    "gpu_node_opens": [],
+    "gpu_node_metadata": [
+      "newfstatat /dev/nvidiactl"
+    ],
+    "checks": {
+      "exit_status_2": true,
+      "names_the_device": true,
+      "no_run_directory": true,
+      "no_gpu_node_opened": true,
+      "strace_log_read": true
+    },
+    "passed": true
+  },
+  "p17-gpu-exec-rocm": {
+    "recipe": "tests/fixtures/recipes/p17-gpu-exec-rocm.yaml",
+    "rc": 2,
+    "message": "lassi run: tests/fixtures/recipes/p17-gpu-exec-rocm.yaml: executor.cuda.device names rocm 0, which this host cannot provide: /dev/kfd exists but this user may not read and write it; the GPU is not usable here; a run never falls back to another device",
+    "run_dir": "/mnt/nvme10/joseph_ufl/lassi-runs/runs/p17-gate-a-p17-gpu-exec-rocm-20261010-235501-p17-gate-a-8980",
+    "strace_lines": 33589,
+    "gpu_node_opens": [],
+    "gpu_node_metadata": [
+      "newfstatat /dev/kfd",
+      "access /dev/kfd"
+    ],
+    "checks": {
+      "exit_status_2": true,
+      "names_the_device": true,
+      "no_run_directory": true,
+      "no_gpu_node_opened": true,
+      "strace_log_read": true
+    },
+    "passed": true
+  }
+}
