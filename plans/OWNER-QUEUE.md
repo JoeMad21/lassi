@@ -680,3 +680,14 @@ Options: (a) approve batches 1 and 2; (b) approve batch 1 only, batch 2 asked ag
 Recommendation: (a), so P5's MLIR work can start; the job is bounded by its space check and its install record, and refuses a mismatch rather than deleting anything.
 Answer:
 Owner's choice (asked in the working session, 2026-10-12; recorded by the agent, in the owner's words): "Not yet". P5.4 is OWNER on this item until the owner approves.
+
+## OQ-055 LASSI Without Hardware Or alpha01: The Local Plan's Fourteen Decisions
+State: ANSWERED
+Kind: decision
+Blocks: the local host setup, P5's remaining tasks, P11 and P12's start, P16 part (a), and P17.12 (plans/local-plan.md, section 4)
+Evidence: plans/local-plan.md (sections 1 to 7); plans/spikes/local-host.md (the workstation, measured 2026-10-15); plans/LESSONS.md (the owner's direction of 2026-10-15)
+Question: With no accelerator and no alpha01 for the foreseeable future (owner, 2026-10-15), how does LASSI proceed on the workstation? The fourteen decisions of plans/local-plan.md, section 7: (1) where LASSI builds; (2) who installs; (3) host policy in place of Agent Rule 7; (4) approval for heavy local work in place of Agent Rule 17; (5) WSL memory for LLVM links; (6) evidence for local runs; (7) the sandbox fix for util-linux 2.39; (8) the RTX 3080 as P17's GPU host; (9) the work order; (10) OQ-054 and OQ-045; (11) the alpha01 excess-files inventory; (12) P16; (13) gates that need hardware; (14) P13.
+Options: as plans/local-plan.md, section 7, gives them, each with its consequences.
+Recommendation: as plans/local-plan.md, section 7: (1) (b) a dedicated Ubuntu 22.04 WSL distro that matches alpha01's tools; (2) (b) an agent writes one install script per batch and the owner reviews and runs it; (3) (b) host policy in Host Facts and a new AGENTS.md Local Execution section; (4) (b) the installs and the first LLVM build wait for the owner, later builds run unattended one at a time under a memory cap; (5) (b) the owner raises WSL memory to about 24 GiB; (6) (b) [MEASURED] from a clean commit in a WSL clone with a local provenance file; (7) (a) the -n sandbox fix now; (8) (b) P17.12's spike only; (9) (a) P11 design notes and P12 planning beside P5; (10) close OQ-054, hold OQ-045; (11) (a) defer the inventory until alpha01 returns; (12) (b) P16 part (a) locally with synthetic fixtures only; (13) (a) restate no gates; (14) keep P13 BLOCKED.
+Answer:
+Owner's choice (asked in the working session, 2026-10-15; recorded by the agent, in the owner's words): "Go with recommendations for everything. Fire away, I cannot babysit. Do not crash the computer."
