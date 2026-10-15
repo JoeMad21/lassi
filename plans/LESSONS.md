@@ -14,6 +14,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - Suspend all work at noon EST on 2026-10-11 (the owner's words, given at 02:36 EDT; read as the earlier reading, 12:00 EDT): by then the tree is clean, every commit is pushed, and nothing runs on alpha01; work resumes when the owner says so (owner, 2026-10-11).
 - The Tenstorrent cards are removed from the cluster again (owner, 2026-10-12: "The Tenstorrents have been removed from the cluster again"); work resumed that evening. Tenstorrent code runs on ttsim only, as it did; the bible records it (Environment State and its Decision Log entry of 2026-10-12) from the owner's word, with no probe on the host.
 - No work while a requisite connector is down (owner, 2026-10-12: "Don't continue work unless all your requisite connectors are up."). For LASSI that is the docs connector that holds the master bible: check it with one read of the master before any work, stop and tell the owner if it is missing, and resume only when it reads.
+- All work local for the foreseeable future (owner, 2026-10-15: "Tenstorrent cards are still down. Hardware is unavailable, including Furiosa. Do all work locally for the forseeable future. Plan around hardware unavailability."). Read as: no Tenstorrent or RNGD device, and no alpha01 work of any kind (no rx command), until the owner says otherwise; plans assume the workstation alone. An earlier session's lspci probe found no Tenstorrent device on alpha01 (rx 20261013-101156-exec-c4ed).
 
 ## Audits and the bible
 
