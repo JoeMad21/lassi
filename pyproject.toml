@@ -61,7 +61,7 @@ dev = ["pytest>=8", "ruff>=0.6"]
 testpaths = ["tests"]
 markers = [
   "slow: long-running tests, excluded from the fast suite",
-  "remote: needs the remote build host through tools/rx.py",
+  "remote: needs a Linux build host with the sandbox and pinned toolchains (the local distro or alpha01)",
   "real_tiktoken: keeps the real offline cl100k_base loader instead of the tests' fake encoding (tests/conftest.py)",
 ]
 

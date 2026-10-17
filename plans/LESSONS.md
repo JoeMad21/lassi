@@ -50,7 +50,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 
 ## Status and planning
 
-- tools/status.py cannot change a task's title or dependencies. Put tasks in their final order, with the gate last and depending on every task it needs, before `status.py add`; if it is wrong before the plan commit, restore STATUS from HEAD and re-add.
+- tools/status.py cannot reorder or delete a task row. Put tasks in their final order, with the gate last and depending on every task it needs, before `status.py add`; if the order is wrong before the plan commit, restore STATUS from HEAD and re-add. A wrong title or dependency list is fixed in place: `status.py set <ID> <its state> --title ... --depends A,B` (`--depends -` clears it; an unknown id or the task itself is refused).
 
 ## Git on the workstation
 

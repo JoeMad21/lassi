@@ -20,6 +20,10 @@ Commands:
                                    append a phase row "PN NAME" on branch p<n>-<topic>
   check                            validate the file
 
+next picks the ACTIVE task, else the first READY task whose dependencies are DONE, else the
+first NOT-STARTED phase in WORK_ORDER whose predecessor is DONE, GATE-OWNER, or stalled.
+The file is always written with LF line endings.
+
 Standard library only.
 """
 
@@ -31,11 +35,17 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 REPO = Path(__file__).resolve().parents[1]
 STATUS = REPO / "plans" / "STATUS.md"
-WORK_ORDER = ["P0", "P1", "P2", "P4", "P17", "P5", "P12", "P11"]
+# The work order (AGENTS.md, Work Order): each phase with the phase it follows, or None. P12 and P11
+# both follow P5, so P11's design notes need not wait for P12 (OQ-055, decision 9 (a)), and P16's
+# part (a) follows P12 (OQ-055, decision 12 (b)).
+WORK_ORDER: List[Tuple[str, Optional[str]]] = [
+    ("P0", None), ("P1", "P0"), ("P2", "P1"), ("P4", "P2"), ("P17", "P4"), ("P5", "P17"),
+    ("P12", "P5"), ("P11", "P5"), ("P16", "P12"),
+]
 PHASE_STATES = {"NOT-STARTED", "ACTIVE", "GATE-OWNER", "DONE", "BLOCKED"}
 TASK_STATES = {"READY", "ACTIVE", "DONE", "BLOCKED", "OWNER"}
 TASK_ID = re.compile(r"^P(\d+)\.(\d+|G)$")
@@ -126,7 +136,8 @@ def save(st: Status, path: Path = STATUS) -> None:
     # Replace the later table first so earlier indices stay valid.
     for t in sorted([st.phases, st.tasks], key=lambda x: x.start, reverse=True):
         lines[t.start:t.end] = render_table(t)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Bytes, not write_text: text mode on Windows would write CRLF (PHASE-NOTES, All Phases).
+    path.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
 
 
 def phase_of(task_id: str) -> str:
@@ -147,12 +158,18 @@ def deps_done(row: List[str], states: Dict[str, str]) -> bool:
 
 
 def phase_stalled(st: Status, pid: str) -> bool:
-    """A phase is stalled when it has DONE work and nothing READY or ACTIVE left."""
+    """Return whether a phase has DONE work and no task that can start or resume.
+
+    No task can when none is ACTIVE and every READY task waits on a dependency that is not
+    DONE, so what is left is OWNER or BLOCKED tasks and READY tasks held behind a task that
+    is not DONE (OQ-055, decision 9 (a)): P5's READY tasks behind an OWNER install let the
+    phases that follow P5 be planned beside it.
+    """
     rows = [r for r in st.tasks.rows if phase_of(r[0]) == pid]
-    if not rows:
+    if not any(r[1] == "DONE" for r in rows):
         return False
-    states = {r[1] for r in rows}
-    return "DONE" in states and not states & {"READY", "ACTIVE"}
+    tstates = task_state(st)
+    return not any(r[1] == "ACTIVE" or (r[1] == "READY" and deps_done(r, tstates)) for r in rows)
 
 
 def next_item(st: Status) -> dict:
@@ -165,14 +182,14 @@ def next_item(st: Status) -> dict:
         if r[1] == "READY" and deps_done(r, tstates):
             return {"kind": "task", "id": r[0], "title": r[2], "resume": False}
     pstates = phase_state(st)
-    for i, pid in enumerate(WORK_ORDER):
+    for pid, prev in WORK_ORDER:
         if pstates.get(pid) != "NOT-STARTED":
             continue
-        prev = WORK_ORDER[i - 1] if i else None
-        if prev is None or pstates.get(prev) in {"DONE", "GATE-OWNER"} or phase_stalled(st, prev):
+        if prev is None:
+            return {"kind": "advance", "phase": pid, "note": f"plan {pid}; branch from main"}
+        if pstates.get(prev) in {"DONE", "GATE-OWNER"} or phase_stalled(st, prev):
             return {"kind": "advance", "phase": pid,
                     "note": f"plan {pid}; branch from main if {prev} is merged, else from the {prev} branch"}
-        break
     waiting = [r[0] for r in st.tasks.rows if r[1] in {"OWNER", "BLOCKED"}]
     return {"kind": "none", "reason": "no READY task with satisfied dependencies and no phase to advance",
             "waiting": waiting}
