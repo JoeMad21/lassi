@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Build the pinned tt-mlir tools in user space (task P5.4), as recorded in toolchains/tt-mlir.pin. Run on the build
-# host through `uv run tools/rx.py job start --big`. Under $LASSI_TOOLCHAINS/$PREFIX_NAME it places:
+# Build the pinned tt-mlir tools in user space (task P5.4), as recorded in toolchains/tt-mlir.pin. On the workstation
+# it runs in the LASSI WSL distro under the host profile (tools/local/host-profile.sh), which sets LASSI_ALLOWED_ROOT
+# and LASSI_STOP_GIB with the gate's variables, through the long-job runner (tools/local/longjob.py); on alpha01 it
+# runs through `uv run tools/rx.py job start --big`, with LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl and
+# LASSI_STOP_GIB=145 on its command line (P5.15). Under $LASSI_TOOLCHAINS/$PREFIX_NAME it places:
 #   src/tt-mlir       tt-mlir at COMMIT with its history and the tag VERSION_TAG, which its configure describes;
 #   toolchain/        TTMLIR_TOOLCHAIN_DIR: flatbuffers at FLATBUFFERS_COMMIT, installed (flatc, headers, library);
 #   toolchain/venv/   TTMLIR_VENV_DIR: a venv of the pinned Python holding the tracked, hash-checked requirements;
@@ -30,21 +33,50 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tt-mlir.pin
 source "$here/tt-mlir.pin"
-: "${LASSI_TOOLCHAINS:?LASSI_TOOLCHAINS must be set; the gate sets it}"
-: "${LASSI_SCRATCH:?LASSI_SCRATCH must be set; the gate sets it}"
-: "${LASSI_JOBS:?LASSI_JOBS must be set; the gate sets it}"
+# No value below has a default (AGENTS.md, rules for [OPEN] choices). On alpha01 the gate sets LASSI_TOOLCHAINS,
+# LASSI_SCRATCH, and LASSI_JOBS, and the rx command line gives LASSI_ALLOWED_ROOT and LASSI_STOP_GIB, the scratch
+# root and the stop line in GiB (/mnt/nvme10/joseph_ufl and 145; bible, Host Facts); on the workstation the host
+# profile sets all five.
+set_by="by tools/local/host-profile.sh on the workstation, or on alpha01 by the gate or the rx command line"
+: "${LASSI_TOOLCHAINS:?LASSI_TOOLCHAINS must be set $set_by}"
+: "${LASSI_SCRATCH:?LASSI_SCRATCH must be set $set_by}"
+: "${LASSI_JOBS:?LASSI_JOBS must be set $set_by}"
+: "${LASSI_ALLOWED_ROOT:?LASSI_ALLOWED_ROOT must be set $set_by}"
+: "${LASSI_STOP_GIB:?LASSI_STOP_GIB must be set $set_by}"
 # The gate sets no HOME: it passes its own through (tools/server/gate.py, build_env), and on the build host that is
-# the scratch root (plans/spikes/p0-compile-hardening.md; rx 20260923-183739-exec-7786). HOME is checked with the two
-# roots, since git, CMake, and pip write under it.
+# the scratch root (plans/spikes/p0-compile-hardening.md; rx 20260923-183739-exec-7786); the host profile sets HOME
+# to the scratch root. HOME is checked with the two roots, since git, CMake, and pip write under it.
 : "${HOME:?HOME must be set; the gate passes its own HOME through, the scratch root on the build host}"
+# The allowed root is absolute, so that it does not move with the working directory, and not /, the whole file
+# system. Each root, with its links resolved, must be the allowed root or lie under it; the allowed root is quoted
+# in the pattern, so a glob character in it is matched as itself (Agent Rule 7).
+case "$LASSI_ALLOWED_ROOT" in
+  / | [!/]*)
+    echo "tt-mlir: LASSI_ALLOWED_ROOT, set $set_by, must be an absolute path other than /, not" \
+      "'$LASSI_ALLOWED_ROOT'" >&2
+    exit 2
+    ;;
+esac
 for root in "$LASSI_TOOLCHAINS" "$LASSI_SCRATCH" "$HOME"; do
   case "$(realpath -m "$root")/" in
-    /mnt/nvme10/joseph_ufl/*) ;;
-    *) echo "tt-mlir: refusing to work outside /mnt/nvme10/joseph_ufl (Agent Rule 7): $root" >&2; exit 2 ;;
+    "$LASSI_ALLOWED_ROOT"/*) ;;
+    *)
+      echo "tt-mlir: refusing to work outside $LASSI_ALLOWED_ROOT, the LASSI_ALLOWED_ROOT set $set_by" \
+        "(Agent Rule 7): $root" >&2
+      exit 2
+      ;;
   esac
 done
 case "$LASSI_JOBS" in
   '' | *[!0-9]* | 0) echo "tt-mlir: LASSI_JOBS must be a positive integer, not '$LASSI_JOBS'" >&2; exit 2 ;;
+esac
+# A leading 0 is refused too, since bash arithmetic would read the value as octal.
+case "$LASSI_STOP_GIB" in
+  '' | *[!0-9]* | 0*)
+    echo "tt-mlir: LASSI_STOP_GIB, the stop line in GiB, must be a positive integer with no leading 0, not" \
+      "'$LASSI_STOP_GIB'" >&2
+    exit 2
+    ;;
 esac
 # A tool that crashes must leave no core (Agent Rule 7). The build host's core handler pipes the core to
 # systemd-coredump, which ignores a core limit of 0 and stores the core on the root filesystem; the kernel aborts a
@@ -194,10 +226,11 @@ check_host() {
 }
 
 # check_space <planned KiB>: refuse when the planned bytes do not fit in the free space of the scratch disk, or
-# when, added to what the scratch root holds now (du -s), they would pass the stop line of 145 GiB, which keeps the
-# scratch root under the owner's cap of 150 GiB (OQ-049, 2026-10-11). P5.4 plans for both MLIR stacks together.
+# when, added to what the scratch root holds now (du -s), they would pass the stop line, LASSI_STOP_GIB GiB (145 on
+# both hosts, which keeps the scratch root under the owner's cap of 150 GiB; bible, Host Facts; OQ-049, 2026-10-11).
+# P5.4 plans for both MLIR stacks together.
 check_space() {
-  local planned="$1" stop=$((145 * 1024 * 1024)) used free value
+  local planned="$1" stop=$((LASSI_STOP_GIB * 1024 * 1024)) used free value
   used="$( (du -sk "$LASSI_SCRATCH" 2>/dev/null || true) | cut -f1)"
   free="$(df -Pk "$LASSI_SCRATCH" | awk 'NR == 2 { print $4 }')"
   for value in "$used" "$free"; do
@@ -209,8 +242,8 @@ check_space() {
     esac
   done
   if [ $((used + planned)) -gt "$stop" ]; then
-    echo "tt-mlir: $LASSI_SCRATCH holds $used KiB; the planned $planned KiB would pass the 145 GiB stop line" \
-      "($stop KiB)" >&2
+    echo "tt-mlir: $LASSI_SCRATCH holds $used KiB; the planned $planned KiB would pass the $LASSI_STOP_GIB GiB" \
+      "stop line ($stop KiB, LASSI_STOP_GIB)" >&2
     echo "tt-mlir: queue backup or deletion candidates in the owner queue before installing" >&2
     return 1
   fi

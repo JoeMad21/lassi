@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Build the pinned tt-metal in user space (task P4.2), as recorded in toolchains/tt-metal.pin. Run on the build
-# host through `uv run tools/rx.py job start --big`. It fetches the pinned commit and its submodules by sha at
-# depth 1, configures with the pin's flags, and builds only the pin's TARGETS and examples: the runtime library,
-# the linker scripts and objects the kernel JIT links with, and the pinned programming examples, not all or the
-# install target, so that it takes the least CPU on the shared host (owner, 2026-09-25). It never runs a program
-# it builds, so nothing opens a device.
+# Build the pinned tt-metal in user space (task P4.2), as recorded in toolchains/tt-metal.pin. On the workstation it
+# runs in the LASSI WSL distro under the host profile (tools/local/host-profile.sh), which sets LASSI_ALLOWED_ROOT and
+# LASSI_STOP_GIB with the gate's variables, through the long-job runner (tools/local/longjob.py); on alpha01 it runs
+# through `uv run tools/rx.py job start --big`, with LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl and LASSI_STOP_GIB=145
+# on its command line (P5.15). It fetches the pinned commit and its submodules by sha at depth 1, configures with
+# the pin's flags, and builds only the pin's TARGETS and examples: the runtime library, the linker scripts and
+# objects the kernel JIT links with, and the pinned programming examples, not all or the install target, so that it
+# takes the least CPU on the shared host (owner, 2026-09-25). It never runs a program it builds, so nothing opens a
+# device.
 # The flags are those of the pin's own ttsim CI build (.github/workflows/ttsim.yaml, pr-gate.yaml, and
 # build-artifact.yaml at COMMIT: build_metal.sh --build-type Release with TOOLCHAIN_FILE, --disable-profiler,
 # and --without-distributed), except the Python bindings, the tests, and ccache, which are off. At the pin none
@@ -29,24 +32,67 @@
 # delete it) and rerun. A commit, submodule, sfpi, host tool, or CMake setting that differs from the pin is
 # refused.
 set -euo pipefail
-# A tool that crashes leaves no core file, which the host's core handler would put on the root filesystem
-# (Agent Rule 7).
-ulimit -c 0
 here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tt-metal.pin
 source "$here/tt-metal.pin"
-: "${LASSI_TOOLCHAINS:?LASSI_TOOLCHAINS must be set; the gate sets it}"
-: "${LASSI_SCRATCH:?LASSI_SCRATCH must be set; the gate sets it}"
-: "${LASSI_JOBS:?LASSI_JOBS must be set; the gate sets it}"
+# No value below has a default (AGENTS.md, rules for [OPEN] choices). On alpha01 the gate sets LASSI_TOOLCHAINS,
+# LASSI_SCRATCH, and LASSI_JOBS, and the rx command line gives LASSI_ALLOWED_ROOT and LASSI_STOP_GIB, the scratch
+# root and the stop line in GiB (/mnt/nvme10/joseph_ufl and 145; bible, Host Facts); on the workstation the host
+# profile sets all five.
+set_by="by tools/local/host-profile.sh on the workstation, or on alpha01 by the gate or the rx command line"
+: "${LASSI_TOOLCHAINS:?LASSI_TOOLCHAINS must be set $set_by}"
+: "${LASSI_SCRATCH:?LASSI_SCRATCH must be set $set_by}"
+: "${LASSI_JOBS:?LASSI_JOBS must be set $set_by}"
+: "${LASSI_ALLOWED_ROOT:?LASSI_ALLOWED_ROOT must be set $set_by}"
+: "${LASSI_STOP_GIB:?LASSI_STOP_GIB must be set $set_by}"
+# The allowed root is absolute, so that it does not move with the working directory, and not /, the whole file
+# system. Each root, with its links resolved, must be the allowed root or lie under it; the allowed root is quoted
+# in the pattern, so a glob character in it is matched as itself (Agent Rule 7).
+case "$LASSI_ALLOWED_ROOT" in
+  / | [!/]*)
+    echo "tt-metal: LASSI_ALLOWED_ROOT, set $set_by, must be an absolute path other than /, not" \
+      "'$LASSI_ALLOWED_ROOT'" >&2
+    exit 2
+    ;;
+esac
 for root in "$LASSI_TOOLCHAINS" "$LASSI_SCRATCH"; do
   case "$(realpath -m "$root")/" in
-    /mnt/nvme10/joseph_ufl/*) ;;
-    *) echo "tt-metal: refusing to work outside /mnt/nvme10/joseph_ufl (Agent Rule 7): $root" >&2; exit 2 ;;
+    "$LASSI_ALLOWED_ROOT"/*) ;;
+    *)
+      echo "tt-metal: refusing to work outside $LASSI_ALLOWED_ROOT, the LASSI_ALLOWED_ROOT set $set_by" \
+        "(Agent Rule 7): $root" >&2
+      exit 2
+      ;;
   esac
 done
 case "$LASSI_JOBS" in
   '' | *[!0-9]* | 0) echo "tt-metal: LASSI_JOBS must be a positive integer, not '$LASSI_JOBS'" >&2; exit 2 ;;
 esac
+# A leading 0 is refused too, since bash arithmetic would read the value as octal.
+case "$LASSI_STOP_GIB" in
+  '' | *[!0-9]* | 0*)
+    echo "tt-metal: LASSI_STOP_GIB, the stop line in GiB, must be a positive integer with no leading 0, not" \
+      "'$LASSI_STOP_GIB'" >&2
+    exit 2
+    ;;
+esac
+# A tool that crashes must leave no core (Agent Rule 7). alpha01's core handler pipes the core to systemd-coredump,
+# which ignores a core limit of 0 (the `ulimit -c 0` this script had) and stores the core on the root filesystem;
+# the kernel aborts a piped core dump only when the limit is exactly 1 byte (plans/spikes/p0-sandbox-hardening.md,
+# R6, rx 20260923-133451-exec-7c3d; plans/LESSONS.md). On the workstation WSL pipes the core to its own crash
+# handler; whether the 1-byte limit stops it too is unmeasured until the host's qualification (P5.15). bash's
+# `ulimit -c` counts 1024-byte blocks, so it can neither set 1 byte nor read it back: prlimit sets the limit in
+# bytes, soft and hard, and reads it back itself, since this pin names no Python, and the script refuses unless it
+# reads 1 and 1. It comes after the root checks above, so that they refuse first, and before anything is downloaded,
+# configured, or built. No step below runs a tool under a wrapper that resets the limit and re-raises a child's
+# signal, as strace does (plans/LESSONS.md); every child inherits the 1-byte hard limit.
+if ! prlimit --pid $$ --core=1:1 \
+  || ! read -r core_soft core_hard < <(prlimit --pid $$ --core --raw --noheadings --output SOFT,HARD) \
+  || [ "$core_soft $core_hard" != "1 1" ]; then
+  echo "tt-metal: cannot hold RLIMIT_CORE at exactly 1 byte, soft and hard (prlimit, read back as 1 and 1); a" \
+    "crashing tool could store a core on the root filesystem (Agent Rule 7)" >&2
+  exit 2
+fi
 prefix="$LASSI_TOOLCHAINS/$PREFIX_NAME"
 
 # refuse_foreign <path>...: refuse when a path, with its links resolved, is FOREIGN_CHECKOUT or lies inside
@@ -173,11 +219,11 @@ check_host() {
 }
 
 # check_space <planned KiB>: refuse when the planned bytes do not fit in the free space of the scratch disk,
-# or when, added to what the scratch root holds now (du -s), they would pass the stop line of 145 GiB,
-# which keeps the scratch root under the owner's cap of 150 GiB (OQ-049, 2026-10-11; the P4 plan's 115
-# and 120 GiB before, plans/p4-ttsim.md).
+# or when, added to what the scratch root holds now (du -s), they would pass the stop line, LASSI_STOP_GIB GiB
+# (145 on both hosts, which keeps the scratch root under the owner's cap of 150 GiB; bible, Host Facts;
+# OQ-049, 2026-10-11; the P4 plan's 115 and 120 GiB before, plans/p4-ttsim.md).
 check_space() {
-  local planned="$1" stop=$((145 * 1024 * 1024)) used free value
+  local planned="$1" stop=$((LASSI_STOP_GIB * 1024 * 1024)) used free value
   used="$( (du -sk "$LASSI_SCRATCH" 2>/dev/null || true) | cut -f1)"
   free="$(df -Pk "$LASSI_SCRATCH" | awk 'NR == 2 { print $4 }')"
   for value in "$used" "$free"; do
@@ -189,8 +235,8 @@ check_space() {
     esac
   done
   if [ $((used + planned)) -gt "$stop" ]; then
-    echo "tt-metal: $LASSI_SCRATCH holds $used KiB; the planned $planned KiB would pass the 145 GiB stop line" \
-      "($stop KiB)" >&2
+    echo "tt-metal: $LASSI_SCRATCH holds $used KiB; the planned $planned KiB would pass the $LASSI_STOP_GIB GiB" \
+      "stop line ($stop KiB, LASSI_STOP_GIB)" >&2
     echo "tt-metal: queue backup or deletion candidates in the owner queue before installing" >&2
     return 1
   fi

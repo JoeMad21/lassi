@@ -55,6 +55,20 @@ The contract these tests fix, for the implementation to follow:
   TTMLIR_VENV_DIR set, and the script's own source and build directories
   under the prefix (its `<part>_src="$prefix/..."` and
   `<part>_build="$prefix/..."` lines); pinned_record runs no host tool.
+- The host values (task P5.15; plans/local-plan.md section 3.3, item 2):
+  the script takes its allowed root from LASSI_ALLOWED_ROOT and its stop
+  line from LASSI_STOP_GIB (a positive integer of GiB), both required with
+  no default and checked with the other values before the core limit. The
+  host profile (tools/local/host-profile.sh) sets them on the workstation;
+  on alpha01 the rx command line gives LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl
+  and LASSI_STOP_GIB=145, with which the script keeps and refuses exactly
+  what the literal root and 145 GiB did. LASSI_TOOLCHAINS, LASSI_SCRATCH, and
+  HOME must each resolve to the allowed root or under it, which is matched
+  literally, and a relative allowed root or "/" is refused. The whole-script
+  probes run the script with stand-ins for prlimit and for every tool that
+  writes or fetches, each an exported bash function that logs its call and
+  fails, so the script stops at its first step past its checks and writes
+  nothing; the stop line values other than 145 are SYNTHETIC.
 
 No test fetches from the network, configures, or builds anything, and no
 test runs a program that could open a device. Fixture texts are SYNTHETIC.
@@ -629,28 +643,222 @@ def test_script_is_strict_sources_its_pin_and_needs_the_gate_environment() -> No
     assert "set -euo pipefail" in text
     # The core limit is prlimit's 1 byte, not `ulimit -c 0` (test_script_holds_the_core_limit_at_one_byte_first).
     assert CORE_LIMIT in text and CORE_READ in text
-    for name in ("LASSI_TOOLCHAINS", "LASSI_SCRATCH", "LASSI_JOBS"):
-        assert f'"${{{name}:?' in text
+    # The allowed root and the stop line come from the host profile, or on alpha01 the command line, with no default.
+    for name in ("LASSI_TOOLCHAINS", "LASSI_SCRATCH", "LASSI_JOBS", "LASSI_ALLOWED_ROOT", "LASSI_STOP_GIB"):
+        assert f'"${{{name}:?' in text, name
     loop = [line for line in logic_lines(text) if line.startswith("for root in ")]
     assert len(loop) == 1, loop
     for name in ("$LASSI_TOOLCHAINS", "$LASSI_SCRATCH", "$HOME"):
-        assert f'"{name}"' in loop[0], f"{name} must lie in the scratch root (Agent Rule 7)"
-    assert 'case "$(realpath -m "$root")/" in\n    /mnt/nvme10/joseph_ufl/*) ;;' in text
+        assert f'"{name}"' in loop[0], f"{name} must lie in the allowed root (Agent Rule 7)"
+    assert ROOT_CASE.search(text), "the root check's case pattern is the quoted allowed root, then /*"
     assert 'export TMPDIR="$LASSI_SCRATCH/tmp"' in text
     assert 'prefix="$LASSI_TOOLCHAINS/$PREFIX_NAME"' in text
 
 
+# The allowed root and the stop line (task P5.15).
+
+
+ALPHA01_ROOT = "/mnt/nvme10/joseph_ufl"
+# What alpha01's rx command line gives the script (Host Facts: the 145G stop line under the 150G cap), with the
+# gate's layout of the roots (tools/server/gate.py, build_env), and HOME at the scratch root, as there.
+ALPHA01 = {
+    "LASSI_ALLOWED_ROOT": ALPHA01_ROOT,
+    "LASSI_STOP_GIB": "145",
+    "LASSI_TOOLCHAINS": f"{ALPHA01_ROOT}/toolchains",
+    "LASSI_SCRATCH": ALPHA01_ROOT,
+    "LASSI_JOBS": "4",
+    "HOME": ALPHA01_ROOT,
+}
+# Another host's values, as a host profile gives them, under the probe's directory ("$PWD" in a value names it);
+# SYNTHETIC.
+LOCAL = {
+    "LASSI_ALLOWED_ROOT": "$PWD/scratch",
+    "LASSI_STOP_GIB": "20",
+    "LASSI_TOOLCHAINS": "$PWD/scratch/toolchains",
+    "LASSI_SCRATCH": "$PWD/scratch",
+    "LASSI_JOBS": "4",
+    "HOME": "$PWD/scratch",
+}
+# The values the probes unset before they set their own; HOME is always given.
+SCRIPT_VARIABLES = ("LASSI_ALLOWED_ROOT", "LASSI_STOP_GIB", "LASSI_TOOLCHAINS", "LASSI_SCRATCH", "LASSI_JOBS")
+# The tools the whole-script probes stand in for: prlimit, the first the script runs once its checks pass, and every
+# tool that would write or fetch, so a script that ran one before its core limit would show it and write nothing.
+STAND_INS = ("prlimit", "mkdir", "mktemp", "git", "curl", "cp", "mv", "ln", "rm")
+# The root check's case line: the resolved root and a slash, matched against the allowed root, quoted so that a glob
+# character in it is matched as itself, and anything under it.
+ROOT_CASE = re.compile(r'case "\$\(realpath -m "\$root"\)/" in\n +"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"/\*\) ;;')
+
+
+def run_script(cwd: Path, values: dict[str, str]) -> tuple[subprocess.CompletedProcess[str], list[str], str]:
+    """Run toolchains/tt-mlir.sh from `cwd` with only `values` of SCRIPT_VARIABLES (and HOME) set, under stand-ins.
+
+    Each value is a double-quoted bash word, so "$PWD" in it names `cwd`. Each stand-in is an exported bash
+    function that logs its call to calls.log and fails. Returns the result, the logged calls, and `cwd` as bash
+    spells it.
+    """
+    lines = ["set -euo pipefail", 'printf "%s" "$PWD" >pwd.txt', ": >calls.log", 'export CALLS_LOG="$PWD/calls.log"']
+    for tool in STAND_INS:
+        lines += [f'{tool}() {{ echo "{tool} $*" >>"$CALLS_LOG"; return 97; }}', f"export -f {tool}"]
+    lines.append("unset " + " ".join(SCRIPT_VARIABLES))
+    lines += [f'export {key}="{value}"' for key, value in values.items()]
+    lines.append(f"exec \"$BASH\" '{(TOOLCHAINS / 'tt-mlir.sh').as_posix()}'")
+    result = run_probe("\n".join(lines) + "\n", cwd)
+    calls = (cwd / "calls.log").read_text(encoding="ascii").splitlines()
+    return result, calls, (cwd / "pwd.txt").read_text(encoding="ascii")
+
+
+def report_of(result: subprocess.CompletedProcess[str], calls: list[str]) -> str:
+    """Return a whole-script probe's exit status, output, and logged calls, for an assertion message."""
+    return f"exit {result.returncode}; stdout {result.stdout!r}; stderr {result.stderr!r}; calls {calls}"
+
+
+def accepted(result: subprocess.CompletedProcess[str], calls: list[str]) -> None:
+    """Assert the script passed its checks: nothing was refused, and its first step after them set the core limit."""
+    report = report_of(result, calls)
+    assert "refusing" not in result.stderr, report
+    assert calls and calls[0].startswith("prlimit ") and "--core=1:1" in calls[0], (
+        f"the first step past the checks must set the 1-byte core limit: {report}"
+    )
+    assert result.stdout == "", report
+
+
+def refused(result: subprocess.CompletedProcess[str], calls: list[str], status: int | None = 2) -> str:
+    """Assert the script stopped at its checks with `status` (None: any failure), ran nothing, printed nothing."""
+    report = report_of(result, calls)
+    assert result.returncode != 0 if status is None else result.returncode == status, report
+    assert calls == [], f"a tool ran before the refusal: {report}"
+    assert result.stdout == "", report
+    return result.stderr
+
+
+def says_where_the_values_come_from(stderr: str) -> None:
+    """Assert a refusal says the values come from the host profile or, on alpha01, the command line."""
+    for word in ("host-profile.sh", "alpha01"):
+        assert word in stderr, f"the message names {word}: {stderr}"
+
+
 @needs_bash
-def test_script_refuses_a_root_outside_the_scratch_root_before_anything() -> None:
-    """A toolchains root outside the scratch root, or one that only resolves outside it, stops the script at once."""
-    assert BASH is not None
-    for toolchains in ("/mnt/nvme10/other/toolchains", "/mnt/nvme10/joseph_ufl/../other"):
-        env = {**os.environ, "LASSI_TOOLCHAINS": toolchains, "LASSI_SCRATCH": "/mnt/nvme10/joseph_ufl",
-               "LASSI_JOBS": "4", "HOME": "/mnt/nvme10/joseph_ufl"}
-        result = subprocess.run([BASH, "toolchains/tt-mlir.sh"], capture_output=True, text=True, cwd=REPO, env=env)
-        assert result.returncode == 2, result.stdout + result.stderr
-        assert "refusing to work outside /mnt/nvme10/joseph_ufl" in result.stderr
-        assert result.stdout == ""
+@pytest.mark.parametrize(
+    ("changed", "kept"),
+    [
+        ({}, True),
+        ({"LASSI_TOOLCHAINS": ALPHA01_ROOT, "LASSI_SCRATCH": f"{ALPHA01_ROOT}/"}, True),
+        ({"LASSI_TOOLCHAINS": f"{ALPHA01_ROOT}/x/../toolchains"}, True),
+        ({"HOME": f"{ALPHA01_ROOT}/home"}, True),
+        ({"LASSI_TOOLCHAINS": "/mnt/nvme10/other/toolchains"}, False),
+        ({"LASSI_TOOLCHAINS": f"{ALPHA01_ROOT}/../other"}, False),
+        ({"LASSI_TOOLCHAINS": f"{ALPHA01_ROOT}2/toolchains"}, False),
+        ({"LASSI_SCRATCH": "/mnt/nvme10/other"}, False),
+        ({"HOME": "/home/someone"}, False),
+    ],
+    ids=["gate-layout", "the-root-itself", "resolves-inside", "home-inside", "outside", "resolves-outside", "sibling",
+         "scratch-outside", "home-outside"],
+)
+def test_script_keeps_and_refuses_with_alpha01s_values_as_before(
+    tmp_path: Path, changed: dict[str, str], kept: bool
+) -> None:
+    """With alpha01's root and 145 on its command line, the roots and HOME the literal root kept are kept, no more."""
+    result, calls, _ = run_script(tmp_path, {**ALPHA01, **changed})
+    if kept:
+        accepted(result, calls)
+        return
+    stderr = refused(result, calls)
+    assert f"refusing to work outside {ALPHA01_ROOT}" in stderr, stderr
+    says_where_the_values_come_from(stderr)
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("changed", "kept"),
+    [
+        ({}, True),
+        ({"LASSI_TOOLCHAINS": f"{ALPHA01_ROOT}/toolchains"}, False),
+        ({"LASSI_TOOLCHAINS": "$PWD/scratch2/toolchains"}, False),
+        ({"HOME": ALPHA01_ROOT}, False),
+    ],
+    ids=["inside", "alpha01s-root", "sibling", "home-on-alpha01s-root"],
+)
+def test_script_takes_another_allowed_root_and_stop_line(tmp_path: Path, changed: dict[str, str], kept: bool) -> None:
+    """A host profile's root and stop line work as alpha01's do; alpha01's root is then outside the allowed one."""
+    result, calls, pwd = run_script(tmp_path, {**LOCAL, **changed})
+    if kept:
+        accepted(result, calls)
+        return
+    stderr = refused(result, calls)
+    assert f"refusing to work outside {pwd}/scratch" in stderr, stderr
+    says_where_the_values_come_from(stderr)
+
+
+@needs_bash
+@pytest.mark.parametrize(("under", "kept"), [("scr*tch", True), ("scrXtch", False)], ids=["the-root", "glob-match"])
+def test_script_matches_the_allowed_root_literally(tmp_path: Path, under: str, kept: bool) -> None:
+    """A glob character in the allowed root is matched as itself, so a root it would match as a pattern is refused."""
+    values = {**LOCAL, "LASSI_ALLOWED_ROOT": "$PWD/scr*tch", "LASSI_TOOLCHAINS": f"$PWD/{under}/toolchains",
+              "LASSI_SCRATCH": f"$PWD/{under}", "HOME": f"$PWD/{under}"}
+    result, calls, pwd = run_script(tmp_path, values)
+    if kept:
+        accepted(result, calls)
+        return
+    stderr = refused(result, calls)
+    assert f"refusing to work outside {pwd}/scr*tch" in stderr, stderr
+
+
+@needs_bash
+@pytest.mark.parametrize("variable", ["LASSI_ALLOWED_ROOT", "LASSI_STOP_GIB"])
+@pytest.mark.parametrize("empty", [False, True], ids=["unset", "empty"])
+def test_script_refuses_without_the_allowed_root_or_the_stop_line(tmp_path: Path, variable: str, empty: bool) -> None:
+    """Neither value has a default (AGENTS.md, rules for [OPEN] choices): unset or empty, the script stops first."""
+    values = {key: value for key, value in ALPHA01.items() if key != variable}
+    if empty:
+        values[variable] = ""
+    result, calls, _ = run_script(tmp_path, values)
+    stderr = refused(result, calls, status=None)
+    assert variable in stderr, stderr
+    says_where_the_values_come_from(stderr)
+
+
+@needs_bash
+@pytest.mark.parametrize("allowed", ["/", "scratch", "./scratch"], ids=["slash", "relative", "dot-relative"])
+def test_script_refuses_an_allowed_root_that_is_relative_or_slash(tmp_path: Path, allowed: str) -> None:
+    """"/" would allow the whole file system, and a relative root would move with the working directory."""
+    # The roots given lie under both readings of the allowed root ($PWD/scratch).
+    result, calls, _ = run_script(tmp_path, {**LOCAL, "LASSI_ALLOWED_ROOT": allowed})
+    stderr = refused(result, calls)
+    assert "LASSI_ALLOWED_ROOT" in stderr, stderr
+
+
+@needs_bash
+@pytest.mark.parametrize("value", ["0", "abc", "-1", "1.5", "145G"])
+def test_script_refuses_a_stop_line_that_is_not_a_positive_integer(tmp_path: Path, value: str) -> None:
+    """LASSI_STOP_GIB is checked with the other values, before the core limit or any tool, and the message prints it."""
+    result, calls, _ = run_script(tmp_path, {**ALPHA01, "LASSI_STOP_GIB": value})
+    stderr = refused(result, calls)
+    assert "LASSI_STOP_GIB" in stderr and f"'{value}'" in stderr, stderr
+
+
+def test_script_names_no_allowed_root_of_its_own() -> None:
+    """alpha01's root is a value its command line gives, not a literal of the script; a message may still name it."""
+    lines = [line for line in code_lines(script_text()) if ALPHA01_ROOT in line]
+    messages = re.compile(r'(\*\) )?echo |"|: "\$\{[A-Z_]+:\?')
+    assert all(messages.match(line) for line in lines), lines
+
+
+def header(text: str) -> str:
+    """Return a script's header comment: the comment lines after the shebang, without their #, joined by spaces."""
+    found = []
+    for line in text.splitlines()[1:]:
+        if not line.startswith("#"):
+            break
+        found.append(line.lstrip("#").strip())
+    return " ".join(found)
+
+
+def test_header_says_how_the_script_runs_on_each_host() -> None:
+    """On the workstation it runs under the host profile through the long-job runner; on alpha01 through rx."""
+    head = header(script_text())
+    needed = ("tools/local/host-profile.sh", "tools/local/longjob.py", "tools/rx.py", "alpha01", "LASSI_ALLOWED_ROOT",
+              "LASSI_STOP_GIB")
+    assert not [word for word in needed if word not in head], head
 
 
 # The core limit (Agent Rule 7). alpha01's core handler pipes a core to systemd-coredump, which ignores a limit of 0
@@ -946,6 +1154,11 @@ LASSI_SCRATCH=/mnt/nvme10/scratch
 """
 
 
+def space_body(stop_gib: int) -> str:
+    """Return a check_space probe body with the du and df stand-ins and LASSI_STOP_GIB set to `stop_gib`."""
+    return SPACE_STUBS + f'LASSI_STOP_GIB={stop_gib}\ncheck_space "1000"\n'
+
+
 @needs_bash
 @pytest.mark.parametrize(
     ("used", "free", "fits"),
@@ -953,12 +1166,48 @@ LASSI_SCRATCH=/mnt/nvme10/scratch
     ids=["at-the-stop-line", "over-the-stop-line", "disk-full", "du-fails"],
 )
 def test_check_space_stops_at_the_plan_line(tmp_path: Path, used: int | str, free: int, fits: bool) -> None:
-    """du of the scratch root plus the planned KiB may reach 145 GiB, never pass it, and must fit the free space."""
-    body = SPACE_STUBS + 'check_space "1000"\n'
-    result = run_functions(("check_space",), body, tmp_path, env={"DU_KIB": str(used), "DF_KIB": str(free)})
+    """With alpha01's LASSI_STOP_GIB=145, du plus the planned KiB may reach 145 GiB, never pass it, and must fit."""
+    result = run_functions(("check_space",), space_body(145), tmp_path, env={"DU_KIB": str(used), "DF_KIB": str(free)})
     assert (result.returncode == 0) == fits, result.stdout + result.stderr
     if not fits:
         assert "tt-mlir:" in result.stderr
+
+
+@needs_bash
+@pytest.mark.parametrize("stop_gib", [145, 20])
+@pytest.mark.parametrize(("below", "fits"), [(1000, True), (999, False)], ids=["at-the-stop-line", "over-it"])
+def test_check_space_takes_its_stop_line_from_lassi_stop_gib(
+    tmp_path: Path, stop_gib: int, below: int, fits: bool
+) -> None:
+    """The stop line is LASSI_STOP_GIB GiB (20 is SYNTHETIC, so a literal 145 shows), and the messages print it."""
+    stop_kib = stop_gib * GIB_KIB
+    result = run_functions(("check_space",), space_body(stop_gib), tmp_path,
+                           env={"DU_KIB": str(stop_kib - below), "DF_KIB": str(10**9)})
+    assert (result.returncode == 0) == fits, result.stdout + result.stderr
+    if fits:
+        assert f"stop line {stop_kib} KiB" in result.stdout, result.stdout
+        return
+    assert f"{stop_gib} GiB" in result.stderr and f"{stop_kib} KiB" in result.stderr, "the message prints the value"
+    assert stop_gib == 145 or "145 GiB" not in result.stderr, result.stderr
+
+
+def comment_above(text: str, offset: int) -> str:
+    """Return the comment lines right above the line that starts at `offset`, without their #, joined by spaces."""
+    found = []
+    for line in reversed(text[:offset].splitlines()):
+        if not line.startswith("#"):
+            break
+        found.append(line.lstrip("#").strip())
+    return " ".join(reversed(found))
+
+
+def test_check_space_has_no_stop_line_of_its_own() -> None:
+    """check_space reads LASSI_STOP_GIB, and its comment says so (145 on both hosts, Host Facts); no literal 145."""
+    text = script_text()
+    body = bash_function(text, "check_space")
+    assert "LASSI_STOP_GIB" in body and "145" not in body, body
+    comment = comment_above(text, text.index(body))
+    assert "LASSI_STOP_GIB" in comment and "stop line of 145 GiB" not in comment, comment
 
 
 @needs_bash

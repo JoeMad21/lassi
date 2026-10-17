@@ -11,6 +11,21 @@ scripts in bash on local files and throwaway git repositories, with stand-ins
 where a test needs one; no test fetches from the network, builds tt-metal, or
 runs a program that could open a device. No value here is a measurement: the
 pinned commits and hashes come from the P4.1 spike and from GitHub.
+
+Task P5.15 (plans/p5-ir.md; plans/local-plan.md section 3.3, items 2 and 3;
+bible Host Facts, Workstation and Workstation scratch) adds the contract of the
+host values: each script takes its allowed root from LASSI_ALLOWED_ROOT and
+its stop line from LASSI_STOP_GIB (a positive integer of GiB), both required
+with no default. The host profile (tools/local/host-profile.sh) sets them on
+the workstation; on alpha01 the rx command line gives
+LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl and LASSI_STOP_GIB=145, with which
+the scripts keep and refuse exactly what the literal root and 145 GiB did.
+Both scripts hold RLIMIT_CORE at exactly 1 byte with prlimit, read back with
+prlimit itself (these pins name no Python), as toolchains/tt-mlir.sh does.
+The whole-script probes run a script with stand-ins for prlimit and for every
+tool that writes or fetches, each an exported bash function that logs its
+call and fails, so a script stops at its first step past its checks and
+writes nothing; the stop line values other than 145 are SYNTHETIC.
 """
 
 from __future__ import annotations
@@ -262,11 +277,14 @@ def test_script_is_strict_sources_its_pin_and_needs_the_gate_environment(name: s
     assert "set -euo pipefail" in text
     assert f'"$here/{name}.pin"' in text
     assert '"${LASSI_TOOLCHAINS:?' in text and '"${LASSI_SCRATCH:?' in text
+    # The allowed root and the stop line come from the host profile, or on alpha01 the command line, with no default.
+    assert '"${LASSI_ALLOWED_ROOT:?' in text and '"${LASSI_STOP_GIB:?' in text
     assert 'for root in "$LASSI_TOOLCHAINS" "$LASSI_SCRATCH"' in text
-    # The roots, with links resolved, must lie in the scratch root (Agent Rule 7).
-    assert 'case "$(realpath -m "$root")/" in\n    /mnt/nvme10/joseph_ufl/*) ;;' in text
-    # No core file from a crashing tool reaches the root filesystem.
-    assert text.index("\nulimit -c 0\n") < text.index(f'source "$here/{name}.pin"')
+    # The roots, with links resolved, must lie in the allowed root, quoted so it is matched literally (Agent Rule 7).
+    assert ROOT_CASE.search(text), "the root check's case pattern is the quoted allowed root, then /*"
+    # No core file from a crashing tool reaches the root filesystem: the 1-byte limit, not `ulimit -c 0`
+    # (test_script_holds_the_core_limit_at_one_byte_first).
+    assert CORE_LIMIT in text
     assert 'export TMPDIR="$LASSI_SCRATCH/tmp"' in text
     assert 'prefix="$LASSI_TOOLCHAINS/$PREFIX_NAME"' in text
 
@@ -722,6 +740,11 @@ LASSI_SCRATCH=/mnt/nvme10/scratch
 STOP_KIB = 145 * 1024 * 1024
 
 
+def space_body(stop_gib: int) -> str:
+    """Return a check_space probe body with the du and df stand-ins and LASSI_STOP_GIB set to `stop_gib`."""
+    return SPACE_STUBS + f'LASSI_STOP_GIB={stop_gib}\ncheck_space "1000"\n'
+
+
 @needs_bash
 @pytest.mark.parametrize("name", NAMES)
 @pytest.mark.parametrize(
@@ -730,9 +753,39 @@ STOP_KIB = 145 * 1024 * 1024
     ids=["at-the-stop-line", "over-the-stop-line", "disk-full", "du-fails"],
 )
 def test_check_space_stops_at_the_plan_line(tmp_path: Path, name: str, used: int | str, free: int, fits: bool) -> None:
-    body = SPACE_STUBS + 'check_space "1000"\n'
-    result = run_functions(name, ("check_space",), body, tmp_path, env={"DU_KIB": str(used), "DF_KIB": str(free)})
+    # alpha01's stop line, 145 GiB (LASSI_STOP_GIB=145 on its command line), refuses at the same KiB as before.
+    result = run_functions(name, ("check_space",), space_body(145), tmp_path,
+                           env={"DU_KIB": str(used), "DF_KIB": str(free)})
     assert (result.returncode == 0) == fits, result.stdout + result.stderr
+
+
+@needs_bash
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize("stop_gib", [145, 20])
+@pytest.mark.parametrize(("below", "fits"), [(1000, True), (999, False)], ids=["at-the-stop-line", "over-it"])
+def test_check_space_takes_its_stop_line_from_lassi_stop_gib(
+    tmp_path: Path, name: str, stop_gib: int, below: int, fits: bool
+) -> None:
+    # 20 GiB is SYNTHETIC, a stop line other than the hosts' 145, so a literal 145 in check_space shows.
+    stop_kib = stop_gib * 1024 * 1024
+    result = run_functions(name, ("check_space",), space_body(stop_gib), tmp_path,
+                           env={"DU_KIB": str(stop_kib - below), "DF_KIB": str(10**9)})
+    assert (result.returncode == 0) == fits, result.stdout + result.stderr
+    if fits:
+        assert f"stop line {stop_kib} KiB" in result.stdout, result.stdout
+        return
+    assert f"{stop_gib} GiB" in result.stderr and f"{stop_kib} KiB" in result.stderr, "the message prints the value"
+    assert stop_gib == 145 or "145 GiB" not in result.stderr, result.stderr
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_check_space_has_no_stop_line_of_its_own(name: str) -> None:
+    text = script_text(name)
+    body = bash_function(text, "check_space")
+    assert "LASSI_STOP_GIB" in body and "145" not in body, body
+    # Its comment says where the stop line comes from (145 on both hosts, Host Facts), not a literal 145 GiB.
+    comment = comment_above(text, text.index(body))
+    assert "LASSI_STOP_GIB" in comment and "stop line of 145 GiB" not in comment, comment
 
 
 LIB = b"stand-in library bytes"
@@ -791,18 +844,350 @@ def test_ttsim_swap_in_moves_the_previous_install_aside_and_keeps_it(tmp_path: P
     assert not (tmp_path / "tc" / "ttsim@v0.staging").exists()
 
 
-@pytest.mark.parametrize("name", NAMES)
-def test_script_refuses_a_root_outside_the_scratch_root_before_anything(tmp_path: Path, name: str) -> None:
-    # A path under /mnt/nvme10 but outside the scratch root, and one that only resolves outside it. The script
-    # exits at the root check, before it makes a directory or runs a tool.
+# The allowed root, the stop line, and the core limit (task P5.15).
+
+
+ALPHA01_ROOT = "/mnt/nvme10/joseph_ufl"
+# What alpha01's rx command line gives the scripts (Host Facts: the 145G stop line under the 150G cap), with the
+# gate's layout of the roots (tools/server/gate.py, build_env).
+ALPHA01 = {
+    "LASSI_ALLOWED_ROOT": ALPHA01_ROOT,
+    "LASSI_STOP_GIB": "145",
+    "LASSI_TOOLCHAINS": f"{ALPHA01_ROOT}/toolchains",
+    "LASSI_SCRATCH": ALPHA01_ROOT,
+    "LASSI_JOBS": "4",
+}
+# Another host's values, as a host profile gives them, under the probe's directory ("$PWD" in a value names it);
+# SYNTHETIC.
+LOCAL = {
+    "LASSI_ALLOWED_ROOT": "$PWD/scratch",
+    "LASSI_STOP_GIB": "20",
+    "LASSI_TOOLCHAINS": "$PWD/scratch/toolchains",
+    "LASSI_SCRATCH": "$PWD/scratch",
+    "LASSI_JOBS": "4",
+}
+SCRIPT_VARIABLES = tuple(ALPHA01)
+# The tools the whole-script probes stand in for: prlimit, the first a script runs once its checks pass, and every
+# tool that would write or fetch, so a script that ran one before its core limit would show it and write nothing.
+STAND_INS = ("prlimit", "mkdir", "mktemp", "git", "curl", "cp", "mv", "ln", "rm")
+CORE_LIMIT = "prlimit --pid $$ --core=1:1"
+# The root check's case line: the resolved root and a slash, matched against the allowed root, quoted so that a glob
+# character in it is matched as itself, and anything under it.
+ROOT_CASE = re.compile(r'case "\$\(realpath -m "\$root"\)/" in\n +"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"/\*\) ;;')
+# A code line that runs a tool: a pinned host tool by its variable, or git, CMake, Ninja, a download, a new
+# directory or temporary file, readelf, find, or sha256sum.
+TOOL_RUN = re.compile(
+    r'"\$(?:CMAKE|NINJA|CLANG_C|CLANG_CXX|LINKER)"'
+    r"|\b(?:git|git_in|cmake|ninja|curl|wget|mkdir|mktemp|readelf|find|sha256sum)\b"
+)
+
+
+def run_script(name: str, cwd: Path, values: dict[str, str]) -> tuple[subprocess.CompletedProcess[str], list[str], str]:
+    """Run toolchains/<name>.sh from `cwd` with only `values` of SCRIPT_VARIABLES set, under the stand-ins.
+
+    Each value is a double-quoted bash word, so "$PWD" in it names `cwd`. Each stand-in is an exported bash
+    function that logs its call to calls.log and fails. Returns the result, the logged calls, and `cwd` as bash
+    spells it.
+    """
+    lines = ["set -euo pipefail", 'printf "%s" "$PWD" >pwd.txt', ": >calls.log", 'export CALLS_LOG="$PWD/calls.log"']
+    for tool in STAND_INS:
+        lines += [f'{tool}() {{ echo "{tool} $*" >>"$CALLS_LOG"; return 97; }}', f"export -f {tool}"]
+    lines.append("unset " + " ".join(SCRIPT_VARIABLES))
+    lines += [f'export {key}="{value}"' for key, value in values.items()]
+    lines.append(f"exec \"$BASH\" '{(TOOLCHAINS / f'{name}.sh').as_posix()}'")
+    (cwd / "run.sh").write_bytes(("\n".join(lines) + "\n").encode("ascii"))
     assert BASH is not None
-    for toolchains in ("/mnt/nvme10/other/toolchains", "/mnt/nvme10/joseph_ufl/../other"):
-        env = {**os.environ, "LASSI_TOOLCHAINS": toolchains, "LASSI_SCRATCH": "/mnt/nvme10/joseph_ufl",
-               "LASSI_JOBS": "4"}
-        result = subprocess.run([BASH, f"toolchains/{name}.sh"], capture_output=True, text=True, cwd=REPO, env=env)
-        assert result.returncode == 2, result.stdout + result.stderr
-        assert "refusing to work outside /mnt/nvme10/joseph_ufl" in result.stderr
-        assert result.stdout == ""
+    result = subprocess.run([BASH, "run.sh"], cwd=cwd, capture_output=True, text=True, env={**os.environ, **IDENTITY})
+    calls = (cwd / "calls.log").read_text(encoding="ascii").splitlines()
+    return result, calls, (cwd / "pwd.txt").read_text(encoding="ascii")
+
+
+def report_of(result: subprocess.CompletedProcess[str], calls: list[str]) -> str:
+    """Return a whole-script probe's exit status, output, and logged calls, for an assertion message."""
+    return f"exit {result.returncode}; stdout {result.stdout!r}; stderr {result.stderr!r}; calls {calls}"
+
+
+def accepted(result: subprocess.CompletedProcess[str], calls: list[str]) -> None:
+    """Assert the script passed its checks: nothing was refused, and its first step after them set the core limit."""
+    report = report_of(result, calls)
+    assert "refusing" not in result.stderr, report
+    assert calls and calls[0].startswith("prlimit ") and "--core=1:1" in calls[0], (
+        f"the first step past the checks must set the 1-byte core limit: {report}"
+    )
+    assert result.stdout == "", report
+
+
+def refused(result: subprocess.CompletedProcess[str], calls: list[str], status: int | None = 2) -> str:
+    """Assert the script stopped at its checks with `status` (None: any failure), ran nothing, printed nothing."""
+    report = report_of(result, calls)
+    assert result.returncode != 0 if status is None else result.returncode == status, report
+    assert calls == [], f"a tool ran before the refusal: {report}"
+    assert result.stdout == "", report
+    return result.stderr
+
+
+def says_where_the_values_come_from(stderr: str) -> None:
+    """Assert a refusal says the values come from the host profile or, on alpha01, the command line."""
+    for word in ("host-profile.sh", "alpha01"):
+        assert word in stderr, f"the message names {word}: {stderr}"
+
+
+@needs_bash
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize(
+    ("toolchains", "scratch", "kept"),
+    [
+        (f"{ALPHA01_ROOT}/toolchains", ALPHA01_ROOT, True),
+        (ALPHA01_ROOT, f"{ALPHA01_ROOT}/", True),
+        (f"{ALPHA01_ROOT}/x/../toolchains", ALPHA01_ROOT, True),
+        ("/mnt/nvme10/other/toolchains", ALPHA01_ROOT, False),
+        (f"{ALPHA01_ROOT}/../other", ALPHA01_ROOT, False),
+        (f"{ALPHA01_ROOT}2/toolchains", ALPHA01_ROOT, False),
+        (f"{ALPHA01_ROOT}/toolchains", "/mnt/nvme10/other", False),
+    ],
+    ids=["gate-layout", "the-root-itself", "resolves-inside", "outside", "resolves-outside", "sibling",
+         "scratch-outside"],
+)
+def test_script_keeps_and_refuses_with_alpha01s_values_as_before(
+    tmp_path: Path, name: str, toolchains: str, scratch: str, kept: bool
+) -> None:
+    # alpha01's root and 145 on the command line: the roots the literal root kept are kept, and the rest refused.
+    values = {**ALPHA01, "LASSI_TOOLCHAINS": toolchains, "LASSI_SCRATCH": scratch}
+    result, calls, _ = run_script(name, tmp_path, values)
+    if kept:
+        accepted(result, calls)
+        return
+    stderr = refused(result, calls)
+    assert f"refusing to work outside {ALPHA01_ROOT}" in stderr, stderr
+    says_where_the_values_come_from(stderr)
+
+
+@needs_bash
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize(
+    ("toolchains", "kept"),
+    [("$PWD/scratch/toolchains", True), (f"{ALPHA01_ROOT}/toolchains", False), ("$PWD/scratch2/toolchains", False)],
+    ids=["inside", "alpha01s-root", "sibling"],
+)
+def test_script_takes_another_allowed_root_and_stop_line(
+    tmp_path: Path, name: str, toolchains: str, kept: bool
+) -> None:
+    # A host profile's root and stop line work as alpha01's do; alpha01's root is then outside the allowed one.
+    result, calls, pwd = run_script(name, tmp_path, {**LOCAL, "LASSI_TOOLCHAINS": toolchains})
+    if kept:
+        accepted(result, calls)
+        return
+    stderr = refused(result, calls)
+    assert f"refusing to work outside {pwd}/scratch" in stderr, stderr
+    says_where_the_values_come_from(stderr)
+
+
+@needs_bash
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize(("under", "kept"), [("scr*tch", True), ("scrXtch", False)], ids=["the-root", "glob-match"])
+def test_script_matches_the_allowed_root_literally(tmp_path: Path, name: str, under: str, kept: bool) -> None:
+    # A glob character in the allowed root is matched as itself, so a root it would match as a pattern is refused.
+    values = {**LOCAL, "LASSI_ALLOWED_ROOT": "$PWD/scr*tch", "LASSI_TOOLCHAINS": f"$PWD/{under}/toolchains",
+              "LASSI_SCRATCH": f"$PWD/{under}"}
+    result, calls, pwd = run_script(name, tmp_path, values)
+    if kept:
+        accepted(result, calls)
+        return
+    stderr = refused(result, calls)
+    assert f"refusing to work outside {pwd}/scr*tch" in stderr, stderr
+
+
+@needs_bash
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize("variable", ["LASSI_ALLOWED_ROOT", "LASSI_STOP_GIB"])
+@pytest.mark.parametrize("empty", [False, True], ids=["unset", "empty"])
+def test_script_refuses_without_the_allowed_root_or_the_stop_line(
+    tmp_path: Path, name: str, variable: str, empty: bool
+) -> None:
+    # Neither value has a default (AGENTS.md, rules for [OPEN] choices): unset or empty, the script stops first.
+    values = {key: value for key, value in ALPHA01.items() if key != variable}
+    if empty:
+        values[variable] = ""
+    result, calls, _ = run_script(name, tmp_path, values)
+    stderr = refused(result, calls, status=None)
+    assert variable in stderr, stderr
+    says_where_the_values_come_from(stderr)
+
+
+@needs_bash
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize("allowed", ["/", "scratch", "./scratch"], ids=["slash", "relative", "dot-relative"])
+def test_script_refuses_an_allowed_root_that_is_relative_or_slash(tmp_path: Path, name: str, allowed: str) -> None:
+    # "/" would allow the whole file system, and a relative root would move with the working directory; the roots
+    # given lie under both readings ($PWD/scratch).
+    result, calls, _ = run_script(name, tmp_path, {**LOCAL, "LASSI_ALLOWED_ROOT": allowed})
+    stderr = refused(result, calls)
+    assert "LASSI_ALLOWED_ROOT" in stderr, stderr
+
+
+@needs_bash
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize("value", ["0", "abc", "-1", "1.5", "145G"])
+def test_script_refuses_a_stop_line_that_is_not_a_positive_integer(tmp_path: Path, name: str, value: str) -> None:
+    # LASSI_STOP_GIB is checked with the other values, before anything runs, and the message prints it.
+    result, calls, _ = run_script(name, tmp_path, {**ALPHA01, "LASSI_STOP_GIB": value})
+    stderr = refused(result, calls)
+    assert "LASSI_STOP_GIB" in stderr and f"'{value}'" in stderr, stderr
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_script_names_no_allowed_root_of_its_own(name: str) -> None:
+    # alpha01's root is a value its command line gives, not a literal of the script; a message may still name it.
+    lines = [line for line in code_lines(script_text(name)) if ALPHA01_ROOT in line]
+    messages = re.compile(r'(\*\) )?echo |"|: "\$\{[A-Z_]+:\?')
+    assert all(messages.match(line) for line in lines), lines
+
+
+def code_offsets(text: str, word: str) -> list[int]:
+    """Return the offset of `word` in each line of bash text that holds it and is not a comment."""
+    found, offset = [], 0
+    for raw in text.splitlines(keepends=True):
+        if word in raw and not raw.strip().startswith("#"):
+            found.append(offset + raw.index(word))
+        offset += len(raw)
+    return found
+
+
+def comment_above(text: str, offset: int) -> str:
+    """Return the comment lines right above the line that starts at `offset`, without their #, joined by spaces."""
+    found = []
+    for line in reversed(text[:offset].splitlines()):
+        if not line.startswith("#"):
+            break
+        found.append(line.lstrip("#").strip())
+    return " ".join(reversed(found))
+
+
+def core_block(text: str) -> str:
+    """Return the script's core-limit block, from its `if ! prlimit` line through its `fi` line."""
+    assert f"\nif ! {CORE_LIMIT}" in text, f"no block starting `if ! {CORE_LIMIT}`, as toolchains/tt-mlir.sh's does"
+    start = text.index(f"\nif ! {CORE_LIMIT}") + 1
+    return text[start : text.index("\nfi\n", start) + len("\nfi\n")]
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_script_holds_the_core_limit_at_one_byte_first(name: str) -> None:
+    # prlimit sets RLIMIT_CORE to 1:1 and reads it back, after the root checks, before anything is written or
+    # fetched, in the block toolchains/tt-mlir.sh has (if ! prlimit ...; then ... exit 2; fi).
+    text = script_text(name)
+    lines = [line for line in code_lines(text) if not line.startswith(("echo ", '"'))]
+    assert not [line for line in lines if re.search(r"(^|[\s;&|(])ulimit\b", line)], "ulimit -c counts 1024-byte blocks"
+    assert sum(line.count(CORE_LIMIT) for line in code_lines(text)) == 1, f"one {CORE_LIMIT}"
+    block = core_block(text)
+    start = text.index(block)
+    assert block.rstrip().endswith("exit 2\nfi"), "a limit not set, or not read back as 1 and 1, stops the script"
+    used = code_offsets(text, "prlimit")
+    assert len(used) >= 2, "prlimit sets the limit and reads it back; these pins name no Python"
+    assert all(start <= offset < start + len(block) for offset in used), "every prlimit is in the block"
+    roots = text.index('for root in "$LASSI_TOOLCHAINS" "$LASSI_SCRATCH"; do')
+    assert text.index("\ndone\n", roots) < start, "the root checks refuse first"
+    before = [line for line in code_lines(text[:start]) if not line.startswith(("echo ", ': "${'))]
+    assert not [line for line in before if TOOL_RUN.search(line)], "no tool runs before it"
+    assert start < text.index('mkdir -p "$TMPDIR"'), "before the first directory is made"
+    assert start < text.index("\ntrap cleanup EXIT\n"), "before every main step: each download, configure, and build"
+
+
+@pytest.mark.parametrize("name", ("tt-mlir", *NAMES))
+def test_core_limit_comment_keeps_the_evidence_tt_mlir_sh_cites(name: str) -> None:
+    # Why 1 byte (the spike's R6 on alpha01's piped systemd-coredump) and why bash's ulimit -c cannot set or read it
+    # back (it counts 1024-byte blocks), with the citations tt-mlir.sh gives.
+    text = script_text(name)
+    comment = comment_above(text, text.index(core_block(text)))
+    cited = ("plans/spikes/p0-sandbox-hardening.md", "R6", "rx 20260923-133451-exec-7c3d", "plans/LESSONS.md",
+             "ulimit -c", "1024-byte blocks")
+    assert not [word for word in cited if word not in comment], comment
+
+
+# A stand-in for util-linux prlimit in the core-block probes: a call with --core=<soft>:<hard> logs the setting to
+# prlimit.sets and returns SET_STATUS; any other call reads the core limit, returning READ_STATUS when that is not
+# 0, else printing SOFT and HARD in the columns --output (or -o) names, by default RESOURCE,DESCRIPTION,SOFT,HARD,
+# UNITS, one space apart, under a heading line unless --noheadings (or -n) is given.
+PRLIMIT_STAND_IN = r'''prlimit() {
+  local arg next="" output=RESOURCE,DESCRIPTION,SOFT,HARD,UNITS headings=1 column head="" row=""
+  for arg in "$@"; do
+    if [ "$next" = output ]; then output="$arg"; next=""; continue; fi
+    case "$arg" in
+      --core=*) printf '%s\n' "$arg" >>prlimit.sets; return "$SET_STATUS" ;;
+      -o | --output) next=output ;;
+      --output=*) output="${arg#--output=}" ;;
+      -o*) output="${arg#-o}" ;;
+      -n | --noheadings) headings=0 ;;
+    esac
+  done
+  if [ "$READ_STATUS" != 0 ]; then return "$READ_STATUS"; fi
+  for column in ${output//,/ }; do
+    head+=" ${column^^}"
+    case "${column^^}" in
+      RESOURCE) row+=" CORE" ;;
+      DESCRIPTION) row+=" max core file size" ;;
+      SOFT) row+=" $SOFT" ;;
+      HARD) row+=" $HARD" ;;
+      UNITS) row+=" bytes" ;;
+    esac
+  done
+  if [ "$headings" = 1 ]; then printf '%s\n' "${head# }"; fi
+  printf '%s\n' "${row# }"
+}
+'''
+
+
+@needs_bash
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize(
+    ("set_status", "read_status", "soft", "hard", "holds"),
+    [
+        (0, 0, "1", "1", True),
+        (1, 0, "1", "1", False),
+        (0, 1, "1", "1", False),
+        (0, 0, "0", "0", False),
+        (0, 0, "1024", "1024", False),
+        (0, 0, "1", "unlimited", False),
+        (0, 0, "0", "1", False),
+    ],
+    ids=["held", "prlimit-fails", "read-fails", "reads-zero", "reads-1024", "hard-unlimited", "soft-zero"],
+)
+def test_core_limit_block_refuses_unless_set_and_read_back_as_one_byte(
+    tmp_path: Path, name: str, set_status: int, read_status: int, soft: str, hard: str, holds: bool
+) -> None:
+    # 0 is what `ulimit -c 0` gave, which a piped core handler ignores, and 1024 what `ulimit -c 1` gives.
+    values = f"SET_STATUS={set_status}\nREAD_STATUS={read_status}\nSOFT={soft}\nHARD={hard}\n"
+    body = "set -euo pipefail\n" + PRLIMIT_STAND_IN + values + core_block(script_text(name)) + "echo held\n"
+    (tmp_path / "probe.sh").write_bytes(body.encode("ascii"))
+    assert BASH is not None
+    result = subprocess.run([BASH, "probe.sh"], cwd=tmp_path, capture_output=True, text=True)
+    sets = tmp_path / "prlimit.sets"
+    assert sets.exists() and sets.read_text(encoding="ascii") == "--core=1:1\n", "set once, in bytes, soft and hard"
+    if holds:
+        assert (result.returncode, result.stdout) == (0, "held\n"), result.stdout + result.stderr
+        return
+    assert result.returncode == 2 and result.stdout == "", result.stdout + result.stderr
+    lines = result.stderr.splitlines()
+    assert len(lines) == 1 and lines[0].startswith(f"{name}:") and "1 byte" in lines[0], result.stderr
+
+
+def header(text: str) -> str:
+    """Return a script's header comment: the comment lines after the shebang, without their #, joined by spaces."""
+    found = []
+    for line in text.splitlines()[1:]:
+        if not line.startswith("#"):
+            break
+        found.append(line.lstrip("#").strip())
+    return " ".join(found)
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_header_says_how_the_script_runs_on_each_host(name: str) -> None:
+    # The workstation runs it under the host profile through the long-job runner; alpha01 through rx, with the two
+    # values on the command line.
+    head = header(script_text(name))
+    needed = ("tools/local/host-profile.sh", "tools/local/longjob.py", "tools/rx.py", "alpha01", "LASSI_ALLOWED_ROOT",
+              "LASSI_STOP_GIB")
+    assert not [word for word in needed if word not in head], head
 
 
 def test_tt_metal_script_clears_the_build_environment() -> None:

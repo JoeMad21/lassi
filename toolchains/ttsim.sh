@@ -1,27 +1,72 @@
 #!/usr/bin/env bash
 # Install the pinned ttsim in user space (task P4.2), as recorded in toolchains/ttsim.pin: the release's
 # Wormhole library, checked against its pinned size and sha256, with the Wormhole soc descriptor from the
-# pinned tt-metal tree beside it, under the name tt-metal's own ttsim CI job gives it. Run on the build host
-# through `uv run tools/rx.py job start --big`, after toolchains/tt-metal.sh. Nothing here loads the library or
-# runs a program, so nothing opens a device.
+# pinned tt-metal tree beside it, under the name tt-metal's own ttsim CI job gives it. It runs after
+# toolchains/tt-metal.sh. On the workstation it runs in the LASSI WSL distro under the host profile
+# (tools/local/host-profile.sh), which sets LASSI_ALLOWED_ROOT and LASSI_STOP_GIB with the gate's variables, through
+# the long-job runner (tools/local/longjob.py); on alpha01 it runs through `uv run tools/rx.py job start --big`, with
+# LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl and LASSI_STOP_GIB=145 on its command line (P5.15). Nothing here loads
+# the library or runs a program, so nothing opens a device.
 # Idempotent: an install whose record and files match the pin is kept, and a verified download is reused. A new
 # install is assembled in a staging prefix and checked; only then is a previous install moved aside (never
 # deleted) and the staging prefix renamed into place.
 set -euo pipefail
-# A tool that crashes leaves no core file, which the host's core handler would put on the root filesystem
-# (Agent Rule 7).
-ulimit -c 0
 here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=ttsim.pin
 source "$here/ttsim.pin"
-: "${LASSI_TOOLCHAINS:?LASSI_TOOLCHAINS must be set; the gate sets it}"
-: "${LASSI_SCRATCH:?LASSI_SCRATCH must be set; the gate sets it}"
+# No value below has a default (AGENTS.md, rules for [OPEN] choices). On alpha01 the gate sets LASSI_TOOLCHAINS and
+# LASSI_SCRATCH, and the rx command line gives LASSI_ALLOWED_ROOT and LASSI_STOP_GIB, the scratch root and the stop
+# line in GiB (/mnt/nvme10/joseph_ufl and 145; bible, Host Facts); on the workstation the host profile sets all four.
+set_by="by tools/local/host-profile.sh on the workstation, or on alpha01 by the gate or the rx command line"
+: "${LASSI_TOOLCHAINS:?LASSI_TOOLCHAINS must be set $set_by}"
+: "${LASSI_SCRATCH:?LASSI_SCRATCH must be set $set_by}"
+: "${LASSI_ALLOWED_ROOT:?LASSI_ALLOWED_ROOT must be set $set_by}"
+: "${LASSI_STOP_GIB:?LASSI_STOP_GIB must be set $set_by}"
+# The allowed root is absolute, so that it does not move with the working directory, and not /, the whole file
+# system. Each root, with its links resolved, must be the allowed root or lie under it; the allowed root is quoted
+# in the pattern, so a glob character in it is matched as itself (Agent Rule 7).
+case "$LASSI_ALLOWED_ROOT" in
+  / | [!/]*)
+    echo "ttsim: LASSI_ALLOWED_ROOT, set $set_by, must be an absolute path other than /, not" \
+      "'$LASSI_ALLOWED_ROOT'" >&2
+    exit 2
+    ;;
+esac
 for root in "$LASSI_TOOLCHAINS" "$LASSI_SCRATCH"; do
   case "$(realpath -m "$root")/" in
-    /mnt/nvme10/joseph_ufl/*) ;;
-    *) echo "ttsim: refusing to work outside /mnt/nvme10/joseph_ufl (Agent Rule 7): $root" >&2; exit 2 ;;
+    "$LASSI_ALLOWED_ROOT"/*) ;;
+    *)
+      echo "ttsim: refusing to work outside $LASSI_ALLOWED_ROOT, the LASSI_ALLOWED_ROOT set $set_by" \
+        "(Agent Rule 7): $root" >&2
+      exit 2
+      ;;
   esac
 done
+# A leading 0 is refused too, since bash arithmetic would read the value as octal.
+case "$LASSI_STOP_GIB" in
+  '' | *[!0-9]* | 0*)
+    echo "ttsim: LASSI_STOP_GIB, the stop line in GiB, must be a positive integer with no leading 0, not" \
+      "'$LASSI_STOP_GIB'" >&2
+    exit 2
+    ;;
+esac
+# A tool that crashes must leave no core (Agent Rule 7). alpha01's core handler pipes the core to systemd-coredump,
+# which ignores a core limit of 0 (the `ulimit -c 0` this script had) and stores the core on the root filesystem;
+# the kernel aborts a piped core dump only when the limit is exactly 1 byte (plans/spikes/p0-sandbox-hardening.md,
+# R6, rx 20260923-133451-exec-7c3d; plans/LESSONS.md). On the workstation WSL pipes the core to its own crash
+# handler; whether the 1-byte limit stops it too is unmeasured until the host's qualification (P5.15). bash's
+# `ulimit -c` counts 1024-byte blocks, so it can neither set 1 byte nor read it back: prlimit sets the limit in
+# bytes, soft and hard, and reads it back itself, since this pin names no Python, and the script refuses unless it
+# reads 1 and 1. It comes after the root checks above, so that they refuse first, and before anything is downloaded
+# or written. No step below runs a tool under a wrapper that resets the limit and re-raises a child's signal, as
+# strace does (plans/LESSONS.md); every child inherits the 1-byte hard limit.
+if ! prlimit --pid $$ --core=1:1 \
+  || ! read -r core_soft core_hard < <(prlimit --pid $$ --core --raw --noheadings --output SOFT,HARD) \
+  || [ "$core_soft $core_hard" != "1 1" ]; then
+  echo "ttsim: cannot hold RLIMIT_CORE at exactly 1 byte, soft and hard (prlimit, read back as 1 and 1); a" \
+    "crashing tool could store a core on the root filesystem (Agent Rule 7)" >&2
+  exit 2
+fi
 # curl and bash for here-documents put temporary files under TMPDIR; keep them on the scratch disk
 # (Agent Rule 7).
 export TMPDIR="$LASSI_SCRATCH/tmp"
@@ -67,11 +112,11 @@ if installed_matches "$prefix"; then
 fi
 
 # check_space <planned KiB>: refuse when the planned bytes do not fit in the free space of the scratch disk,
-# or when, added to what the scratch root holds now (du -s), they would pass the stop line of 145 GiB,
-# which keeps the scratch root under the owner's cap of 150 GiB (OQ-049, 2026-10-11; the P4 plan's 115
-# and 120 GiB before, plans/p4-ttsim.md).
+# or when, added to what the scratch root holds now (du -s), they would pass the stop line, LASSI_STOP_GIB GiB
+# (145 on both hosts, which keeps the scratch root under the owner's cap of 150 GiB; bible, Host Facts;
+# OQ-049, 2026-10-11; the P4 plan's 115 and 120 GiB before, plans/p4-ttsim.md).
 check_space() {
-  local planned="$1" stop=$((145 * 1024 * 1024)) used free value
+  local planned="$1" stop=$((LASSI_STOP_GIB * 1024 * 1024)) used free value
   used="$( (du -sk "$LASSI_SCRATCH" 2>/dev/null || true) | cut -f1)"
   free="$(df -Pk "$LASSI_SCRATCH" | awk 'NR == 2 { print $4 }')"
   for value in "$used" "$free"; do
@@ -83,8 +128,8 @@ check_space() {
     esac
   done
   if [ $((used + planned)) -gt "$stop" ]; then
-    echo "ttsim: $LASSI_SCRATCH holds $used KiB; the planned $planned KiB would pass the 145 GiB stop line" \
-      "($stop KiB)" >&2
+    echo "ttsim: $LASSI_SCRATCH holds $used KiB; the planned $planned KiB would pass the $LASSI_STOP_GIB GiB" \
+      "stop line ($stop KiB, LASSI_STOP_GIB)" >&2
     echo "ttsim: queue backup or deletion candidates in the owner queue before installing" >&2
     return 1
   fi
