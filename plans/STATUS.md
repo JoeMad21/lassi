@@ -19,7 +19,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
 | P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
 | P10 Full LASSI | p10-full | BLOCKED | no NVIDIA host (OQ-003, 2026-09-23); compile-only tier and -mp=multicore proxy meanwhile |
-| P11 Dataflow Dialect | p11-df | NOT-STARTED | full scope needs P5; design notes may start earlier |
+| P11 Dataflow Dialect | p11-df | ACTIVE | base: p5-ir at 63f65f4 (P5 stalled on OQ-056's install, not merged); plan plans/p11-df.md; OQ-060 (df op set, type system, first non-Tenstorrent target; bible question 7), OQ-061 (df lowering and the gate's df source), and OQ-062 (xDSL's role and pin; bible question 9) filed 2026-10-17 |
 | P12 Language Frontends | p12-frontends | ACTIVE | base: p5-ir at 7772e13 (P5 stalled on OQ-056's install, not merged); plan plans/p12-frontends.md; OQ-057 (xlang-v0 items, sources, splits, Fortran; bible question 10), OQ-058 (which phase builds cgeist's CUDA path), and OQ-059 (xDSL as a pinned dependency) filed 2026-10-17 |
 | P13 Cerebras Target | p13-cerebras | BLOCKED | Cerebras SDK access incoming on the owner's side (OQ-004, 2026-09-23) |
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
