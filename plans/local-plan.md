@@ -201,6 +201,8 @@ Still unmeasured, or a risk:
 | P16 Adversarial | No, except its training method (P8) | Adversary agent, fuzzer, input-contract checks. lassi/agents does not exist yet (the bible's layout lists it, docs/BIBLE.md:174), and the runner refuses adversary sections (lassi/core/runner.py:365) | Seeded faulty C++ candidates run natively in the sandbox, judged by binary_io | Decision 12; the sandbox; the gcc pin |
 | P17 Portable Stack (P17.12, P17.13, P17.G) | Part (b) needs a GPU host | None | P17.12 as a spike on the RTX 3080 (see below) | Decision 8; the cuda extra and cuda@12.6.3 under a local root |
 
+Note (2026-10-18): the owner named the df dialect and TurboQuant separate projects, to be incorporated later (OQ-066; plans/LESSONS.md, Owner directions). The P11 row above no longer applies: P11 is outside the work order and BLOCKED, with its plan frozen on branch p11-df. The rest of this section stands as written, except that P11's design notes no longer run beside P5 (section 4.2, step 5) on 2026-10-15.
+
 The P17.12 spike would measure what CUDA needs in the sandbox under WSL: /dev/dxg and /usr/lib/wsl/lib. The current code fits a Linux host, not WSL:
 - the cuda probe requires dev/nvidiactl (lassi/executors/devices.py:183);
 - the gpu executor's table binds /dev/nvidia* (lassi/executors/gpu.py:102-104);
@@ -241,7 +243,7 @@ Until decisions 1 to 5 are answered: no install, no .wslconfig change, and no LL
 | Phase | Blocker as written | Why there is no local route | Revisit when |
 | --- | --- | --- | --- |
 | P3 RNGD Serving | Smoke per arm on RNGD | No RNGD (the direction) | RNGD returns |
-| P6 DF Zero-Shot | MLIR and source arms on RNGD | RNGD. Also, tt-pairs-v0 has no eval item until P18 or a split assignment (OQ-025) | RNGD returns |
+| P6 DF Zero-Shot | MLIR and source arms on RNGD | RNGD. Also, tt-pairs-v0 has no eval item until P5.18 builds Tier D (OQ-066) | RNGD returns |
 | P7 Offline Training | RNGD sampling, fxb export, training GPUs | RNGD and GPUs. No train-split item exists: Tier A is unassigned (OQ-025) | Hardware, then split decisions |
 | P8 Online Training | MI300X (vLLM rollouts) | No MI300X (OQ-040) | MI300X access |
 | P9 LASSI-EE | MI300X power protocol | As P8. A CUDA-arm port on the RTX 3080 would be a restated gate | After P17.13, if decision 8 leads there |
@@ -326,6 +328,8 @@ Plans and notes:
 - This plan changes nothing about OQ-044 and OQ-051, which are owner actions.
 
 ## 7. Owner decisions
+
+Note (2026-10-18): the owner answered these decisions on 2026-10-15 (OQ-055), and on 2026-10-18 named the df dialect and TurboQuant separate projects, to be incorporated later (OQ-066). Decision 9 (a)'s P11 half is superseded, and its stall rule stands; P11 (section 4.1) and P18 (section 5) stay BLOCKED outside the work order. The P11 text below (decision 1 (a), decision 9, decision 11, and the P11 proposals left to phase planning) is kept as the record of 2026-10-15. Of the choices left to P12's planning, xDSL as a pinned dependency is deferred to P13's planning (OQ-059, OQ-066).
 
 **1. Where LASSI builds and runs locally** (spike draft A; this replaces OQ-054's route)
 - (a) Wait for alpha01.

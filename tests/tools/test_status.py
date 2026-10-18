@@ -106,7 +106,7 @@ def write_status(tmp_path, phases, tasks):
 
 def test_ready_tasks_behind_an_owner_task_stall_the_phase(tmp_path):
     """P5's READY tasks wait on its OWNER install, so P5 is stalled and P12 is planned beside it (OQ-055, 9 (a))."""
-    f = write_status(tmp_path, DONE_BEFORE_P5 + [("P5", "ACTIVE"), ("P12", "NOT-STARTED"), ("P11", "NOT-STARTED")],
+    f = write_status(tmp_path, DONE_BEFORE_P5 + [("P5", "ACTIVE"), ("P12", "NOT-STARTED")],
                      [("P5.1", "DONE", "-"), ("P5.4", "OWNER", "P5.1"), ("P5.5", "READY", "P5.1,P5.4"),
                       ("P5.G", "READY", "P5.5")])
     st = status.load(f)
@@ -132,18 +132,23 @@ def test_a_task_that_can_start_keeps_its_phase_from_stalling(tmp_path):
         assert status.phase_stalled(status.load(f), "P5") is stalled, tasks
 
 
-def test_p11_follows_p5_not_p12(tmp_path):
-    """P11's design notes may be planned beside P12, even while P12 has no DONE work or is BLOCKED (OQ-055, 9 (a))."""
-    for p12 in ("ACTIVE", "BLOCKED"):
-        f = write_status(tmp_path, DONE_BEFORE_P5 + [("P5", "ACTIVE"), ("P12", p12), ("P11", "NOT-STARTED")],
-                         [("P5.1", "DONE", "-"), ("P5.4", "OWNER", "P5.1"), ("P12.1", "OWNER", "-")])
-        item = status.next_item(status.load(f))
-        assert item["kind"] == "advance" and item["phase"] == "P11", p12
+def test_a_phase_outside_the_work_order_is_never_advanced(tmp_path):
+    """A NOT-STARTED phase outside WORK_ORDER is never advanced, even once every phase in the order is DONE: P11
+    (the df dialect) and P18 (TurboQuant Tier B) are separate projects the owner deferred (2026-10-18, OQ-066)."""
+    assert not {"P11", "P18"} & {pid for pid, _ in status.WORK_ORDER}
+    every_phase_done = [(pid, "DONE") for pid, _ in status.WORK_ORDER]
+    for outside in ("P11", "P18"):
+        f = write_status(tmp_path, every_phase_done + [(outside, "NOT-STARTED")], [("P0.0", "DONE", "-")])
+        assert status.next_item(status.load(f))["kind"] == "none", outside
+    f = write_status(tmp_path, DONE_BEFORE_P5 + [("P5", "ACTIVE"), ("P11", "NOT-STARTED"), ("P12", "NOT-STARTED")],
+                     [("P5.1", "DONE", "-"), ("P5.4", "OWNER", "P5.1")])
+    item = status.next_item(status.load(f))
+    assert item["kind"] == "advance" and item["phase"] == "P12"
 
 
-def test_p12_and_p11_wait_for_p5(tmp_path):
-    """Neither P12 nor P11 is planned while P5 has a task that can start."""
-    f = write_status(tmp_path, DONE_BEFORE_P5 + [("P5", "ACTIVE"), ("P12", "NOT-STARTED"), ("P11", "NOT-STARTED")],
+def test_p12_waits_for_p5(tmp_path):
+    """P12 is not planned while P5 has a task that can start."""
+    f = write_status(tmp_path, DONE_BEFORE_P5 + [("P5", "ACTIVE"), ("P12", "NOT-STARTED")],
                      [("P5.1", "DONE", "-"), ("P5.2", "OWNER", "-"), ("P5.3", "READY", "P5.1")])
     item = status.next_item(status.load(f))
     assert item["kind"] == "task" and item["id"] == "P5.3"
@@ -152,8 +157,8 @@ def test_p12_and_p11_wait_for_p5(tmp_path):
 def test_p16_follows_p12(tmp_path):
     """P16's part (a) is planned once P12 is stalled, not while P12 has no DONE work, and never while BLOCKED
     (OQ-055, decision 12 (b))."""
-    tasks = [("P5.1", "DONE", "-"), ("P5.4", "OWNER", "P5.1"), ("P11.1", "DONE", "-"), ("P11.2", "BLOCKED", "-")]
-    phases = DONE_BEFORE_P5 + [("P5", "ACTIVE"), ("P12", "ACTIVE"), ("P11", "ACTIVE")]
+    tasks = [("P5.1", "DONE", "-"), ("P5.4", "OWNER", "P5.1")]
+    phases = DONE_BEFORE_P5 + [("P5", "ACTIVE"), ("P12", "ACTIVE")]
     f = write_status(tmp_path, phases + [("P16", "NOT-STARTED")],
                      tasks + [("P12.1", "DONE", "-"), ("P12.2", "OWNER", "-")])
     item = status.next_item(status.load(f))

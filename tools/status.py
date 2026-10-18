@@ -39,12 +39,12 @@ from typing import Dict, List, Optional, Tuple
 
 REPO = Path(__file__).resolve().parents[1]
 STATUS = REPO / "plans" / "STATUS.md"
-# The work order (AGENTS.md, Work Order): each phase with the phase it follows, or None. P12 and P11
-# both follow P5, so P11's design notes need not wait for P12 (OQ-055, decision 9 (a)), and P16's
-# part (a) follows P12 (OQ-055, decision 12 (b)).
+# The work order (AGENTS.md, Work Order): each phase with the phase it follows, or None. P12 follows
+# P5, and P16's part (a) follows P12 (OQ-055, decision 12 (b)). P11 (the df dialect) and P18
+# (TurboQuant Tier B) are separate projects the owner deferred on 2026-10-18 (OQ-066), outside it.
 WORK_ORDER: List[Tuple[str, Optional[str]]] = [
     ("P0", None), ("P1", "P0"), ("P2", "P1"), ("P4", "P2"), ("P17", "P4"), ("P5", "P17"),
-    ("P12", "P5"), ("P11", "P5"), ("P16", "P12"),
+    ("P12", "P5"), ("P16", "P12"),
 ]
 PHASE_STATES = {"NOT-STARTED", "ACTIVE", "GATE-OWNER", "DONE", "BLOCKED"}
 TASK_STATES = {"READY", "ACTIVE", "DONE", "BLOCKED", "OWNER"}
