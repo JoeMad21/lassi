@@ -1,7 +1,7 @@
 # Status
 
 Single source of phase and task state. Edit only with `uv run tools/status.py`; the tables are parsed.
-Work order while hardware is blocked: P0, P1, P2, P4, P17, P5, P12, P11 (docs/BIBLE.md, Build Roadmap).
+Work order while hardware is blocked: P0, P1, P2, P4, P17, P5, P12, P16 part (a) (docs/BIBLE.md, Build Roadmap; AGENTS.md, Work Order); P11 and P18 are separate projects, deferred by the owner on 2026-10-18 (OQ-066).
 A phase marked BLOCKED stays blocked until the owner records in its Note that the blocker is cleared.
 
 ## Phases
@@ -13,20 +13,20 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P2 Scoring | p2-scoring | DONE | base: p1-faithful at 5d5fd0c; plan plans/p2-scoring.md; gate evidence results/p2-gate; owner review OQ-024 accepted with option (b), review questions moved to P4.15; PR 3 merged |
 | P3 RNGD Serving | p3-rngd | BLOCKED | RNGD host answered (OQ-001); owner 2026-09-24 asked to leverage Furiosa in the 15:00 demo, so serving on RNGD for the demo is allowed; P3 proper starts when the owner opens it here |
 | P4 ttsim Execution | p4-ttsim | DONE | base: main at 75eceef (P2 DONE, PR 3 merged); plan plans/p4-ttsim.md; gate passed 2026-10-05 (results/p4-gate); PR 4 merged at 0dcc261 |
-| P5 IR Levels | p5-ir | ACTIVE | base: p17-portable at 7f920d7 (P17 stalled, not merged: P17.11 OWNER on OQ-047; GPU half BLOCKED, OQ-040); plan plans/p5-ir.md; OQ-049 answered (cap 150G) and OQ-048 answered (Tier B moved to P18), 2026-10-11 |
+| P5 IR Levels | p5-ir | ACTIVE | base: p17-portable at 7f920d7 (P17 stalled, not merged: P17.11 OWNER on OQ-047; GPU half BLOCKED, OQ-040); plan plans/p5-ir.md; OQ-049 answered (cap 150G) and OQ-048 answered (Tier B moved to P18), 2026-10-11; 2026-10-18 (OQ-066): P5.13 and P5.14 deferred with TurboQuant, a separate project, and P5.18 (Tier D, eval only) added |
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
 | P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
 | P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
 | P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
 | P10 Full LASSI | p10-full | BLOCKED | no NVIDIA host (OQ-003, 2026-09-23); compile-only tier and -mp=multicore proxy meanwhile |
-| P11 Dataflow Dialect | p11-df | ACTIVE | base: p5-ir at 63f65f4 (P5 stalled on OQ-056's install, not merged); plan plans/p11-df.md; OQ-060 (df op set, type system, first non-Tenstorrent target; bible question 7), OQ-061 (df lowering and the gate's df source), and OQ-062 (xDSL's role and pin; bible question 9) filed 2026-10-17 |
+| P11 Dataflow Dialect | p11-df | BLOCKED | separate project, deferred by the owner on 2026-10-18 for later incorporation (OQ-066); its plan stays on branch p11-df, frozen |
 | P12 Language Frontends | p12-frontends | ACTIVE | base: p5-ir at 7772e13 (P5 stalled on OQ-056's install, not merged); plan plans/p12-frontends.md; OQ-057 (xlang-v0 items, sources, splits, Fortran; bible question 10), OQ-058 (which phase builds cgeist's CUDA path), and OQ-059 (xDSL as a pinned dependency) filed 2026-10-17 |
 | P13 Cerebras Target | p13-cerebras | BLOCKED | Cerebras SDK access incoming on the owner's side (OQ-004, 2026-09-23) |
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
 | P16 Adversarial | p16-adversarial | NOT-STARTED | P4 blocker cleared (owner, 2026-10-15, OQ-055 decision 12 (b); recorded by the agent): P4 DONE, PR 4 merged. Split: part (a), the adversary agent, the fuzzer, input-contract checks, and the gate, runs locally after P12; part (b), the adversarial training method, stays BLOCKED on P8; confirmed counterexamples join only synthetic fixtures outside every suite (Agent Rule 5) |
 | P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; gate part (a) passed in P17.11 (results/p17-gate-a on branch p17-portable, 5b0cf72; approvals on OQ-047), and PR 5 'P17 Portable Stack, part (a)' is open; stalled: P17.12, P17.13, and P17.G BLOCKED with no GPU host (OQ-040); the workstation's RTX 3080 serves only P17.12's spike, with no model inference or training, once the cuda extra and cuda@12.6.3 are installed under a local root (OQ-055 decision 8 (b)); P5 started 2026-10-07 from p17-portable at 7f920d7 |
-| P18 TurboQuant Tier B | p18-turboquant | BLOCKED | moved from P5 by the owner, 2026-10-11 (OQ-048): waits past the current phases for the owner's word that TurboQuant Hotswap, a separate project, is ready; takes over P5.13 and P5.14 |
+| P18 TurboQuant Tier B | p18-turboquant | BLOCKED | separate project (TurboQuant), deferred by the owner on 2026-10-11 and 2026-10-18 for later incorporation (OQ-048, OQ-066); P5.13 and P5.14 go with it |
 
 ## Tasks
 
@@ -126,12 +126,12 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P5.9 | READY | Program spec: extraction and host generator | P5.8 |  |
 | P5.10 | READY | Tenstorrent target: ttkernel to Metalium C++ on ttsim | P5.4,P5.6,P5.9 |  |
 | P5.12 | READY | Execution gate and the round-trip driver | P5.7,P5.10,P5.11 |  |
-| P5.13 | BLOCKED | Tier B of tt-pairs-v0 | P5.3,P5.12 | moved to P18 by the owner, 2026-10-11 (OQ-048): Tier B waits for TurboQuant Hotswap; P18's plan takes it over |
-| P5.14 | BLOCKED | Tier B through the round trip: raiser, spec, and frontend coverage | P5.12,P5.13 | moved to P18 by the owner, 2026-10-11 (OQ-048); P18's plan takes it over |
-| P5.G | READY | Phase gate: Tier A pairs round-trip on ttsim; per-kernel gate rates | P5.12 |  |
+| P5.13 | BLOCKED | Tier B of tt-pairs-v0 | P5.3,P5.12 | deferred with TurboQuant, a separate project (owner, 2026-10-18; OQ-066) |
+| P5.14 | BLOCKED | Tier B through the round trip: raiser, spec, and frontend coverage | P5.12,P5.13 | deferred with TurboQuant, a separate project (owner, 2026-10-18; OQ-066) |
+| P5.G | READY | Phase gate: Tier A pairs round-trip on ttsim; per-kernel gate rates | P5.12,P5.18 |  |
 | P5.15 | OWNER | Local host setup and the evidence procedure | - | Windows half committed (b4168de): tools/local/host-profile.sh, longjob.py, provenance.py, install-batch1.sh, and the TT scripts' LASSI_ALLOWED_ROOT, LASSI_STOP_GIB, and core limit. OQ-056 answered (a), 2026-10-17: waits for the owner to run tools/local/install-batch1.sh (import with --disk-dir on C:, then packages), set memory=24GB in .wslconfig, and run wsl --shutdown; then the WSL half runs unattended through tools/local/longjob.py with a 20G job cap |
 | P5.16 | READY | Sandbox setup on util-linux 2.39 (mount -n) | P5.15 | OQ-055 decision 7 (a): -n on the setup's four mount --move lines (lassi/executors/sandbox.py:728, :742, :744, :747), the setup hash pin, and the bible's Sandbox text; remote sandbox tests from a clean commit in the LASSI distro |
-| P5.17 | READY | Rebuild tt-metal and ttsim locally at their pins | P5.15 | OQ-055 decision 1 (b): the committed scripts at the pins in the LASSI distro, the CPM list compared, ttsim smoke on the six P4.9 examples; the owner's yes for these builds is OQ-056 (a), 2026-10-17, unattended through tools/local/longjob.py once P5.15 is DONE |
+| P5.17 | READY | Rebuild tt-metal and ttsim locally at their pins | P5.15 | OQ-055 decision 1 (b): the committed scripts at the pins in the LASSI distro, the CPM list compared, ttsim smoke on the six P4.9 examples; the owner's yes for these builds is OQ-056 (a), 2026-10-17, unattended through tools/local/longjob.py once P5.15 is DONE; also --filter=blob:none on tools/fetch_bench.py's git route, with a test (PHASE-NOTES P5; taken from Tier B's plan, 2026-10-18, OQ-066) |
 | P12.0 | DONE | Plan phase P12 into plans/p12-frontends.md and add its tasks here | - | plan plans/p12-frontends.md; base p5-ir at 7772e13 (P5 stalled, not merged); OQ-057 to OQ-059 filed |
 | P12.1 | DONE | Spike: frontend toolchain pins, paths, and budget (documentation only) | - | plans/spikes/p12-frontend-pins.md: pins proposed (rustc nightly-2026-10-17, .NET SDK 10.0.402 with Roslyn 5.9.0, numpy 2.2.6 on python3.10, gcc-12, flang at 26eb4285), PROJECTED 4.71 to 9.09 GiB; OQ-063 to OQ-065 filed, Responses on OQ-058 and OQ-059; bible master rev 281 |
 | P12.2 | DONE | Spike: xlang-v0 candidates (documentation only) | - | plans/spikes/p12-xlang-v0.md: Benchmarks Game at 40296663 (3-clause BSD); no upstream program fits a subset or binary_io as written; four items proposed as programs written here (n-body, spectral-norm, mandelbrot, fannkuch-redux) with held-out inputs and tolerances; Response on OQ-057 |
@@ -148,3 +148,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P12.13 | OWNER | cgeist's CUDA kernel path | P12.4,P12.5,P5.6,P5.7 | OQ-058 (which phase builds it); an answer (a) after P12.5's batch is filed makes this task file a one-item CUDA batch first; under another answer, BLOCKED as moved and dropped from P12.G's dependencies |
 | P12.14 | OWNER | xDSL interchange check | P12.10,P12.12 | OQ-059 (xDSL as a pinned dependency); under answer (a), BLOCKED as moved and dropped from P12.G's dependencies |
 | P12.G | READY | Phase gate: xlang-v0 raises to the hub and round-trips natively in every language | P12.10,P12.12,P12.13,P12.14 |  |
+| P5.18 | READY | Tier D of tt-pairs-v0 (eval only) | P5.17 | the owner's choice of 2026-10-18, OQ-066 |
