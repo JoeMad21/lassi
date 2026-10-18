@@ -19,7 +19,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
 | P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
 | P10 Full LASSI | p10-full | BLOCKED | no NVIDIA host (OQ-003, 2026-09-23); compile-only tier and -mp=multicore proxy meanwhile |
-| P11 Dataflow Dialect | p11-df | NOT-STARTED | full scope needs P5; design notes may start earlier |
+| P11 Dataflow Dialect | p11-df | ACTIVE | base: p5-ir at 63f65f4 (P5 stalled on OQ-056's install, not merged); plan plans/p11-df.md; OQ-060 (df op set, type system, first non-Tenstorrent target; bible question 7), OQ-061 (df lowering and the gate's df source), and OQ-062 (xDSL's role and pin; bible question 9) filed 2026-10-17 |
 | P12 Language Frontends | p12-frontends | ACTIVE | base: p5-ir at 7772e13 (P5 stalled on OQ-056's install, not merged); plan plans/p12-frontends.md; OQ-057 (xlang-v0 items, sources, splits, Fortran; bible question 10), OQ-058 (which phase builds cgeist's CUDA path), and OQ-059 (xDSL as a pinned dependency) filed 2026-10-17 |
 | P13 Cerebras Target | p13-cerebras | BLOCKED | Cerebras SDK access incoming on the owner's side (OQ-004, 2026-09-23) |
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
@@ -132,3 +132,16 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P5.15 | OWNER | Local host setup and the evidence procedure | - | Windows half committed (b4168de): tools/local/host-profile.sh, longjob.py, provenance.py, install-batch1.sh, and the TT scripts' LASSI_ALLOWED_ROOT, LASSI_STOP_GIB, and core limit. OQ-056 answered (a), 2026-10-17: waits for the owner to run tools/local/install-batch1.sh (import with --disk-dir on C:, then packages), set memory=24GB in .wslconfig, and run wsl --shutdown; then the WSL half runs unattended through tools/local/longjob.py with a 20G job cap |
 | P5.16 | READY | Sandbox setup on util-linux 2.39 (mount -n) | P5.15 | OQ-055 decision 7 (a): -n on the setup's four mount --move lines (lassi/executors/sandbox.py:728, :742, :744, :747), the setup hash pin, and the bible's Sandbox text; remote sandbox tests from a clean commit in the LASSI distro |
 | P5.17 | READY | Rebuild tt-metal and ttsim locally at their pins | P5.15 | OQ-055 decision 1 (b): the committed scripts at the pins in the LASSI distro, the CPM list compared, ttsim smoke on the six P4.9 examples; the owner's yes for these builds is OQ-056 (a), 2026-10-17, unattended through tools/local/longjob.py once P5.15 is DONE |
+| P11.0 | DONE | Plan phase P11 into plans/p11-df.md and add its tasks here | - | plan plans/p11-df.md; base p5-ir at 63f65f4 (P5 stalled on OQ-056's install, not merged); OQ-060, OQ-061, and OQ-062 filed |
+| P11.1 | READY | Design note: df op set, type system, and first non-Tenstorrent target (question 7) | - | proposal plans/p11-design/ops-types.md, added to OQ-060 as a Response; Windows, documentation only |
+| P11.2 | READY | Design note: lowering sketch and the gate's df source | P11.1 | proposal plans/p11-design/lowering.md, added to OQ-061 as a Response; Windows, documentation only |
+| P11.3 | READY | Design note: xDSL's role and pin (question 9) | - | proposal plans/p11-design/xdsl.md, added to OQ-062 as a Response; Windows, documentation only |
+| P11.4 | READY | Spike: tblgen-to-irdl coverage and df's build route (question 13) | - | plans/spikes/p11-irdl.md from source read at the pins on Windows; Responses to OQ-060, OQ-061, and OQ-062; question 13 answered in the bible as read from source, confirmed later by P11.7's export |
+| P11.5 | OWNER | df dialect in ODS: build, pin, and docs | P11.4,P5.4,P5.G | OWNER on OQ-060 (op set and types); waits for P5.G, since P11 beyond design notes needs P5 (AGENTS.md, Work Order); out-of-tree build in the LASSI distro against P5.4's LLVM 4efe170d through tools/local/longjob.py |
+| P11.6 | READY | The df IRLevel and its pin in records | P11.5,P5.6 |  |
+| P11.7 | OWNER | IRDL export and the xDSL parse | P11.4,P11.5 | OWNER on OQ-062 (xDSL's role and pin) |
+| P11.8 | OWNER | df -> ttkernel lowering and the derived program spec | P11.6,P5.9,P5.10 | OWNER on OQ-061 (the lowering build) |
+| P11.9 | OWNER | Tier A in df | P11.8 | OWNER on OQ-061 (the gate's df source); an item that cannot be put in df gets its own owner-queue item, and P11.11 and P11.G go OWNER on it |
+| P11.10 | READY | Recipe target switch in run recipes | P11.9 |  |
+| P11.11 | READY | Round trips through df in lassi corpus | P11.9,P5.12 |  |
+| P11.G | READY | Phase gate: Tier A pairs round-trip through df on ttsim | P11.7,P11.10,P11.11 |  |
