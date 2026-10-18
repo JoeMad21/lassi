@@ -20,7 +20,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
 | P10 Full LASSI | p10-full | BLOCKED | no NVIDIA host (OQ-003, 2026-09-23); compile-only tier and -mp=multicore proxy meanwhile |
 | P11 Dataflow Dialect | p11-df | NOT-STARTED | full scope needs P5; design notes may start earlier |
-| P12 Language Frontends | p12-frontends | NOT-STARTED | - |
+| P12 Language Frontends | p12-frontends | ACTIVE | base: p5-ir at 7772e13 (P5 stalled on OQ-056's install, not merged); plan plans/p12-frontends.md; OQ-057 (xlang-v0 items, sources, splits, Fortran; bible question 10), OQ-058 (which phase builds cgeist's CUDA path), and OQ-059 (xDSL as a pinned dependency) filed 2026-10-17 |
 | P13 Cerebras Target | p13-cerebras | BLOCKED | Cerebras SDK access incoming on the owner's side (OQ-004, 2026-09-23) |
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
@@ -132,3 +132,19 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P5.15 | OWNER | Local host setup and the evidence procedure | - | Windows half committed (b4168de): tools/local/host-profile.sh, longjob.py, provenance.py, install-batch1.sh, and the TT scripts' LASSI_ALLOWED_ROOT, LASSI_STOP_GIB, and core limit. OQ-056 answered (a), 2026-10-17: waits for the owner to run tools/local/install-batch1.sh (import with --disk-dir on C:, then packages), set memory=24GB in .wslconfig, and run wsl --shutdown; then the WSL half runs unattended through tools/local/longjob.py with a 20G job cap |
 | P5.16 | READY | Sandbox setup on util-linux 2.39 (mount -n) | P5.15 | OQ-055 decision 7 (a): -n on the setup's four mount --move lines (lassi/executors/sandbox.py:728, :742, :744, :747), the setup hash pin, and the bible's Sandbox text; remote sandbox tests from a clean commit in the LASSI distro |
 | P5.17 | READY | Rebuild tt-metal and ttsim locally at their pins | P5.15 | OQ-055 decision 1 (b): the committed scripts at the pins in the LASSI distro, the CPM list compared, ttsim smoke on the six P4.9 examples; the owner's yes for these builds is OQ-056 (a), 2026-10-17, unattended through tools/local/longjob.py once P5.15 is DONE |
+| P12.0 | DONE | Plan phase P12 into plans/p12-frontends.md and add its tasks here | - | plan plans/p12-frontends.md; base p5-ir at 7772e13 (P5 stalled, not merged); OQ-057 to OQ-059 filed |
+| P12.1 | READY | Spike: frontend toolchain pins, paths, and budget (documentation only) | - |  |
+| P12.2 | READY | Spike: xlang-v0 candidates (documentation only) | - |  |
+| P12.3 | READY | Python harness binding | - |  |
+| P12.4 | READY | Python-subset frontend | P12.3 |  |
+| P12.5 | READY | P12's install batch (the owner runs it) | P12.1,P5.15 | Windows half (script, pins, tests) once P5.15 is DONE; then one owner-queue item like OQ-056 and OWNER on it; the owner runs it in the LASSI distro after batch 1 |
+| P12.6 | READY | Native toolchains and bindings for C, Rust, C#, and Python | P12.3,P12.5,P5.16 |  |
+| P12.7 | READY | LLVM import frontend | P12.1,P12.4,P5.6,P5.7 |  |
+| P12.8 | READY | Rust MIR frontend | P12.6,P12.7,P5.6,P5.7 |  |
+| P12.9 | READY | C# Roslyn frontend | P12.6,P12.7,P5.6,P5.7 |  |
+| P12.10 | READY | Fortran frontend (Flang) | P12.1,P12.4,P12.5,P5.6,P5.7 |  |
+| P12.11 | OWNER | xlang-v0 suite | P12.2,P12.6 | OQ-057 (items, sources, splits, Fortran; bible question 10); its Fortran answer (b) adds P12.10 to the dependencies here and of P12.12 |
+| P12.12 | READY | Native round trips in lassi corpus | P12.4,P12.7,P12.8,P12.9,P12.11,P5.12 | extends P5.12's driver and waits for P5.12's chain (P5.8, P5.9, P5.10: P5's Tenstorrent tasks; OWNER with P5.12 if P5.7 finds a Tier A reference beyond cgeist's reach); p5-ir merged in first (the plan's branch route), then cgeist's refusal moves onto P12.4's exception; OQ-057 Fortran (b) adds P12.10 |
+| P12.13 | OWNER | cgeist's CUDA kernel path | P12.4,P12.5,P5.6,P5.7 | OQ-058 (which phase builds it); an answer (a) after P12.5's batch is filed makes this task file a one-item CUDA batch first; under another answer, BLOCKED as moved and dropped from P12.G's dependencies |
+| P12.14 | OWNER | xDSL interchange check | P12.10,P12.12 | OQ-059 (xDSL as a pinned dependency); under answer (a), BLOCKED as moved and dropped from P12.G's dependencies |
+| P12.G | READY | Phase gate: xlang-v0 raises to the hub and round-trips natively in every language | P12.10,P12.12,P12.13,P12.14 |  |
