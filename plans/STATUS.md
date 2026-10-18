@@ -146,6 +146,6 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P12.11 | OWNER | xlang-v0 suite | P12.2,P12.6 | OQ-057 (items, sources, splits, Fortran; bible question 10); its Fortran answer (b) adds P12.10 to the dependencies here and of P12.12 |
 | P12.12 | READY | Native round trips in lassi corpus | P12.4,P12.7,P12.8,P12.9,P12.11,P5.12 | extends P5.12's driver and waits for P5.12's chain (P5.8, P5.9, P5.10: P5's Tenstorrent tasks; OWNER with P5.12 if P5.7 finds a Tier A reference beyond cgeist's reach); p5-ir merged in first (the plan's branch route), then cgeist's refusal moves onto P12.4's exception; OQ-057 Fortran (b) adds P12.10 |
 | P12.13 | OWNER | cgeist's CUDA kernel path | P12.4,P12.5,P5.6,P5.7 | OQ-058 (which phase builds it); an answer (a) after P12.5's batch is filed makes this task file a one-item CUDA batch first; under another answer, BLOCKED as moved and dropped from P12.G's dependencies |
-| P12.14 | OWNER | xDSL interchange check | P12.10,P12.12 | OQ-059 (xDSL as a pinned dependency); under answer (a), BLOCKED as moved and dropped from P12.G's dependencies |
-| P12.G | READY | Phase gate: xlang-v0 raises to the hub and round-trips natively in every language | P12.10,P12.12,P12.13,P12.14 |  |
+| P12.14 | BLOCKED | xDSL interchange check | P12.10,P12.12 | deferred to P13's planning with xDSL's pin (owner, 2026-10-18; OQ-066) |
+| P12.G | READY | Phase gate: xlang-v0 raises to the hub and round-trips natively in every language | P12.10,P12.12,P12.13 |  |
 | P5.18 | READY | Tier D of tt-pairs-v0 (eval only) | P5.17 | the owner's choice of 2026-10-18, OQ-066 |
