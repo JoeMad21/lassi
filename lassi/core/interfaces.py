@@ -12,6 +12,9 @@ registry name. Contract rules (bible, Component Interfaces):
 - Oracles never trust a program's self-reported PASS as the only signal.
 - LLM backends never truncate a request: one that knows its model's context
   raises ContextExceeded, defined here, before generating (task P17.4).
+- Frontends raise FrontendRefusal, defined here, for a source outside their
+  published subset, carrying one parse-stage Diagnostic per construct
+  (task P12.4); they return a module only for a source they raise whole.
 - Stages are pure over the trial record: read fields, append an attempt or
   annotation, return. Side effects go through components.
 - A Trainer writes only under the output directory it is given and reads a
@@ -178,6 +181,63 @@ class ContextExceeded(Exception):
         self.context = context
 
 
+class FrontendRefusal(Exception):
+    """A source outside a frontend's published subset: one Diagnostic at stage parse per construct it refuses.
+
+    Every Frontend raises it, and only it, for a source outside its subset,
+    instead of returning a module (bible Frontend Rules: anything else fails
+    with a readable diagnostic that is counted in corpus statistics). It is
+    built from Diagnostic records (lassi.core.record) alone and keeps them,
+    in the order given, as the tuple `diagnostics`, its own copy. Each is at
+    stage "parse", one of the Result Record's stages, so the record gains no
+    field or stage. Its message names each diagnostic's place as
+    `<file>:<line>:<column>`, as much of it as the diagnostic holds, with
+    its code and message, on one line of ASCII.
+
+    It refuses an empty sequence, and a diagnostic at any other stage, with
+    a ValueError that names the stage, and an item that is not a Diagnostic
+    with a TypeError. It is neither a ValueError nor a ContextExceeded, so
+    no handler written for those catches it by accident.
+    """
+
+    def __init__(self, diagnostics: Sequence[Diagnostic]) -> None:
+        """Keep a copy of `diagnostics` after checking each one; the message names every place and reason."""
+        from lassi.core.record import Diagnostic  # lassi.core.record imports this module, so import it here
+
+        items = tuple(diagnostics)
+        if not items:
+            raise ValueError("a FrontendRefusal needs at least one diagnostic")
+        for index, item in enumerate(items):
+            if not isinstance(item, Diagnostic):
+                raise TypeError(f"item {index} of a FrontendRefusal is a {type(item).__name__}, not a Diagnostic")
+            if item.stage != "parse":
+                raise ValueError(
+                    f"diagnostic {index} of a FrontendRefusal is at stage {item.stage!r}; a refusal holds "
+                    "diagnostics at stage 'parse' only"
+                )
+        super().__init__(_refusal_message(items))
+        self.diagnostics = items
+
+
+def _refusal_message(diagnostics: tuple[Diagnostic, ...]) -> str:
+    """Return a FrontendRefusal's message: how many constructs, then each one's place, code, and message."""
+    parts = []
+    for item in diagnostics:
+        place = ""
+        if item.file is not None:
+            place = item.file
+            if item.line is not None:
+                place += f":{item.line}" + (f":{item.column}" if item.column is not None else "")
+        elif item.line is not None:
+            place = f"line {item.line}" + (f", column {item.column}" if item.column is not None else "")
+        fields = [field for field in (place, item.code, item.message) if field]
+        parts.append(": ".join(fields))
+    count = len(diagnostics)
+    head = f"the source is outside the frontend's subset ({count} construct{'' if count == 1 else 's'})"
+    text = f"{head}: {'; '.join(parts)}"
+    return "".join(char if " " <= char <= "~" else char.encode("unicode_escape").decode("ascii") for char in text)
+
+
 class LLMBackend(Component, Protocol):
     """Serves a model: messages plus sampling in, text plus token counts out."""
 
@@ -194,7 +254,12 @@ class Frontend(Component, Protocol):
     """Raises source code to a hub-level module tagged `structured` or `low`."""
 
     def raise_source(self, files: Mapping[str, str], flags: Sequence[str]) -> Module:
-        """Return the hub-level module for the given source files and flags."""
+        """Return the hub-level module for the given source files and flags.
+
+        A source outside the frontend's published subset raises
+        FrontendRefusal, defined here, with one parse-stage Diagnostic per
+        construct outside it, and no module is returned.
+        """
         ...
 
 
