@@ -3,7 +3,7 @@
 Bible: Component Interfaces (capabilities: recipes are validated against
 them at load time), Agents And Judges (the Adversary role), Project Recipes
 (the agent and judge bindings block: `adversary: {kind: fuzzer, budget:
-{inputs: 64}}`; Notes: a mismatch fails before any model call), Agent Rule
+{inputs: 64}, seed: 1}`; Notes: a mismatch fails before any model call), Agent Rule
 3. Plan: plans/p16-adversarial.md, P16.2.
 
 The contract these tests fix: the adversary section binds an Agent at

@@ -152,7 +152,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P16.0 | DONE | Plan phase P16 into plans/p16-adversarial.md and add its tasks here | - | plan plans/p16-adversarial.md; base p12-frontends at cdc0e73 (P12 stalled, not merged); OQ-067, OQ-068, and OQ-069 filed |
 | P16.1 | DONE | Input contracts and their check | - | lassi/harness/contract.py: input_contract and check_inputs (ten reasons, three ordered stages; reads only), the manifest key contract in load_suite (widen only, never narrow); held-out bytes pinned by sha256 from 9793777; bible master rev 298 |
 | P16.2 | DONE | The adversary interface | P16.1 | the adversary interface in lassi/core/interfaces.py (proposes_inputs, propose, AdversaryView without held-out inputs, seed, or reference outputs; Proposal as data; no subclasses), the adversary.kind binding checked at load, lassi/agents/; the faithful-check gap closed in recipe.py; bible master rev 299 |
-| P16.3 | READY | The fuzzer adversary | P16.1,P16.2 |  |
+| P16.3 | DONE | The fuzzer adversary | P16.1,P16.2 | lassi/agents/fuzzer.py: the registered Agent fuzzer (budget.inputs and seed required; boundary and special values, patterned arrays, fresh draws through generate_inputs' streams from draw_seed, never the item's seed); every proposal passes check_inputs; its known-answer digest was recorded on Windows only and is rechecked in the LASSI distro before P16.10's freeze; bible master rev 301 |
 | P16.4 | READY | The LLM adversary agent (scripted backends only) | P16.1,P16.2,P16.13 |  |
 | P16.5 | READY | The adversary stage, its record, and the runner | P16.1,P16.2,P16.3 |  |
 | P16.6 | READY | Adversary metrics | P16.5 |  |

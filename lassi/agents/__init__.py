@@ -10,7 +10,11 @@ candidate, its budget, and its earlier outcomes, never a held-out input, the
 item's seed, or a reference output, and proposes data, never code.
 
 Agents here are generic components: no module names a project, a suite, a
-model, or a host, and none imports the projects package (Agent Rule 3). No
-agent is registered here yet; the fuzzer and the llm adversary come with
-tasks P16.3 and P16.4.
+model, or a host, and none imports the projects package (Agent Rule 3).
+Importing this package registers the Agent `fuzzer` (lassi.agents.fuzzer,
+task P16.3), the fuzzer adversary; the llm adversary comes with task P16.4.
 """
+
+from lassi.agents.fuzzer import Fuzzer, draw_seed, fresh_draw
+
+__all__ = ["Fuzzer", "draw_seed", "fresh_draw"]

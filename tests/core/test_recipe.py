@@ -2049,7 +2049,7 @@ def test_bible_binding_block_fits_the_schema(
     for key, value in own.items():
         assert recipe.data[key] == value, key
     adversary = [b for b in recipe.bindings if b.where == "adversary.kind"]
-    assert binding_tuples(adversary) == [("Agent", "fuzzer", "adversary.kind", {"budget": {"inputs": 64}})]
+    assert binding_tuples(adversary) == [("Agent", "fuzzer", "adversary.kind", {"budget": {"inputs": 64}, "seed": 1})]
 
 
 def test_bible_train_recipe_is_not_a_run_recipe(load_error: Callable[..., str], tmp_path: Path) -> None:
