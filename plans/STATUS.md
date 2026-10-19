@@ -24,7 +24,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P13 Cerebras Target | p13-cerebras | BLOCKED | Cerebras SDK access incoming on the owner's side (OQ-004, 2026-09-23) |
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
 | P15 Judges | p15-judges | BLOCKED | P9 for measurements |
-| P16 Adversarial | p16-adversarial | NOT-STARTED | P4 blocker cleared (owner, 2026-10-15, OQ-055 decision 12 (b); recorded by the agent): P4 DONE, PR 4 merged. Split: part (a), the adversary agent, the fuzzer, input-contract checks, and the gate, runs locally after P12; part (b), the adversarial training method, stays BLOCKED on P8; confirmed counterexamples join only synthetic fixtures outside every suite (Agent Rule 5) |
+| P16 Adversarial | p16-adversarial | ACTIVE | base: p12-frontends at cdc0e73 (P12 stalled behind P5's builds, not merged); plan plans/p16-adversarial.md; branch route PHASE-NOTES P16; OQ-067 (Tier A's C++ side in the gate; adv-seeded-v0's splits), OQ-068 (the LLM adversary's model), and OQ-069 (P16's state after its gate) filed 2026-10-18; P4 blocker cleared (owner, 2026-10-15, OQ-055 decision 12 (b); recorded by the agent): P4 DONE, PR 4 merged; part (b) BLOCKED on P8 |
 | P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; gate part (a) passed in P17.11 (results/p17-gate-a on branch p17-portable, 5b0cf72; approvals on OQ-047), and PR 5 'P17 Portable Stack, part (a)' is open; stalled: P17.12, P17.13, and P17.G BLOCKED with no GPU host (OQ-040); the workstation's RTX 3080 serves only P17.12's spike, with no model inference or training, once the cuda extra and cuda@12.6.3 are installed under a local root (OQ-055 decision 8 (b)); P5 started 2026-10-07 from p17-portable at 7f920d7 |
 | P18 TurboQuant Tier B | p18-turboquant | BLOCKED | separate project (TurboQuant), deferred by the owner on 2026-10-11 and 2026-10-18 for later incorporation (OQ-048, OQ-066); P5.13 and P5.14 go with it |
 
@@ -149,3 +149,18 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P12.14 | BLOCKED | xDSL interchange check | P12.10,P12.12 | deferred to P13's planning with xDSL's pin (owner, 2026-10-18; OQ-066) |
 | P12.G | READY | Phase gate: xlang-v0 raises to the hub and round-trips natively in every language | P12.10,P12.12,P12.13 |  |
 | P5.18 | READY | Tier D of tt-pairs-v0 (eval only) | P5.17 | the owner's choice of 2026-10-18, OQ-066 |
+| P16.0 | DONE | Plan phase P16 into plans/p16-adversarial.md and add its tasks here | - | plan plans/p16-adversarial.md; base p12-frontends at cdc0e73 (P12 stalled, not merged); OQ-067, OQ-068, and OQ-069 filed |
+| P16.1 | READY | Input contracts and their check | - |  |
+| P16.2 | READY | The adversary interface | P16.1 |  |
+| P16.3 | READY | The fuzzer adversary | P16.1,P16.2 |  |
+| P16.4 | READY | The LLM adversary agent (scripted backends only) | P16.1,P16.2,P16.13 |  |
+| P16.5 | READY | The adversary stage, its record, and the runner | P16.1,P16.2,P16.3 |  |
+| P16.6 | READY | Adversary metrics | P16.5 |  |
+| P16.7 | READY | Confirmed counterexamples as synthetic fixtures | P16.5 |  |
+| P16.8 | READY | The seeded set: synthetic references and seeded faulty candidates | P16.1,P16.4,P16.5,P16.13 |  |
+| P16.9 | OWNER | Seeded faulty candidates on Tier A's C++ side | P16.8,P16.10,P5.17 | OQ-067 (1): under (b) it runs once P16.8, P16.10, and P5.17 are DONE (its Depends), since its distro checks need the freeze form and the fetched kernels; under (a) BLOCKED as moved and dropped from P16.G's dependencies |
+| P16.10 | READY | Sandboxed native runs of the seeded candidates, and the freeze | P16.5,P16.8,P5.15,P5.16 |  |
+| P16.11 | OWNER | The LLM adversary on a real model | P16.4,P16.10 | OQ-068: under (a) BLOCKED on a model host; under (b) or (c) P16.G adds it |
+| P16.12 | BLOCKED | Part (b): the adversarial training method | P16.5,P16.7 | BLOCKED on P8 (MI300X access; the Build Roadmap's P16 row, part (b)); planned with P8 |
+| P16.G | READY | Phase gate: adversary finds oracle-confirmed divergences on seeded faulty candidates | P16.4,P16.6,P16.7,P16.9,P16.10 | the phase's state after a pass follows OQ-069 |
+| P16.13 | READY | The replay backend bound from a recipe | - |  |
