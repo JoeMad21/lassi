@@ -53,10 +53,23 @@ Optional keys for hand-written pairs (task P4.13, tt-pairs-v0):
   ones; tools/fetch_bench.py fetches and checks each upstream one.
 - per item, held-out inputs (bible Harness Contract): `inputs`, a non-empty
   list of generate_inputs entries (name, dtype, shape, dist, lo, hi), each
-  of at most MAX_INPUT_ELEMENTS elements; `outputs`, the output array names
+  of at most MAX_INPUT_ELEMENTS elements (lassi.harness.lassi_io
+  element_count: a zero dim gives 0); `outputs`, the output array names
   in the order the program takes them; and `seed`, an int in [0, 2**64).
   The three go together and never with run_args: the program's arguments
   are then program_args, and stage_inputs writes the inputs before a run.
+- per item with held-out inputs, `contract` (task P16.1): its input
+  contract, a list of exactly one entry per input, each with the keys
+  name, dtype (the input's), lo, and hi, and the optional allow_nan and
+  allow_inf (true or false), its range holding every dtype value of the
+  input's own [lo, hi), so the item's held-out inputs pass it;
+  lassi.harness.contract input_contract states the bound rules and the
+  check. SuiteItem.contract is the item's InputContract: the key
+  read over its inputs, or, without the key, its inputs read as one, and
+  None for an item without held-out inputs. load_suite refuses a malformed
+  key, and the key on an item without held-out inputs, with a ValueError
+  naming the item's `contract`. The key never changes the held-out inputs:
+  generate_inputs and stage_inputs read only inputs and seed.
 - per item, `unpack_to_dest`: a non-empty note on the item's unpack_to_dest
   check (ttsim Facts; plans/spikes/p4-ttsim-runtime.md).
 
@@ -78,16 +91,16 @@ import yaml
 
 from lassi.core.record import BenchItem
 from lassi.core.tolerance import Tolerance
-from lassi.harness.lassi_io import SUFFIX, LassiIOError, check_input_spec, generate_inputs
+from lassi.harness.contract import MAX_INPUT_ELEMENTS, InputContract, input_contract
+from lassi.harness.lassi_io import SUFFIX, LassiIOError, check_input_spec, element_count, generate_inputs
 
 SPLITS = ("train", "eval", "unassigned")
 PURPOSES = ("train", "eval", "prompt-tuning", "harvest")
 # The splits Agent Rule 5 keeps from training, prompt tuning, and corpus harvest, and those purposes, with their words.
 HELD_SPLITS = ("eval", "unassigned")
 FORBIDDEN_PURPOSES = {"train": "training", "prompt-tuning": "prompt tuning", "harvest": "corpus harvest"}
-# The most elements one held-out input may hold (PHASE-NOTES P4, the P4.3 review item): 2**20 = 1048576, about 2.5
-# times the largest Tier A input (a 640 x 640 matrix, 409600 elements); the pure-Python generator draws each one.
-MAX_INPUT_ELEMENTS = 1 << 20
+# MAX_INPUT_ELEMENTS (2**20), the most elements one held-out input may hold, is defined in lassi.harness.contract,
+# whose check_inputs refuses a proposed input past it too, and imported here, where load_suite caps each input at it.
 # Where stage_inputs writes the held-out inputs inside a run's workdir. No model file path may start with "@"
 # (lassi.core.files), so none can take its place, as for the ttsim executor's "@ttsim".
 INPUTS_DIR = "@inputs"
@@ -103,7 +116,7 @@ _OUTPUT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,246}")
 _REPO = Path(__file__).resolve().parents[2]
 # The root tracked paths are read under: this repository (tests point it elsewhere).
 TRACKED_ROOT = _REPO
-_ITEM_KEYS = {"run_args", "passfail", "support", "tolerance", "inputs", "outputs", "seed", "unpack_to_dest"}
+_ITEM_KEYS = {"run_args", "passfail", "support", "tolerance", "inputs", "outputs", "seed", "unpack_to_dest", "contract"}
 _HELD_OUT = ("inputs", "outputs", "seed")
 
 
@@ -167,8 +180,9 @@ class SuiteItem:
     in the build directory to its path in the pinned sources, and
     `tolerance` is the tolerance its two references must meet (None when the
     manifest declares none). `inputs`, `outputs`, and `seed` are its
-    held-out inputs (empty and None when it declares none), and
-    `unpack_to_dest` its unpack_to_dest note.
+    held-out inputs (empty and None when it declares none),
+    `unpack_to_dest` its unpack_to_dest note, and `contract` its input
+    contract (lassi.harness InputContract; None without held-out inputs).
     """
 
     name: str
@@ -182,6 +196,7 @@ class SuiteItem:
     outputs: tuple[str, ...] = ()
     seed: int | None = None
     unpack_to_dest: str | None = None
+    contract: InputContract | None = None
 
 
 def _held_message(suite: str, name: str, split: str, purpose: str) -> str:
@@ -415,6 +430,7 @@ def _item(name: Any, spec: Any, where: str) -> SuiteItem:
         raise ValueError(f"{where}.passfail names {unknown[0]!r}, not a language of the item ({', '.join(languages)})")
     support = _item_support(spec.get("support", {}), languages, where)
     inputs, outputs, seed = _held_out(spec, where)
+    contract = _contract(spec, inputs, where)
     note = spec.get("unpack_to_dest")
     if "unpack_to_dest" in spec and not (isinstance(note, str) and note.strip()):
         raise ValueError(f"{where}.unpack_to_dest must be a non-empty note, got {note!r}")
@@ -430,6 +446,7 @@ def _item(name: Any, spec: Any, where: str) -> SuiteItem:
         outputs=outputs,
         seed=seed,
         unpack_to_dest=note,
+        contract=contract,
     )
 
 
@@ -464,7 +481,7 @@ def _held_out(spec: Mapping[str, Any], where: str) -> tuple[tuple[dict[str, Any]
     except LassiIOError as error:
         raise ValueError(str(error)) from None
     for entry in inputs:
-        if _elements(entry["shape"]) > MAX_INPUT_ELEMENTS:
+        if element_count(entry["shape"], MAX_INPUT_ELEMENTS) is None:
             raise ValueError(
                 f"{where}.inputs: {entry['name']!r} holds more than {MAX_INPUT_ELEMENTS} elements, the cap per input"
             )
@@ -478,14 +495,21 @@ def _held_out(spec: Mapping[str, Any], where: str) -> tuple[tuple[dict[str, Any]
     return tuple(dict(entry) for entry in inputs), tuple(outputs), seed
 
 
-def _elements(shape: list[int]) -> int:
-    """Return the element count of a checked shape, or MAX_INPUT_ELEMENTS + 1 as soon as the count passes the cap."""
-    count = 1
-    for dim in shape:
-        count *= dim
-        if count > MAX_INPUT_ELEMENTS:
-            return MAX_INPUT_ELEMENTS + 1
-    return count
+def _contract(spec: Mapping[str, Any], inputs: tuple[dict[str, Any], ...], where: str) -> InputContract | None:
+    """Return the item's input contract: its `contract` key read over its held-out inputs, or the inputs read as one.
+
+    None for an item without held-out inputs, which may not declare the key.
+    A malformed key raises ValueError naming `<where>.contract`.
+    """
+    at = f"{where}.contract"
+    if not inputs:
+        if "contract" in spec:
+            raise ValueError(f"{at}: only an item with held-out inputs (inputs, outputs, and seed) declares a contract")
+        return None
+    declared = spec.get("contract")
+    if "contract" in spec and declared is None:
+        raise ValueError(f"{at} must be a list of one entry per held-out input, got null")
+    return input_contract(inputs, declared=declared, where=at)
 
 
 def _tolerance(value: Any, where: str) -> Tolerance:

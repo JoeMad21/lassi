@@ -45,7 +45,10 @@ Held-out inputs: generate_inputs(spec, seed, out_dir) writes one file per
 spec entry, <name>.lassiio, with PCG-XSH-RR 64/32 draws (Pcg32) on a stream of
 its own per input; the rules for turning draws into values are in its
 docstring. check_input_spec checks a spec as generate_inputs does, writing
-nothing.
+nothing, and element_count counts a shape's elements up to a limit, as the
+element caps of held-out and proposed inputs count them (a zero dim gives
+0). The bound rules are checked once, in _float_bounds and _int_bounds,
+which lassi.harness.contract shares.
 """
 
 from __future__ import annotations
@@ -59,7 +62,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Any, BinaryIO
 
 MAGIC = b"LASSIIO\x00"
 VERSION = 1
@@ -200,6 +203,17 @@ def _byte_count(dims: Sequence[int], itemsize: int, limit: int) -> int | None:
     return total
 
 
+def element_count(shape: Sequence[int], limit: int) -> int | None:
+    """Return the element count of a checked shape (non-negative int dims), or None when it exceeds `limit`.
+
+    A zero dim gives 0 whatever the other dims, as in a file (an empty array
+    holds no element), and a huge shape costs one pass over its dims. The
+    element cap of held-out inputs and proposed inputs counts this way
+    (lassi.bench.registry load_suite; lassi.harness.contract).
+    """
+    return _byte_count(shape, 1, limit)
+
+
 def _name_problem(name: object) -> str:
     """Return why `name` is not a valid array name, or "" when it is."""
     if not isinstance(name, str):
@@ -254,9 +268,32 @@ def _u32_at(where: str, raw: bytes, offset: int, field: str) -> int:
     return struct.unpack_from("<I", raw, offset)[0]
 
 
-def _decode(where: str, raw: bytes) -> LassiArray:
-    """Return the array a file's bytes hold, or raise LassiIOError naming `where` (the checks run in file order)."""
-    size = len(raw)
+# The header's fixed fields: magic, version, dtype code, and rank.
+_FIXED_BYTES = 20
+
+
+@dataclass(frozen=True)
+class _Header:
+    """A checked file header: the dtype, the dims, the array name, where the data starts, and the file's size."""
+
+    dtype: DType
+    dims: tuple[int, ...]
+    name: str
+    end: int
+    size: int
+
+
+def _longest_header(rank: int) -> int:
+    """Return the size of the longest header of a file of `rank` dims: a 255-byte name, then padding to 8."""
+    name_end = _FIXED_BYTES + 8 * rank + 4 + MAX_NAME_BYTES
+    return name_end + (-name_end % ALIGNMENT)
+
+
+def _decode_fixed(where: str, raw: bytes, size: int) -> tuple[DType, int]:
+    """Check the fixed fields of a file of `size` bytes that starts with `raw`; return its dtype and rank.
+
+    `raw` is the whole file or at least its first 20 bytes.
+    """
     if raw[:8] != MAGIC:
         if size < 8 and MAGIC.startswith(raw):
             raise _refusal(where, f"truncated: the file ends inside its magic ({size} bytes)")
@@ -267,12 +304,21 @@ def _decode(where: str, raw: bytes) -> LassiArray:
     code = _u32_at(where, raw, 12, "dtype code")
     if code not in _BY_CODE:
         raise _refusal(where, f"unknown dtype code {code}; the codes are 1 to {max(_BY_CODE)}")
-    dtype = _BY_CODE[code]
-    rank = _u32_at(where, raw, 16, "rank")
-    dims_end = 20 + 8 * rank
+    return _BY_CODE[code], _u32_at(where, raw, 16, "rank")
+
+
+def _decode_header(where: str, raw: bytes, size: int) -> _Header:
+    """Check the header of a file of `size` bytes that starts with `raw` (read_array's checks up to the padding).
+
+    `raw` is the whole file or at least its first _longest_header(rank)
+    bytes, so it holds every header byte the file holds; the checks run in
+    file order and name `where`.
+    """
+    dtype, rank = _decode_fixed(where, raw, size)
+    dims_end = _FIXED_BYTES + 8 * rank
     if dims_end > size:
         raise _refusal(where, f"truncated: rank {rank} needs {8 * rank} bytes of dims, the file has {size} bytes")
-    dims = struct.unpack_from(f"<{rank}Q", raw, 20)
+    dims = struct.unpack_from(f"<{rank}Q", raw, _FIXED_BYTES)
     length = _u32_at(where, raw, dims_end, "name length")
     if not 1 <= length <= MAX_NAME_BYTES:
         raise _refusal(where, f"bad name length {length}: {_NAME_RULE}")
@@ -287,16 +333,51 @@ def _decode(where: str, raw: bytes) -> LassiArray:
         raise _refusal(where, f"truncated: the file ends inside the padding after its name ({size} bytes)")
     if any(raw[name_end:header_end]):
         raise _refusal(where, "bad padding: the bytes between the name and the data must be zero")
-    available = size - header_end
-    expected = _byte_count(dims, dtype.itemsize, available)
+    return _Header(dtype, dims, name.decode("ascii"), header_end, size)
+
+
+def _check_data_size(where: str, header: _Header) -> None:
+    """Refuse a file whose data, the bytes after its header, is not the size its dims give."""
+    available = header.size - header.end
+    expected = _byte_count(header.dims, header.dtype.itemsize, available)
     if expected != available:
         need = f"more than {available}" if expected is None else str(expected)
         raise _refusal(
             where,
-            f"data size: dims {_shown(dims)} of {dtype.name} need {need} bytes, "
+            f"data size: dims {_shown(header.dims)} of {header.dtype.name} need {need} bytes, "
             f"but {available} bytes follow the header",
         )
-    return LassiArray(name.decode("ascii"), dtype.name, dims, raw[header_end:])
+
+
+def _decode(where: str, raw: bytes) -> LassiArray:
+    """Return the array a file's bytes hold, or raise LassiIOError naming `where` (the checks run in file order)."""
+    header = _decode_header(where, raw, len(raw))
+    _check_data_size(where, header)
+    return LassiArray(header.name, header.dtype.name, header.dims, raw[header.end :])
+
+
+def _read_header(where: str, handle: BinaryIO) -> _Header:
+    """Read and check the header of the file open at its start in `handle`, reading no more than the header can take.
+
+    It reads the 20 fixed bytes, checks them, then reads at most the rest of
+    the longest header of that rank, and never past the file's size; the
+    refusals are read_array's, with the same messages.
+    """
+    size = os.fstat(handle.fileno()).st_size
+    raw = handle.read(_FIXED_BYTES)
+    _, rank = _decode_fixed(where, raw, size)
+    raw += handle.read(max(0, min(_longest_header(rank), size) - len(raw)))
+    return _decode_header(where, raw, size)
+
+
+def _read_data(where: str, handle: BinaryIO, header: _Header) -> LassiArray:
+    """Check that the file's data is the size its dims give, then read it; return the array."""
+    _check_data_size(where, header)
+    handle.seek(header.end)
+    data = handle.read(header.size - header.end)
+    if len(data) != header.size - header.end:
+        raise _refusal(where, f"truncated: the file changed size while it was read ({header.size} bytes before)")
+    return LassiArray(header.name, header.dtype.name, header.dims, data)
 
 
 # ---------------------------------------------------------------------------
@@ -443,9 +524,30 @@ class _InputPlan:
     hi_key: int = 0
 
 
-def _float_plan(where: str, name: str, dtype: DType, dims: tuple[int, ...], lo: Any, hi: Any) -> _InputPlan:
-    """Check a uniform entry's bounds against its float dtype and return its plan."""
-    fmt = _FLOATS[dtype.name]
+def _key_range(low: float, high: float, fmt: _FloatFormat) -> tuple[int, int]:
+    """Return the ordering keys (_key) of the smallest and largest format values in [low, high).
+
+    The bounds are finite and inside the format's finite range. A value of
+    the format lies in [low, high) exactly when its key lies in the returned
+    closed range, which is empty when its first key is above its last.
+    """
+    lo_bits = _round_bits(low, fmt)
+    lo_key = _key(lo_bits, fmt) + (1 if _bits_value(lo_bits, fmt) < low else 0)
+    hi_bits = _round_bits(high, fmt)
+    hi_key = _key(hi_bits, fmt) - (1 if _bits_value(hi_bits, fmt) >= high else 0)
+    return lo_key, hi_key
+
+
+def _float_bounds(where: str, dtype: str, lo: Any, hi: Any) -> tuple[float, float, int, int]:
+    """Check [lo, hi) against a float dtype under generate_inputs' bound rules; return it and its key range.
+
+    The result is lo and hi as doubles and _key_range(lo, hi), the keys
+    generate_inputs keeps its draws between. Raises LassiIOError naming
+    `where` for a bound that is not a number or not exactly a double, a
+    non-finite bound, lo not below hi, a bound past the dtype's finite range,
+    hi - lo past a double's range, or a range that holds no dtype value.
+    """
+    fmt = _FLOATS[dtype]
     bounds = []
     for label, value in (("lo", lo), ("hi", hi)):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -464,33 +566,44 @@ def _float_plan(where: str, name: str, dtype: DType, dims: tuple[int, ...], lo: 
         raise _refusal(where, f"lo {low!r} must be below hi {high!r}")
     largest = _bits_value((((1 << fmt.exp_bits) - 2) << fmt.frac_bits) | ((1 << fmt.frac_bits) - 1), fmt)
     if max(abs(low), abs(high)) > largest:
-        raise _refusal(where, f"[{low!r}, {high!r}) reaches past the finite range of {dtype.name}")
+        raise _refusal(where, f"[{low!r}, {high!r}) reaches past the finite range of {dtype}")
     if not math.isfinite(high - low):
         raise _refusal(where, f"hi - lo overflows a double for [{low!r}, {high!r})")
-    lo_bits = _round_bits(low, fmt)
-    lo_key = _key(lo_bits, fmt) + (1 if _bits_value(lo_bits, fmt) < low else 0)
-    hi_bits = _round_bits(high, fmt)
-    hi_key = _key(hi_bits, fmt) - (1 if _bits_value(hi_bits, fmt) >= high else 0)
+    lo_key, hi_key = _key_range(low, high, fmt)
     if lo_key > hi_key:
-        raise _refusal(where, f"no {dtype.name} value lies in [{low!r}, {high!r})")
-    return _InputPlan(name, dtype, dims, "uniform", low, high, lo_key, hi_key)
+        raise _refusal(where, f"no {dtype} value lies in [{low!r}, {high!r})")
+    return low, high, lo_key, hi_key
 
 
-def _int_plan(where: str, name: str, dtype: DType, dims: tuple[int, ...], lo: Any, hi: Any) -> _InputPlan:
-    """Check an integers entry's bounds against its integer dtype and return its plan."""
+def _int_bounds(where: str, dtype: str, lo: Any, hi: Any) -> tuple[int, int]:
+    """Check [lo, hi) against an integer dtype under generate_inputs' bound rules; return it.
+
+    Raises LassiIOError naming `where` for a bound that is not an int (a
+    bool is not), lo not below hi, or a range past the dtype's.
+    """
     for label, value in (("lo", lo), ("hi", hi)):
         if isinstance(value, bool) or not isinstance(value, int):
             raise _refusal(where, f"{label} {_shown(value)} is not an int")
     if lo >= hi:
         raise _refusal(where, f"lo {_shown(lo)} must be below hi {_shown(hi)}")
-    signed = _INTS[dtype.name][1]
-    bits = 8 * dtype.itemsize
+    signed = _INTS[dtype][1]
+    bits = 8 * DTYPES[dtype].itemsize
     smallest, largest = (-(1 << (bits - 1)), (1 << (bits - 1)) - 1) if signed else (0, (1 << bits) - 1)
     if lo < smallest or hi - 1 > largest:
-        raise _refusal(
-            where, f"[{_shown(lo)}, {_shown(hi)}) does not fit {dtype.name}, which holds [{smallest}, {largest}]"
-        )
-    return _InputPlan(name, dtype, dims, "integers", lo, hi)
+        raise _refusal(where, f"[{_shown(lo)}, {_shown(hi)}) does not fit {dtype}, which holds [{smallest}, {largest}]")
+    return lo, hi
+
+
+def _float_plan(where: str, name: str, dtype: DType, dims: tuple[int, ...], lo: Any, hi: Any) -> _InputPlan:
+    """Check a uniform entry's bounds against its float dtype and return its plan."""
+    low, high, lo_key, hi_key = _float_bounds(where, dtype.name, lo, hi)
+    return _InputPlan(name, dtype, dims, "uniform", low, high, lo_key, hi_key)
+
+
+def _int_plan(where: str, name: str, dtype: DType, dims: tuple[int, ...], lo: Any, hi: Any) -> _InputPlan:
+    """Check an integers entry's bounds against its integer dtype and return its plan."""
+    low, high = _int_bounds(where, dtype.name, lo, hi)
+    return _InputPlan(name, dtype, dims, "integers", low, high)
 
 
 def _plan_entry(where: str, index: int, entry: object) -> _InputPlan:

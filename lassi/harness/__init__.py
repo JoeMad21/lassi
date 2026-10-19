@@ -4,8 +4,20 @@
   binary file), its reader and writer, and the seeded generator of held-out
   input files. Programs read and write the same files through the C and C++
   header assets/harness/c/lassi_io.h.
+- lassi.harness.contract: an item's input contract (input_contract, from its
+  held-out input spec and the optional manifest key `contract`) and the
+  check that refuses a proposed input set outside it before any run
+  (check_inputs, InputContractError with one of CONTRACT_REASONS).
 """
 
+from lassi.harness.contract import (
+    CONTRACT_REASONS,
+    ContractInput,
+    InputContract,
+    InputContractError,
+    check_inputs,
+    input_contract,
+)
 from lassi.harness.lassi_io import (
     DTYPES,
     MAGIC,
@@ -22,15 +34,21 @@ from lassi.harness.lassi_io import (
 )
 
 __all__ = [
+    "CONTRACT_REASONS",
+    "ContractInput",
     "DTYPES",
     "MAGIC",
     "VERSION",
     "DType",
+    "InputContract",
+    "InputContractError",
     "LassiArray",
     "LassiIOError",
     "Pcg32",
     "check_input_spec",
+    "check_inputs",
     "generate_inputs",
+    "input_contract",
     "read_array",
     "stream_of",
     "write_array",

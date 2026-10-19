@@ -150,7 +150,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P12.G | READY | Phase gate: xlang-v0 raises to the hub and round-trips natively in every language | P12.10,P12.12,P12.13 |  |
 | P5.18 | READY | Tier D of tt-pairs-v0 (eval only) | P5.17 | the owner's choice of 2026-10-18, OQ-066 |
 | P16.0 | DONE | Plan phase P16 into plans/p16-adversarial.md and add its tasks here | - | plan plans/p16-adversarial.md; base p12-frontends at cdc0e73 (P12 stalled, not merged); OQ-067, OQ-068, and OQ-069 filed |
-| P16.1 | READY | Input contracts and their check | - |  |
+| P16.1 | DONE | Input contracts and their check | - | lassi/harness/contract.py: input_contract and check_inputs (ten reasons, three ordered stages; reads only), the manifest key contract in load_suite (widen only, never narrow); held-out bytes pinned by sha256 from 9793777; bible master rev 298 |
 | P16.2 | READY | The adversary interface | P16.1 |  |
 | P16.3 | READY | The fuzzer adversary | P16.1,P16.2 |  |
 | P16.4 | READY | The LLM adversary agent (scripted backends only) | P16.1,P16.2,P16.13 |  |
