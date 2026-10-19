@@ -10,7 +10,8 @@ The contract these tests fix:
 - lassi.core.capabilities SUPPORTS_POWER is "supports_power", and
   Profiler.stop() returns a lassi.core.record.Profile. `profiler` is no
   longer among the sections the runner refuses as not carried out
-  (_NOT_CARRIED_OUT); adversary, refine, agents, and judges still are.
+  (_NOT_CARRIED_OUT); refine, agents, and judges still are (adversary is
+  carried out since task P16.5).
 - RunContext has a `profiler`, None by default. lassi.core.stages
   profiled_run(context, artifact, inputs, limits) runs context.executor
   alone and returns (run, Profile()) without a profiler; with one it calls
@@ -101,7 +102,7 @@ CUDA_TO_OMP = Direction("cuda", "omp")
 TOOLCHAINS = {"cuda": "nvcc-sm80", "omp": "nvcpp-cc80"}
 RUN_STAGES = ["baseline", "generate", "compile_loop", "run_loop"]
 COMPILE_STAGES = ["generate", "compile_loop"]
-NOT_CARRIED_OUT = ("adversary", "refine", "agents", "judges")
+NOT_CARRIED_OUT = ("refine", "agents", "judges")
 SUPPORTS_POWER = "supports_power"
 TAKES_DEVICE = "takes_device"
 RUNNER = frozenset({"runs_code", "sandboxed"})

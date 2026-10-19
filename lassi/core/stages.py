@@ -318,7 +318,7 @@ from lassi.core.record import (
     standing_attempt,
     unified_diff,
 )
-from lassi.core.registry import DEFAULT_REGISTRY, register
+from lassi.core.registry import DEFAULT_REGISTRY, Registry, register
 from lassi.core.store import BlobStore, TextStore
 from lassi.executors.workdir import build_dir, fresh_build_dir
 from lassi.prompts import render
@@ -486,6 +486,9 @@ class RunContext:
     observer, and no stage reads anything back from it. `profiler` is the
     run's Profiler (task P17.7), built once per run, or None when the recipe
     binds none; run_loop brackets each attempt run with it (profiled_run).
+    `registry` is the run's registry (task P16.5), from which a stage that
+    builds a component per trial builds it (the adversary stage, its
+    Agent); None means DEFAULT_REGISTRY.
     """
 
     recipe: Recipe
@@ -507,6 +510,7 @@ class RunContext:
     executors: Mapping[str, Executor] = field(default_factory=dict)
     observer: Observer | None = None
     profiler: Profiler | None = None
+    registry: Registry | None = None
 
 
 def executor_for(context: RunContext, language: str) -> Executor:

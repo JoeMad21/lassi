@@ -1,8 +1,8 @@
 """The Parquet mirror of a run's Trial records.
 
 Parquet mirrors the JSON records and never replaces them (bible Design
-Principle 7). A run's trials flatten into five tables, trials, attempts,
-diagnostics, requests, and output_stats, each written as Hive-partitioned Parquet under
+Principle 7). A run's trials flatten into six tables, trials, attempts,
+diagnostics, requests, output_stats, and adversary, each written as Hive-partitioned Parquet under
 `<out_dir>/<table>/project=.../arm=.../bench=.../direction=.../part-0.parquet`.
 Partition values come from the parsed trial_id and are URI-encoded in
 directory names as pyarrow does by default, so a '+' is written as `%2B` and
@@ -37,6 +37,13 @@ null first, then ordinal. The diagnostics table also holds the baseline's
 notes (Trial.baseline_diagnostics), with attempt_index null, before each
 trial's attempt diagnostics.
 
+The adversary table (task P16.5) has one row per trial the adversary stage
+took (Trial.adversary set): the key columns, agent, config, proposals,
+refusals, runs, wall_s, divergences, and contract_findings. proposals and
+runs are int64 columns and wall_s a double; config, refusals, and the two
+lists (each entry as its record's dict) are JSON text with sorted keys. A
+trial with no record has no row.
+
 The requests table has one row per recorded model request (Trial.requests),
 in index order: the stage that sent it, the attempt its reply became
 (attempt_index, null for a context request), the role and the sha256 of each
@@ -62,6 +69,7 @@ import pyarrow.dataset as ds
 from lassi.core.record import (
     RUN_FLAG_NAMES,
     TOOLCHAIN_PIN_NAMES,
+    AdversaryRecord,
     Attempt,
     DeviceRecord,
     Diagnostic,
@@ -74,7 +82,7 @@ from lassi.core.record import (
 )
 from lassi.core.store import sha256_text
 
-TABLES = ("trials", "attempts", "diagnostics", "requests", "output_stats")
+TABLES = ("trials", "attempts", "diagnostics", "requests", "output_stats", "adversary")
 PARTITION_COLUMNS = ("project", "arm", "bench", "direction")
 
 _STRING = pa.string()
@@ -213,6 +221,19 @@ SCHEMAS = {
             ("note", _STRING),
         ]
     ),
+    "adversary": pa.schema(
+        [
+            *_KEY_FIELDS,
+            ("agent", _STRING),
+            ("config", _STRING),
+            ("proposals", _INT),
+            ("refusals", _STRING),
+            ("runs", _INT),
+            ("wall_s", _DOUBLE),
+            ("divergences", _STRING),
+            ("contract_findings", _STRING),
+        ]
+    ),
 }
 
 _SORT_KEYS = {
@@ -221,6 +242,7 @@ _SORT_KEYS = {
     "diagnostics": ("trial_id", "attempt_index", "ordinal"),
     "requests": ("trial_id", "index"),
     "output_stats": ("trial_id", "attempt_index", "ordinal"),
+    "adversary": ("trial_id",),
 }
 
 
@@ -408,6 +430,26 @@ def _stats_rows(
     ]
 
 
+def _json_cell(value: Any) -> str:
+    """Return a value as JSON text with sorted keys, as the attempts table holds files."""
+    return json.dumps(value, sort_keys=True, ensure_ascii=True)
+
+
+def _adversary_row(record: AdversaryRecord, key: dict[str, str]) -> dict[str, Any]:
+    """Return the adversary row of one trial's record: counts as ints, wall_s, the rest as sorted-key JSON text."""
+    return {
+        **key,
+        "agent": record.agent,
+        "config": _json_cell(record.config),
+        "proposals": record.proposals,
+        "refusals": _json_cell(record.refusals),
+        "runs": record.runs,
+        "wall_s": record.wall_s,
+        "divergences": _json_cell([dataclasses.asdict(entry) for entry in record.divergences]),
+        "contract_findings": _json_cell([dataclasses.asdict(entry) for entry in record.contract_findings]),
+    }
+
+
 def trial_rows(trials: Sequence[Trial]) -> dict[str, list[dict[str, Any]]]:
     """Flatten trials into rows for each table, in column order and sorted by trial_id, index, and ordinal.
 
@@ -434,6 +476,8 @@ def trial_rows(trials: Sequence[Trial]) -> dict[str, list[dict[str, Any]]]:
                 rows["diagnostics"].append(_diagnostic_row(diagnostic, key, attempt.index, ordinal))
         for request in trial.requests or []:
             rows["requests"].append(_request_row(request, key))
+        if trial.adversary is not None:
+            rows["adversary"].append(_adversary_row(trial.adversary, key))
     return {table: _sorted_rows(table, [_typed_row(table, row) for row in rows[table]]) for table in TABLES}
 
 

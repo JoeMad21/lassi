@@ -1,13 +1,16 @@
 """Tests for the Parquet mirror of Result records (P0.2), with the requests table (P2.1).
 
 lassi/core/parquet.py flattens Trials into tables (trials, attempts,
-diagnostics, requests, and since P4.4 output_stats), writes them as
-Hive-partitioned Parquet by project, arm, bench, and direction, and reads
-them back to exactly the rows trial_rows produces. P4.4 also adds the
-columns reference_run_outputs and run_outputs; these fixtures record no
-output files, statistics, or baseline notes, so those columns are null and
-output_stats has no rows here (tests/core/test_output_stats_views.py and
-tests/core/test_binary_io_runs.py cover them).
+diagnostics, requests, since P4.4 output_stats, and since P16.5
+adversary), writes them as Hive-partitioned Parquet by project, arm,
+bench, and direction, and reads them back to exactly the rows trial_rows
+produces. P4.4 also adds the columns reference_run_outputs and
+run_outputs; these fixtures record no output files, statistics, or
+baseline notes, so those columns are null and output_stats has no rows
+here (tests/core/test_output_stats_views.py and
+tests/core/test_binary_io_runs.py cover them). No fixture here has an
+adversary record, so the adversary table has no rows here
+(tests/core/test_adversary_record.py covers it).
 Parquet mirrors the JSON records and never replaces them (bible Design
 Principle 7). The fixtures span two arms and two directions, with None values,
 an empty per_input list, a trial without attempts, a numeric-looking bench
@@ -959,6 +962,7 @@ def expected_rows_b_omp_filled() -> dict[str, list[dict[str, Any]]]:
         "diagnostics": [diagnostic],
         "requests": expected_request_rows_b_omp_filled(),
         "output_stats": [],
+        "adversary": [],
     }
 
 
@@ -967,7 +971,7 @@ def expected_rows_b_omp_filled() -> dict[str, list[dict[str, Any]]]:
 
 
 def test_table_and_partition_constants() -> None:
-    assert parquet.TABLES == ("trials", "attempts", "diagnostics", "requests", "output_stats")
+    assert parquet.TABLES == ("trials", "attempts", "diagnostics", "requests", "output_stats", "adversary")
     assert parquet.PARTITION_COLUMNS == ("project", "arm", "bench", "direction")
 
 

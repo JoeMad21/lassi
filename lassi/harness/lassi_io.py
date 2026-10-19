@@ -44,7 +44,9 @@ not a refusal.
 Held-out inputs: generate_inputs(spec, seed, out_dir) writes one file per
 spec entry, <name>.lassiio, with PCG-XSH-RR 64/32 draws (Pcg32) on a stream of
 its own per input; the rules for turning draws into values are in its
-docstring. check_input_spec checks a spec as generate_inputs does, writing
+docstring. write_inputs(arrays, out_dir) writes given arrays the same way,
+one <name>.lassiio file each (task P16.5, a proposed input set).
+check_input_spec checks a spec as generate_inputs does, writing
 nothing, and element_count counts a shape's elements up to a limit, as the
 element caps of held-out and proposed inputs count them (a zero dim gives
 0). The bound rules are checked once, in _float_bounds and _int_bounds,
@@ -751,6 +753,59 @@ def generate_inputs(spec: Sequence[Mapping[str, Any]], seed: int, out_dir: str |
         rng = Pcg32(seed, stream_of(plan.name))
         data = _uniform_data(plan, rng) if plan.dist == "uniform" else _integer_data(plan, rng)
         blobs[plan.name] = _encode(str(paths[plan.name]), plan.name, plan.dtype.name, plan.dims, data)
+    for name, blob in blobs.items():
+        paths[name].write_bytes(blob)
+    return paths
+
+
+def write_inputs(arrays: Sequence[LassiArray], out_dir: str | os.PathLike[str]) -> dict[str, Path]:
+    """Write one lassi_io file per array into the existing directory `out_dir`; return name -> path in array order.
+
+    Task P16.5: the writer of a proposed input set (lassi.core.interfaces
+    Proposal). Each array goes to <out_dir>/<name>.lassiio, the file name
+    program_args names under @inputs, holding the array as write_array
+    writes it, so a set written here has the bytes generate_inputs writes
+    for the same arrays and a program reads it as it reads its held-out
+    inputs. stage_inputs draws only an item's own inputs; this writes the
+    arrays it is given.
+
+    Raises LassiIOError (a ValueError) naming `out_dir`, before any file is
+    written, as generate_inputs refuses: an out_dir that is not a directory,
+    an item that is not a LassiArray, a bad name or one over
+    MAX_INPUT_NAME_BYTES, a name used twice, an array lassi_io cannot write
+    (an unknown dtype, a bad shape, data whose length is not the shape's),
+    and a file that already exists at one of the paths.
+    """
+    where = os.fspath(out_dir)
+    if not os.path.isdir(where):
+        raise _refusal(where, "the output directory does not exist")
+    if isinstance(arrays, (str, bytes, Mapping)) or not isinstance(arrays, Sequence):
+        raise _refusal(where, "the arrays must be a sequence of LassiArray")
+    paths: dict[str, Path] = {}
+    blobs: dict[str, bytes] = {}
+    for index, array in enumerate(arrays):
+        if not isinstance(array, LassiArray):
+            raise _refusal(where, f"array {index} is a {type(array).__name__}, not a LassiArray")
+        problem = _name_problem(array.name)
+        if problem:
+            raise _refusal(where, f"array {index}: {problem}")
+        if len(array.name) > MAX_INPUT_NAME_BYTES:
+            raise _refusal(
+                where,
+                f"array {index}: the name is {len(array.name)} bytes; an input's name is at most "
+                f"{MAX_INPUT_NAME_BYTES} bytes, so that <name>{SUFFIX} fits a 255-byte file name",
+            )
+        if array.name in paths:
+            raise _refusal(where, f"array {index}: the name {array.name!r} is used twice")
+        path = Path(where) / f"{array.name}{SUFFIX}"
+        try:
+            blobs[array.name] = _encode(str(path), array.name, array.dtype, array.shape, array.data)
+        except LassiIOError as error:
+            raise _refusal(where, f"array {index}: {error}") from None
+        paths[array.name] = path
+    existing = sorted(str(path) for path in paths.values() if os.path.lexists(path))
+    if existing:
+        raise _refusal(where, f"refusing to replace existing files: {', '.join(existing)}")
     for name, blob in blobs.items():
         paths[name].write_bytes(blob)
     return paths

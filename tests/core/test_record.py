@@ -50,6 +50,14 @@ one is loaded. to_dict always writes the key, null when no code is
 recorded. A trial.json written before the field has no such key and loads
 unchanged with it None, which means not recorded and is never read as a
 code (Agent Rule 1).
+
+Trial.adversary (P16.5) is the adversary stage's record, the Trial's last
+field, null when the stage did not take the trial. The bible's Trial block
+names it last as `adversary: AdversaryRecord`, a block name, not an inline
+mapping, and the block defines AdversaryRecord, Divergence, and
+ContractFinding after DeviceRecord; their mappings keyed by data
+(AdversaryRecord's config and refusals, each entry's inputs) are not record
+fields (tests/core/test_adversary_record.py tests the classes).
 """
 
 from __future__ import annotations
@@ -94,8 +102,17 @@ DEVICE_RECORD_FIELDS = (
     "key", "kind", "indices", "name", "count", "memory_bytes", "driver", "runtime", "framework", "framework_version"
 )
 
-# Bible mappings whose keys are data (paths, component names), not record fields.
-DICT_VALUED = frozenset({"Attempt.files", "Attempt.score.components"})
+# Bible mappings whose keys are data (paths, component names, refusal reasons, input names), not record fields.
+DICT_VALUED = frozenset(
+    {
+        "Attempt.files",
+        "Attempt.score.components",
+        "AdversaryRecord.config",
+        "AdversaryRecord.refusals",
+        "Divergence.inputs",
+        "ContractFinding.inputs",
+    }
+)
 
 # Record paths the bible block defines as nested records; guards the parser against passing vacuously.
 NESTED_RECORDS = {
@@ -125,9 +142,24 @@ NESTED_RECORDS = {
     "Diagnostic": ["Diagnostic"],
     "OutputStats": ["OutputStats"],
     "DeviceRecord": ["DeviceRecord"],
+    "AdversaryRecord": ["AdversaryRecord"],
+    "Divergence": ["Divergence"],
+    "ContractFinding": ["ContractFinding"],
 }
-# The top-level blocks of the bible's Result Record yaml block, in order, and the record class of each.
-BIBLE_BLOCKS = ("Trial", "Request", "RequestMessage", "Attempt", "Diagnostic", "OutputStats", "DeviceRecord")
+# The top-level blocks of the bible's Result Record yaml block, in order, and the record class of each. The
+# adversary stage's three blocks (task P16.5) follow DeviceRecord; Trial names its record as AdversaryRecord.
+BIBLE_BLOCKS = (
+    "Trial",
+    "Request",
+    "RequestMessage",
+    "Attempt",
+    "Diagnostic",
+    "OutputStats",
+    "DeviceRecord",
+    "AdversaryRecord",
+    "Divergence",
+    "ContractFinding",
+)
 
 CORE_MODULES = ("lassi.core.record", "lassi.core.store", "lassi.core.trial_md", "lassi.core.parquet")
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)

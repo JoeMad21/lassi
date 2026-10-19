@@ -59,6 +59,17 @@ page: an attempt's prompt under that attempt, any other text at its first
 request. A record whose requests were not recorded (None) shows "Not
 recorded."; a trial that asked no model shows "None.".
 
+Adversary (task P16.5): a trial the adversary stage took (Trial.adversary
+set) ends with a "## Adversary" section: a table of the agent, its
+resolved config (JSON with sorted keys), the proposals, the runs, and the
+stage's wall_s (pipeline time, as the summary's, not labeled); the
+refusals as rows of reason and count; and each divergence and contract
+finding under "#### Proposal <index>", with a table of each input's name
+and sha256 in the binary store, then the divergence's candidate_failure
+(CLEAN_CANDIDATE_RUN when the candidate's run was clean) and per-output
+statistics (as an attempt's) or the finding's message. A trial without a
+record adds nothing, so its page renders as before.
+
 Guard reasons (task P17.14): an attempt's Guards table has one row per guard
 outcome (GUARD_OUTCOMES) and then, only when the attempt records why
 host_compute is null, a host_compute_not_checked row with the code. A code
@@ -69,6 +80,7 @@ row, so such a page renders as before.
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
@@ -76,6 +88,7 @@ from lassi.core.files import fence_for, language_for
 from lassi.core.record import (
     GUARD_OUTCOMES,
     TOOLCHAIN_PIN_NAMES,
+    AdversaryRecord,
     Attempt,
     Context,
     DeviceRecord,
@@ -97,6 +110,9 @@ PLACEHOLDER = "PLACEHOLDER"
 # The name of a run's wall_s row when the trial's runs ran on an executor that declares the simulator capability
 # (task P4.6): a simulator's wall time is never performance (Agent Rule 2).
 SIMULATOR_WALL_S = "wall_s (simulator wall time, not performance)"
+# The candidate_failure cell of a divergence whose candidate run was clean (task P16.5): a known value, never a
+# PLACEHOLDER, which marks a value not yet measured.
+CLEAN_CANDIDATE_RUN = "none (the run was clean)"
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +440,43 @@ def _attempt_blocks(attempt: Attempt, store: TextStore, simulator: bool = False)
 # The page
 
 
+def _inputs_table(inputs: Mapping[str, str]) -> str:
+    """Return the table of a proposal's inputs: each input's name and the sha256 of its file in the binary store."""
+    return _table(("Input", "sha256"), [(name, f"`{inputs[name]}`") for name in sorted(inputs)])
+
+
+def _adversary_blocks(record: AdversaryRecord | None) -> list[str]:
+    """Return the Adversary section (task P16.5); nothing when the adversary stage did not take the trial."""
+    if record is None:
+        return []
+    config = json.dumps(record.config, sort_keys=True, ensure_ascii=True)
+    rows = [
+        ("agent", record.agent),
+        ("config", config),
+        ("proposals", fmt(record.proposals)),
+        ("runs", fmt(record.runs)),
+        ("wall_s", fmt(record.wall_s)),
+    ]
+    blocks = ["## Adversary\n", _table(("Field", "Value"), rows), "### Refusals\n"]
+    refused = [(reason, fmt(count)) for reason, count in record.refusals.items()]
+    blocks.append(_table(("Reason", "Count"), refused) if refused else "None.\n")
+    blocks.append("### Divergences\n")
+    for divergence in record.divergences:
+        blocks += [f"#### Proposal {divergence.proposal}\n", _inputs_table(divergence.inputs)]
+        failure = divergence.candidate_failure or CLEAN_CANDIDATE_RUN
+        blocks.append(_table(("Field", "Value"), [("candidate_failure", failure)]))
+        blocks += _stats_blocks(divergence.stats)
+    if not record.divergences:
+        blocks.append("None.\n")
+    blocks.append("### Contract findings\n")
+    for finding in record.contract_findings:
+        blocks += [f"#### Proposal {finding.proposal}\n", _inputs_table(finding.inputs)]
+        blocks.append(_table(("Field", "Value"), [("message", finding.message)]))
+    if not record.contract_findings:
+        blocks.append("None.\n")
+    return blocks
+
+
 def render_trial_md(trial: Trial, store: TextStore, *, simulator: bool = False) -> str:
     """Return trial.md for `trial`, resolving prompt and request message texts through `store`.
 
@@ -439,5 +492,6 @@ def render_trial_md(trial: Trial, store: TextStore, *, simulator: bool = False) 
     blocks += _requests_blocks(trial, store)
     for attempt in trial.attempts:
         blocks += _attempt_blocks(attempt, store, simulator)
+    blocks += _adversary_blocks(trial.adversary)
     page = "\n".join(blocks)
     return page.encode("ascii", "backslashreplace").decode("ascii")

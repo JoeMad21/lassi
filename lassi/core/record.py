@@ -30,6 +30,7 @@ from datetime import datetime, timedelta
 from typing import Any, NamedTuple, NoReturn
 
 from lassi.core.interfaces import Sampling
+from lassi.harness.contract import CONTRACT_REASONS
 
 STAGES = ("S0", "S1", "S2", "S3", "S4", "S5")
 DIAGNOSTIC_STAGES = ("parse", "verify", "lower", "compile", "jit", "run")
@@ -114,8 +115,8 @@ def _check_sha256(owner: str, name: str, value: object) -> None:
         _fail(owner, name, value, "must be 64 lowercase hex characters")
 
 
-def _check_non_negative(owner: str, name: str, value: int) -> None:
-    """Require an integer value to be zero or more."""
+def _check_non_negative(owner: str, name: str, value: float) -> None:
+    """Require a number (an int, or a float such as a wall time) to be zero or more."""
     if value < 0:
         _fail(owner, name, value, "must be >= 0")
 
@@ -167,6 +168,8 @@ def _convert(hint: Any, value: Any, where: str, build: Callable[[type, Any, str]
             return None
         (inner,) = [arg for arg in typing.get_args(hint) if arg is not type(None)]
         return _convert(inner, value, where, build)
+    if hint is Any:
+        return _json_data(value, where)
     if dataclasses.is_dataclass(hint):
         return build(hint, value, where)
     if origin is list:
@@ -192,6 +195,24 @@ def _scalar(hint: Any, value: Any, where: str) -> Any:
     if hint in (str, bool) and isinstance(value, hint):
         return value
     raise ValueError(f"{where}: expected {getattr(hint, '__name__', hint)}, got {value!r}")
+
+
+def _json_data(value: Any, where: str) -> Any:
+    """Return a copy of plain JSON data: a str-keyed dict, a list, a str, an int, a finite float, a bool, or None.
+
+    A field typed Any holds such data (AdversaryRecord.config, a recipe
+    section as resolved); anything else, a NaN or an infinity included,
+    raises ValueError naming `where`.
+    """
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        return _finite_float(value, where)
+    if isinstance(value, list):
+        return [_json_data(item, f"{where}[{index}]") for index, item in enumerate(value)]
+    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
+        return {key: _json_data(item, f"{where}[{key!r}]") for key, item in value.items()}
+    raise ValueError(f"{where}: expected JSON data (a mapping with string keys, a list, or a scalar), got {value!r}")
 
 
 def _finite_float(value: int | float, where: str) -> float:
@@ -560,6 +581,116 @@ class DeviceRecord:
             _fail("DeviceRecord", "framework", self.framework, "and framework_version must be both set or both None")
 
 
+def _check_inputs_field(owner: str, inputs: dict[str, str]) -> None:
+    """Require a non-empty mapping of input name -> sha256 of its lassi_io file in the binary store."""
+    if not inputs:
+        _fail(owner, "inputs", inputs, "must name at least one input")
+    for name, digest in inputs.items():
+        _check_non_empty(owner, "inputs", name)
+        _check_sha256(owner, "inputs", digest)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Divergence:
+    """One confirmed divergence the adversary stage found (task P16.5; bible Adversarial Setups, item 1).
+
+    `proposal` is the proposal's index among the trial's proposals (refused
+    ones included), `inputs` maps each input's name to the sha256 of its
+    lassi_io file in the binary store, and `stats` holds binary_io's
+    OutputStats of the candidate's run against the target reference's, at
+    least one of them failed: the oracle confirmed it (Agent Rule 14).
+    `candidate_failure` says how the candidate's run failed (a simulator
+    gap, a kernel JIT error, a hang, undefined behavior, an exit status
+    other than 0, or an incomplete workdir), or is None when it ran clean,
+    so a divergence from a run that crashed, stopped at a gap, or was cut is
+    never read as one whose outputs merely differ.
+    """
+
+    proposal: int
+    inputs: dict[str, str]
+    stats: list[OutputStats]
+    candidate_failure: str | None
+
+    def __post_init__(self) -> None:
+        """Check the field types, the index, each input's digest, that an output failed, and the failure text."""
+        _check_fields(self)
+        _check_non_negative("Divergence", "proposal", self.proposal)
+        _check_inputs_field("Divergence", self.inputs)
+        if all(entry.passed for entry in self.stats):
+            _fail("Divergence", "stats", self.stats, "must hold an output that failed")
+        if self.candidate_failure is not None:
+            _check_non_empty("Divergence", "candidate_failure", self.candidate_failure)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContractFinding:
+    """An in-contract input set on which the target reference failed, never a divergence (task P16.5).
+
+    `proposal` and `inputs` are as in Divergence; `message` says how the
+    target reference's run failed (its exit status, a hang, or output files
+    the oracle cannot compare against).
+    """
+
+    proposal: int
+    inputs: dict[str, str]
+    message: str
+
+    def __post_init__(self) -> None:
+        """Check the field types, the index, each input's digest, and that the message is not empty."""
+        _check_fields(self)
+        _check_non_negative("ContractFinding", "proposal", self.proposal)
+        _check_inputs_field("ContractFinding", self.inputs)
+        _check_non_empty("ContractFinding", "message", self.message)
+
+
+@dataclass(frozen=True, kw_only=True)
+class AdversaryRecord:
+    """What the adversary stage did with one trial it took (task P16.5; bible Result Record).
+
+    `agent` is the adversary's registry name (adversary.kind) and `config`
+    the adversary section's keys other than kind, as resolved. `proposals`
+    counts the input sets it proposed, refused ones included; `refusals`
+    maps each check_inputs reason (CONTRACT_REASONS) to the count of
+    proposals refused for it, each at least 1; `runs` counts the program
+    runs the stage made; `wall_s` is the stage's own wall time in the
+    trial, in seconds (its builds, the adversary's replies, the checks, and
+    the runs), which Final.wall_s, the trial's pipeline time, includes.
+    `divergences` and `contract_findings` keep proposal order, and no
+    proposal is in both. Every field is required.
+    """
+
+    agent: str
+    config: dict[str, Any]
+    proposals: int
+    refusals: dict[str, int]
+    runs: int
+    wall_s: float
+    divergences: list[Divergence]
+    contract_findings: list[ContractFinding]
+
+    def __post_init__(self) -> None:
+        """Check the field types, the counts, the wall time, the refusal reasons, and the proposal indexes."""
+        _check_fields(self)
+        _check_non_empty("AdversaryRecord", "agent", self.agent)
+        _check_non_negative("AdversaryRecord", "proposals", self.proposals)
+        _check_non_negative("AdversaryRecord", "runs", self.runs)
+        _check_non_negative("AdversaryRecord", "wall_s", self.wall_s)
+        for reason, count in self.refusals.items():
+            _check_choice("AdversaryRecord", "refusals", reason, CONTRACT_REASONS)
+            if count < 1:
+                _fail("AdversaryRecord", "refusals", self.refusals, "must count each reason at least once")
+        if sum(self.refusals.values()) > self.proposals:
+            _fail("AdversaryRecord", "refusals", self.refusals, f"must count at most the {self.proposals} proposal(s)")
+        indexes: set[int] = set()
+        for name in ("divergences", "contract_findings"):
+            found = [entry.proposal for entry in getattr(self, name)]
+            if found != sorted(set(found)) or any(index >= self.proposals for index in found):
+                _fail("AdversaryRecord", name, found, f"must name distinct proposals below {self.proposals}, in order")
+            if indexes & set(found):
+                _fail("AdversaryRecord", name, found, "must not name a proposal the divergences name")
+            indexes.update(found)
+
+
 @dataclass(frozen=True, kw_only=True)
 class Provenance:
     """A trial's copy of its run manifest, so a trial read outside its run tree still says where it came from.
@@ -709,6 +840,10 @@ class Trial:
     recorded, as in a trial.json written before requests were, and the
     runner starts every trial with an empty list, so a trial that asked no
     model records [].
+    `adversary` (task P16.5) is the adversary stage's record
+    (AdversaryRecord); None means the stage did not take the trial, or the
+    record predates the field, so a trial.json written before it loads with
+    it None.
     """
 
     trial_id: str
@@ -724,6 +859,7 @@ class Trial:
     requests: list[Request] | None = None
     attempts: list[Attempt] = field(default_factory=list)
     final: Final = field(default_factory=Final)
+    adversary: AdversaryRecord | None = None
 
     def __post_init__(self) -> None:
         """Check the field types, the id, the recipe hash, the id against the bench item, and the list orders.

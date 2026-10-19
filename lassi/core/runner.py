@@ -4,9 +4,10 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
 
 1. loads the recipe with the registry (every component registers when this
    module is imported, since it imports lassi.llm, lassi.toolchains,
-   lassi.executors, lassi.profilers, lassi.core.stages,
-   lassi.core.oracle_stage, which imports lassi.oracles, and lassi.scoring,
-   which registers every ScoreProfile);
+   lassi.executors, lassi.profilers, lassi.agents (the fuzzer adversary),
+   lassi.core.stages, lassi.core.oracle_stage, which imports lassi.oracles,
+   lassi.core.adversary_stage (task P16.5), and lassi.scoring, which
+   registers every ScoreProfile);
 2. refuses what it cannot run, before any directory is created or any model
    is asked: arms without a model (the model registry that maps arms to
    backends comes later) and arms beside a model; a recipe with no
@@ -47,6 +48,13 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    ScoreProfile that cannot be built, and a `metrics` name that no
    registered provider offers, that two offer, or that is named twice
    (lassi.scoring.run_scoring.plan_scoring);
+   an adversary section and an adversary stage (one that declares
+   runs_proposals; task P16.5) without each other, that stage listed twice
+   or before the oracle stage, an adversary.budget.inputs that is not an
+   int of at least 1, an item of the run with no held-out inputs, a target
+   language's executor that runs no program or runs programs without
+   `sandboxed`, and an adversary Agent that refuses its config or has no
+   propose() (_check_adversary);
    and, when any bound executor runs programs, a sandbox.wall_s that is
    neither a number of seconds above 0 nor `baseline_x10`, or a
    sandbox.mem_gb that is not above 0 (the limits of every run,
@@ -120,8 +128,9 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    prompt set's fragments, the context packs by language, the target
    language's executor, which runs every attempt, with executors per
    language every language's executor, so the baseline runs each reference
-   on its own language's, and the run's profiler, which run_loop wraps
-   around every attempt run), then the
+   on its own language's, the run's profiler, which run_loop wraps
+   around every attempt run, and the run's registry, from which the
+   adversary stage builds the trial's adversary), then the
    trial's final block, whose alignment is that of the attempt whose output
    stands (_final). A stage that sets final.end_reason ends the trial:
    no later stage runs, and the final block keeps the end reason. With
@@ -271,10 +280,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from lassi import profilers  # noqa: F401  (registers the Profilers timing, nvml, and rocm_smi)
+from lassi import (
+    agents,  # noqa: F401  (registers the Agent fuzzer, the fuzzer adversary)
+    profilers,  # noqa: F401  (registers the Profilers timing, nvml, and rocm_smi)
+)
 from lassi.analysis.guard_coverage import coverage_markdown, guard_coverage
 from lassi.bench import Direction, Suite, load_suite, sources_dir
 from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
+from lassi.core.adversary_stage import ADVERSARY_KIND, RUNS_PROPOSALS, adversary_binding, budget_inputs
 from lassi.core.capabilities import (
     DEVICE_KEY,
     MODEL_CHECK,
@@ -361,8 +374,13 @@ _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
 # Names the run tree uses for itself: a recipe (the first trial_id segment) with one of these names would
 # put its trial directories among the text store or the Parquet tables.
 _RUN_TREE_NAMES = frozenset({"texts", PARQUET_DIR, RESOLVED_RECIPE, TOOLCHAINS_JSON, PROVENANCE_JSON, RUN_MD})
-# Recipe sections this runner does not carry out; a recipe that sets one is refused, never run without it.
-_NOT_CARRIED_OUT = ("adversary", "refine", "agents", "judges")
+# Recipe sections this runner does not carry out; a recipe that sets one is refused, never run without it. The
+# adversary section is carried out by a stage that declares RUNS_PROPOSALS (task P16.5; _check_adversary).
+_NOT_CARRIED_OUT = ("refine", "agents", "judges")
+# The capability of the stage that aligns attempts (the oracle stage), which a stage that runs proposals follows.
+_ALIGNS = "aligns"
+# The capability of an executor that runs no program.
+_COMPILE_ONLY = "compile_only"
 # How long git may take to report the commit or the dirty flag, in seconds.
 _GIT_TIMEOUT_S = 60.0
 # How long a pinned compiler's --version may take, in seconds, and the name prefix of the fresh directory under
@@ -598,6 +616,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         raise RunError(f"the run directory {run_dir} already exists; choose another run id")
     bench = _bench(recipe, settings, options)
     _check_plan(recipe, registry, settings, bench)
+    _check_adversary(recipe, registry, settings, bench)
     devices = probe_devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
     _check_one_role(recipe, registry, devices)
     _check_profiler(recipe, registry, settings, devices)
@@ -1654,6 +1673,115 @@ def _check_oracle(recipe: Recipe, registry: Registry, bench: _Bench) -> None:
             _check_agreement(recipe, stages, bench, setting)
 
 
+def _check_adversary(recipe: Recipe, registry: Registry, settings: _Settings, bench: _Bench) -> None:
+    """Refuse, before any directory exists, an adversary section or stage the run cannot carry out (task P16.5).
+
+    A stage that declares RUNS_PROPOSALS (the adversary stage) runs the
+    proposals of the Agent bound at adversary.kind, so each needs the
+    other: the section without such a stage and the stage without the
+    section are refused, and so is the stage listed twice or before a stage
+    that aligns (the oracle stage; _check_proposal_stage). Then an
+    adversary.budget.inputs that is not an int of at least 1, an item of the
+    run with no held-out inputs (it has no input contract), a target
+    language's executor that runs no program or runs programs without
+    declaring sandboxed (_check_proposal_executors), and an Agent that
+    refuses its config or has no propose() (_check_agent). The stage's
+    need for an Oracle that declares aligns_output_files is checked at load
+    (its `requires`).
+    """
+    stages = [registry.get("Stage", name) for name in recipe.data["stages"]]
+    listed = [index for index, entry in enumerate(stages) if RUNS_PROPOSALS in entry.capabilities]
+    binding = adversary_binding(recipe.bindings)
+    if binding is None and not listed:
+        return
+    if binding is None:
+        raise RunError(
+            f"{recipe.path}: stages[{listed[0]}] {stages[listed[0]].name!r} runs an adversary's proposals, but the "
+            "recipe has no adversary section; set adversary: {kind: <Agent>, budget: {inputs: <N>}}, with the "
+            "Agent's own keys, or remove the stage"
+        )
+    if not listed:
+        raise RunError(
+            f"{recipe.path}: sets adversary (Agent {binding.name!r} at {ADVERSARY_KIND}), but no listed stage runs "
+            "its proposals; list the adversary stage after the oracle stage, or remove the section"
+        )
+    name = stages[listed[0]].name
+    _check_proposal_stage(recipe, stages, listed)
+    try:
+        budget_inputs(binding.config)
+    except ValueError as error:
+        raise RunError(f"{recipe.path}: {error}") from None
+    missing = [item for item in bench.items if bench.suite.items[item].contract is None]
+    if missing:
+        raise RunError(
+            f"{recipe.path}: stage {name!r} checks every proposal against its item's input contract, which only an "
+            f"item with held-out inputs has, but {bench.suite.name} item(s) {', '.join(missing)} declare no held-out "
+            "inputs; select items that do with bench.items"
+        )
+    _check_proposal_executors(recipe, registry, settings, name)
+    _check_agent(recipe, registry, binding)
+
+
+def _check_proposal_stage(recipe: Recipe, stages: Sequence[Entry], listed: Sequence[int]) -> None:
+    """Refuse a stage that runs proposals listed twice, or listed before every stage that aligns attempts."""
+    first = listed[0]
+    where = f"{recipe.path}: stages[{first}] {stages[first].name!r}"
+    if len(listed) > 1:
+        raise RunError(f"{where} is listed {len(listed)} times; a trial's adversary record is one, so list it once")
+    if not any(_ALIGNS in entry.capabilities for entry in stages[:first]):
+        raise RunError(
+            f"{where} takes a trial whose standing attempt passed the oracle on the held-out inputs, which a stage "
+            f"that declares {_ALIGNS!r} records; list the oracle stage before it"
+        )
+
+
+def _check_proposal_executors(recipe: Recipe, registry: Registry, settings: _Settings, stage: str) -> None:
+    """Refuse a target language's executor that runs no program, or runs programs without declaring sandboxed.
+
+    Every accepted proposal runs the target reference and the candidate,
+    model-generated code, on the target language's executor (Agent Rule 6),
+    whether or not run_loop is listed. With executors per language, a target
+    language with no executor is left to _executors, which names
+    executor.<language>.
+    """
+    bindings = [binding for binding in recipe.bindings if binding.interface == "Executor"]
+    languages = executor_languages(recipe.data)
+    by_language = dict(zip(languages, bindings, strict=True)) if languages else {}
+    for direction in settings.directions:
+        binding = by_language.get(direction.target) if languages else (bindings[0] if bindings else None)
+        if binding is None:
+            continue
+        capabilities = registry.get("Executor", binding.name).capabilities
+        named = f"Executor {binding.name!r} ({binding.where}), the {direction.target!r} executor,"
+        if _COMPILE_ONLY in capabilities or RUNS_CODE not in capabilities:
+            why = f"declares {_COMPILE_ONLY!r}" if _COMPILE_ONLY in capabilities else f"does not declare {RUNS_CODE!r}"
+            raise RunError(
+                f"{recipe.path}: stage {stage!r} runs the target reference and the candidate on each accepted "
+                f"proposal, but {named} {why}, so it runs no program; bind an executor that runs programs, or "
+                "remove the stage and the adversary section"
+            )
+        if SANDBOXED not in capabilities:
+            raise RunError(
+                f"{recipe.path}: stage {stage!r} runs the candidate, model-generated code, on each accepted proposal, "
+                f"but {named} runs programs without declaring {SANDBOXED!r}; model-generated code runs only in the "
+                "sandbox (Agent Rule 6)"
+            )
+
+
+def _check_agent(recipe: Recipe, registry: Registry, binding: Binding) -> None:
+    """Build the adversary once as factory(**config) and drop it; RunError for a refused config or no propose()."""
+    entry = registry.get(binding.interface, binding.name)
+    try:
+        agent = entry.factory(**binding.config)
+    except ValueError as error:
+        where = f"{recipe.path}: {binding.where}"
+        raise RunError(f"{where}: Agent {binding.name!r} refused its settings: {error}") from None
+    if not callable(getattr(agent, "propose", None)):
+        raise RunError(
+            f"{recipe.path}: {binding.where}: Agent {binding.name!r} declares proposes_inputs but has no propose(view)"
+        )
+
+
 def _check_agreement(recipe: Recipe, stages: Sequence[Any], bench: _Bench, setting: str) -> None:
     """Refuse an oracle `setting` that reads the references' agreement when the run could never measure it.
 
@@ -2238,6 +2366,7 @@ def _context(run: _Run, backend: Any, direction: Direction, item: str) -> RunCon
         packs=settings.packs,
         observer=run.observer,
         profiler=run.profiler,
+        registry=run.registry,
     )
 
 

@@ -2,7 +2,8 @@
 
 - lassi.harness.lassi_io: the lassi_io file format (one named array per
   binary file), its reader and writer, and the seeded generator of held-out
-  input files. Programs read and write the same files through the C and C++
+  input files, and write_inputs, the writer of a proposed input set (task
+  P16.5). Programs read and write the same files through the C and C++
   header assets/harness/c/lassi_io.h.
 - lassi.harness.contract: an item's input contract (input_contract, from its
   held-out input spec and the optional manifest key `contract`) and the
@@ -31,6 +32,7 @@ from lassi.harness.lassi_io import (
     read_array,
     stream_of,
     write_array,
+    write_inputs,
 )
 
 __all__ = [
@@ -52,4 +54,5 @@ __all__ = [
     "read_array",
     "stream_of",
     "write_array",
+    "write_inputs",
 ]
