@@ -2,7 +2,8 @@
 
 Bible: Project Recipes (Notes), Component Interfaces (ScoreProfile; the
 capability rule), Design Principles 1, 5, and 7, Evaluation Protocol (Run
-Metrics), Readability Standards (Run row).
+Metrics; the Judges and adversaries row), Readability Standards (Run row),
+Agent Rule 14.
 
 The runner (lassi.core.runner) calls plan_scoring before the run directory
 exists, score_trial after each trial's stages, and compute_metrics,
@@ -26,7 +27,12 @@ it (lassi.scoring.score_run.score_trials).
   order); a profile that declares none offers none;
 - a row of the run metric tables (lassi.analysis.metrics.METRIC_NAMES),
   which read the Scores of SCORE_PROFILE, so they are offered only when
-  that profile is registered.
+  that profile is registered;
+- a row of the adversary metric tables (lassi.analysis.adversary
+  ADVERSARY_METRICS, task P16.6), which read the trials' adversary records
+  alone, so they are offered only when the recipe's stages list one whose
+  registered entry declares RUNS_PROPOSALS (the adversary stage; read from
+  the registry, never from the stage's name), and need no ScoreProfile.
 
 Checking the names builds every registered ScoreProfile, with the run's
 bench root for a profile that reads bench sources. A name no provider
@@ -35,19 +41,26 @@ all before the run directory exists. After the trials, every profile that
 gives a named metric scores every trial. These metric-only Scores never
 touch Attempt.score or final.score. When SCORE_PROFILE gives a named metric,
 the P2.8 table of every arm and direction follows
-(lassi.analysis.metrics.metric_tables).
+(lassi.analysis.metrics.metric_tables); when an adversary metric is named,
+the adversary table of every arm, suite, adversary, and direction follows
+(lassi.analysis.adversary.adversary_tables), every row of each, from the
+records only, so no Score and no judged value enters them (Agent Rule 14).
 
 run.md's Metrics section (metrics_section) lists each named metric and its
 source, then the per-trial values of the named components (PLACEHOLDER for
 null) and the notes on them (one row per trial and component whose Score
 carries a note), then the P2.8 tables as
 lassi.analysis.tables.table_markdown renders them, each table's heading one
-level down. write_metrics writes the tables' Parquet (write_metrics_parquet)
-and parquet/metric_values/part-0.parquet, one row per trial and named
-component with its profile, value, and note. Both read the same rows
-(_value_rows), so the values and notes tables show every metric_values row
-(Design Principle 7). The section holds names, values, and notes only,
-never prompt, source, context, or model text (OQ-018).
+level down, then the adversary tables as
+lassi.analysis.adversary.adversary_markdown renders them under a third-level
+heading. write_metrics writes the tables' Parquet (write_metrics_parquet),
+parquet/metric_values/part-0.parquet, one row per trial and named
+component with its profile, value, and note, and the adversary tables'
+parquet/adversary_metrics (write_adversary_parquet), beside the trials' own
+adversary table. The values and notes tables read the same rows as
+metric_values (_value_rows), so they show every metric_values row (Design
+Principle 7). The section holds names, values, and notes only, never
+prompt, source, context, or model text (OQ-018).
 """
 
 from __future__ import annotations
@@ -62,8 +75,16 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from lassi.analysis.adversary import (
+    ADVERSARY_METRICS,
+    AdversaryTable,
+    adversary_markdown,
+    adversary_tables,
+    write_adversary_parquet,
+)
 from lassi.analysis.metrics import METRIC_NAMES, SCORE_PROFILE, MetricTable, metric_tables
 from lassi.analysis.tables import LEGEND, table_markdown, write_metrics_parquet
+from lassi.core.adversary_stage import RUNS_PROPOSALS
 from lassi.core.interfaces import Score, ScoreProfile
 from lassi.core.record import ScoreBreakdown, Trial
 from lassi.core.registry import Registry
@@ -91,18 +112,33 @@ NOTES_LEGEND = (
 )
 NO_NOTES = "No value of a named component carries a note.\n"
 NOTES_HEADER = ("Trial", "Profile", "Component", "Note")
+# The heading level of the adversary metrics in run.md: a third-level heading inside the Metrics section.
+ADVERSARY_LEVEL = 3
 
 
 @dataclass(frozen=True)
 class MetricSource:
-    """Where one named metric comes from: the trial Scores of `profile`, as a component or as a run table row."""
+    """Where one named metric comes from: the trial Scores of `profile`, or the trials' adversary records.
+
+    A ScoreProfile's metric names its `profile`, as a trial component or, with
+    `table_row`, as a row of the run metric tables, and `stage` is None. An
+    adversary metric (lassi.analysis.adversary) is a table row whose
+    `profile` is None and whose `stage` is the listed stage that declares
+    RUNS_PROPOSALS, the stage that writes the records it reads.
+    """
 
     metric: str
-    profile: str
+    profile: str | None
     table_row: bool
+    stage: str | None = None
 
     def describe(self) -> str:
         """Return the source as run.md names it."""
+        if self.stage is not None:
+            return (
+                "row of the adversary metric tables (lassi.analysis.adversary), over the trials' adversary records "
+                f"from the stage {self.stage!r}, which declares {RUNS_PROPOSALS}"
+            )
         if self.table_row:
             return f"row of the run metric tables (lassi.analysis), over the ScoreProfile {self.profile}'s scores"
         return f"trial component of the ScoreProfile {self.profile}"
@@ -128,12 +164,14 @@ class RunMetrics:
     """The named metrics of a finished run: their sources, every trial's metric-only Scores, and the P2.8 tables.
 
     `scored` is in trial_id order. `tables` is None unless SCORE_PROFILE
-    gives a named metric.
+    gives a named metric, and `adversary` (the adversary tables) is None
+    unless an adversary metric is named.
     """
 
     sources: tuple[MetricSource, ...]
     scored: tuple[ScoredTrial, ...]
     tables: tuple[MetricTable, ...] | None
+    adversary: tuple[AdversaryTable, ...] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -143,10 +181,12 @@ class RunMetrics:
 def plan_scoring(data: Mapping[str, Any], registry: Registry, bench_root: Path | None) -> ScoringPlan:
     """Build the profiles the resolved recipe `data` needs and check its metrics names (see the module docstring).
 
-    Raises ValueError (RegistryError among them) naming the problem: a
-    profile that cannot be built, a declaration that is not a list of
-    distinct names, and a metric that no provider or more than one offers,
-    or that is named twice.
+    The adversary metrics are offered when a stage in `data`'s stages list
+    declares RUNS_PROPOSALS in `registry` (proposal_stage). Raises
+    ValueError (RegistryError among them) naming the problem: a profile
+    that cannot be built, a declaration that is not a list of distinct
+    names, and a metric that no provider or more than one offers, or that
+    is named twice.
     """
     name = data.get("score")
     bound = None if name is None else _build(name, bench_root, registry, "")
@@ -159,10 +199,23 @@ def plan_scoring(data: Mapping[str, Any], registry: Registry, bench_root: Path |
             built[other] = bound
         else:
             built[other] = _build(other, bench_root, registry, " to read the metrics it offers")
-    offered = offered_metrics(built)
+    offered = offered_metrics(built, proposal_stage(data, registry))
     sources = tuple(_source(metric, offered, names[:index]) for index, metric in enumerate(names))
-    profiles = {source.profile: built[source.profile] for source in sources}
+    profiles = {source.profile: built[source.profile] for source in sources if source.profile is not None}
     return ScoringPlan(score=name, bound=bound, metrics=sources, profiles=MappingProxyType(profiles))
+
+
+def proposal_stage(data: Mapping[str, Any], registry: Registry) -> str | None:
+    """Return the first stage in `data`'s stages whose registered entry declares RUNS_PROPOSALS; None when none does.
+
+    A stage name `registry` does not hold declares nothing here; the recipe
+    loader refuses it.
+    """
+    registered = set(registry.names("Stage"))
+    for stage in data.get("stages") or ():
+        if stage in registered and RUNS_PROPOSALS in registry.get("Stage", stage).capabilities:
+            return stage
+    return None
 
 
 def _build(name: str, bench_root: Path | None, registry: Registry, why: str) -> ScoreProfile:
@@ -192,11 +245,13 @@ def trial_components(profile: object, name: str) -> tuple[str, ...]:
     return tuple(declared)
 
 
-def offered_metrics(profiles: Mapping[str, ScoreProfile]) -> dict[str, list[MetricSource]]:
-    """Return each metric the built `profiles` offer, with every source that offers it.
+def offered_metrics(profiles: Mapping[str, ScoreProfile], stage: str | None = None) -> dict[str, list[MetricSource]]:
+    """Return each metric the built `profiles` and the proposal `stage` offer, with every source that offers it.
 
     A profile offers the trial components it declares; the run metric
-    tables offer their rows when SCORE_PROFILE is among `profiles`.
+    tables offer their rows when SCORE_PROFILE is among `profiles`; the
+    adversary metric tables offer theirs when `stage`, the listed stage that
+    declares RUNS_PROPOSALS, is set.
     """
     offered: dict[str, list[MetricSource]] = {}
     for name, profile in profiles.items():
@@ -205,6 +260,9 @@ def offered_metrics(profiles: Mapping[str, ScoreProfile]) -> dict[str, list[Metr
     if SCORE_PROFILE in profiles:
         for row in METRIC_NAMES:
             offered.setdefault(row, []).append(MetricSource(row, SCORE_PROFILE, table_row=True))
+    if stage is not None:
+        for row in ADVERSARY_METRICS:
+            offered.setdefault(row, []).append(MetricSource(row, None, table_row=True, stage=stage))
     return offered
 
 
@@ -216,8 +274,9 @@ def _source(metric: str, offered: Mapping[str, Sequence[MetricSource]], earlier:
     if not found:
         known = ", ".join(sorted(offered)) or "none"
         raise ValueError(
-            f"metrics names {metric!r}, which no registered provider offers: it is neither a trial component that "
-            f"a registered ScoreProfile declares nor a row of the run metric tables; known metrics: {known}"
+            f"metrics names {metric!r}, which no registered provider offers: it is not a trial component that a "
+            "registered ScoreProfile declares, a row of the run metric tables, or an adversary metric (offered when "
+            f"a listed stage declares {RUNS_PROPOSALS}); known metrics: {known}"
         )
     if len(found) > 1:
         sources = "; ".join(source.describe() for source in found)
@@ -256,18 +315,20 @@ def score_trial(plan: ScoringPlan, trial: Trial) -> Trial:
 
 
 def compute_metrics(plan: ScoringPlan, trials: Sequence[Trial]) -> RunMetrics | None:
-    """Score every trial with each profile a named metric needs, and build the P2.8 tables; None without metrics.
+    """Score every trial with each profile a named metric needs, and build the P2.8 and adversary tables.
 
-    The Scores are the metrics' own and never enter the trials. Raises
-    ScoreError when a profile cannot score a trial, and ValueError when a
-    Score lacks a named component or the tables cannot be built.
+    None without metrics. The Scores are the metrics' own and never enter
+    the trials; the adversary tables read the trials' adversary records
+    alone. Raises ScoreError when a profile cannot score a trial, and
+    ValueError when a Score lacks a named component or the tables cannot be
+    built.
     """
     if not plan.metrics:
         return None
     scored = tuple(score_trials(trials, plan.profiles))
     for item in scored:
-        for source in plan.metrics:
-            if not source.table_row and source.metric not in item.scores[source.profile].components:
+        for source in _components_of(plan.metrics):
+            if source.metric not in item.scores[source.profile].components:
                 raise ValueError(
                     f"the ScoreProfile {source.profile!r} declares the component {source.metric!r}, but its Score "
                     f"of {item.trial.trial_id} lacks it"
@@ -275,7 +336,10 @@ def compute_metrics(plan: ScoringPlan, trials: Sequence[Trial]) -> RunMetrics | 
     tables = None
     if SCORE_PROFILE in plan.profiles:
         tables = tuple(metric_tables([(item.trial, item.scores[SCORE_PROFILE]) for item in scored]))
-    return RunMetrics(sources=plan.metrics, scored=scored, tables=tables)
+    adversary = None
+    if any(source.stage is not None for source in plan.metrics):
+        adversary = tuple(adversary_tables(trials))
+    return RunMetrics(sources=plan.metrics, scored=scored, tables=tables, adversary=adversary)
 
 
 def _cell(text: str) -> str:
@@ -289,9 +353,14 @@ def _table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
     return "".join("| " + " | ".join(_cell(cell) for cell in line) + " |\n" for line in lines)
 
 
+def _components_of(sources: Sequence[MetricSource]) -> list[MetricSource]:
+    """Return the sources that are trial components of a ScoreProfile, in the recipe's order."""
+    return [source for source in sources if not source.table_row and source.profile is not None]
+
+
 def _components(metrics: RunMetrics) -> list[MetricSource]:
     """Return the sources of the named metrics that are trial components, in the recipe's order."""
-    return [source for source in metrics.sources if not source.table_row]
+    return _components_of(metrics.sources)
 
 
 def _value_rows(metrics: RunMetrics) -> list[tuple[str, str, str, float | None, str | None]]:
@@ -343,36 +412,55 @@ def _demoted(text: str) -> str:
 
 
 def metrics_section(metrics: RunMetrics, score: str | None) -> str:
-    """Return run.md's Metrics section: each named metric's source, the per-trial values and notes, the P2.8 tables.
+    """Return run.md's Metrics section: each named metric's source, the per-trial values and notes, and the tables.
 
-    `score` is the ScoreProfile the recipe binds, None when it binds none.
-    The text is plain ASCII with LF newlines (see the module docstring).
+    The tables are the P2.8 tables and the adversary tables, each when a
+    metric it gives is named. `score` is the ScoreProfile the recipe binds,
+    None when it binds none. The text is plain ASCII with LF newlines (see
+    the module docstring).
     """
+    sources = [(source.metric, source.describe()) for source in metrics.sources]
+    blocks = [f"{METRICS_HEADING}\n", _intro(metrics, score), _table(("Metric", "Source"), sources)]
+    blocks += _values_blocks(metrics)
+    if metrics.tables is not None:
+        blocks += [LEGEND + "\n", *(_demoted(table_markdown(table)) for table in metrics.tables)]
+    if metrics.adversary is not None:
+        blocks.append(adversary_markdown(metrics.adversary, level=ADVERSARY_LEVEL))
+    return "\n".join(blocks).encode("ascii", "backslashreplace").decode("ascii")
+
+
+def _intro(metrics: RunMetrics, score: str | None) -> str:
+    """Return the Metrics section's opening paragraph: where the named metrics come from, and what stays unscored."""
     held = (
         f"hold only the scores of the ScoreProfile {score}, which the recipe binds"
         if score is not None
         else "stay empty, since the recipe binds no score"
     )
-    intro = (
-        f"The recipe's metrics line names {len(metrics.sources)} metric(s), each from the trial Scores of the "
-        "ScoreProfile its source names. Those Scores are computed for the metrics only: Attempt.score and "
-        f"final.score in trial.json, trial.md, and the Parquet trials tables {held}.\n"
+    count = len(metrics.sources)
+    if all(source.stage is None for source in metrics.sources):
+        return (
+            f"The recipe's metrics line names {count} metric(s), each from the trial Scores of the "
+            "ScoreProfile its source names. Those Scores are computed for the metrics only: Attempt.score and "
+            f"final.score in trial.json, trial.md, and the Parquet trials tables {held}.\n"
+        )
+    return (
+        f"The recipe's metrics line names {count} metric(s), each from the source the table below names. The "
+        "adversary metrics read the trials' adversary records alone (lassi.analysis.adversary), so no Score and no "
+        "judged value enters them (Agent Rule 14); any ScoreProfile's Scores are computed for the metrics only. "
+        f"Attempt.score and final.score in trial.json, trial.md, and the Parquet trials tables {held}.\n"
     )
-    sources = [(source.metric, source.describe()) for source in metrics.sources]
-    blocks = [f"{METRICS_HEADING}\n", intro, _table(("Metric", "Source"), sources), *_values_blocks(metrics)]
-    if metrics.tables is not None:
-        blocks += [LEGEND + "\n", *(_demoted(table_markdown(table)) for table in metrics.tables)]
-    return "\n".join(blocks).encode("ascii", "backslashreplace").decode("ascii")
 
 
 def write_metrics(metrics: RunMetrics, parquet_dir: Path) -> None:
-    """Write the named metrics' Parquet under `parquet_dir`: the metric_values table and the P2.8 tables.
+    """Write the named metrics' Parquet under `parquet_dir`: metric_values, the P2.8 tables, and the adversary tables.
 
     metric_values/part-0.parquet holds one row per trial and named
     component (_value_rows, as lassi.scoring.score_run.TRIAL_SCHEMA:
     trial_id, profile, component, value, note), written only when a named
     metric is a component; run.md's Metrics section shows the same rows.
-    The P2.8 tables go through write_metrics_parquet.
+    The P2.8 tables go through write_metrics_parquet, and the adversary
+    tables through write_adversary_parquet (adversary_metrics, no rows when
+    the stage took no trial).
     """
     rows = [dict(zip(TRIAL_SCHEMA.names, values, strict=True)) for values in _value_rows(metrics)]
     if rows:
@@ -381,3 +469,5 @@ def write_metrics(metrics: RunMetrics, parquet_dir: Path) -> None:
         pq.write_table(pa.Table.from_pylist(rows, schema=TRIAL_SCHEMA), str(table_dir / "part-0.parquet"))
     if metrics.tables is not None:
         write_metrics_parquet(metrics.tables, Path(parquet_dir))
+    if metrics.adversary is not None:
+        write_adversary_parquet(metrics.adversary, Path(parquet_dir))

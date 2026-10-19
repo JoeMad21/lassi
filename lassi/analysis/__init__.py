@@ -10,8 +10,22 @@
 - lassi.analysis.guard_coverage: how many attempts the host-compute guard
   checked, and why the rest were not checked, per run and per target
   language (task P17.14).
+- lassi.analysis.adversary: the adversary metrics per arm, suite,
+  adversary, and direction from the trials' adversary records (task
+  P16.6): the confirmed-divergence rate, the invalid-input rejection rate,
+  and the contract-finding count, in Markdown and Parquet.
 """
 
+from lassi.analysis.adversary import (
+    ADVERSARY_METRICS,
+    AdversaryRow,
+    AdversaryTable,
+    adversary_markdown,
+    adversary_rows,
+    adversary_tables,
+    read_adversary_parquet,
+    write_adversary_parquet,
+)
 from lassi.analysis.metrics import METRIC_NAMES, MetricRow, MetricTable, metric_tables
 from lassi.analysis.paper import (
     PAPER_FILE,
@@ -26,21 +40,29 @@ from lassi.analysis.stats import pass_at_k, wilson_interval
 from lassi.analysis.tables import metrics_markdown, read_metrics_parquet, table_markdown, write_metrics_parquet
 
 __all__ = [
+    "ADVERSARY_METRICS",
     "METRIC_NAMES",
     "PAPER_FILE",
+    "AdversaryRow",
+    "AdversaryTable",
     "MetricRow",
     "MetricTable",
     "PaperCount",
     "PaperMetric",
     "PaperValues",
+    "adversary_markdown",
+    "adversary_rows",
+    "adversary_tables",
     "b0_interval",
     "load_paper",
     "metric_tables",
     "metrics_markdown",
     "paper_interval",
     "pass_at_k",
+    "read_adversary_parquet",
     "read_metrics_parquet",
     "table_markdown",
     "wilson_interval",
+    "write_adversary_parquet",
     "write_metrics_parquet",
 ]
