@@ -87,7 +87,7 @@ def fixture_registry() -> Registry:
         ("Executor", fake("native", {"runs_code"}, config_keys={"host"})),
         ("Oracle", fake("stdout_mask", {"stdout_diff"}, config_keys={"passfail"})),
         ("Profiler", fake("timer", {"timing"}, config_keys={"interval_ms"})),
-        ("Agent", fake("fuzzer", {"fuzzes_inputs"}, config_keys={"budget"})),
+        ("Agent", fake("fuzzer", {"fuzzes_inputs", "proposes_inputs"}, config_keys={"budget"})),  # P16.2's rule
         ("Agent", fake("generator", {"generates"}, requires={"LLMBackend": {"chat"}})),
         ("Agent", fake("fixer", {"fixes_code"})),
         ("Judge", fake("equivalence", {"verdict"})),

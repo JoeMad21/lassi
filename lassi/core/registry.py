@@ -15,6 +15,9 @@ check a recipe without building anything (bible, Component Interfaces):
 
 The registry reads these attributes and never calls the class, so a recipe
 whose components do not fit together fails before any backend is constructed.
+A recipe section may also need capabilities of the component it binds
+(Binding.needs; task P16.2): the adversary section's Agent must declare
+proposes_inputs (lassi.core.capabilities PROPOSES_INPUTS).
 
 The runner, never the registry, constructs components. A component bound by a
 kind section is built as `factory(**binding.config)`; an LLM backend as
@@ -81,12 +84,20 @@ class Entry:
 
 @dataclass(frozen=True)
 class Binding:
-    """One component a recipe binds: `where` is its recipe key path, `config` its section's keys other than kind."""
+    """One component a recipe binds: `where` is its recipe key path, `config` its section's keys other than kind.
+
+    `needs` holds the capabilities the recipe section itself requires of the
+    component it binds, beside any requirement other components declare
+    (Entry.requires): the adversary section's Agent must declare
+    proposes_inputs (lassi.core.recipe _KIND_SECTIONS; task P16.2). It is
+    empty for every other binding.
+    """
 
     interface: str
     name: str
     where: str
     config: Mapping[str, Any]
+    needs: frozenset[str] = frozenset()
 
 
 class Registry:
@@ -155,10 +166,11 @@ def register(interface: str, name: str) -> Callable[[_Class], _Class]:
 def check_bindings(bindings: Sequence[Binding], registry: Registry) -> None:
     """Raise RegistryError on the first binding that does not fit; construct nothing.
 
-    Three passes, each over the bindings in recipe order: every component is
-    registered, every config key is one its component accepts, and every
-    requirement a component declares is met by every component bound to the
-    required interface.
+    Four passes, each over the bindings in recipe order: every component is
+    registered, every component declares the capabilities its recipe section
+    needs (Binding.needs), every config key is one its component accepts,
+    and every requirement a component declares is met by every component
+    bound to the required interface.
     """
     entries: list[Entry] = []
     for binding in bindings:
@@ -167,9 +179,24 @@ def check_bindings(bindings: Sequence[Binding], registry: Registry) -> None:
         except RegistryError as exc:
             raise RegistryError(f"{binding.where}: {exc}") from exc
     for binding, entry in zip(bindings, entries, strict=True):
+        _check_needs(binding, entry)
+    for binding, entry in zip(bindings, entries, strict=True):
         _check_config(binding, entry)
     for binding, entry in zip(bindings, entries, strict=True):
         _check_requires(binding, entry, bindings, entries)
+
+
+def _check_needs(binding: Binding, entry: Entry) -> None:
+    """Raise RegistryError when the component lacks a capability its recipe section needs, naming the section's key."""
+    missing = sorted(frozenset(binding.needs) - entry.capabilities)
+    if missing:
+        section = binding.where.split(".", 1)[0]
+        declared = ", ".join(sorted(entry.capabilities)) or "nothing"
+        needed = ", ".join(repr(capability) for capability in missing)
+        raise RegistryError(
+            f"{binding.where}: {entry.interface} {entry.name!r} does not declare {needed}, which the {section} "
+            f"section requires of the {entry.interface} it binds; {entry.name!r} declares: {declared}"
+        )
 
 
 def _check_config(binding: Binding, entry: Entry) -> None:

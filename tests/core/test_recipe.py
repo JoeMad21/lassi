@@ -131,6 +131,9 @@ REQUIRED = (
 
 # Kind sections and the interface each binds.
 KIND_SECTIONS = {"executor": "Executor", "oracle": "Oracle", "profiler": "Profiler", "adversary": "Agent"}
+# The capability the adversary section's Agent must declare (task P16.2; lassi.core.capabilities PROPOSES_INPUTS),
+# written out so this module imports before that name exists; tests/core/test_adversary_binding.py tests the rule.
+ADVERSARY_CAPABILITY = "proposes_inputs"
 
 # Names that belong to projects and must never appear in the shared loader or registry source.
 PROJECT_NAMES = ("lassi-repro", "lassi-ee", "lassi-df", "hecbench", "qwen", "wizardcoder", "a100", "mi300x", "gpt-oss")
@@ -247,7 +250,7 @@ FAKES: tuple[tuple[str, type], ...] = (
     ("Executor", fake("none", {"compile_only"})),
     ("Oracle", fake("stdout_mask", {"stdout_diff"}, config_keys={"passfail"})),
     ("Profiler", fake("timer", {"timing"}, config_keys={"interval_ms"})),
-    ("Agent", fake("fuzzer", {"fuzzes_inputs"}, config_keys={"budget"})),
+    ("Agent", fake("fuzzer", {"fuzzes_inputs", ADVERSARY_CAPABILITY}, config_keys={"budget"})),
     ("Agent", fake("generator", {"generates"}, requires={"LLMBackend": {"chat"}})),
     ("Agent", fake("fixer", {"fixes_code"})),
     ("Agent", fake("reviewer", {"reviews"})),
@@ -501,14 +504,19 @@ def permissive_registry(registry_module: ModuleType, *datas: Mapping[str, Any]) 
 
     A fake whose section holds a device section declares takes_device and
     leaves `device` out of its config keys, as the registry requires (task P17.2).
+    The Agent an adversary section binds declares proposes_inputs, which that
+    section requires (task P16.2).
     """
     found: dict[tuple[str, str], set[str]] = {}
+    adversaries = {data["adversary"]["kind"] for data in datas if "adversary" in data}
     for data in datas:
         for key, keys in bound_components(data).items():
             found.setdefault(key, set()).update(keys)
     registry = registry_module.Registry()
     for (interface, name), keys in sorted(found.items()):
         capabilities = {"takes_device"} if "device" in keys else set()
+        if interface == "Agent" and name in adversaries:
+            capabilities.add(ADVERSARY_CAPABILITY)
         registry.register(interface, name, fake(name, capabilities, config_keys=keys - {"device"}))
     return registry
 
@@ -729,7 +737,8 @@ def test_errors_are_value_errors(registry_module: ModuleType, recipe_module: Mod
             ["interface", "name", "factory", "capabilities", "requires", "config_keys"],
             id="entry",
         ),
-        pytest.param("lassi.core.registry", "Binding", ["interface", "name", "where", "config"], id="binding"),
+        # P16.2 appends needs, what a binding's recipe section requires (tests/core/test_adversary_binding.py).
+        pytest.param("lassi.core.registry", "Binding", ["interface", "name", "where", "config", "needs"], id="binding"),
         pytest.param(
             "lassi.core.recipe",
             "Recipe",

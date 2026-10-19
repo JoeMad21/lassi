@@ -25,21 +25,35 @@ registry name. Contract rules (bible, Component Interfaces):
 - A Profiler brackets one attempt run with start() and stop() and returns
   a Profile (task P17.7); power values come only from a profiler that
   declares supports_power.
+- An adversary is an Agent that declares proposes_inputs and provides
+  propose(view) (lassi.core.capabilities PROPOSES_INPUTS, Adversary; task
+  P16.2). Its AdversaryView, defined here, holds the item's input contract,
+  the source program and the candidate as text, the budget left, and
+  earlier proposals' outcomes, and never a held-out input, the item's
+  seed, or a reference output. A Proposal, defined here, is data (named
+  arrays), never code, and is checked against the contract before any run.
+  An outcome's code is a short token, never free text. The three types
+  check their fields' exact types and take no subclass.
 - Every component declares its capabilities (see `capabilities.Component`).
 
 Trial, Attempt, Diagnostic, DeviceRecord, and Profile are Result Record types in
 `lassi.core.record`, FrameworkBuild is in `lassi.core.devices`, and
 SuiteItem and TrainView are in `lassi.bench.registry`; they are referenced
-here by name only.
+here by name only. InputContract, ContractInput, and LassiArray are
+lassi.harness types, which the adversary's records check against.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, Protocol, Sequence
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Mapping, Protocol, Sequence, final
 
 from lassi.core.capabilities import Component
+from lassi.harness.contract import ContractInput, InputContract
+from lassi.harness.lassi_io import LassiArray
 
 if TYPE_CHECKING:
     from lassi.bench.registry import SuiteItem, TrainView
@@ -158,6 +172,200 @@ class Score:
     components: Mapping[str, float | None]
     scalar: float | None
     notes: Mapping[str, str] = field(default_factory=dict)
+
+
+# An outcome's code [DESIGN] (task P16.2): a short token, never free text, so no run output, statistic, or seed reaches
+# an adversary through it. Every lassi.harness CONTRACT_REASONS entry is one; task P16.5 adds the stage's own codes.
+_OUTCOME_CODE = re.compile(r"[a-z][a-z0-9-]{0,63}")
+# The fields of a ContractInput other than shape, with the exact types input_contract gives them (lassi.harness).
+_CONTRACT_INPUT_TYPES: tuple[tuple[str, tuple[type, ...]], ...] = (
+    ("name", (str,)),
+    ("dtype", (str,)),
+    ("lo", (int, float)),
+    ("hi", (int, float)),
+    ("allow_nan", (bool,)),
+    ("allow_inf", (bool,)),
+)
+
+
+@final
+@dataclass(frozen=True)
+class Proposal:
+    """One input set an adversary proposes: named arrays, data only, never code (task P16.2).
+
+    `arrays` is a tuple of LassiArray (lassi.harness), each a name, a dtype,
+    a shape, and the element bytes, as one lassi_io file holds them; a list
+    is stored as a tuple. Anything else is refused with a TypeError naming
+    `arrays`: program text, bytes, a mapping, a callable, a code object,
+    None, a lone array, an instance of a LassiArray subclass, which could
+    carry methods, and an array whose name or dtype is not exactly a str or
+    whose shape holds anything but ints (a bool, a float, or text). A
+    proposal may lie outside the item's contract (a repeated, missing, or
+    extra input, another dtype or shape, an element out of range, or no
+    array at all): check_inputs refuses such a set before any run and the
+    refusal is counted, so a Proposal refuses only what is not data. The
+    class takes no subclass, which could add a field.
+    """
+
+    arrays: tuple[LassiArray, ...]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Refuse every subclass (see the class docstring)."""
+        _refuse_subclass("Proposal", cls)
+
+    def __post_init__(self) -> None:
+        """Refuse `arrays` unless it is a tuple or list of LassiArray holding data only; keep it as a tuple."""
+        arrays = _exact_items(self.arrays, LassiArray, "Proposal.arrays")
+        for index, array in enumerate(arrays):
+            _check_array_fields(array, f"Proposal.arrays[{index}]")
+        object.__setattr__(self, "arrays", arrays)
+
+
+@final
+@dataclass(frozen=True)
+class ProposalOutcome:
+    """What became of one earlier proposal, as its adversary may see it: the proposal and a code (task P16.2).
+
+    `code` is a short token, exactly a str of lower-case letters, digits,
+    and hyphens that starts with a letter and has at most 64 characters: the
+    check_inputs reason (lassi.harness CONTRACT_REASONS) for a proposal
+    refused before any run, or the adversary stage's own code for one that
+    ran (task P16.5 fixes those). It is never free text, and the outcome
+    carries no run result, output file, or statistic, so no reference output
+    reaches an adversary through it. A `proposal` that is not exactly a
+    Proposal and a `code` that is not exactly a str are refused with a
+    TypeError, and a str that is not such a token with a ValueError, the
+    message naming the field. The class takes no subclass, which could add
+    a field.
+    """
+
+    proposal: Proposal
+    code: str
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Refuse every subclass (see the class docstring)."""
+        _refuse_subclass("ProposalOutcome", cls)
+
+    def __post_init__(self) -> None:
+        """Refuse a proposal that is not a Proposal and a code that is not a short token."""
+        if type(self.proposal) is not Proposal:
+            raise TypeError(f"ProposalOutcome.proposal must be a Proposal, not {type(self.proposal).__name__}")
+        if type(self.code) is not str:
+            raise TypeError(f"ProposalOutcome.code must be a str, not {type(self.code).__name__}")
+        if _OUTCOME_CODE.fullmatch(self.code) is None:
+            raise ValueError(
+                f"ProposalOutcome.code must be a short token (lower-case letters, digits, and hyphens, starting with "
+                f"a letter, at most 64 characters), never free text, not {self.code[:80]!r}"
+            )
+
+
+@final
+@dataclass(frozen=True)
+class AdversaryView:
+    """All an adversary sees of one trial (task P16.2): the contract, the programs, its budget, and its outcomes.
+
+    `contract` is the item's InputContract (lassi.harness), exactly that
+    type, its inputs a non-empty tuple of exactly ContractInput whose fields
+    have the exact types input_contract gives them (name and dtype a str,
+    shape a tuple of ints, lo and hi an int or a float, the two flags a
+    bool); `source` and `candidate` map each file's relative path to its
+    text, both exactly str, for the source program and the candidate, and
+    are kept as read-only copies; `budget_left` is how many input sets the
+    adversary may still propose, exactly an int of at least 0 (a bool is
+    refused); `outcomes` holds earlier proposals' outcomes (ProposalOutcome)
+    in order, a list kept as a tuple. A held-out input, the item's seed, and
+    a reference output have no field here, and anything else in a field
+    (the held-out input spec, an array, file bytes, a run result, a subclass
+    that adds a field) is refused with a TypeError or a ValueError naming
+    the field (Harness Contract: held-out inputs never appear in a prompt).
+    The class takes no subclass, which could add a field.
+
+    Known cases, not complete: the checks bound what each field can hold,
+    not what a text says, so a file's text could quote anything; the stage
+    that builds the view (task P16.5) gives it the source program's and the
+    candidate's files only.
+    """
+
+    contract: InputContract
+    source: Mapping[str, str]
+    candidate: Mapping[str, str]
+    budget_left: int
+    outcomes: tuple[ProposalOutcome, ...]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Refuse every subclass (see the class docstring)."""
+        _refuse_subclass("AdversaryView", cls)
+
+    def __post_init__(self) -> None:
+        """Check every field (see the class docstring) and keep read-only copies of the files and outcomes."""
+        _check_contract(self.contract, "AdversaryView.contract")
+        for name in ("source", "candidate"):
+            object.__setattr__(self, name, _text_files(getattr(self, name), f"AdversaryView.{name}"))
+        budget = self.budget_left
+        if type(budget) is not int:
+            raise TypeError(f"AdversaryView.budget_left must be an int, not {type(budget).__name__}")
+        if budget < 0:
+            raise ValueError(f"AdversaryView.budget_left must be at least 0, not {budget}")
+        object.__setattr__(self, "outcomes", _exact_items(self.outcomes, ProposalOutcome, "AdversaryView.outcomes"))
+
+
+def _refuse_subclass(base: str, cls: type) -> None:
+    """Raise TypeError for `cls`, a subclass of `base`, which takes none: a subclass could add an unchecked field."""
+    raise TypeError(f"{base} takes no subclass ({cls.__name__}): a subclass could add a field its checks never see")
+
+
+def _exact_items(items: object, kind: type, where: str) -> tuple[Any, ...]:
+    """Return `items` as a tuple when it is a tuple or list whose every item is exactly of `kind`; else TypeError."""
+    if not isinstance(items, (tuple, list)):
+        raise TypeError(f"{where} must be a tuple or list of {kind.__name__}, not {type(items).__name__}")
+    for index, item in enumerate(items):
+        if type(item) is not kind:
+            raise TypeError(f"{where}[{index}] must be a {kind.__name__}, not {type(item).__name__}")
+    return tuple(items)
+
+
+def _check_array_fields(array: LassiArray, where: str) -> None:
+    """Refuse an array whose name or dtype is not exactly a str or whose shape holds anything but exactly ints."""
+    for name in ("name", "dtype"):
+        value = getattr(array, name)
+        if type(value) is not str:
+            raise TypeError(f"{where}.{name} must be a str, not {type(value).__name__}")
+    others = [type(dim).__name__ for dim in array.shape if type(dim) is not int]
+    if others:
+        raise TypeError(f"{where}.shape must hold ints, not {others[0]}")
+
+
+def _check_contract(contract: object, where: str) -> None:
+    """Refuse a contract that is not exactly an InputContract of exactly ContractInput (AdversaryView's docstring)."""
+    if type(contract) is not InputContract:
+        raise TypeError(f"{where} must be an InputContract, not {type(contract).__name__}")
+    inputs = contract.inputs
+    if type(inputs) is not tuple or not inputs:
+        given = "an empty tuple" if type(inputs) is tuple else type(inputs).__name__
+        raise TypeError(f"{where}.inputs must be a non-empty tuple of ContractInput, not {given}")
+    for index, spec in enumerate(inputs):
+        at = f"{where}.inputs[{index}]"
+        if type(spec) is not ContractInput:
+            raise TypeError(f"{at} must be a ContractInput, not {type(spec).__name__}")
+        for name, kinds in _CONTRACT_INPUT_TYPES:
+            value = getattr(spec, name)
+            if type(value) not in kinds:
+                wanted = " or ".join(kind.__name__ for kind in kinds)
+                raise TypeError(f"{at}.{name} must be {wanted}, not {type(value).__name__}")
+        if type(spec.shape) is not tuple or any(type(dim) is not int for dim in spec.shape):
+            raise TypeError(f"{at}.shape must be a tuple of ints, not {type(spec.shape).__name__} {spec.shape!r}")
+
+
+def _text_files(files: object, where: str) -> Mapping[str, str]:
+    """Return a read-only copy of `files` when it maps exactly str paths to exactly str text; else TypeError."""
+    if not isinstance(files, Mapping):
+        raise TypeError(f"{where} must map each file's path (str) to its text (str), not {type(files).__name__}")
+    for path, text in files.items():
+        if type(path) is not str:
+            raise TypeError(f"{where} has a path of type {type(path).__name__}; each path is a str")
+        if type(text) is not str:
+            raise TypeError(f"{where}[{path!r}] is a {type(text).__name__}; each file is given as its text (str)")
+    return MappingProxyType(dict(files))
 
 
 class ContextExceeded(Exception):
@@ -356,7 +564,18 @@ class Profiler(Component, Protocol):
 
 
 class Agent(Component, Protocol):
-    """A role bound to a backend, tools, and a budget."""
+    """A role bound to a backend, tools, and a budget.
+
+    An adversary (bible Agents And Judges, the Adversary role; task P16.2)
+    is an Agent that declares the capability proposes_inputs
+    (lassi.core.capabilities PROPOSES_INPUTS) and provides propose(view)
+    (lassi.core.capabilities Adversary). Its AdversaryView holds the item's
+    input contract, the source program and the candidate as text, the
+    budget left, and earlier proposals' outcomes, and never a held-out
+    input, the item's seed, or a reference output; it returns Proposals,
+    which are data, never code. A recipe's adversary section binds it at
+    adversary.kind and requires the capability (lassi.core.recipe).
+    """
 
     def act(self, trial: Trial) -> Attempt | Mapping[str, str]:
         """Return a new attempt or an annotation for `trial`."""

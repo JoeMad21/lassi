@@ -12,10 +12,13 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
 5. materializes the defaults (`project`: the loaded file's recipe name; `faithful: false`; every fix on);
 6. applies the faithful overrides (bible, Project Recipes Notes; Design Principle 4);
 7. checks types and required choices, never picking a value for a choice left open;
-8. binds components and checks their capabilities without constructing any (Component Interfaces),
-   refuses a faithful recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES),
-   and reads the device section of every component that declares `takes_device` (task P17.2): one is
-   required, never picked, and lassi.core.devices.parse_device refuses a bad one naming the key;
+8. binds components and checks their capabilities without constructing any (Component Interfaces), the
+   adversary section's Agent among them, which must declare proposes_inputs (task P16.2); refuses a faithful
+   recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES), a toolchain upstream
+   never used (NOT_UPSTREAM_TOOLCHAINS), or an offload build (OFFLOAD_CAPABILITIES) with an executor that
+   runs programs and takes no device section (task P16.2); and reads the device section of every component
+   that declares `takes_device` (task P17.2): one is required, never picked, and
+   lassi.core.devices.parse_device refuses a bad one naming the key;
 9. serializes the resolved mapping to canonical YAML and hashes it.
 
 `executor` has two forms (task P4.5). The single form is a kind section, `{kind: <name>, <config>...}`,
@@ -49,12 +52,13 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
 import yaml
 
 from lassi.bench.registry import FORBIDDEN_PURPOSES, HELD_SPLITS
-from lassi.core.capabilities import DEVICE_KEY, TAKES_DEVICE
+from lassi.core.capabilities import DEVICE_KEY, PROPOSES_INPUTS, RUNS_CODE, TAKES_DEVICE
 from lassi.core.devices import DeviceSectionError, parse_device
 from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry, RegistryError, check_bindings, device_path
 
@@ -102,6 +106,26 @@ FIXES: dict[str, str] = {
 # for the host CPU (the -mp=multicore proxy, bible Harness Contract), where upstream builds them for GPU offload.
 # A recipe with faithful: true may not bind a toolchain that declares one (Design Principle 4).
 PROXY_CAPABILITIES = frozenset({"openmp_multicore"})
+# Toolchains a recipe with faithful: true may not bind, each with the reason [DESIGN] (task P16.2; PHASE-NOTES All
+# Phases, the faithful check): a build upstream never used. Here alone a registry name decides, not a capability:
+# gcc-native declares only diagnostics and emits_warnings, which upstream's toolchains declare too, so no capability
+# tells it apart, and its module (lassi/toolchains/gcc.py) lies outside this task. A capability declared there, read
+# here in place of the name, is the follow-up.
+NOT_UPSTREAM_TOOLCHAINS: Mapping[str, str] = MappingProxyType(
+    {"gcc-native": "a host g++ -fopenmp build upstream never used"}
+)
+# Toolchain capabilities of a build whose programs upstream ran on a GPU: `openmp_offload` builds OpenMP target
+# regions for GPU offload (-mp=gpu). A recipe with faithful: true may not pair such a toolchain with an executor that
+# declares runs_code and not takes_device [DESIGN] (task P16.2), native and ttsim among them: such an executor gives
+# its runs no GPU (in the sandbox only a run of the gpu executor, which takes a device section, sees a device node;
+# bible Sandbox, gpu program runs), so the run is not upstream's, whatever the binary then does on the host. A
+# compile-only executor runs nothing, and may be paired.
+# Known cases, not complete: the check closes the two cases PHASE-NOTES All Phases states (gcc-native; nvcpp-cc80
+# with the native executor) and what the capability rule above reaches. A faithful recipe still loads that runs a
+# CUDA build (nvcc-sm80, capability cuda) or a HIP build (hipcc-gfx942, hip) on an executor with no GPU, or that binds
+# nvcpp-cc80, an NVIDIA offload build, with the gpu executor on a rocm device (tests/core/test_faithful_bindings.py
+# pins each).
+OFFLOAD_CAPABILITIES = frozenset({"openmp_offload"})
 
 
 class RecipeError(ValueError):
@@ -512,12 +536,17 @@ REQUIRED: tuple[str, ...] = (
 # The model section's own keys; every other model key is the backend's config (_bindings).
 _MODEL_OWN = ("backend", "id")
 
-# Kind sections in binding order, with the interface each binds.
-_KIND_SECTIONS: tuple[tuple[str, str], ...] = (
-    ("executor", "Executor"),
-    ("oracle", "Oracle"),
-    ("profiler", "Profiler"),
-    ("adversary", "Agent"),
+# Kind sections in binding order, with the interface each binds and the capabilities the section itself needs of the
+# component it binds (Binding.needs, checked by check_bindings): the adversary section binds an Agent that must
+# declare proposes_inputs (task P16.2), while an Agent bound to a role under agents needs none. Known cases, not
+# complete: the rule holds for a run recipe (load_recipe). load_train_recipe binds only trainer.kind, so a train
+# recipe's adversary section (method adversarial, part (b)) is bound and checked by neither rule until task P16.12
+# binds it through the entry here; lassi train refuses the key until then.
+_KIND_SECTIONS: tuple[tuple[str, str, frozenset[str]], ...] = (
+    ("executor", "Executor", frozenset()),
+    ("oracle", "Oracle", frozenset()),
+    ("profiler", "Profiler", frozenset()),
+    ("adversary", "Agent", frozenset({PROPOSES_INPUTS})),
 )
 
 # The train recipe's names (bible Training Module, Algorithms and Weight Modes; the train.yaml block's comments),
@@ -604,7 +633,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
         check_bindings(bindings, registry)
     except RegistryError as exc:
         raise RecipeError(f"{path}: {exc}") from exc
-    _check_faithful_toolchains(path, data, bindings, registry)
+    _check_faithful_bindings(path, data, bindings, registry)
     _check_devices(path, bindings, registry)
     canonical = yaml.safe_dump(data, sort_keys=True, default_flow_style=False, allow_unicode=False, width=4096)
     return Recipe(
@@ -1019,7 +1048,7 @@ def _overlay(merged: Mapping[str, Any], child: Mapping[str, Any]) -> dict[str, A
     single and the per-language form replaces the inherited one too, and two
     per-language sections merge entry by entry (_merge_executors).
     """
-    sections = [section for section, _ in _KIND_SECTIONS] + ["trainer"]
+    sections = [section for section, _, _ in _KIND_SECTIONS] + ["trainer"]
     switched = {section for section in sections if _names_other_kind(merged.get(section), child.get(section))}
     inherited, own = merged.get("executor"), child.get("executor")
     forms = (_executor_form(inherited), _executor_form(own))
@@ -1094,29 +1123,76 @@ def _check_required(data: Mapping[str, Any], required: Sequence[str] = REQUIRED)
             value = value[part]
 
 
-def _check_faithful_toolchains(
+def _check_faithful_bindings(
     path: Path, data: Mapping[str, Any], bindings: Sequence[Binding], registry: Registry
 ) -> None:
-    """Refuse a faithful recipe that binds a toolchain declaring a PROXY_CAPABILITIES capability.
+    """Refuse a faithful recipe that binds a toolchain, or a toolchain and executor pair, upstream never ran.
 
-    Upstream builds OpenMP target regions for GPU offload; a proxy build
-    checks outputs only (bible Harness Contract), so a faithful label on it
-    would misstate what was reproduced (Design Principle 4). The capability,
-    not the toolchain's name, decides. Recipes that are not faithful may
-    bind a proxy. Runs after check_bindings, so every name is registered.
+    A faithful label on such a recipe would misstate what was reproduced
+    (Design Principle 4, Agent Rule 4). Toolchain by toolchain in binding
+    order, the first refusal is raised, naming the binding:
+
+    - a toolchain that declares a PROXY_CAPABILITIES capability: upstream
+      builds OpenMP target regions for GPU offload, and a proxy build checks
+      outputs only (bible Harness Contract); the capability decides;
+    - a toolchain named in NOT_UPSTREAM_TOOLCHAINS [DESIGN] (task P16.2);
+    - a toolchain that declares an OFFLOAD_CAPABILITIES capability, when the
+      executor of its language (the single form's, or the language's own)
+      declares runs_code and not takes_device [DESIGN] (task P16.2), native
+      and ttsim among them; the message also names that executor's binding.
+
+    Recipes that are not faithful may bind any of them. Runs after
+    check_bindings, so every name is registered.
+
+    Known cases, not complete: a faithful recipe still loads that runs a
+    CUDA build (nvcc-sm80) or a HIP build (hipcc-gfx942) on an executor with
+    no GPU, or binds nvcpp-cc80 with the gpu executor on a rocm device (the
+    comments at OFFLOAD_CAPABILITIES).
     """
     if data["faithful"] is not True:
         return
     for binding in bindings:
         if binding.interface != "Toolchain":
             continue
-        proxy = sorted(PROXY_CAPABILITIES & registry.get("Toolchain", binding.name).capabilities)
-        if proxy:
-            raise RecipeError(
-                f"{path}: {binding.where} binds Toolchain {binding.name!r}, which declares {', '.join(proxy)} "
-                "(a proxy build, not upstream's); a recipe with faithful: true may not bind it, so bind "
-                "upstream's toolchain or set faithful: false"
-            )
+        problem = _unfaithful_toolchain(binding, bindings, registry)
+        if problem is not None:
+            raise RecipeError(f"{path}: {problem}")
+
+
+def _unfaithful_toolchain(binding: Binding, bindings: Sequence[Binding], registry: Registry) -> str | None:
+    """Return why a faithful recipe may not bind the Toolchain `binding` (see _check_faithful_bindings), or None."""
+    who = f"{binding.where} binds Toolchain {binding.name!r}"
+    capabilities = registry.get("Toolchain", binding.name).capabilities
+    proxy = sorted(PROXY_CAPABILITIES & capabilities)
+    if proxy:
+        return (
+            f"{who}, which declares {', '.join(proxy)} (a proxy build, not upstream's); a recipe with faithful: true "
+            "may not bind it, so bind upstream's toolchain or set faithful: false"
+        )
+    if binding.name in NOT_UPSTREAM_TOOLCHAINS:
+        return (
+            f"{who} ({NOT_UPSTREAM_TOOLCHAINS[binding.name]}); a recipe with faithful: true may not bind it, so bind "
+            "upstream's toolchain or set faithful: false"
+        )
+    offload = sorted(OFFLOAD_CAPABILITIES & capabilities)
+    executor = _executor_for(bindings, binding.where.removeprefix("toolchain."))
+    if not offload or executor is None:
+        return None
+    runs = registry.get("Executor", executor.name).capabilities
+    if RUNS_CODE not in runs or TAKES_DEVICE in runs:
+        return None
+    return (
+        f"{who}, which declares {', '.join(offload)} (upstream ran such programs on a GPU), and {executor.where} binds "
+        f"Executor {executor.name!r}, which runs programs with no device section, so no GPU is exposed to them; a "
+        "recipe with faithful: true may not pair them, so bind an executor with a GPU device section or a "
+        "compile-only executor for that language, or set faithful: false"
+    )
+
+
+def _executor_for(bindings: Sequence[Binding], language: str) -> Binding | None:
+    """Return the Executor binding that runs `language`'s programs (the single form's, or its own), else None."""
+    paths = ("executor.kind", f"executor.{language}", f"executor.{language}.kind")
+    return next((item for item in bindings if item.interface == "Executor" and item.where in paths), None)
 
 
 def _check_devices(path: Path, bindings: Sequence[Binding], registry: Registry) -> None:
@@ -1214,7 +1290,9 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
 
     A per-language executor section binds one Executor per language, in
     executor_languages order, at executor.<language> for a name and
-    executor.<language>.kind for a kind section. The LLMBackend's config holds
+    executor.<language>.kind for a kind section. A kind section's binding
+    carries the capabilities that section needs (_KIND_SECTIONS; needs, empty
+    for every other binding). The LLMBackend's config holds
     every key of the model section but backend and id: its device section,
     when it has one, under `device`, any server setting (base_url,
     timeout_s, api_key_env; task P17.3), and any in-process model setting
@@ -1222,8 +1300,15 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
     """
     found: list[Binding] = []
 
-    def bind(interface: str, name: str, where: str, config: Mapping[str, Any] | None = None) -> None:
-        found.append(Binding(interface=interface, name=name, where=where, config=_fresh(dict(config or {}))))
+    def bind(
+        interface: str,
+        name: str,
+        where: str,
+        config: Mapping[str, Any] | None = None,
+        needs: frozenset[str] = frozenset(),
+    ) -> None:
+        config = _fresh(dict(config or {}))
+        found.append(Binding(interface=interface, name=name, where=where, config=config, needs=needs))
 
     if "backend" in data.get("model", {}):
         model = data["model"]
@@ -1231,18 +1316,18 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
         bind("LLMBackend", model["backend"], "model.backend", model_config)
     for key in sorted(data.get("toolchain", {})):
         bind("Toolchain", data["toolchain"][key], f"toolchain.{key}")
-    for section, interface in _KIND_SECTIONS:
+    for section, interface, needs in _KIND_SECTIONS:
         if section == "executor" and executor_languages(data):
             for language in executor_languages(data):
                 entry = data[section][language]
                 if isinstance(entry, str):
-                    bind(interface, entry, f"{section}.{language}")
+                    bind(interface, entry, f"{section}.{language}", needs=needs)
                 else:
                     config = {key: value for key, value in entry.items() if key != "kind"}
-                    bind(interface, entry["kind"], f"{section}.{language}.kind", config)
+                    bind(interface, entry["kind"], f"{section}.{language}.kind", config, needs)
         elif section in data:
             config = {key: value for key, value in data[section].items() if key != "kind"}
-            bind(interface, data[section]["kind"], f"{section}.kind", config)
+            bind(interface, data[section]["kind"], f"{section}.kind", config, needs)
     for index, stage in enumerate(data.get("stages", [])):
         bind("Stage", stage, f"stages[{index}]")
     if "score" in data:

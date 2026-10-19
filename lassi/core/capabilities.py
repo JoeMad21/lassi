@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, Protocol, cast, runtime_checkable
 
 if TYPE_CHECKING:
+    from lassi.core.interfaces import AdversaryView, Proposal
     from lassi.core.record import Alignment, Diagnostic, OutputStats
     from lassi.core.tolerance import Tolerance
 
@@ -76,11 +77,22 @@ TAKES_DEVICE = "takes_device"
 # The key of a device section inside a component's recipe section.
 DEVICE_KEY = "device"
 
+# The capability of an executor that runs programs (bible Execution Backends); one without it only compiles. The
+# faithful check of lassi.core.recipe reads it here (task P16.2). lassi.core.stages, which runs programs only on
+# such an executor, keeps its own RUNS_CODE of this value, and tests/core/test_faithful_bindings.py keeps them equal.
+RUNS_CODE = "runs_code"
+
 # The capability of a Profiler that reads power telemetry (task P17.7): its stop() may fill a Profile's avg_power_w
 # and energy_j, and it must also declare TAKES_DEVICE, its device section naming the one GPU it reads. The runner
 # refuses, before any directory exists, such a profiler without TAKES_DEVICE, or one beside a profiled executor that
 # runs on another device; run_loop refuses power values from a profiler that does not declare it.
 SUPPORTS_POWER = "supports_power"
+
+# The capability of an Agent that is an adversary (task P16.2; bible Agents And Judges, the Adversary role;
+# Adversarial Setups, item 1): it provides propose(view) (Adversary below). A recipe's adversary section binds an
+# Agent at adversary.kind and requires it, so check_bindings refuses an Agent there that does not declare it
+# (lassi.core.recipe _KIND_SECTIONS, lassi.core.registry); an Agent bound to a role under agents needs none.
+PROPOSES_INPUTS = "proposes_inputs"
 
 
 @runtime_checkable
@@ -190,6 +202,31 @@ def _reading_problem(reading: object) -> str | None:
         if not isinstance(item.code, str) or not item.code.startswith(GUARD_CODE_PREFIX):
             return f"holds the diagnostic code {item.code!r}, which does not start with {GUARD_CODE_PREFIX!r}"
     return None
+
+
+class Adversary(Protocol):
+    """An Agent that declares PROPOSES_INPUTS ("proposes_inputs"): it searches for input sets that break a candidate.
+
+    What it provides is propose(view). It sees one trial only through an
+    AdversaryView (lassi.core.interfaces): the item's input contract, the
+    source program's and the candidate's files as text, the input sets it
+    may still propose, and its earlier proposals' outcomes; never a held-out
+    input, the item's seed, or a reference output. It returns Proposals,
+    which are data (named arrays), never code, and nothing it returns is
+    executed. Each proposal is checked against the contract (lassi.harness
+    check_inputs) before any run, and one outside it is refused and counted,
+    since a divergence on invalid input is not a bug (bible Adversarial
+    Setups, the adversary rule). A divergence counts only when the oracle
+    confirms it, never on an adversary's claim (Agent Rule 14).
+    """
+
+    def propose(self, view: AdversaryView) -> Sequence[Proposal]:
+        """Return the next input sets to try against the candidate in `view`, at most view.budget_left of them.
+
+        An empty result proposes nothing more. Of the trial it reads only
+        what `view` holds.
+        """
+        ...
 
 
 class OutputFileOracle(Protocol):
