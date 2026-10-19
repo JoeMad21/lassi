@@ -163,4 +163,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P16.11 | OWNER | The LLM adversary on a real model | P16.4,P16.10 | OQ-068: under (a) BLOCKED on a model host; under (b) or (c) P16.G adds it |
 | P16.12 | BLOCKED | Part (b): the adversarial training method | P16.5,P16.7 | BLOCKED on P8 (MI300X access; the Build Roadmap's P16 row, part (b)); planned with P8 |
 | P16.G | READY | Phase gate: adversary finds oracle-confirmed divergences on seeded faulty candidates | P16.4,P16.6,P16.7,P16.9,P16.10 | the phase's state after a pass follows OQ-069 |
-| P16.13 | READY | The replay backend bound from a recipe | - |  |
+| P16.13 | READY | The replay backend bound from a recipe | - | suspended by the owner 2026-10-19 mid-task: its tests and partial code, unreviewed, are in this workstation's git stash 'P16.13 WIP (tests and code, unreviewed; stopped 2026-10-19)'; resume by applying it, then review, fix, bible, and audit |
