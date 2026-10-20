@@ -1,0 +1,11 @@
+{
+  "synthetic": true,
+  "completions": [
+    {
+      "text": "SYNTHETIC claim: the candidate diverges at x = 500.\n```json\n{\"proposals\": [{\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [4], \"fill\": 500}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [4], \"values\": [1, 2, 3, 4]}]}]}\n```\nSYNTHETIC text after the block, never recorded."
+    },
+    {
+      "text": "```json\n{\"proposals\": []}\n```"
+    }
+  ]
+}

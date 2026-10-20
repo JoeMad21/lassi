@@ -67,8 +67,12 @@ refusals as rows of reason and count; and each divergence and contract
 finding under "#### Proposal <index>", with a table of each input's name
 and sha256 in the binary store, then the divergence's candidate_failure
 (CLEAN_CANDIDATE_RUN when the candidate's run was clean) and per-output
-statistics (as an attempt's) or the finding's message. A trial without a
-record adds nothing, so its page renders as before.
+statistics (as an attempt's) or the finding's message. An adversary that
+keeps a log (AdversaryRecord.agent_log; task P16.4) adds a last "### Agent
+log" table of its steps, token counts, malformed replies, dropped
+proposals, and stop ("none" when it never stopped itself); one that keeps
+none adds nothing there. A trial without a record adds nothing, so its
+page renders as before.
 
 Guard reasons (task P17.14): an attempt's Guards table has one row per guard
 outcome (GUARD_OUTCOMES) and then, only when the attempt records why
@@ -89,6 +93,7 @@ from lassi.core.record import (
     GUARD_OUTCOMES,
     TOOLCHAIN_PIN_NAMES,
     AdversaryRecord,
+    AgentLog,
     Attempt,
     Context,
     DeviceRecord,
@@ -474,7 +479,21 @@ def _adversary_blocks(record: AdversaryRecord | None) -> list[str]:
         blocks.append(_table(("Field", "Value"), [("message", finding.message)]))
     if not record.contract_findings:
         blocks.append("None.\n")
+    if record.agent_log is not None:
+        blocks += ["### Agent log\n", _table(("Field", "Value"), _agent_log_rows(record.agent_log))]
     return blocks
+
+
+def _agent_log_rows(log: AgentLog) -> list[tuple[str, str]]:
+    """Return the Agent log table's rows (task P16.4): each count, then the stop ("none" when it never stopped)."""
+    return [
+        ("steps", fmt(log.steps)),
+        ("prompt_tokens", fmt(log.prompt_tokens)),
+        ("completion_tokens", fmt(log.completion_tokens)),
+        ("malformed_replies", fmt(log.malformed_replies)),
+        ("dropped_proposals", fmt(log.dropped_proposals)),
+        ("stop", "none" if log.stop is None else log.stop),
+    ]
 
 
 def render_trial_md(trial: Trial, store: TextStore, *, simulator: bool = False) -> str:

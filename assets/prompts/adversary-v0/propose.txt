@@ -1,0 +1,33 @@
+You are testing a translated program. Find input sets on which the candidate program's outputs differ from the
+outputs of the source program it was translated from.
+
+Each input set gives every input of the contract below: the input's name, dtype, and shape exactly, and every
+element within its range [lo, hi). A set outside the contract is refused before anything runs, and it still
+uses up the budget.
+
+The input contract:
+$contract
+
+The source program, each file in a fenced code block whose first line is // FILE: <path>:
+
+$source_files
+The candidate program, in the same form:
+
+$candidate_files
+You may propose at most $budget_left more input sets.
+
+Your earlier proposals and what became of each: a contract reason when it was refused, agreed when the two
+programs agreed, diverged when the candidate's outputs differed, and contract-finding when the reference program
+itself failed on it:
+$outcomes
+
+Answer with exactly one fenced block, opened by a line ```json and closed by a line ```, and no other fenced
+block. It holds one JSON object of this form:
+{"proposals": [{"inputs": [{"name": "<input name>", "dtype": "<dtype>", "shape": [<dims>], "fill": <value>}]}]}
+Give each input exactly one of these keys for its elements:
+- "values": a list of every element, in C order;
+- "fill": one value for every element;
+- "pattern": a list of values repeated, and cut, to the element count.
+A value for an integer dtype is a JSON integer. A value for a float dtype is a JSON number, read as a double and
+rounded to the dtype to nearest with ties to even, or one of the strings "nan", "inf", and "-inf". Use no other key.
+To stop proposing, answer {"proposals": []}.

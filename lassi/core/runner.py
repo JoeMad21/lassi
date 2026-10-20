@@ -4,7 +4,7 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
 
 1. loads the recipe with the registry (every component registers when this
    module is imported, since it imports lassi.llm, lassi.toolchains,
-   lassi.executors, lassi.profilers, lassi.agents (the fuzzer adversary),
+   lassi.executors, lassi.profilers, lassi.agents (the fuzzer and llm adversaries),
    lassi.core.stages, lassi.core.oracle_stage, which imports lassi.oracles,
    lassi.core.adversary_stage (task P16.5), and lassi.scoring, which
    registers every ScoreProfile);
@@ -293,7 +293,7 @@ from pathlib import Path
 from typing import Any
 
 from lassi import (
-    agents,  # noqa: F401  (registers the Agent fuzzer, the fuzzer adversary)
+    agents,  # noqa: F401  (registers the Agents fuzzer and llm, the adversaries)
     profilers,  # noqa: F401  (registers the Profilers timing, nvml, and rocm_smi)
 )
 from lassi.analysis.guard_coverage import coverage_markdown, guard_coverage

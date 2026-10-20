@@ -1,0 +1,11 @@
+{
+  "synthetic": true,
+  "completions": [
+    {
+      "text": "SYNTHETIC reply written to break the contract, one way per proposal.\n```json\n{\"proposals\": [{\"inputs\": [{\"name\": \"x\", \"dtype\": \"i32\", \"shape\": [4], \"values\": [1, 2, 3, 4]}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [3], \"values\": [1, 2, 3]}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [4], \"fill\": 5000}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [4], \"fill\": \"nan\"}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [4], \"fill\": 1}, {\"name\": \"w\", \"dtype\": \"f32\", \"shape\": [4], \"fill\": 1}]}, {\"inputs\": []}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [2000000], \"fill\": 0}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f128\", \"shape\": [4], \"values\": [1, 2, 3, 4]}]}]}\n```"
+    },
+    {
+      "text": "```json\n{\"proposals\": []}\n```"
+    }
+  ]
+}

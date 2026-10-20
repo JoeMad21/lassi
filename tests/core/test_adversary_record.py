@@ -73,7 +73,18 @@ FINDING = "SYNTHETIC: the cpp reference run ended with exit status 139"
 CANDIDATE_FAILURE = "SYNTHETIC: the cpp candidate run ended with exit status 139"
 # A SYNTHETIC wall time in seconds, not a measurement.
 WALL_S = 12.5
-RECORD_FIELDS = ("agent", "config", "proposals", "refusals", "runs", "wall_s", "divergences", "contract_findings")
+# agent_log (task P16.4) is the last field, optional, so a record written before it loads.
+RECORD_FIELDS = (
+    "agent",
+    "config",
+    "proposals",
+    "refusals",
+    "runs",
+    "wall_s",
+    "divergences",
+    "contract_findings",
+    "agent_log",
+)
 DIVERGENCE_FIELDS = ("proposal", "inputs", "stats", "candidate_failure")
 FINDING_FIELDS = ("proposal", "inputs", "message")
 TABLE_COLUMNS = (
@@ -87,6 +98,7 @@ TABLE_COLUMNS = (
     "wall_s",
     "divergences",
     "contract_findings",
+    "agent_log",
 )
 
 
@@ -265,6 +277,7 @@ def test_the_parquet_mirror_has_an_adversary_table_with_one_row_per_taken_trial(
     assert row["refusals"] == text(found.refusals)
     assert row["divergences"] == text([dataclasses.asdict(entry) for entry in found.divergences])
     assert row["contract_findings"] == text([dataclasses.asdict(entry) for entry in found.contract_findings])
+    assert row["agent_log"] is None, "an adversary that keeps no log has a null agent_log (task P16.4)"
     parquet.write_run_parquet(trials, tmp_path / "parquet")
     assert parquet.read_run_parquet(tmp_path / "parquet")["adversary"] == rows
 

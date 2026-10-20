@@ -84,6 +84,10 @@ NO_PROGRAM = "no-program"
 NO_GUARD = "no-guard"
 GUARD_NOT_CHECKED = "guard-not-checked"
 HOST_COMPUTE_NOT_CHECKED = (NOT_BUILT, NO_PROGRAM, NO_GUARD, GUARD_NOT_CHECKED)
+# Why an adversary that keeps a log stopped proposing in a trial (task P16.4; AgentLog.stop): steps and tokens mean
+# its budget of model calls or of tokens ran out, context-exceeded that its backend refused a request past the
+# model's context (lassi.core.interfaces ContextExceeded), and no-proposal that its model proposed nothing more.
+AGENT_STOPS = ("steps", "tokens", "context-exceeded", "no-proposal")
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -644,6 +648,39 @@ class ContractFinding:
 
 
 @dataclass(frozen=True, kw_only=True)
+class AgentLog:
+    """What an adversary that keeps a log reports of its own model calls in one trial (task P16.4).
+
+    `steps` counts its model calls, a refused one (ContextExceeded)
+    included; `prompt_tokens` and `completion_tokens` sum its backend's
+    counts, which a scripted backend approximates (never a measurement);
+    `malformed_replies` counts the replies it could not read as proposals,
+    each a refused reply that gave the stage no proposal, at most `steps`;
+    `dropped_proposals` counts proposals past the budget left that it never
+    gave the stage; `stop` is why it stopped proposing (AGENT_STOPS), or
+    None when it never stopped itself, the stage's input budget running out
+    first. Every field is required.
+    """
+
+    steps: int
+    prompt_tokens: int
+    completion_tokens: int
+    malformed_replies: int
+    dropped_proposals: int
+    stop: str | None
+
+    def __post_init__(self) -> None:
+        """Check the field types, that every count is zero or more, malformed_replies against steps, and stop."""
+        _check_fields(self)
+        for name in ("steps", "prompt_tokens", "completion_tokens", "malformed_replies", "dropped_proposals"):
+            _check_non_negative("AgentLog", name, getattr(self, name))
+        if self.malformed_replies > self.steps:
+            _fail("AgentLog", "malformed_replies", self.malformed_replies, f"must be at most the {self.steps} step(s)")
+        if self.stop is not None:
+            _check_choice("AgentLog", "stop", self.stop, AGENT_STOPS)
+
+
+@dataclass(frozen=True, kw_only=True)
 class AdversaryRecord:
     """What the adversary stage did with one trial it took (task P16.5; bible Result Record).
 
@@ -656,7 +693,9 @@ class AdversaryRecord:
     trial, in seconds (its builds, the adversary's replies, the checks, and
     the runs), which Final.wall_s, the trial's pipeline time, includes.
     `divergences` and `contract_findings` keep proposal order, and no
-    proposal is in both. Every field is required.
+    proposal is in both. `agent_log` (task P16.4) is the adversary's own
+    log (AgentLog) when it declares reports_log, else None, so a record
+    written before it loads unchanged. Every other field is required.
     """
 
     agent: str
@@ -667,6 +706,7 @@ class AdversaryRecord:
     wall_s: float
     divergences: list[Divergence]
     contract_findings: list[ContractFinding]
+    agent_log: AgentLog | None = None
 
     def __post_init__(self) -> None:
         """Check the field types, the counts, the wall time, the refusal reasons, and the proposal indexes."""

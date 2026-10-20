@@ -12,9 +12,12 @@ item's seed, or a reference output, and proposes data, never code.
 Agents here are generic components: no module names a project, a suite, a
 model, or a host, and none imports the projects package (Agent Rule 3).
 Importing this package registers the Agent `fuzzer` (lassi.agents.fuzzer,
-task P16.3), the fuzzer adversary; the llm adversary comes with task P16.4.
+task P16.3), the fuzzer adversary, and the Agent `llm` (lassi.agents.llm,
+task P16.4), the llm adversary, whose model proposes input sets in a fixed
+declarative form.
 """
 
 from lassi.agents.fuzzer import Fuzzer, draw_seed, fresh_draw
+from lassi.agents.llm import LLMAdversary, ReplyError, parse_reply, render_messages
 
-__all__ = ["Fuzzer", "draw_seed", "fresh_draw"]
+__all__ = ["Fuzzer", "LLMAdversary", "ReplyError", "draw_seed", "fresh_draw", "parse_reply", "render_messages"]

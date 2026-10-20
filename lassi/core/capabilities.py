@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Iterable, Protocol, cast, runtime_checkable
 
 if TYPE_CHECKING:
     from lassi.core.interfaces import AdversaryView, Proposal
-    from lassi.core.record import Alignment, Diagnostic, OutputStats
+    from lassi.core.record import AgentLog, Alignment, Diagnostic, OutputStats
     from lassi.core.tolerance import Tolerance
 
 # The capability of an LLM backend whose model is unloaded before generated code runs, as upstream's notebook does
@@ -93,6 +93,10 @@ SUPPORTS_POWER = "supports_power"
 # Agent at adversary.kind and requires it, so check_bindings refuses an Agent there that does not declare it
 # (lassi.core.recipe _KIND_SECTIONS, lassi.core.registry); an Agent bound to a role under agents needs none.
 PROPOSES_INPUTS = "proposes_inputs"
+
+# The capability of an adversary that keeps a log of its own model calls (task P16.4; LogsTurns below): after
+# asking it, the adversary stage puts its log() in AdversaryRecord.agent_log, and None there for any other.
+REPORTS_LOG = "reports_log"
 
 
 @runtime_checkable
@@ -226,6 +230,14 @@ class Adversary(Protocol):
         An empty result proposes nothing more. Of the trial it reads only
         what `view` holds.
         """
+        ...
+
+
+class LogsTurns(Protocol):
+    """An adversary that declares REPORTS_LOG ("reports_log"): it reports its own model calls in the trial."""
+
+    def log(self) -> AgentLog:
+        """Return its log (lassi.core.record AgentLog) of the trial so far."""
         ...
 
 

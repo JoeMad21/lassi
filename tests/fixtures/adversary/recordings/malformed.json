@@ -1,0 +1,26 @@
+{
+  "synthetic": true,
+  "completions": [
+    {
+      "text": "SYNTHETIC reply with no block: the candidate looks wrong to me."
+    },
+    {
+      "text": "```json\n{\"proposals\": []}\n```\nSYNTHETIC second block:\n```json\n{\"proposals\": []}\n```"
+    },
+    {
+      "text": "```json\n{\"proposals\": [\n```"
+    },
+    {
+      "text": "```json\n{\"proposals\": [], \"claim\": \"SYNTHETIC: the candidate diverges\"}\n```"
+    },
+    {
+      "text": "```json\n{\"proposals\": [{\"inputs\": [{\"name\": \"n\", \"dtype\": \"i8\", \"shape\": [1], \"values\": [300]}]}]}\n```"
+    },
+    {
+      "text": "```json\n{\"proposals\": [{\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [4], \"fill\": 1e39}]}]}\n```"
+    },
+    {
+      "text": "```json\n{\"proposals\": []}\n```"
+    }
+  ]
+}

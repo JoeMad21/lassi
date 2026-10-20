@@ -39,10 +39,12 @@ trial's attempt diagnostics.
 
 The adversary table (task P16.5) has one row per trial the adversary stage
 took (Trial.adversary set): the key columns, agent, config, proposals,
-refusals, runs, wall_s, divergences, and contract_findings. proposals and
-runs are int64 columns and wall_s a double; config, refusals, and the two
-lists (each entry as its record's dict) are JSON text with sorted keys. A
-trial with no record has no row.
+refusals, runs, wall_s, divergences, contract_findings, and agent_log.
+proposals and runs are int64 columns and wall_s a double; config,
+refusals, and the two lists (each entry as its record's dict) are JSON
+text with sorted keys, and so is agent_log (the AgentLog's dict; task
+P16.4), null for an adversary that keeps no log. A trial with no record
+has no row.
 
 The requests table has one row per recorded model request (Trial.requests),
 in index order: the stage that sent it, the attempt its reply became
@@ -232,6 +234,7 @@ SCHEMAS = {
             ("wall_s", _DOUBLE),
             ("divergences", _STRING),
             ("contract_findings", _STRING),
+            ("agent_log", _STRING),
         ]
     ),
 }
@@ -447,6 +450,7 @@ def _adversary_row(record: AdversaryRecord, key: dict[str, str]) -> dict[str, An
         "wall_s": record.wall_s,
         "divergences": _json_cell([dataclasses.asdict(entry) for entry in record.divergences]),
         "contract_findings": _json_cell([dataclasses.asdict(entry) for entry in record.contract_findings]),
+        "agent_log": None if record.agent_log is None else _json_cell(dataclasses.asdict(record.agent_log)),
     }
 
 

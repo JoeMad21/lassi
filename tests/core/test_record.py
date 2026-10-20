@@ -145,9 +145,11 @@ NESTED_RECORDS = {
     "AdversaryRecord": ["AdversaryRecord"],
     "Divergence": ["Divergence"],
     "ContractFinding": ["ContractFinding"],
+    "AgentLog": ["AgentLog"],
 }
 # The top-level blocks of the bible's Result Record yaml block, in order, and the record class of each. The
-# adversary stage's three blocks (task P16.5) follow DeviceRecord; Trial names its record as AdversaryRecord.
+# adversary stage's three blocks (task P16.5) follow DeviceRecord; Trial names its record as AdversaryRecord, whose
+# agent_log names the last block, AgentLog (task P16.4).
 BIBLE_BLOCKS = (
     "Trial",
     "Request",
@@ -159,6 +161,7 @@ BIBLE_BLOCKS = (
     "AdversaryRecord",
     "Divergence",
     "ContractFinding",
+    "AgentLog",
 )
 
 CORE_MODULES = ("lassi.core.record", "lassi.core.store", "lassi.core.trial_md", "lassi.core.parquet")

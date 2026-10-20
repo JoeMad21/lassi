@@ -19,13 +19,14 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
    runs programs and takes no device section (task P16.2); and reads the device section of every component
    that declares `takes_device` (task P17.2): one is required, never picked, and
    lassi.core.devices.parse_device refuses a bad one naming the key;
-9. checks model.recording, the replay backend's recording (task P16.13; _bind_recording): a path relative to
-   the repository root (REPO, read at each load, never the working directory), written with / separators and
-   no empty, `.`, or `..` segment, that names a file under tests/fixtures/ exactly as spelled and still lies
-   inside tests/fixtures/ once links are followed; anything else is refused naming model.recording. The
-   sha256 of the file's bytes enters the model section as model.recording_sha256, which a recipe may state
-   and which must then match, so a rerun from the resolved recipe reads the same bytes; the backend's
-   binding carries the checked file;
+9. checks model.recording, the replay backend's recording (task P16.13; _bind_recording), and
+   adversary.recording, an adversary's own replay backend's (task P16.4): a path relative to the repository
+   root (REPO, read at each load, never the working directory), written with / separators and no empty,
+   `.`, or `..` segment, that names a file under tests/fixtures/ exactly as spelled and still lies inside
+   tests/fixtures/ once links are followed (recording_file); anything else is refused naming the key. The
+   sha256 of the file's bytes enters the section as <section>.recording_sha256, which a recipe may state and
+   which must then match, so a rerun from the resolved recipe reads the same bytes; the backend's binding
+   carries the checked file, and the adversary's binding the sha256 beside the path as written;
 10. serializes the resolved mapping to canonical YAML and hashes it.
 
 `executor` has two forms (task P4.5). The single form is a kind section, `{kind: <name>, <config>...}`,
@@ -86,6 +87,8 @@ REPO = Path(__file__).resolve().parents[2]
 RECORDING_KEY = "recording"
 RECORDING_SHA256_KEY = "recording_sha256"
 RECORDING_DIR = ("tests", "fixtures")
+# The kind section whose Agent may take a recording too, adversary.recording (task P16.4; _KIND_SECTIONS).
+_ADVERSARY = "adversary"
 # The text of model.recording_sha256: a sha256 hex digest as hashlib writes it.
 _SHA256_TEXT = re.compile(r"[0-9a-f]{64}")
 
@@ -1248,70 +1251,94 @@ def _check_devices(path: Path, bindings: Sequence[Binding], registry: Registry) 
 
 
 def _bind_recording(path: Path, data: dict[str, Any], bindings: Sequence[Binding]) -> list[Binding]:
-    """Check model.recording, enter its sha256 in the model section, and give the backend's binding the file (step 9).
+    """Check each section's recording, enter its sha256 there, and give the section's binding what it needs (step 9).
 
-    The file is _recording_file's. model.recording_sha256 becomes the sha256
-    of its bytes; a recipe that states one (a resolved recipe does) must state
-    that one, and one stated without model.recording is refused. The
-    LLMBackend binding's recording becomes the checked file's absolute path,
-    which the runner passes as factory(model.id, recording=...); the resolved
-    mapping keeps the path as written, so the recipe hash names no host path.
-    Runs after check_bindings, so a backend that does not list recording in
-    its config_keys never reaches it with one. A model section with no
+    Each file is recording_file's, and <section>.recording_sha256 becomes the
+    sha256 of its bytes (_section_recording). Runs after check_bindings, so a
+    component that does not list recording in its config_keys never reaches
+    it with one. Every refusal names the key.
+
+    model.recording (task P16.13): the LLMBackend binding's recording becomes
+    the checked file's absolute path, which the runner passes as
+    factory(model.id, recording=...); the resolved mapping keeps the path as
+    written, so the recipe hash names no host path. A model section with no
     backend binds no LLMBackend: its recording is checked and hashed here,
     no binding carries it, and the runner refuses the recipe for the missing
     model.backend, as it does with any other model key. The backend reads
     the file again when the runner builds it, and the runner compares the
-    sha256 of the bytes it read with model.recording_sha256 (task P16.13).
-    Every refusal names the key.
+    sha256 of the bytes it read with model.recording_sha256.
+
+    adversary.recording (task P16.4), an adversary's own replay backend's:
+    the Agent binding's config gains adversary.recording_sha256 and keeps
+    the recording as written, since the adversary stage copies that config
+    into every trial's AdversaryRecord, so no host path enters a record. The
+    Agent resolves the path with recording_file itself and compares the
+    sha256 of the bytes its backend read (lassi.agents.llm).
     """
-    model = data.get("model", {})
-    if RECORDING_KEY not in model:
-        if RECORDING_SHA256_KEY in model:
+    model = _section_recording(path, "model", data.get("model", {}))
+    adversary = _section_recording(path, _ADVERSARY, data.get(_ADVERSARY, {}))
+    found = []
+    for binding in bindings:
+        if model is not None and binding.interface == "LLMBackend":
+            binding = replace(binding, config=_fresh({**binding.config, RECORDING_KEY: str(model[0])}))
+        elif adversary is not None and binding.where == f"{_ADVERSARY}.kind":
+            binding = replace(binding, config=_fresh({**binding.config, RECORDING_SHA256_KEY: adversary[1]}))
+        found.append(binding)
+    return found
+
+
+def _section_recording(path: Path, section: str, values: Any) -> tuple[Path, str] | None:
+    """Check `section`.recording, set `section`.recording_sha256 in `values`, and return the file and that sha256.
+
+    None when the section holds no recording; one that states the sha256
+    without a recording is refused. A recipe that states the sha256 (a
+    resolved recipe does) must state that of the file's bytes.
+    """
+    key, sha_key = f"{section}.{RECORDING_KEY}", f"{section}.{RECORDING_SHA256_KEY}"
+    if not isinstance(values, dict) or RECORDING_KEY not in values:
+        if isinstance(values, Mapping) and RECORDING_SHA256_KEY in values:
             raise RecipeError(
-                f"{path}: model.{RECORDING_SHA256_KEY} is set without model.{RECORDING_KEY}; it records the sha256 "
-                f"of the recording's bytes, so set model.{RECORDING_KEY} or remove it"
+                f"{path}: {sha_key} is set without {key}; it records the sha256 of the recording's bytes, so set "
+                f"{key} or remove it"
             )
-        return list(bindings)
-    value = model[RECORDING_KEY]
-    file = _recording_file(path, value)
+        return None
+    value = values[RECORDING_KEY]
+    file = recording_file(value, f"{path}: {key}")
     try:
         digest = hashlib.sha256(file.read_bytes()).hexdigest()
     except OSError as exc:
-        raise RecipeError(f"{path}: model.{RECORDING_KEY} {value!r} cannot be read ({exc.strerror or exc})") from None
-    stated = model.get(RECORDING_SHA256_KEY)
+        raise RecipeError(f"{path}: {key} {value!r} cannot be read ({exc.strerror or exc})") from None
+    stated = values.get(RECORDING_SHA256_KEY)
     if stated is not None and stated != digest:
         raise RecipeError(
-            f"{path}: model.{RECORDING_SHA256_KEY} is {stated}, but the bytes of model.{RECORDING_KEY} {value!r} "
-            f"have the sha256 {digest}; the recording changed since the recipe stated it, so restore those bytes "
-            "or state the new sha256"
+            f"{path}: {sha_key} is {stated}, but the bytes of {key} {value!r} have the sha256 {digest}; the "
+            "recording changed since the recipe stated it, so restore those bytes or state the new sha256"
         )
-    model[RECORDING_SHA256_KEY] = digest
-    return [
-        replace(binding, config=_fresh({**binding.config, RECORDING_KEY: str(file)}))
-        if binding.interface == "LLMBackend"
-        else binding
-        for binding in bindings
-    ]
+    values[RECORDING_SHA256_KEY] = digest
+    return file, digest
 
 
-def _recording_file(path: Path, value: str) -> Path:
-    """Return the file model.recording names, resolved; refuse it, naming the key, unless it fits the rule below.
+def recording_file(value: object, where: str) -> Path:
+    """Return the recording file `value` names, resolved; refuse it, naming `where`, unless it fits the rule below.
 
-    `value` is a path relative to REPO (read here, at each load) written with /
-    separators: not empty, not absolute (no leading / or \\ and no drive), no
-    backslash, and no empty, `.`, or `..` segment, so the path in the recipe
-    hash has no redundant segment (a link inside tests/fixtures/ could still
-    give a file a second path; none is committed). It must lie under
-    tests/fixtures/ as written, name a file whose every part matches the disk
-    exactly (case included, as Linux reads it), and still lie inside
-    tests/fixtures/ once every link is followed, so a link cannot lead a
-    recording out of it.
+    `where` names the key in each refusal (such as "<recipe>: model.recording"
+    or "adversary.recording"); a refusal is a RecipeError, a ValueError.
+    `value` is a str, a path relative to REPO (read here, at each call)
+    written with / separators: not empty, not absolute (no leading / or \\
+    and no drive), no backslash, and no empty, `.`, or `..` segment, so the
+    path in the recipe hash has no redundant segment (a link inside
+    tests/fixtures/ could still give a file a second path; none is
+    committed). It must lie under tests/fixtures/ as written, name a file
+    whose every part matches the disk exactly (case included, as Linux reads
+    it), and still lie inside tests/fixtures/ once every link is followed,
+    so a link cannot lead a recording out of it (tasks P16.13 and P16.4).
     """
-    where = f"{path}: model.{RECORDING_KEY} {value!r}"
     fixtures = "/".join(RECORDING_DIR) + "/"
+    if not isinstance(value, str):
+        raise RecipeError(f"{where} must be a string, a path under {fixtures}, not {value!r}")
     if not value:
-        raise RecipeError(f"{path}: model.{RECORDING_KEY} is empty; name a recording file under {fixtures}")
+        raise RecipeError(f"{where} is empty; name a recording file under {fixtures}")
+    where = f"{where} {value!r}"
     if value.startswith("/") or PureWindowsPath(value).anchor:
         raise RecipeError(f"{where} is an absolute path; write it relative to the repository root, under {fixtures}")
     if "\\" in value:

@@ -90,7 +90,9 @@ For a trial it takes:
    resolved config, the proposal count, the refusals by reason, the program
    runs made, the stage's own wall time (from its first build to its last
    run; Final.wall_s, the trial's pipeline time, includes it), the
-   divergences, and the findings, both in proposal order.
+   divergences, and the findings, both in proposal order, and, for an
+   adversary that declares reports_log, its log() after the last reply
+   (AgentLog; task P16.4), else None.
 
 The stage changes no attempt's stage, alignment, or score, and nothing in
 the trial but Trial.adversary (Agent Rule 14: a divergence counts only when
@@ -131,7 +133,7 @@ from pathlib import Path
 from typing import Any
 
 from lassi.bench.registry import INPUTS_DIR, SuiteItem, program_args
-from lassi.core.capabilities import ALIGNS_OUTPUT_FILES, OutputFileOracle, declares, unload_before_run
+from lassi.core.capabilities import ALIGNS_OUTPUT_FILES, REPORTS_LOG, OutputFileOracle, declares, unload_before_run
 from lassi.core.interfaces import AdversaryView, Executor, Limits, Proposal, ProposalOutcome, RunResult
 from lassi.core.record import AdversaryRecord, Attempt, ContractFinding, Divergence, Trial, standing_attempt
 from lassi.core.registry import DEFAULT_REGISTRY, Binding, register
@@ -400,8 +402,8 @@ class _Search:
         blobs = BlobStore(self.context.store.root)
         return {array.name: blobs.put(path.read_bytes()) for array, path in zip(proposal.arrays, staged, strict=True)}
 
-    def record(self, binding: Binding, wall_s: float) -> AdversaryRecord:
-        """Return the trial's AdversaryRecord, with `wall_s` as the stage's own wall time."""
+    def record(self, binding: Binding, wall_s: float, agent: Any) -> AdversaryRecord:
+        """Return the trial's AdversaryRecord, with `wall_s` as the stage's own wall time and `agent`'s log, if any."""
         return AdversaryRecord(
             agent=binding.name,
             config=dict(binding.config),
@@ -411,6 +413,7 @@ class _Search:
             wall_s=wall_s,
             divergences=list(self.divergences),
             contract_findings=list(self.findings),
+            agent_log=agent.log() if declares(agent, REPORTS_LOG) else None,
         )
 
 
@@ -452,8 +455,9 @@ class AdversaryStage:
         budget = budget_inputs(binding.config)
         started = time.monotonic()
         search = self._search(trial, standing)
-        search.ask(self._agent(binding), binding, budget)
-        return dataclasses.replace(trial, adversary=search.record(binding, time.monotonic() - started))
+        agent = self._agent(binding)
+        search.ask(agent, binding, budget)
+        return dataclasses.replace(trial, adversary=search.record(binding, time.monotonic() - started, agent))
 
     def describe(self) -> str:
         """Return a one-line description of the stage."""

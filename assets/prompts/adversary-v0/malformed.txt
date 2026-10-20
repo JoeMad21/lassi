@@ -1,0 +1,4 @@
+Your reply could not be read as proposals: $reason
+
+Answer again in the form above: exactly one fenced block, opened by a line ```json and closed by a line ```,
+holding one JSON object {"proposals": [...]}, with at most $budget_left input sets.
