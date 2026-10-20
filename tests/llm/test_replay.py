@@ -27,6 +27,7 @@ upstream source or prompt. No value in this module is a measurement.
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import inspect
 import json
@@ -159,6 +160,28 @@ def test_constructor_signature() -> None:
         ("recording", inspect.Parameter.KEYWORD_ONLY),
     ]
     assert params[1].default is None
+
+
+def test_declares_recording_as_its_one_config_key() -> None:
+    # Task P16.13: a recipe binds the recording as model.recording, which the registry accepts only from a backend
+    # that lists it in config_keys; the runner then passes it as the keyword setting `recording`.
+    cls = replay_cls()
+    assert "config_keys" in vars(cls), "declared on the class itself"
+    assert cls.config_keys == frozenset({"recording"})
+    assert DEFAULT_REGISTRY.get("LLMBackend", "replay").config_keys == frozenset({"recording"})
+    parameter = inspect.signature(cls).parameters["recording"]
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def test_reports_the_sha256_of_the_bytes_it_read(tmp_path: Path) -> None:
+    # Task P16.13: the runner compares it with model.recording_sha256, which the loader entered, so the resolved
+    # recipe describes the bytes the backend replays; a later change to the file never changes it.
+    path = three_replies(tmp_path)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    backend = replay_cls()("fixture/replay-a", recording=path)
+    path.write_bytes(b"changed after the backend read it\n")
+    assert backend.recording_sha256 == digest
+    assert replay_cls()("fixture/replay-b").recording_sha256 is None, "no recording, no sha256"
 
 
 def test_registry_factory_builds_a_backend_from_the_model_id_alone() -> None:

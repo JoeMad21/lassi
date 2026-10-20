@@ -10,9 +10,9 @@ The contract these tests fix, end to end through run_recipe:
 
 - model.base_url, model.timeout_s, and model.api_key_env reach the backend:
   the runner builds it as factory(model.id, **config), the config being the
-  model keys other than backend and id. The key is read from the variable
-  api_key_env names and sent as a Bearer header; the recipe names only the
-  variable.
+  model keys other than backend, id, and recording_sha256 (task P16.13). The
+  key is read from the variable api_key_env names and sent as a Bearer
+  header; the recipe names only the variable.
 - A setting the backend refuses (its ValueError, such as a base_url with a
   query or a password) is a RunError before any directory exists, and the
   message does not quote the value.

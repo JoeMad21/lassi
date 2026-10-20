@@ -16,7 +16,8 @@ Each entry holds the reply `text` and, optionally, the `messages` the call is
 expected to send. When they are present, complete() compares the messages it
 receives with them exactly (roles, order, count, and every character) and
 raises ServingError on any difference. The file is read once, when the backend
-is built. A file that is not ASCII, not valid JSON, not labeled
+is built, and recording_sha256 holds the sha256 of the bytes read (None with
+no recording). A file that is not ASCII, not valid JSON, not labeled
 `"synthetic": true`, or not of this shape (an unknown key included, so a
 misspelled `messages` cannot turn the check off) raises ValueError naming the
 file; a file that cannot be read raises OSError. An empty completions list is
@@ -24,10 +25,22 @@ valid: a trial that ends before any model call needs no completion.
 
 Its token counts are approximations, never measurements: whitespace word
 counts (len(text.split())) of the messages and of the reply, as the mock's.
+
+A recipe binds a recording as model.recording (task P16.13), the one key in
+config_keys: a path relative to the repository root that must name a file
+under tests/fixtures/. lassi.core.recipe checks the path at load, enters the
+sha256 of the file's bytes in the resolved recipe as model.recording_sha256,
+and gives the binding the checked file, so the runner builds the backend as
+factory(model.id, recording=<that file>). The backend reads the file again
+then, so the runner compares its recording_sha256 with
+model.recording_sha256 and refuses a run whose recording changed in between.
+A direct caller passes any path, read against the working directory as
+given.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from collections.abc import Sequence
@@ -58,18 +71,27 @@ class ReplayBackend:
 
     name = "replay"
     capabilities = frozenset({"chat"})
+    # model.recording, which the recipe loader checks and resolves to the file under tests/fixtures/ (task P16.13).
+    config_keys = frozenset({"recording"})
 
     def __init__(self, model_id: str, *, recording: str | os.PathLike[str] | None = None) -> None:
         """Keep `model_id` and read the recording at `recording`, a path to a synthetic JSON recording.
 
         The file is read and checked here, so a bad recording fails when the
         backend is built: ValueError naming the file for a bad one, OSError for
-        one that cannot be read. With no recording (None), complete() raises
-        ServingError.
+        one that cannot be read. recording_sha256 is the sha256 of the bytes
+        read, from that one read, so it describes the completions replayed
+        (task P16.13). With no recording (None), it is None and complete()
+        raises ServingError.
         """
         self.model_id = model_id
         self._path = None if recording is None else Path(recording)
-        self._completions = None if self._path is None else _load_recording(self._path)
+        self.recording_sha256: str | None = None
+        self._completions: tuple[_Recorded, ...] | None = None
+        if self._path is not None:
+            raw = self._path.read_bytes()
+            self.recording_sha256 = hashlib.sha256(raw).hexdigest()
+            self._completions = _parse_recording(self._path, raw)
         self._next = 0
 
     def __repr__(self) -> str:
@@ -119,9 +141,8 @@ def _first_difference(expected: tuple[tuple[str, str], ...], sent: tuple[tuple[s
     return f"{len(sent)} message(s) sent, {len(expected)} expected"
 
 
-def _load_recording(path: Path) -> tuple[_Recorded, ...]:
-    """Read and check the recording at `path`; raise ValueError naming the file when it is bad."""
-    raw = path.read_bytes()
+def _parse_recording(path: Path, raw: bytes) -> tuple[_Recorded, ...]:
+    """Check `raw`, the bytes read from the recording at `path`; raise ValueError naming the file when bad."""
     if not raw.isascii():
         raise ValueError(f"replay recording {path} is not plain ASCII")
     try:

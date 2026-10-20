@@ -11,11 +11,13 @@ The contract these tests fix:
   the model section. The loader fills none in, so a recipe without them
   resolves and hashes exactly as before this task; a key that is set enters
   the canonical YAML and the recipe hash as written.
-- The backend's binding carries every model key except backend and id as its
-  config, beside any device section (task P17.2), so the runner can build
-  the backend as factory(model.id, **config).
+- The backend's binding carries every model key except backend, id, and
+  recording_sha256 (the loader's record of model.recording's bytes; task
+  P16.13) as its config, beside any device section (task P17.2), so the
+  runner can build the backend as factory(model.id, **config).
 - openai_compat accepts all three keys and ollama base_url and timeout_s
-  (their config_keys); mock and replay accept none. The registry's config
+  (their config_keys); replay accepts only recording (task P16.13;
+  tests/core/test_recipe_recording.py) and mock none. The registry's config
   check refuses any other, naming model.<key>.
 - api_key_env holds a variable name: uppercase letters, digits, and '_', not
   starting with a digit, at most 64 characters. A value outside that shape,
@@ -60,7 +62,7 @@ ACCEPTED = {
     "openai_compat": frozenset({"base_url", "timeout_s", "api_key_env"}),
     "ollama": frozenset({"base_url", "timeout_s"}),
     "mock": frozenset(),
-    "replay": frozenset(),
+    "replay": frozenset({"recording"}),
 }
 # The sha256 of the canonical YAML of recipe() loaded as serving.yaml, computed with lassi.core.recipe at 03441ee,
 # before this task; a hash is a function of its input text, not a measurement.
@@ -274,9 +276,11 @@ def test_ollama_refuses_api_key_env_naming_the_key(tmp_path: Path) -> None:
 @pytest.mark.parametrize("key", sorted(SERVER_KEYS))
 @pytest.mark.parametrize("backend", ["mock", "replay"])
 def test_mock_and_replay_refuse_server_keys_naming_the_key(tmp_path: Path, backend: str, key: str) -> None:
+    # The mock accepts no key; replay accepts recording alone (task P16.13), and the refusal lists it.
+    accepted = "it accepts no config keys" if backend == "mock" else "accepted keys: recording"
     message = str(load_error(tmp_path, recipe(model=model(backend, **{key: SERVER_KEYS[key]}))))
     assert f"model.{key}" in message and f"LLMBackend '{backend}'" in message, message
-    assert f"does not accept the key '{key}'" in message and "accepts no config keys" in message, message
+    assert f"does not accept the key '{key}'" in message and accepted in message, message
 
 
 def test_a_misspelled_server_key_is_unknown(tmp_path: Path) -> None:

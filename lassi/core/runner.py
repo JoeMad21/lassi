@@ -95,10 +95,15 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    kind and indices, naming profiler.device and that executor's key.
    A stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id, **config), whose
-   config holds the model section's keys other than backend and id (its
-   device section, server settings such as model.base_url, and an
-   in-process model's model.revision and model.seed), a setting
-   the backend refuses being a RunError; then, for a backend that declares
+   config holds the model section's keys other than backend, id, and
+   recording_sha256 (its device section, server settings such as
+   model.base_url, an in-process model's model.revision and model.seed,
+   and the replay backend's model.recording, which the loader has checked
+   under tests/fixtures/ and hashed into the resolved recipe, passed as the
+   checked file; task P16.13), a setting
+   the backend refuses being a RunError, as are a recording the backend
+   cannot read and one whose bytes, by the backend's recording_sha256, are
+   not those model.recording_sha256 records; then, for a backend that declares
    `model_check` (lassi.core.capabilities MODEL_CHECK), it reads the serving
    record with serving(), so a model the server does not list, a server
    that does not answer, or a record that would hold the API key is a
@@ -138,7 +143,10 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    when it declares scores_attempts, before the trial is written;
 6. with `metrics`, scores every trial again with each profile that gives a
    named metric (these Scores stay out of the trials) and builds the run
-   metric tables (lassi.scoring.run_scoring.compute_metrics);
+   metric tables (lassi.scoring.run_scoring.compute_metrics), and, when an
+   adversary metric is named, the adversary metric tables from the trials'
+   adversary records alone (lassi.analysis.adversary adversary_tables;
+   task P16.6);
 7. writes the run tree and prints one line per trial and the run directory.
 
 With RunOptions.observer set, the run also sends progress events
@@ -197,7 +205,8 @@ host), resolve inside it (Agent Rule 7). The tree holds:
   rate, and each host_compute_not_checked code's count, for the run and
   per target language. With
   `metrics` it ends in a Metrics section
-  (lassi.scoring.run_scoring.metrics_section);
+  (lassi.scoring.run_scoring.metrics_section), with the adversary tables
+  when an adversary metric is named;
 - one directory per trial (one level per trial_id segment) with trial.json,
   trial.md (each run's wall_s row labeled as simulator wall time when the
   trial's target-language executor declares `simulator`), and
@@ -206,7 +215,10 @@ host), resolve inside it (Agent Rule 7). The tree holds:
   never meets an earlier run's builds);
 - texts/, the text store of prompts and replies; parquet/, the mirror, which
   with `metrics` also holds the metric tables and the named components'
-  values (lassi.scoring.run_scoring.write_metrics).
+  values (lassi.scoring.run_scoring.write_metrics), and, when an adversary
+  metric is named and the adversary stage took a trial, the adversary
+  metric tables as parquet/adversary_metrics
+  (lassi.analysis.adversary write_adversary_parquet; task P16.6).
 
 Pinned toolchains (Agent Rule 10): a toolchain class that declares PIN and
 PIN_BIN is built as factory(executable=<toolchains root>/<PREFIX_NAME>/
@@ -312,6 +324,8 @@ from lassi.core.interfaces import Executor, Profiler, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
 from lassi.core.progress import STAGE_START, TRIAL_END, TRIAL_START, GuardedObserver, Observer, ProgressEvent, notify
 from lassi.core.recipe import (
+    RECORDING_KEY,
+    RECORDING_SHA256_KEY,
     UNCAPPED,
     Recipe,
     RecipeError,
@@ -885,7 +899,12 @@ def framework_build(recipe: Recipe, binding: Binding, entry: Entry) -> Framework
 
 
 def _backend_config(recipe: Recipe) -> Mapping[str, Any]:
-    """Return the config of the recipe's LLMBackend binding: the model section's keys other than backend and id."""
+    """Return the config of the recipe's LLMBackend binding.
+
+    It holds the model section's keys other than backend, id, and
+    recording_sha256, with model.recording as the file the loader checked
+    (lassi.core.recipe _bind_recording; task P16.13).
+    """
     return next(binding.config for binding in recipe.bindings if binding.interface == "LLMBackend")
 
 
@@ -895,13 +914,53 @@ def _backend(recipe: Recipe, registry: Registry, settings: _Settings) -> Any:
     The HTTP backends' ValueError messages name the setting and never quote its
     value (lassi.llm._http.checked_base_url), and hf_local's quote only a
     model.id, model.revision, model.seed, or model.device value, none a
-    secret, so the RunError quotes them. Construction sends no request.
+    secret, so the RunError quotes them. Construction sends no request. A
+    backend that takes model.recording reads the file again here, so an
+    OSError (a file removed since load) is a RunError naming model.recording,
+    and _check_recording compares the bytes it read with the loader's.
     """
     factory = registry.get("LLMBackend", settings.backend).factory
+    config = _backend_config(recipe)
     try:
-        return factory(settings.model_id, **_backend_config(recipe))
+        backend = factory(settings.model_id, **config)
     except ValueError as error:
         raise RunError(f"{recipe.path}: model: LLMBackend {settings.backend!r} refused its settings: {error}") from None
+    except OSError as error:
+        if RECORDING_KEY not in config:
+            raise
+        raise RunError(
+            f"{recipe.path}: model.{RECORDING_KEY}: LLMBackend {settings.backend!r} could not read its recording "
+            f"{config[RECORDING_KEY]} ({error.strerror or error}); it was readable when the recipe loaded"
+        ) from None
+    _check_recording(recipe, settings, backend)
+    return backend
+
+
+def _check_recording(recipe: Recipe, settings: _Settings, backend: Any) -> None:
+    """Refuse a backend whose recording bytes are not the ones model.recording_sha256 records (task P16.13).
+
+    The loader hashes model.recording into the resolved recipe, and the
+    backend reads the file again when it is built, reporting the sha256 of
+    the bytes it read as recording_sha256 (lassi.llm.replay). A recording
+    changed in between, or a backend that reports no sha256, is a RunError
+    before any directory exists, so recipe.resolved.yaml describes the bytes
+    the trials replay (Agent Rule 10).
+    """
+    stated = recipe.data.get("model", {}).get(RECORDING_SHA256_KEY)
+    if stated is None:
+        return
+    read = getattr(backend, RECORDING_SHA256_KEY, None)
+    where = f"{recipe.path}: model.{RECORDING_SHA256_KEY}: LLMBackend {settings.backend!r}"
+    if read is None:
+        raise RunError(
+            f"{where} takes model.{RECORDING_KEY} but reports no {RECORDING_SHA256_KEY} (the sha256 of the bytes it "
+            "read), so the run cannot show that the resolved recipe describes the recording it replays"
+        )
+    if read != stated:
+        raise RunError(
+            f"{where} read model.{RECORDING_KEY} with the sha256 {read}, but the recipe loaded it with the sha256 "
+            f"{stated}; the recording changed after the recipe was loaded, so rerun once it holds the bytes intended"
+        )
 
 
 def _served_model(recipe: Recipe, settings: _Settings, backend: Any) -> Mapping[str, Any] | None:

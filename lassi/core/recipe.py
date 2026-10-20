@@ -19,7 +19,14 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
    runs programs and takes no device section (task P16.2); and reads the device section of every component
    that declares `takes_device` (task P17.2): one is required, never picked, and
    lassi.core.devices.parse_device refuses a bad one naming the key;
-9. serializes the resolved mapping to canonical YAML and hashes it.
+9. checks model.recording, the replay backend's recording (task P16.13; _bind_recording): a path relative to
+   the repository root (REPO, read at each load, never the working directory), written with / separators and
+   no empty, `.`, or `..` segment, that names a file under tests/fixtures/ exactly as spelled and still lies
+   inside tests/fixtures/ once links are followed; anything else is refused naming model.recording. The
+   sha256 of the file's bytes enters the model section as model.recording_sha256, which a recipe may state
+   and which must then match, so a rerun from the resolved recipe reads the same bytes; the backend's
+   binding carries the checked file;
+10. serializes the resolved mapping to canonical YAML and hashes it.
 
 `executor` has two forms (task P4.5). The single form is a kind section, `{kind: <name>, <config>...}`,
 binding one Executor at executor.kind for every language. The per-language form is a non-empty mapping
@@ -36,7 +43,7 @@ and can be rerun from (Design Principle 5). It always holds `project`, the first
 trial id segment, so a rerun from it writes the same trial ids.
 
 Train recipes (task P17.8; bible Project Recipes, Notes, train recipes) load with
-load_train_recipe: steps 1 to 4, 7, 8, and 9 as above, against TRAIN_SCHEMA, with no
+load_train_recipe: steps 1 to 4, 7, 8, and 10 as above, against TRAIN_SCHEMA, with no
 default materialized and no faithful override, so each file of the chain must be a train
 recipe. A train recipe binds one Trainer at trainer.kind, whose section holds its device
 and config keys; it names exactly one data source, bench or data.synthetic; bench.split
@@ -50,7 +57,7 @@ import hashlib
 import math
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
@@ -71,6 +78,16 @@ _ENV_NAME_TEXT = re.compile(r"[A-Z_][A-Z0-9_]{0,63}")
 _REVISION_TEXT = re.compile(r"[0-9a-f]{40}")
 # model.seed's bound: the seed of call k is seed + k (bible Serving Rules), far inside torch.manual_seed's range.
 _SEED_LIMIT = 2**32
+
+# The repository root, against which model.recording is read (task P16.13); load_recipe reads it at each load.
+REPO = Path(__file__).resolve().parents[2]
+# model.recording: the replay backend's recording, a path relative to REPO under RECORDING_DIR (task P16.13). The
+# loader enters the sha256 of its bytes beside it, at model.recording_sha256, so the recipe hash covers the bytes.
+RECORDING_KEY = "recording"
+RECORDING_SHA256_KEY = "recording_sha256"
+RECORDING_DIR = ("tests", "fixtures")
+# The text of model.recording_sha256: a sha256 hex digest as hashlib writes it.
+_SHA256_TEXT = re.compile(r"[0-9a-f]{64}")
 
 # Every named fix toggle and what turning it on changes. Fixes default to on; faithful: true turns them all off.
 FIXES: dict[str, str] = {
@@ -453,6 +470,11 @@ _ENV_NAME = _Leaf(
 # model.revision and model.seed: an in-process model's pin and sampling seed (task P17.4).
 _REVISION = _Leaf("a full commit id: 40 lowercase hexadecimal characters", _is_revision)
 _SEED = _Leaf(f"an integer from 0 to {_SEED_LIMIT - 1}", _is_seed)
+# model.recording_sha256: the sha256 of model.recording's bytes, which the loader enters (task P16.13).
+_SHA256 = _Leaf(
+    "a sha256: 64 lowercase hexadecimal characters",
+    lambda value: isinstance(value, str) and _SHA256_TEXT.fullmatch(value) is not None,
+)
 _STRINGS = _ListOf(_STR)
 _KIND = _KindSection()
 _EXECUTOR = _ExecutorSection()
@@ -487,7 +509,8 @@ SCHEMA = _Fields(
         "profiler": _KIND,
         "adversary": _KIND,
         # device: a device section (P17.2); base_url, timeout_s, api_key_env: a served backend's settings (P17.3);
-        # revision, seed: an in-process model's settings (P17.4)
+        # revision, seed: an in-process model's settings (P17.4); recording and its sha256: the replay backend's
+        # recording (P16.13)
         "model": _Fields(
             {
                 "backend": _STR,
@@ -498,6 +521,8 @@ SCHEMA = _Fields(
                 "api_key_env": _ENV_NAME,
                 "revision": _REVISION,
                 "seed": _SEED,
+                RECORDING_KEY: _STR,
+                RECORDING_SHA256_KEY: _SHA256,
             }
         ),
         "arms": _STRINGS,
@@ -533,8 +558,9 @@ REQUIRED: tuple[str, ...] = (
     "executor.kind",  # in the single form; the per-language form names a kind in each entry instead
 )
 
-# The model section's own keys; every other model key is the backend's config (_bindings).
-_MODEL_OWN = ("backend", "id")
+# The model section's own keys; every other model key is the backend's config (_bindings). recording_sha256 is
+# the loader's record of model.recording's bytes, not a backend setting (task P16.13).
+_MODEL_OWN = ("backend", "id", RECORDING_SHA256_KEY)
 
 # Kind sections in binding order, with the interface each binds and the capabilities the section itself needs of the
 # component it binds (Binding.needs, checked by check_bindings): the adversary section binds an Agent that must
@@ -635,6 +661,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
         raise RecipeError(f"{path}: {exc}") from exc
     _check_faithful_bindings(path, data, bindings, registry)
     _check_devices(path, bindings, registry)
+    bindings = _bind_recording(path, data, bindings)
     canonical = yaml.safe_dump(data, sort_keys=True, default_flow_style=False, allow_unicode=False, width=4096)
     return Recipe(
         name=_recipe_name(path),
@@ -985,7 +1012,7 @@ def _is_file_as_spelled(base: Path, relative: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Resolving and checking (steps 4 to 8)
+# Resolving and checking (steps 4 to 9)
 
 
 def _resolve(chain: Sequence[tuple[Path, Mapping[str, Any]]]) -> dict[str, Any]:
@@ -1220,6 +1247,99 @@ def _check_devices(path: Path, bindings: Sequence[Binding], registry: Registry) 
             raise RecipeError(f"{path}: {error}") from None
 
 
+def _bind_recording(path: Path, data: dict[str, Any], bindings: Sequence[Binding]) -> list[Binding]:
+    """Check model.recording, enter its sha256 in the model section, and give the backend's binding the file (step 9).
+
+    The file is _recording_file's. model.recording_sha256 becomes the sha256
+    of its bytes; a recipe that states one (a resolved recipe does) must state
+    that one, and one stated without model.recording is refused. The
+    LLMBackend binding's recording becomes the checked file's absolute path,
+    which the runner passes as factory(model.id, recording=...); the resolved
+    mapping keeps the path as written, so the recipe hash names no host path.
+    Runs after check_bindings, so a backend that does not list recording in
+    its config_keys never reaches it with one. A model section with no
+    backend binds no LLMBackend: its recording is checked and hashed here,
+    no binding carries it, and the runner refuses the recipe for the missing
+    model.backend, as it does with any other model key. The backend reads
+    the file again when the runner builds it, and the runner compares the
+    sha256 of the bytes it read with model.recording_sha256 (task P16.13).
+    Every refusal names the key.
+    """
+    model = data.get("model", {})
+    if RECORDING_KEY not in model:
+        if RECORDING_SHA256_KEY in model:
+            raise RecipeError(
+                f"{path}: model.{RECORDING_SHA256_KEY} is set without model.{RECORDING_KEY}; it records the sha256 "
+                f"of the recording's bytes, so set model.{RECORDING_KEY} or remove it"
+            )
+        return list(bindings)
+    value = model[RECORDING_KEY]
+    file = _recording_file(path, value)
+    try:
+        digest = hashlib.sha256(file.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise RecipeError(f"{path}: model.{RECORDING_KEY} {value!r} cannot be read ({exc.strerror or exc})") from None
+    stated = model.get(RECORDING_SHA256_KEY)
+    if stated is not None and stated != digest:
+        raise RecipeError(
+            f"{path}: model.{RECORDING_SHA256_KEY} is {stated}, but the bytes of model.{RECORDING_KEY} {value!r} "
+            f"have the sha256 {digest}; the recording changed since the recipe stated it, so restore those bytes "
+            "or state the new sha256"
+        )
+    model[RECORDING_SHA256_KEY] = digest
+    return [
+        replace(binding, config=_fresh({**binding.config, RECORDING_KEY: str(file)}))
+        if binding.interface == "LLMBackend"
+        else binding
+        for binding in bindings
+    ]
+
+
+def _recording_file(path: Path, value: str) -> Path:
+    """Return the file model.recording names, resolved; refuse it, naming the key, unless it fits the rule below.
+
+    `value` is a path relative to REPO (read here, at each load) written with /
+    separators: not empty, not absolute (no leading / or \\ and no drive), no
+    backslash, and no empty, `.`, or `..` segment, so the path in the recipe
+    hash has no redundant segment (a link inside tests/fixtures/ could still
+    give a file a second path; none is committed). It must lie under
+    tests/fixtures/ as written, name a file whose every part matches the disk
+    exactly (case included, as Linux reads it), and still lie inside
+    tests/fixtures/ once every link is followed, so a link cannot lead a
+    recording out of it.
+    """
+    where = f"{path}: model.{RECORDING_KEY} {value!r}"
+    fixtures = "/".join(RECORDING_DIR) + "/"
+    if not value:
+        raise RecipeError(f"{path}: model.{RECORDING_KEY} is empty; name a recording file under {fixtures}")
+    if value.startswith("/") or PureWindowsPath(value).anchor:
+        raise RecipeError(f"{where} is an absolute path; write it relative to the repository root, under {fixtures}")
+    if "\\" in value:
+        raise RecipeError(f"{where} must use / separators, so it names the same file on every OS")
+    parts = tuple(value.split("/"))
+    if any(part in ("", ".", "..") for part in parts):
+        raise RecipeError(
+            f"{where} has an empty, '.', or '..' segment; write the file's plain path from the repository "
+            "root, so the path in the recipe hash has no redundant segment"
+        )
+    if parts[: len(RECORDING_DIR)] != RECORDING_DIR or len(parts) <= len(RECORDING_DIR):
+        raise RecipeError(f"{where} is not under {fixtures}; a recording is a test fixture and lives there")
+    root = REPO
+    if not _is_file_as_spelled(root, value):
+        raise RecipeError(
+            f"{where} names no file under the repository root {root} (each part must match the disk exactly, "
+            "including case)"
+        )
+    try:
+        file = root.joinpath(*parts).resolve(strict=True)
+        inside = file.is_relative_to(root.joinpath(*RECORDING_DIR).resolve(strict=True))
+    except (OSError, RuntimeError) as exc:
+        raise RecipeError(f"{where} cannot be resolved ({exc})") from None
+    if not inside:
+        raise RecipeError(f"{where} resolves to {file}, outside {fixtures}; a link may not lead a recording out of it")
+    return file
+
+
 def _check_train_source(path: Path, data: Mapping[str, Any]) -> None:
     """Refuse a train recipe that names both data sources, bench and data.synthetic, or neither."""
     named = [key for key in ("bench", "data") if key in data]
@@ -1293,10 +1413,12 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
     executor.<language>.kind for a kind section. A kind section's binding
     carries the capabilities that section needs (_KIND_SECTIONS; needs, empty
     for every other binding). The LLMBackend's config holds
-    every key of the model section but backend and id: its device section,
-    when it has one, under `device`, any server setting (base_url,
-    timeout_s, api_key_env; task P17.3), and any in-process model setting
-    (revision, seed; task P17.4).
+    every key of the model section but backend, id, and recording_sha256: its
+    device section, when it has one, under `device`, any server setting
+    (base_url, timeout_s, api_key_env; task P17.3), any in-process model
+    setting (revision, seed; task P17.4), and the replay backend's recording
+    as written (task P16.13), which _bind_recording then replaces with the
+    checked file.
     """
     found: list[Binding] = []
 

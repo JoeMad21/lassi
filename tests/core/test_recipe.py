@@ -381,7 +381,7 @@ def bible_block_data(key: str) -> dict[str, Any]:
 
 
 def canonical(data: Mapping[str, Any]) -> str:
-    """Return the canonical YAML text of a resolved mapping (load_recipe step 9)."""
+    """Return the canonical YAML text of a resolved mapping (load_recipe step 10)."""
     return yaml.safe_dump(data, sort_keys=True, default_flow_style=False, allow_unicode=False, width=4096)
 
 
