@@ -36,3 +36,27 @@ Limits:
 - One trial per item, one demo model, five items per direction: not a rate, and not comparable with the paper's tables.
 - No translation compiled, so nothing here says anything about TT correctness or performance; ttsim is a simulator in any case.
 - Wall times include model calls and compiles on a shared host. They are not performance numbers, and none is reported here.
+
+## Follow-up: Qwen3-Coder-30B, C++ to TT
+
+The owner's choice in the same window, once the 8B C++ to TT trials had all stopped at the cap: the same C++ to TT trials with a larger coding model, on four cards (the owner approved four in the working session when the artifact turned out to need them).
+
+Provenance (maxabs-30b/provenance.json, pcc-30b/provenance.json, and serve-30b/provenance.json):
+- runs: rx job 20261020-101846-tiera30-maxabs-d732 (run directory 20261020-tiera30-maxabs) and rx job 20261020-101851-tiera30-pcc-9ecd (run directory 20261020-tiera30-pcc);
+- commit: 60b20d9 (clean tree), branch p16-adversarial;
+- recipes: projects/lassi-demo/tier-a-rngd-30b-cpp2tt-maxabs.yaml, hash 9e5d5a4973c6, and projects/lassi-demo/tier-a-rngd-30b-cpp2tt-pcc.yaml, hash 45d6789649ee; each extends tier-a-rngd-1trial-cpp2tt-maxabs.yaml or tier-a-rngd-1trial-cpp2tt-pcc.yaml (the 8B one-trial recipe with C++ to TT only) with the model id changed, so the same six fixes and the cap of 5 apply;
+- date: 2026-10-20. The jobs ran from 17:18:46 to 17:21:25 UTC and from 17:18:51 to 17:21:05 UTC. Each job log records `lassi_rc=0`; provenance.json's rc 0 is the job's;
+- toolchain pins and devices: as above for the C++ to TT direction;
+- the model: furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8 at revision v2026.4, with temperature 0.2 and max_tokens 4096, served by furiosa-llm 2026.4.0 (rx 20261020-101803-exec-1a45 read the version in that venv) on RNGD npu2 to npu5 by rx job 20261020-095814-rngd-serve30b-9a65 (commit 51154e6), with the same watchdog wrapper. Its log shows npu2 to npu5 at 0.00/47.50 GiB before the server started, and the server loaded two data-parallel groups of TP=16, npu2-3 and npu4-5; run.md records no driver or server version. Each run's job log begins with /v1/models listing the model id. After `rx job kill`, rx 20261020-102313-exec-87c2 showed no own server, port 8123 closed, and all eight cards at 0.00 GiB.
+
+[MEASURED] results, 5 trials (5 items, C++ to TT, one run each):
+
+| Direction | Items | Reached a compiling translation | Stopped at the correction cap |
+| --- | --- | --- | --- |
+| C++ to TT | eltwise_binary, eltwise_sfpu, loopback, matmul_multi_core, matmul_single_core | 0 of 5 | 5 |
+
+- Every trial ended at stage S0 after 6 attempts, with end reason correction-cap; the reference check passed in all 5.
+- Every attempt (30 in all, the first ones included) broke the reply format before any compile: the expected file was not in a fenced block whose first line is `// FILE: <name>.cpp`. rx 20261020-102313-exec-87c2 counted the 30 stored replies: all 30 carry a FILE line, and none carries a code fence.
+- In eltwise_binary (the trial record cpp-tt/eltwise_binary/run01 under run directory 20261020-tiera30-maxabs, read with rx exec on alpha01), the first reply runs to 16460 characters; it begins and ends with runs of `#include <tt-metalium/...>` lines, repeated, and stops mid-line; the second is a short program that adds the arrays in a host loop and never uses the device.
+
+Reading: the larger model breaks the fence_tag format in a different way (a FILE line with no fence, from the first attempt on), so nothing compiled here either. Same limits as above: one sample of one demo model, not a rate.

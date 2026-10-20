@@ -4,4 +4,4 @@
 # Exploratory: not faithful; one sample. Run as tier-a-rngd-1trial-pcc.yaml's header says.
 extends: tier-a-rngd-1trial-cpp2tt-pcc.yaml  # the two matmul items (pcc), C++ to TT, 1 trial each, cap 5
 model:
-  id: furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8  # served at revision v2026.4 on four RNGD cards (tp 32 PEs)
+  id: furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8  # served at revision v2026.4 on four RNGD cards (two data-parallel groups of TP=16)
