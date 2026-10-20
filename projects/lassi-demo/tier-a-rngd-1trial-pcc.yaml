@@ -1,0 +1,11 @@
+# One trial per item and direction of tier-a-rngd-pcc.yaml, with the demo's correction cap of 5, for the owner's
+# two-hour hardware window on 2026-10-20 (OQ-045's real-model Tier A run, cut to fit; the owner's choice in the
+# working session). Run it on the build host from one clean commit, beside tier-a-rngd-1trial-maxabs.yaml, with the
+# model served as plans/PHASE-NOTES.md's real-model run note says, after
+# `uv run tools/fetch_bench.py assets/bench/tt-pairs-v0.yaml`:
+# `uv run lassi --graphics off run projects/lassi-demo/tier-a-rngd-1trial-pcc.yaml --run-id <run id>`.
+# Exploratory: not faithful; 1 trial per item and direction is one sample, not the 5 OQ-045 chose.
+extends: tier-a-rngd-pcc.yaml  # the two matmul items (pcc), both directions, ttsim for TT and native for C++
+loop:
+  max_corrections: 5  # the 09-24 demo's cap (rngd-compile.yaml), so the run fits the window
+trials: {n: 1}  # one trial per item and direction: 4 trials
