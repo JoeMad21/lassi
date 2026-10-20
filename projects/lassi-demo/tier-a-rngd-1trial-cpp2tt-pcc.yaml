@@ -1,0 +1,5 @@
+# The C++ to TT direction only of tier-a-rngd-1trial-pcc.yaml, for the 2026-10-20 window if no RNGD card frees by
+# 12:15 EDT (the owner's choice in the working session: cut to one direction so the run still finishes by 13:30).
+# Exploratory: not faithful; one sample. Run as tier-a-rngd-1trial-pcc.yaml's header says.
+extends: tier-a-rngd-1trial-pcc.yaml  # the two matmul items (pcc), 1 trial each, correction cap 5
+directions: [{source: cpp, target: tt}]  # the model writes the TT host program; 2 trials
