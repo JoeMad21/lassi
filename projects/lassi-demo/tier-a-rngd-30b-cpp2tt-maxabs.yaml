@@ -1,0 +1,7 @@
+# tier-a-rngd-1trial-cpp2tt-maxabs.yaml with a larger coding model, for the follow-up in the owner's 2026-10-20
+# window (the owner's choice in the working session: "Try the 30B coder after", once the 8B run's C++ to TT trials
+# all stopped at the correction cap). Served by furiosa-llm 2026.4.0 at artifact revision v2026.4 on one RNGD card.
+# Exploratory: not faithful; one sample. Run as tier-a-rngd-1trial-maxabs.yaml's header says.
+extends: tier-a-rngd-1trial-cpp2tt-maxabs.yaml  # the three max_abs items, C++ to TT, 1 trial each, cap 5
+model:
+  id: furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8  # served at revision v2026.4 on one RNGD card
