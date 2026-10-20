@@ -197,6 +197,12 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - A fresh adversary workdir holds the program's files, the support files, the artifact copy, and @inputs; a build whose program needs another build product at run time fails there, and a reference failing that way is recorded as a contract finding (lassi/core/adversary_stage.py, _Program.copied).
 - Hand-offs from P16.6 (2026-10-19): a recipe that names an adversary metric builds every ScoreProfile in plan_scoring, so a real adversary run that names one (P16.8, P16.10, P16.G) still needs the lassi profile's offline tiktoken cache and a directory as bench root; the bible's Readability Standards Run row and Project Recipes' score and metrics bullet do not yet name the adversary tables (the Run Metrics paragraph does), which P16.7's bible edit adds; and lassi/core/runner.py's docstring on metrics and parquet/ does not name them, for the next task that edits runner.py.
 - Hand-off from P16.13 (2026-10-20), for P16.4: the llm adversary's replay backend takes its recording under P16.13's rule, but lassi.core.recipe's check of that rule, _recording_file, is private, and _bind_recording rewrites only the LLMBackend binding's model.recording. An Agent's config needs the same check, sha256, and checked file, so reuse _recording_file (made public if another module calls it) rather than restate the rule (bible Project Recipes, Notes, Replay recording).
+- Hand-offs from P16.4 (2026-10-20), for the tasks named:
+  - P16.8: tests/fixtures/adversary/recordings/break-contract.json breaks only the contract of the adv-stage test suite (one input x, f32, shape [4], [-1000, 1000)); for the gate, write or check a break-contract recording against each adv-seeded-v0 item's contract, so every proposal of it is refused there too.
+  - P16.10: the freeze record hashes lassi/agents/llm.py (its ReplyError reasons are model-facing text, shown through malformed.txt), assets/prompts/adversary-v0/, and tests/fixtures/adversary/recordings/.
+  - P16.11: the llm adversary refuses every backend that replays no recording (lassi/agents/llm.py _backend), so no default server address is used; a served or in-process adversary lifts that refusal with its own server-setting keys, the model check, and a serving record.
+
+## P17 Portable Stack
 
 ## P17 Portable Stack
 
