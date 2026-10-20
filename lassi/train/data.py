@@ -21,7 +21,7 @@ load_train_recipe):
 Each returns a TrainData whose split_hash is the sha256 of the canonical JSON
 of the data's identity (split_hash): for synthetic data the records in file
 order, a content hash that the file's name and whitespace do not change; for
-bench data the suite, its pinned commit, the split, the sorted item names,
+bench data the suite, its pinned commit (null for a tracked suite), the split, the sorted item names,
 and the manifest's sha256. Every refusal is a RunError (lassi.core.runner)
 naming the recipe key, before any directory exists.
 """

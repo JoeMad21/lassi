@@ -1,0 +1,33 @@
+# The fuzzer against the seeded faulty candidates of adv-seeded-v0 (task P16.8; plans/p16-adversarial.md, the
+# planning decision "Gate reading (P16.G)"). The replay backend delivers each seeded candidate as one trial's reply
+# (tests/fixtures/adversary/seeded/seeded.json, synthetic, never model output); every candidate passes binary_io on
+# its item's held-out inputs, and the adversary stage asks the fuzzer for in-contract inputs on which it diverges.
+# Run it from one clean commit in the local distro's clone (task P16.10 runs it first, after the freeze):
+# `uv run lassi --graphics off run projects/adversary-seeded/seeded-fuzzer.yaml --run-id <run id>`. A tracked suite:
+# no fetch and no bench root. Exploratory until P16.10's freeze record fixes the candidates, seed, and budget.
+extends: base  # projects/base.yaml: sampling, runs root, sandbox, and report choices
+faithful: false  # a test recipe; nothing here reproduces an upstream run
+model:
+  backend: replay  # replays the seeded candidates in trial order (lassi.llm.replay)
+  id: adv-seeded-replay  # a label for the trial records; no model is served or loaded
+  recording: tests/fixtures/adversary/seeded/seeded.json  # its path and sha256 enter the resolved recipe (P16.13)
+llm:
+  sampling:
+    max_tokens: 4096  # base.yaml leaves max_tokens open and the runner never picks it; the replay ignores it
+loop:
+  max_corrections: 0  # no correction, so each trial takes exactly one completion and the recording stays aligned
+bench:
+  suite: adv-seeded-v0  # assets/bench/adv-seeded-v0.yaml: the six seeded-set items, a tracked suite
+  split: unassigned  # every item stays unassigned until the owner assigns it (OQ-067 (2), OQ-025)
+directions: [{source: cpp, target: cpp}]  # the reference is both the source program and the target reference
+prompts: p0-smoke  # assets/prompts/p0-smoke/: a template set any direction can use; the replay ignores the prompt
+toolchain:
+  cpp: gcc-native  # the pinned host g++ with the native row's flags (toolchains/gcc.pin)
+stages: [baseline, generate, compile_loop, run_loop, oracle, adversary]  # the adversary stage after the oracle
+executor: {kind: native}  # the reference and every candidate run in the sandbox on the host CPU
+# one numeric threshold, every float item's tolerance; binary_io compares scale_i64's integer output exactly
+# whatever the threshold. from_baseline is refused on a one-language direction, since the baseline then builds
+# one reference and compares it with itself, an agreement that would make from_baseline an exact match.
+oracle: {kind: binary_io, metric: max_abs, threshold: 0.001}
+adversary: {kind: fuzzer, budget: {inputs: 32}, seed: 1}  # the gate's fuzzer; P16.10 freezes both values
+trials: {n: 2}  # two seeded candidates per item: 12 trials

@@ -1,0 +1,16 @@
+# The llm adversary, driven by a replay recording, against the seeded candidates (task P16.8; plans/
+# p16-adversarial.md, the planning decision "Gate reading (P16.G)"): its recording
+# (tests/fixtures/adversary/seeded/break-contract.json, synthetic, never model output) proposes only input sets that
+# break every adv-seeded-v0 contract, so check_inputs refuses each before any run and the run reads the
+# invalid-input rejection rate. No real model is called (OQ-068). Run it as seeded-fuzzer.yaml says:
+# `uv run lassi --graphics off run projects/adversary-seeded/seeded-llm.yaml --run-id <run id>`.
+extends: seeded-fuzzer.yaml  # the seeded run's model, suite, stages, oracle, and trials
+adversary:
+  kind: llm  # lassi.agents.llm, on a scripted backend
+  budget: {inputs: 8, tokens: 200000, steps: 4}  # the recording's first reply proposes 8 sets; P16.10 freezes these
+  backend: replay
+  model: adv-seeded-break-contract  # a label; no model is served or loaded
+  sampling: {temperature: 0.2, top_p: 0.9, max_tokens: 2048}  # recorded with the requests; the replay ignores them
+  prompts: adversary-v0  # assets/prompts/adversary-v0/
+  recording: tests/fixtures/adversary/seeded/break-contract.json  # its sha256 enters the resolved recipe (P16.4)
+# A section naming another kind replaces the inherited one, so none of the fuzzer's keys (its seed) carry over.

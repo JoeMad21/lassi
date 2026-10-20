@@ -1,0 +1,25 @@
+# The control of the seeded set (task P16.8; plans/p16-adversarial.md, the planning decision "Gate reading
+# (P16.G)"): the mock delivers each item's reference program as its own candidate, so the fuzzer must find no
+# divergence on any item. Every key but model and trials is seeded-fuzzer.yaml's, restated here since the model
+# section merges key by key and the mock takes no recording. Run it as seeded-fuzzer.yaml says:
+# `uv run lassi --graphics off run projects/adversary-seeded/control-fuzzer.yaml --run-id <run id>`.
+extends: base  # projects/base.yaml: sampling, runs root, sandbox, and report choices
+faithful: false  # a test recipe; nothing here reproduces an upstream run
+model: {backend: mock, id: mock-reference}  # replies with the item's reference target in FILE blocks
+llm:
+  sampling:
+    max_tokens: 4096  # base.yaml leaves max_tokens open and the runner never picks it; the mock ignores it
+loop:
+  max_corrections: 0  # as seeded-fuzzer.yaml; the reference compiles, so no correction is ever asked for
+bench:
+  suite: adv-seeded-v0  # assets/bench/adv-seeded-v0.yaml: the six seeded-set items, a tracked suite
+  split: unassigned  # every item stays unassigned until the owner assigns it (OQ-067 (2), OQ-025)
+directions: [{source: cpp, target: cpp}]  # the reference is both the source program and the target reference
+prompts: p0-smoke  # assets/prompts/p0-smoke/: a template set any direction can use; the mock ignores the prompt
+toolchain:
+  cpp: gcc-native  # the pinned host g++ with the native row's flags (toolchains/gcc.pin)
+stages: [baseline, generate, compile_loop, run_loop, oracle, adversary]  # the adversary stage after the oracle
+executor: {kind: native}  # the reference and every candidate run in the sandbox on the host CPU
+oracle: {kind: binary_io, metric: max_abs, threshold: 0.001}  # as seeded-fuzzer.yaml
+adversary: {kind: fuzzer, budget: {inputs: 32}, seed: 1}  # as seeded-fuzzer.yaml; P16.10 freezes both values
+trials: {n: 1}  # one control per item: 6 trials

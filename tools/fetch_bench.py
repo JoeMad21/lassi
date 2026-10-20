@@ -30,6 +30,10 @@ Two routes, chosen per suite (task P4.13):
 It is idempotent: a destination already at the commit (its git HEAD, or the
 first line of its lassi-fetch.txt) with every file present and matching is
 kept, and nothing is copied or fetched.
+
+A tracked suite (no repo and commit; lassi.bench.registry, task P16.8) has
+every language in this repository: the tool says so and returns 0, with no
+network, no LASSI_SCRATCH, and nothing written.
 """
 
 from __future__ import annotations
@@ -209,11 +213,17 @@ def main(argv: list[str]) -> int:
     if len(argv) != 1:
         print("usage: fetch_bench.py <suite manifest>", file=sys.stderr)
         return 2
+    suite = load_suite(Path(argv[0]))
+    if suite.tracked:
+        print(
+            f"fetch_bench: {suite.name} is a tracked suite: every language is in the repository, so there is nothing "
+            "to fetch"
+        )
+        return 0
     scratch = os.environ.get("LASSI_SCRATCH", "")
     if not scratch:
         print("fetch_bench: LASSI_SCRATCH is not set; run this on the build host through tools/rx.py", file=sys.stderr)
         return 2
-    suite = load_suite(Path(argv[0]))
     dest = sources_dir(Path(scratch), suite)
     if fetched_commit(dest) == suite.commit and not missing_files(suite, dest) and not mismatched_files(suite, dest):
         print(f"fetch_bench: {dest} already holds {suite.name} at {suite.commit}")

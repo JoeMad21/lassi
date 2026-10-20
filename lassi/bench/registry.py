@@ -73,6 +73,16 @@ Optional keys for hand-written pairs (task P4.13, tt-pairs-v0):
 - per item, `unpack_to_dest`: a non-empty note on the item's unpack_to_dest
   check (ttsim Facts; plans/spikes/p4-ttsim-runtime.md).
 
+A tracked suite (task P16.8): a manifest may leave out `repo` and
+`commit` together, for a suite written wholly in this repository, such as
+adv-seeded-v0. Every language of every item is then `tracked: true`, every
+language support entry is `{tracked: ...}`, no item declares item-level
+`support` (which reads the fetched sources), and `pin` is refused; each
+refusal names the key. Suite.repo and Suite.commit are None and
+Suite.tracked is True; sources_dir refuses such a suite, since it has no
+fetched sources, and tools/fetch_bench.py has nothing to fetch for it.
+One of repo and commit without the other is refused naming the other.
+
 A string value anywhere in a manifest that starts with PLACEHOLDER is
 refused, naming its key, so an unfinished manifest never loads.
 """
@@ -219,7 +229,7 @@ class TrainView:
     """
 
     name: str
-    commit: str
+    commit: str | None
     train_items: Mapping[str, SuiteItem]
     held: Mapping[str, str]
 
@@ -237,13 +247,22 @@ class TrainView:
 
 @dataclass(frozen=True)
 class Suite:
-    """A loaded suite manifest: the pinned repository, its items, and the pin of its installed copy, if any."""
+    """A loaded suite manifest: the pinned repository, its items, and the pin of its installed copy, if any.
+
+    `repo` and `commit` are None for a tracked suite (the module docstring),
+    whose every language is in this repository.
+    """
 
     name: str
-    repo: str
-    commit: str
+    repo: str | None
+    commit: str | None
     items: Mapping[str, SuiteItem]
     pin: str | None = None
+
+    @property
+    def tracked(self) -> bool:
+        """Return True for a tracked suite: no upstream repository, every language in this repository."""
+        return self.commit is None
 
     def item(self, name: str, *, purpose: str) -> SuiteItem:
         """Return item `name` for `purpose`, one of PURPOSES (Agent Rule 5).
@@ -356,7 +375,12 @@ def stage_inputs(item: SuiteItem, workdir: Path) -> list[str]:
 
 
 def sources_dir(scratch: Path, suite: Suite) -> Path:
-    """Return where the pinned sources of `suite` live under the scratch root; never inside the repository."""
+    """Return where the pinned sources of `suite` live under the scratch root; never inside the repository.
+
+    A tracked suite has no fetched sources, so it raises ValueError.
+    """
+    if suite.tracked:
+        raise ValueError(f"{suite.name} is a tracked suite: it has no fetched sources; every language is tracked")
     dest = Path(scratch) / "bench" / f"{suite.name}@{suite.commit}"
     resolved = dest.resolve()
     if resolved == _REPO or _REPO in resolved.parents:
@@ -370,19 +394,60 @@ def load_suite(path: Path) -> Suite:
     data = yaml.safe_load(path.read_bytes().decode("utf-8"))
     where = str(path)
     _refuse_placeholders(data, where)
-    _keys(data, {"suite", "repo", "commit", "items"}, where, optional={"pin"})
+    _keys(data, {"suite", "items"}, where, optional={"repo", "commit", "pin"})
     if data["suite"] != path.stem:
         raise ValueError(f"{where}: suite {data['suite']!r} must match the file name {path.stem!r}")
+    tracked = "repo" not in data and "commit" not in data
+    if not tracked:
+        _check_upstream(data, where)
+    if not isinstance(data["items"], dict) or not data["items"]:
+        raise ValueError(f"{where}: items must be a non-empty mapping")
+    items = {name: _item(name, spec, f"{where}: items.{name}") for name, spec in data["items"].items()}
+    if tracked:
+        _check_tracked(data, items, where)
+    return Suite(
+        name=data["suite"], repo=data.get("repo"), commit=data.get("commit"), items=items, pin=data.get("pin")
+    )
+
+
+def _check_upstream(data: Mapping[str, Any], where: str) -> None:
+    """Refuse a manifest's repo, commit, and pin unless repo is an https URL and commit a full commit id."""
+    for key, other in (("repo", "commit"), ("commit", "repo")):
+        if key not in data:
+            raise ValueError(
+                f"{where}: {other} is set without {key}; set both, or neither for a tracked suite whose every "
+                "language is in this repository"
+            )
     if not isinstance(data["commit"], str) or not _COMMIT.fullmatch(data["commit"]):
         raise ValueError(f"{where}: commit must be a full 40-hex commit id, got {data['commit']!r}")
     if not isinstance(data["repo"], str) or not data["repo"].startswith("https://"):
         raise ValueError(f"{where}: repo must be an https URL, got {data['repo']!r}")
     if "pin" in data:
         _check_pin(data["pin"], data["repo"], data["commit"], where)
-    if not isinstance(data["items"], dict) or not data["items"]:
-        raise ValueError(f"{where}: items must be a non-empty mapping")
-    items = {name: _item(name, spec, f"{where}: items.{name}") for name, spec in data["items"].items()}
-    return Suite(name=data["suite"], repo=data["repo"], commit=data["commit"], items=items, pin=data.get("pin"))
+
+
+def _check_tracked(data: Mapping[str, Any], items: Mapping[str, SuiteItem], where: str) -> None:
+    """Refuse, in a tracked suite (no repo or commit), a pin and anything read from fetched sources (task P16.8)."""
+    if "pin" in data:
+        raise ValueError(f"{where}: pin needs a repo and a commit; a tracked suite has no installed copy to pin")
+    for name, item in items.items():
+        if item.support:
+            raise ValueError(
+                f"{where}: items.{name}.support reads the fetched sources, which a tracked suite has none of; give "
+                "each language its own tracked support files instead"
+            )
+        for language, spec in item.languages.items():
+            if not spec.tracked:
+                raise ValueError(
+                    f"{where}: items.{name}.languages.{language} is not tracked, but a suite with no repo and commit "
+                    "is a tracked suite, whose every language is tracked: true"
+                )
+            upstream = sorted(file for file, entry in spec.support.items() if not entry.tracked)
+            if upstream:
+                raise ValueError(
+                    f"{where}: items.{name}.languages.{language}.support.{upstream[0]} is an upstream file, which a "
+                    "tracked suite has no sources for"
+                )
 
 
 def _refuse_placeholders(value: Any, where: str, key: str = "") -> None:

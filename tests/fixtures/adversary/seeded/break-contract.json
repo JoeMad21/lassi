@@ -1,0 +1,11 @@
+{
+  "synthetic": true,
+  "completions": [
+    {
+      "text": "SYNTHETIC reply written to break every adv-seeded-v0 contract, one way per proposal.\n```json\n{\"proposals\": [{\"inputs\": []}, {\"inputs\": [{\"name\": \"zz\", \"dtype\": \"f32\", \"shape\": [64], \"fill\": 0}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f128\", \"shape\": [64], \"fill\": 0}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [3], \"fill\": 0}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [2000000], \"fill\": 0}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f64\", \"shape\": [64], \"fill\": 0}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [64], \"fill\": 0}, {\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [64], \"fill\": 0}]}, {\"inputs\": [{\"name\": \"x\", \"dtype\": \"f32\", \"shape\": [64], \"fill\": 200000000}]}]}\n```\n"
+    },
+    {
+      "text": "SYNTHETIC reply: nothing more.\n```json\n{\"proposals\": []}\n```\n"
+    }
+  ]
+}

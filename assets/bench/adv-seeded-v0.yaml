@@ -1,0 +1,116 @@
+# The seeded set of P16 (bible Benchmark Suites; task P16.8; plans/p16-adversarial.md, the planning decision "Gate
+# subjects (P16.8)"): six small synthetic C++ reference programs, written here, that read their held-out inputs and
+# write their outputs through assets/harness/c/lassi_io.h. The suite is the subject of the adversary gate: its seeded
+# faulty candidates (tests/fixtures/adversary/seeded/, replay fixtures outside every suite) each pass binary_io on an
+# item's held-out inputs and diverge only on in-contract inputs those never hold. A tracked suite (no repo or commit):
+# every file is in this repository, so tools/fetch_bench.py has nothing to fetch and a run needs no bench root.
+# Per item: split stays unassigned until the owner assigns it (OQ-067 (2), OQ-025); inputs (one input x, at most
+# 2**20 elements), seed, and outputs give the program's arguments (lassi.bench.registry program_args); contract
+# widens x's range past the held-out inputs' (task P16.1), so a seeded fault lies inside the contract and outside
+# what the held-out inputs reach; tolerance is the program's own exactness (max_abs 0.001 for an f32 output, exact
+# for an integer one). The programs are deterministic and single-threaded: no thread and no OpenMP construct, since
+# toolchains/gcc.pin builds with -fopenmp and a reduction in thread order could make a control diverge.
+suite: adv-seeded-v0
+items:
+  pair_max:
+    split: unassigned
+    seed: 101
+    # the larger of each adjacent pair, NaN propagated; held-out x holds no NaN, the contract lets one in
+    inputs:
+      - {name: x, dtype: f32, shape: [64], dist: uniform, lo: -1.0, hi: 1.0}
+    outputs: [y]  # f32 [32]
+    tolerance: {metric: max_abs, threshold: 0.001}
+    contract:
+      - {name: x, dtype: f32, lo: -1000.0, hi: 1000.0, allow_nan: true, allow_inf: true}
+    languages:
+      cpp:
+        dir: assets/bench/adv-seeded-v0/pair_max/cpp
+        tracked: true
+        files: [pair_max.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+  piecewise_gate:
+    split: unassigned
+    seed: 102
+    # gates at 0 and 1; held-out x lies in [2, 10), past both
+    inputs:
+      - {name: x, dtype: f32, shape: [64], dist: uniform, lo: 2.0, hi: 10.0}
+    outputs: [y]  # f32 [64]
+    tolerance: {metric: max_abs, threshold: 0.001}
+    contract:
+      - {name: x, dtype: f32, lo: -1000.0, hi: 1000.0}
+    languages:
+      cpp:
+        dir: assets/bench/adv-seeded-v0/piecewise_gate/cpp
+        tracked: true
+        files: [piecewise_gate.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+  piecewise_ops:
+    split: unassigned
+    seed: 103
+    # a negative branch held-out x never takes: x lies in [1, 10)
+    inputs:
+      - {name: x, dtype: f32, shape: [64], dist: uniform, lo: 1.0, hi: 10.0}
+    outputs: [y]  # f32 [64]
+    tolerance: {metric: max_abs, threshold: 0.001}
+    contract:
+      - {name: x, dtype: f32, lo: -1000.0, hi: 1000.0}
+    languages:
+      cpp:
+        dir: assets/bench/adv-seeded-v0/piecewise_ops/cpp
+        tracked: true
+        files: [piecewise_ops.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+  prefix_sum:
+    split: unassigned
+    seed: 104
+    # running sums of 64 values in [0, 1), at most 64, where f32 and double accumulators agree within 0.001
+    inputs:
+      - {name: x, dtype: f32, shape: [64], dist: uniform, lo: 0.0, hi: 1.0}
+    outputs: [y]  # f32 [64]
+    tolerance: {metric: max_abs, threshold: 0.001}
+    contract:
+      - {name: x, dtype: f32, lo: -100000000.0, hi: 100000000.0}
+    languages:
+      cpp:
+        dir: assets/bench/adv-seeded-v0/prefix_sum/cpp
+        tracked: true
+        files: [prefix_sum.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+  scale_i64:
+    split: unassigned
+    seed: 105
+    # 3000x + 7 in 64 bits; held-out x lies in [0, 100), where 32 bits and f32 both hold the product exactly
+    inputs:
+      - {name: x, dtype: i32, shape: [64], dist: integers, lo: 0, hi: 100}
+    outputs: [y]  # i64 [64]
+    tolerance: {metric: max_abs, threshold: 0}
+    contract:
+      - {name: x, dtype: i32, lo: -1000000, hi: 1000000}
+    languages:
+      cpp:
+        dir: assets/bench/adv-seeded-v0/scale_i64/cpp
+        tracked: true
+        files: [scale_i64.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+  signed_root:
+    split: unassigned
+    seed: 106
+    # a negative branch held-out x never takes: x lies in [1, 100)
+    inputs:
+      - {name: x, dtype: f32, shape: [64], dist: uniform, lo: 1.0, hi: 100.0}
+    outputs: [y]  # f32 [64]
+    tolerance: {metric: max_abs, threshold: 0.001}
+    contract:
+      - {name: x, dtype: f32, lo: -10000.0, hi: 10000.0}
+    languages:
+      cpp:
+        dir: assets/bench/adv-seeded-v0/signed_root/cpp
+        tracked: true
+        files: [signed_root.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}

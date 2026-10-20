@@ -40,8 +40,9 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    (factory(**config) raises ValueError, as for an unset oracle.passfail or
    oracle.threshold); an Oracle that reads the references' agreement
    (`agreement_setting`, binary_io's threshold from_baseline) while
-   fixes.baseline_both is off, no listed stage builds the references, or an
-   item of the run declares no tolerance in its suite manifest; a backend that declares
+   fixes.baseline_both is off, no listed stage builds the references, an
+   item of the run declares no tolerance in its suite manifest, or a
+   direction's source and target are one language (task P16.8); a backend that declares
    `unload_before_run` but has no unload(), or `needs_reference` but has no
    with_reference() (or, with fixes.fence_tag off, no with_untagged_fence());
    a `score` profile or, when the recipe names metrics, any registered
@@ -120,7 +121,9 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    (lassi.scoring.profiles.build_profile, with the bench root for a profile
    that declares reads_bench_sources);
 4. loads the suite manifest assets/bench/<bench.suite>.yaml and finds the
-   fetched sources (tools/fetch_bench.py puts them under $LASSI_SCRATCH);
+   fetched sources (tools/fetch_bench.py puts them under $LASSI_SCRATCH),
+   none for a tracked suite, whose files are all in the repository (task
+   P16.8; a bench root given for one is a RunError);
 5. runs every trial, direction by direction in recipe order, item by item in
    sorted order (the items bench.items selects, else every item of the
    recipe's split; an unknown item, one outside the split, or a repeat is a
@@ -298,6 +301,7 @@ from lassi import (
 )
 from lassi.analysis.guard_coverage import coverage_markdown, guard_coverage
 from lassi.bench import Direction, Suite, load_suite, sources_dir
+from lassi.bench import registry as bench_registry
 from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
 from lassi.core.adversary_stage import ADVERSARY_KIND, RUNS_PROPOSALS, adversary_binding, budget_inputs
 from lassi.core.capabilities import (
@@ -424,7 +428,8 @@ class RunOptions:
     - run_id: the run directory's name; None means the UTC start time as
       YYYYMMDD-HHMMSS.
     - bench_root: the fetched sources of the suite; None means
-      lassi.bench.sources_dir($LASSI_SCRATCH, suite).
+      lassi.bench.sources_dir($LASSI_SCRATCH, suite). A tracked suite takes
+      none.
     - toolchains_root: where pinned toolchains are installed; None means
       $LASSI_TOOLCHAINS.
     - registry: the components a recipe may bind; None means DEFAULT_REGISTRY.
@@ -1275,12 +1280,27 @@ def _items(recipe: Recipe, suite: Suite, split: str) -> tuple[str, ...]:
 
 
 def _fetch_hint(suite: Suite) -> str:
-    """Return how to fetch a suite's pinned sources on the build host."""
+    """Return how to fetch a suite's pinned sources on the build host; a tracked suite's files are in the repository."""
+    if suite.tracked:
+        return f"{suite.name} is a tracked suite, so its files are in the repository under assets/; check them there"
     return f"fetch them on the build host with `uv run tools/fetch_bench.py assets/bench/{suite.name}.yaml`"
 
 
 def _sources_root(suite: Suite, options: RunOptions) -> Path:
-    """Return the root of the suite's fetched sources: the bench_root option, else under $LASSI_SCRATCH."""
+    """Return the root of the suite's fetched sources: the bench_root option, else under $LASSI_SCRATCH.
+
+    A tracked suite (lassi.bench.registry; task P16.8) has no fetched
+    sources: every file the run reads is tracked, so its root is
+    TRACKED_ROOT, no LASSI_SCRATCH is needed, and a bench_root option given
+    for it is a RunError, so no run reads elsewhere.
+    """
+    if suite.tracked:
+        if options.bench_root is not None:
+            raise RunError(
+                f"{suite.name} is a tracked suite: every language is in the repository, so it takes no bench root, "
+                f"not {options.bench_root}"
+            )
+        return bench_registry.TRACKED_ROOT
     if options.bench_root is not None:
         root = Path(options.bench_root)
     else:
@@ -1848,9 +1868,21 @@ def _check_agreement(recipe: Recipe, stages: Sequence[Any], bench: _Bench, setti
     target reference only with fixes.baseline_both on and only for an item
     whose suite manifest declares a tolerance, so the fix must be on, a
     listed stage must build the references (`builds_references`), and every
-    item the run covers must declare a tolerance.
+    item the run covers must declare a tolerance. A direction whose source
+    and target are one language builds one reference (the baseline stage),
+    which the baseline compares with itself: a trivial agreement that
+    would make from_baseline an exact match, not the references' own
+    agreement, so it is refused too (task P16.8).
     """
     reads = f"{recipe.path}: {setting} reads the references' agreement"
+    directions = recipe.data["directions"]
+    same = [f"{entry['source']}-{entry['target']}" for entry in directions if entry["source"] == entry["target"]]
+    if same:
+        raise RunError(
+            f"{reads}, which the baseline measures only between two languages; direction(s) {', '.join(same)} have "
+            "one language, so the baseline builds one reference and compares it with itself, an agreement that "
+            "would make from_baseline an exact match; set a number"
+        )
     if recipe.data.get("fixes", {}).get("baseline_both", True) is False:
         raise RunError(
             f"{reads}, which the baseline measures only with fixes.baseline_both on (faithful: true turns it off); "

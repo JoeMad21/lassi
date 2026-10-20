@@ -1,0 +1,283 @@
+{
+  "synthetic": true,
+  "suite": "adv-seeded-v0",
+  "recording": "tests/fixtures/adversary/seeded/seeded.json",
+  "candidates": [
+    {
+      "id": "special-gt",
+      "item": "pair_max",
+      "run": 1,
+      "class": "special-value",
+      "fault": "the NaN check is gone: y[k] = a > b ? a : b, which gives b whenever a is NaN",
+      "trigger": "a pair whose first element x[2k] is a NaN and whose second is a number: the reference gives NaN, the candidate the number (when the NaN is second, a > b ? a : b returns it, as the reference does)",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "f32",
+            "shape": [
+              64
+            ],
+            "pattern": [
+              "nan",
+              1
+            ]
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/pair_max/special-gt.cpp",
+      "sha256": "753d7161fe72e32e2059e1b25081c21a07f990c09e609fd0fdfdc76f4f36184f"
+    },
+    {
+      "id": "special-fmax",
+      "item": "pair_max",
+      "run": 2,
+      "class": "special-value",
+      "fault": "the NaN check is gone: y[k] = std::fmax(a, b), which gives the number when one of the two is NaN",
+      "trigger": "a pair holding a NaN and a number: the reference gives NaN, the candidate the number",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "f32",
+            "shape": [
+              64
+            ],
+            "pattern": [
+              "nan",
+              1
+            ]
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/pair_max/special-fmax.cpp",
+      "sha256": "75f6a096e664a64444e1d45496fca2d7dcba267b67136dce09f4acfd8660e599"
+    },
+    {
+      "id": "boundary-zero",
+      "item": "piecewise_gate",
+      "run": 1,
+      "class": "boundary",
+      "fault": "the gate at 0 became x >= 0, so 0 and -0 take the 5x branch",
+      "trigger": "an element equal to 0: the reference gives 3 - x = 3, the candidate 5x = 0",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "f32",
+            "shape": [
+              64
+            ],
+            "fill": 0
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/piecewise_gate/boundary-zero.cpp",
+      "sha256": "f4152d01b2f7aa803e6d1c671d0a85a6f17cee63095b14c58d2b860136e225b8"
+    },
+    {
+      "id": "boundary-one",
+      "item": "piecewise_gate",
+      "run": 2,
+      "class": "boundary",
+      "fault": "the gate at 1 became x > 1, so 1 takes the 5x branch",
+      "trigger": "an element equal to 1: the reference gives 2x + 1 = 3, the candidate 5x = 5",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "f32",
+            "shape": [
+              64
+            ],
+            "fill": 1
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/piecewise_gate/boundary-one.cpp",
+      "sha256": "995a2e5e8932c6161be696ae66a4a8b1a78518412abd6dbb3aa525c60ee6c84d"
+    },
+    {
+      "id": "arith-sign",
+      "item": "piecewise_ops",
+      "run": 1,
+      "class": "arithmetic",
+      "fault": "the negative branch's subtraction became an addition: 0 + 3x",
+      "trigger": "a negative element: the reference gives -3x > 0, the candidate 3x < 0",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "f32",
+            "shape": [
+              64
+            ],
+            "fill": -5
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/piecewise_ops/arith-sign.cpp",
+      "sha256": "a3b0ee7b675c18060adb8348cf5c73d65cf995fcd0055736f36eed4a6ec4f71f"
+    },
+    {
+      "id": "arith-divide",
+      "item": "piecewise_ops",
+      "run": 2,
+      "class": "arithmetic",
+      "fault": "the negative branch's multiplication became a division: 0 - 3 / x",
+      "trigger": "a negative element other than -1: the reference gives -3x, the candidate -3 / x",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "f32",
+            "shape": [
+              64
+            ],
+            "fill": -5
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/piecewise_ops/arith-divide.cpp",
+      "sha256": "d1b288e36e7e82296f72e5c722a1f3e7392b1887bcdbbfed6bea1989a12be373"
+    },
+    {
+      "id": "precision-float",
+      "item": "prefix_sum",
+      "run": 1,
+      "class": "precision",
+      "fault": "the running sum is accumulated in f32, not double",
+      "trigger": "partial sums whose exact value needs more than 24 significant bits: after 17 pairs of 2^24 and 1 the exact sum 17 * 2^24 + 17 rounds to 17 * 2^24 + 32 in f32, while an f32 accumulator has dropped every 1",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "f32",
+            "shape": [
+              64
+            ],
+            "pattern": [
+              16777216,
+              1
+            ]
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/prefix_sum/precision-float.cpp",
+      "sha256": "a2786a5800e368a291d5998783ceb34c72578b468624ec2207ac8a516ee95f19"
+    },
+    {
+      "id": "precision-blocks",
+      "item": "prefix_sum",
+      "run": 2,
+      "class": "precision",
+      "fault": "the running sum is accumulated in f32 in blocks of 16, each block's sum added to the total in f32",
+      "trigger": "partial sums whose exact value needs more than 24 significant bits: after 17 pairs of 2^24 and 1 the exact sum 17 * 2^24 + 17 rounds to 17 * 2^24 + 32 in f32, while the f32 blocks have dropped every 1",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "f32",
+            "shape": [
+              64
+            ],
+            "pattern": [
+              16777216,
+              1
+            ]
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/prefix_sum/precision-blocks.cpp",
+      "sha256": "436397e468759e02269acd054eed7788c16862cbed1b41564983d4f2341347f3"
+    },
+    {
+      "id": "narrow-wrap",
+      "item": "scale_i64",
+      "run": 1,
+      "class": "narrowing",
+      "fault": "the product is formed in 32 bits (uint32 wraparound) and only then widened",
+      "trigger": "an element whose 3000x + 7 lies outside the int32 range: |x| above 715827",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "i32",
+            "shape": [
+              64
+            ],
+            "fill": -1000000
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/scale_i64/narrow-wrap.cpp",
+      "sha256": "def5cbcca0772b2d2e80ac5b413be9c8fc2b6c23d8b14914bfc928547c1135ba"
+    },
+    {
+      "id": "narrow-float",
+      "item": "scale_i64",
+      "run": 2,
+      "class": "narrowing",
+      "fault": "the product is formed in f32, which holds 24 significant bits",
+      "trigger": "an element whose product 3000x needs more than 24 significant bits: 999999 * 3000 = 2999997000 rounds to 2999996928 in f32",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "i32",
+            "shape": [
+              64
+            ],
+            "fill": 999999
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/scale_i64/narrow-float.cpp",
+      "sha256": "d56f73025f44a027983d170e112c35a2c68c9b3fa8011816a6ce456d603895dd"
+    },
+    {
+      "id": "sign-abs",
+      "item": "signed_root",
+      "run": 1,
+      "class": "sign",
+      "fault": "an absolute value replaced the sign handling: sqrt(fabs(x)) for every x",
+      "trigger": "a negative element: the reference gives -sqrt(-x) < 0, the candidate sqrt(-x) > 0",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "f32",
+            "shape": [
+              64
+            ],
+            "fill": -4
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/signed_root/sign-abs.cpp",
+      "sha256": "e6941dbe333a4b37cc28ead403d50681159339972a9dde34fa54408edc62baa9"
+    },
+    {
+      "id": "sign-unary",
+      "item": "signed_root",
+      "run": 2,
+      "class": "sign",
+      "fault": "the negative branch lost its unary minus: sqrt(-x)",
+      "trigger": "a negative element: the reference gives -sqrt(-x) < 0, the candidate sqrt(-x) > 0",
+      "witness": {
+        "inputs": [
+          {
+            "name": "x",
+            "dtype": "f32",
+            "shape": [
+              64
+            ],
+            "fill": -4
+          }
+        ]
+      },
+      "file": "tests/fixtures/adversary/seeded/candidates/signed_root/sign-unary.cpp",
+      "sha256": "a6d04dca4c6e53bdb4e75b320a2380d90817f4b62a873c8eb9328c76eac9ae77"
+    }
+  ]
+}

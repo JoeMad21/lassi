@@ -31,7 +31,8 @@ Each profile name is a registered ScoreProfile, built by
 lassi.scoring.profiles.build_profile. A profile that declares
 reads_bench_sources gets the bench root: `bench_root`, else the runner's
 default for the one suite the trials name,
-lassi.bench.sources_dir($LASSI_SCRATCH, suite). A profile that declares
+lassi.bench.sources_dir($LASSI_SCRATCH, suite), or the repository for a
+tracked suite (task P16.8). A profile that declares
 scores_attempts also scores each attempt (score_attempts). Every refusal
 raises ScoreError before any directory exists: every trial is scored and
 every output built in memory first, the Markdown and JSON as ASCII bytes
@@ -93,6 +94,7 @@ from lassi.analysis.metrics import SCORE_PROFILE, MetricTable, metric_tables
 from lassi.analysis.paper import PAPER_FILE
 from lassi.analysis.tables import metrics_arrow, metrics_markdown, write_metrics_arrow
 from lassi.bench import load_suite, sources_dir
+from lassi.bench import registry as bench_registry
 from lassi.core.capabilities import SCORES_ATTEMPTS, declares
 from lassi.core.interfaces import Score, ScoreProfile
 from lassi.core.record import RUN_FLAG_NAMES, Attempt, Diagnostic, RunInfo, Trial, json_text
@@ -366,9 +368,11 @@ def find_bench_root(names: Sequence[str], trials: Sequence[Trial], bench_root: s
     """Return the bench root the profiles get: None when no named profile reads bench sources.
 
     Otherwise `bench_root`, else lassi.bench.sources_dir($LASSI_SCRATCH,
-    suite) for the one suite the trials name, as the runner finds it.
-    Raises ScoreError when the trials name more than one suite, when
-    $LASSI_SCRATCH is not set, or when the suite has no manifest.
+    suite) for the one suite the trials name, as the runner finds it, and
+    for a tracked suite (task P16.8) the repository, TRACKED_ROOT, with no
+    LASSI_SCRATCH needed, as the runner reads it. Raises ScoreError when the
+    trials name more than one suite, when $LASSI_SCRATCH is not set for a
+    suite with fetched sources, or when the suite has no manifest.
     """
     readers = [name for name in names if reads_bench_sources(name)]
     if not readers:
@@ -380,14 +384,22 @@ def find_bench_root(names: Sequence[str], trials: Sequence[Trial], bench_root: s
     if len(suites) != 1:
         raise ScoreError(f"{who}, and the trials name the suites {', '.join(suites)}; pass a bench root (--bench-root)")
     suite = suites[0]
+    manifest = BENCH_DIR / f"{suite}.yaml"
+    loaded = None
+    if _NAME.fullmatch(suite) and manifest.is_file():
+        try:
+            loaded = load_suite(manifest)
+        except (OSError, ValueError) as error:
+            raise ScoreError(f"cannot find the bench sources of {suite}: {error}") from error
+        if loaded.tracked:
+            return bench_registry.TRACKED_ROOT.resolve()
     scratch = os.environ.get("LASSI_SCRATCH", "")
     if not scratch:
         raise ScoreError(f"{who}: no bench root was given and LASSI_SCRATCH is not set; pass one (--bench-root)")
-    manifest = BENCH_DIR / f"{suite}.yaml"
-    if not _NAME.fullmatch(suite) or not manifest.is_file():
+    if loaded is None:
         raise ScoreError(f"{who}, but the suite {suite!r} has no manifest; expected {manifest.as_posix()}")
     try:
-        return sources_dir(Path(scratch), load_suite(manifest)).resolve()
+        return sources_dir(Path(scratch), loaded).resolve()
     except (OSError, ValueError) as error:
         raise ScoreError(f"cannot find the bench sources of {suite}: {error}") from error
 
