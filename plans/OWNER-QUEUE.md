@@ -893,3 +893,16 @@ Options:
 - (b) As AGENTS.md's Phase Gate reads: the pass sets P16 DONE and opens the pull request; P16.12 is set BLOCKED as moved, and part (b) moves into P8's Build Roadmap row, a scope edit with a Decision Log entry, planned with P8.
 Recommendation: (a). The row holds part (b) by your split (OQ-055, decision 12 (b)), and P17's shape is the recorded precedent; (b) changes a row you set, for no gain in the work order, since part (b) waits on P8 either way.
 Answer:
+
+## OQ-070 Running On The Tenstorrent Wormholes: The Gate's tt_silicon Class And A Silicon Executor
+State: OPEN
+Kind: access
+Blocks: none now; any run of a TT program on the Wormhole cards instead of ttsim
+Evidence: rx 20261021-201421-exec-4ea0 (lspci -d 1e52: lists eight Tenstorrent Wormhole devices, e8:00.0 to eb:00.0 and f1:00.0 to f4:00.0); the gate refused a probe naming tt-smi: "device class 'tt_silicon' is disabled by the owner" (2026-10-21, 20:14 alpha01 time); docs/BIBLE.md (Execution Backends: the tt_silicon row, "Not built"; Environment State); Agent Rule 9; plans/LESSONS.md (Owner directions, 2026-10-21)
+Question: The Wormholes are on PCI again, and you want TT programs to run on them, not quietly on ttsim. Three things stand between the project and a silicon run. (1) The gate's tt_silicon device class is disabled, so even a read-only check of the driver and devices (tt-smi, /dev/tenstorrent, the kernel module and its version, hugepages) is refused; only you can enable it. (2) No tt_silicon executor exists: the sandbox hides every device, so a silicon run needs the card's device nodes and hugepages passed into the sandbox for one placement at a time, and a check that the pinned tt-metal (5280a9cf) runs with the installed driver and firmware; that is new work, best planned as a task with a spike first. (3) Agent Rule 9: silicon runs are evaluation runs a human starts, never looped device opens, so you would start each run from a command the work prepares.
+Options:
+- (a) Enable tt_silicon in the gate for a read-only diagnosis (the driver and firmware versions, device nodes, hugepages, tt-smi's report), then plan a tt_silicon executor task with that spike; you start every silicon run by hand. TT programs stay on ttsim until the executor passes its qualification.
+- (b) Keep tt_silicon disabled for now; TT programs stay on ttsim, and every result says so in its first lines.
+- (c) Enable tt_silicon and let the work start silicon runs itself during a window you grant: an Agent Rule 9 change, which needs your decision and a Decision Log entry.
+Recommendation: (a). It finds out what the cards need without opening them in a loop, keeps your start on every silicon run (Agent Rule 9), and gives the executor a measured basis.
+Answer:
