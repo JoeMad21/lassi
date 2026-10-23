@@ -168,5 +168,5 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.16 | READY | The tt_silicon executor | P17.15 |  |
 | P17.17 | BLOCKED | Silicon qualification and Tier A with the cards in the loop | P17.16 | the owner's window of 2026-10-23, 20:00 to 24:00 EDT; OQ-075 |
 | P17.18 | READY | tt-train-v0: training records from tt-metal's non-test examples | - | OQ-076 (1a); Tier A excluded by test |
-| P17.19 | READY | Trainer modes: pinned Hub bases, cuda:0, full, LoRA, prompt tuning, from scratch | P17.18 | OQ-076 (2a) |
+| P17.19 | READY | Trainer modes: pinned Hub bases, cuda:0, full, LoRA, prompt tuning, from scratch | P17.18 | OQ-076: CPU training on alpha01 in the owner's windows only, never the RTX 3080 (owner, 2026-10-23) |
 | P17.20 | BLOCKED | Training runs on the RTX 3080 and their evaluation on alpha01's CPU | P17.19 | the owner's windows; OQ-076 (3a) |
