@@ -946,3 +946,13 @@ Recommendation:
 - (8) remove them.
 - (9) keep the smoke's environment.
 Answer:
+
+## OQ-073 P16.10's Host: alpha01 In The Owner's Window Of 2026-10-23
+State: CLOSED
+Kind: access
+Blocks: none
+Evidence: plans/p16-adversarial.md (P16.10: Host: the LASSI distro); rx 20261022-212552-p16-witness-6488 (tests/bench/test_adv_seeded_remote.py, 30 passed) and rx 20261022-214701-p16-witness-b32e (tests/agents/test_fuzzer.py, 246 passed), both on alpha01 at clean commit c5a9a1f; tests/fixtures/adversary/freeze.yaml
+Question: In the working session of 2026-10-23 the agent asked whether P16.10's checks (gcc-native builds of the six adv-seeded-v0 references and twelve seeded candidates, their sandboxed runs on the held-out inputs and witnesses, then the exploratory adversary-seeded runs; CPU only, no card, under the scratch root, about 10 to 20 minutes) could run on alpha01 in the owner's window instead of the LASSI distro the plan names, which does not exist yet.
+Options: (a) alpha01 in the window; (b) wait for the LASSI distro.
+Recommendation: (a).
+Answer: Owner's choice (in the working session, 2026-10-23, about 00:13 EDT; recorded by the agent, in the owner's words), to that question among others: "Do whatever you have to do. Go Go!" Applied: the witness checks, the fuzzer's tests, and the exploratory adversary-seeded runs ran on alpha01 through tools/rx.py; P16.G still runs in the LASSI distro as planned, where the pins (g++-12 12.3.0) are the same.

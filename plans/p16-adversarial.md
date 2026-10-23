@@ -103,7 +103,7 @@ Owner queue: three items are filed with this plan. OQ-067 (Tier A's C++ side in 
   - The freeze record and its fast test (Freeze decision), committed before any adversary-stage run.
   - Then remote tests of the stage on fixture programs outside adv-seeded-v0 (its proposals run only in the sandbox; a refused one starts no process), and an exploratory dirty-tree `lassi run` of each projects/adversary-seeded/ recipe, labeled so, with du of the scratch root and C:'s free space before and after, in the run report. Nothing in the freeze record changes in response to these runs.
 - Files: tests/agents/, tests/core/ (remote tests), tests/fixtures/adversary/seeded/ (only for a fix before the freeze), tests/fixtures/adversary/freeze.yaml, plans/runs/.
-- Host: the LASSI distro. Depends: P16.5, P16.8, P5.15, P5.16.
+- Host: the LASSI distro; its checks and runs ran on alpha01 in the owner's window of 2026-10-23 instead (OQ-073). Depends: P16.5, P16.8, P5.15, P5.16.
 
 ### P16.11 The LLM adversary on a real model (OWNER on OQ-068)
 - Bible: Agents And Judges, Model Serving (Serving Rules; Model Registry), Host Facts (Workstation approvals), Agent Rules 1, 5, 12, 14, and 17.
