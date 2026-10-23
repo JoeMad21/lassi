@@ -142,6 +142,43 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: `lassi/core/` (record, stages, trial_md, parquet), `lassi/analysis/`, `tests/core/`, `tests/analysis/`, `docs/BIBLE.md`.
 - Remote: none. Depends: none.
 
+### P17.15 The sandbox's Tenstorrent exposure: every card in the cluster
+- Added on 2026-10-23 from the owner's OQ-072 answer ("I want the sandbox to have access to all Tenstorrent cards in the cluster. It needs to happen."), with plans/spikes/tt-silicon-executor.md as its evidence; the settings OQ-075 asks are explicit, with no default. Built on branch p16-adversarial, which carries P17's code.
+- Bible: Execution Backends (the tt_silicon row), Sandbox, Agent Rules 6, 7, and 9.
+- Accept:
+  - A Tenstorrent exposure in the sandbox spec (beside the gpu executor's DeviceExposure):
+    - every /dev/tenstorrent/<n> node, bound at its own path;
+    - read-only: /sys/bus/pci/slots, each card's PCI sysfs directory, /sys/module/tenstorrent/version, and the 1 GiB nr_hugepages file;
+    - one writable hugetlbfs bind at /dev/hugepages-1G of the run's own hugepage directory (OQ-075 (1));
+    - a mount-check exception for exactly that one mount;
+    - an optional seccomp rule refusing the driver's reset ioctl (OQ-075 (4)).
+  - A run without the exposure keeps the setup script byte for byte (test).
+  - Windows tests of the script text and the spec checks; remote tests with stand-in nodes and directories on Linux, opening no device.
+- Files: lassi/executors/sandbox.py, tests/executors/.
+- Host: Windows, then alpha01 with stand-ins. Depends: none.
+
+### P17.16 The tt_silicon executor
+- Bible: Execution Backends (the tt_silicon row), Component Interfaces (Executor), Agent Rules 2, 6, 9, and 10.
+- Accept: a registered Executor `tt_silicon` that declares runs_code and sandboxed and runs a TT host program on the cluster's Wormhole cards through P17.15's exposure.
+  - Settings: hugepages mode (OQ-075 (1)) and reset filter (OQ-075 (4)), each a required choice with no default.
+  - Environment: the ttsim row's settings without TT_METAL_SIMULATOR (OQ-075 (8)).
+  - Lock: one cross-process lock for all cards under $LASSI_SCRATCH/locks (OQ-075 (2)).
+  - Hugepages: a per-run hugepage directory, created and emptied before and after each run.
+  - Quarantine: after a hang, kill, or crash, a marker refuses every later run until a human removes it (OQ-075 (3)).
+  - Human start: the runner refuses the executor unless the command line names it with a flag that a recipe cannot set (OQ-075 (6)), and training and reward stages refuse it.
+  - Provenance records every card's serial and firmware, and its results name silicon as the device; wall times are never performance.
+  - Windows tests with fakes.
+- Files: lassi/executors/, lassi/core/runner.py, lassi/cli.py, tests/executors/, tests/core/, docs/BIBLE.md.
+- Host: Windows. Depends: P17.15.
+
+### P17.17 Silicon qualification and Tier A with the cards in the loop
+- Accept: in the owner's window, runs the owner starts (Agent Rule 9), with results under results/ with provenance:
+  - the loopback reference through tt_silicon, the qualification;
+  - the two translations that passed on ttsim on 2026-10-23, Llama-3.1-8B's cpp -> tt eltwise_binary and EXAONE-4-32B's matmul_single_core, from their stored replies;
+  - Tier A cpp -> tt with tt_silicon as the TT executor and RNGD-served models.
+- Files: projects/lassi-demo/, results/.
+- Host: alpha01 in the owner's window. Depends: P17.16; OQ-075.
+
 ### P17.11 Gate part (a): recipes and the hardware-free evidence
 - Bible: Build Roadmap (P17 row, Gate part (a)), Agent Rules 1, 7, and 10; AGENTS.md Phase Gate and Results.
 - Accept, from one clean commit on alpha01, with graphics off:
