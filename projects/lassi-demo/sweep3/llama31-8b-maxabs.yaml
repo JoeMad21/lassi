@@ -1,0 +1,6 @@
+# The third pass of the owner's RNGD sweep of 2026-10-23: ../sweep2/llama31-8b-maxabs.yaml with the correction cap raised from 5 to 15,
+# as the owner asked once no model's code had passed (the second pass's trials all ended at the cap of 5).
+# Served by plans/runs/rngd-sweep/run.sh from models2.tsv. Exploratory, one sample.
+extends: ../sweep2/llama31-8b-maxabs.yaml
+loop:
+  max_corrections: 15
