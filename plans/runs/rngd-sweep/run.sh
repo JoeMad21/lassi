@@ -6,7 +6,7 @@
 #     'bash plans/runs/rngd-sweep/run.sh <deadline as epoch seconds>'
 # For each model, in order: skip it when its artifact is not in $HF_HOME or less than 30 minutes are left; poll
 # `furiosa-smi status` every 60 s (each poll logged in card-polls.txt) until enough cards are free, then pick
-# them (npu1 to npu7 only, never npu0, each at 0.00 GiB; Agent Rule 8); serve it
+# them (npu0 to npu7, each at 0.00 GiB; Agent Rule 8 as the owner changed it on 2026-10-23); serve it
 # on 127.0.0.1:8123 and wait for /v1/models to list its id; run its two recipes (projects/lassi-demo/sweep/
 # <slug>-maxabs.yaml and -pcc.yaml) side by side under one time limit, the time left shared among the models still
 # to run (at most 50 minutes); stop the server and wait for its exit, the port to close, and its cards to read
@@ -33,9 +33,9 @@ ts() { date '+%Y-%m-%dT%H:%M:%S%z'; }
 left() { echo $((deadline - $(date +%s))); }
 
 free_cards() {
-  # One npuN per line: each of npu1 to npu7 whose memory reads 0.00 GiB.
+  # One npuN per line: each of npu0 to npu7 whose memory reads 0.00 GiB.
   # A row reads "| rngd | npuN | <state> | <used>/<total> GiB | ...".
-  furiosa-smi status 2>/dev/null | grep -a -E '\| npu[1-7] ' |
+  furiosa-smi status 2>/dev/null | grep -a -E '\| npu[0-7] ' |
     awk -F'|' '{card=$3; gsub(/ /, "", card); split($5, mem, "/"); used=mem[1]; gsub(/ /, "", used);
                 if (used == "0.00") print card}'
 }
