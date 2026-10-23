@@ -1,0 +1,47 @@
+{
+  "item": "loopback",
+  "target": "0",
+  "provenance": {
+    "commit": "982e71b202cc733cdea966e5ab5912cf037106ed",
+    "dirty": false,
+    "pins": {
+      "tt-metal": "5280a9cfb00998fd49667a29523d03aee905c129",
+      "ttsim": "v1.3.4",
+      "gcc": "12.3.0"
+    },
+    "device": "Tenstorrent Wormhole n300 card 0",
+    "card": {
+      "tt_card_type": "n300",
+      "tt_serial": "01000146118320F8",
+      "tt_fw_bundle_ver": "19.5.0.0",
+      "tt_arc_fw_ver": "2.37.0.0",
+      "tt_eth_fw_ver": "7.5.0",
+      "driver": "2.8.0"
+    },
+    "date": "2026-10-23T04:19:10+00:00"
+  },
+  "cpp_run": {
+    "exit_code": 0,
+    "hang": false
+  },
+  "tt_run": {
+    "exit_code": 0,
+    "hang": false,
+    "wall_s_not_performance": 1.8709897249937057,
+    "stdout_tail": "rmware bundle version: 19.5.0 (topology_discovery.cpp:403)\n2026-10-22 21:19:08.505 | info     |             UMD | Firmware bundle version 19.5.0 on the system is newer than the latest fully tested version 19.4.0 for wormhole_b0 architecture. Newest features may not be supported. (topology_discovery.cpp:429)\n2026-10-22 21:19:08.525 | info     |             UMD | Harvesting masks for chip 0 tensix: 0x102 dram: 0x0 eth: 0x0 pcie: 0x0 l2cpu: 0x0 (cluster.cpp:333)\n2026-10-22 21:19:08.876 | info     |             UMD | Harvesting masks for chip 1 tensix: 0x88 dram: 0x0 eth: 0x0 pcie: 0x0 l2cpu: 0x0 (cluster.cpp:333)\n2026-10-22 21:19:08.889 | info     |             UMD | Opening local chip ids/PCIe ids: {0}/[0] and remote chip ids {1} (cluster.cpp:180)\n2026-10-22 21:19:08.889 | info     |             UMD | IOMMU: disabled (cluster.cpp:155)\n2026-10-22 21:19:08.889 | info     |             UMD | KMD version: 2.8.0 (cluster.cpp:158)\n2026-10-22 21:19:08.891 | info     |             UMD | Starting devices in cluster (cluster.cpp:966)\n2026-10-22 21:19:08.892 | info     |             UMD | Mapped hugepage 0x2580000000 to NOC address 0x800000000 (silicon_sysmem_manager.cpp:217)\n2026-10-22 21:19:08.893 | info     |             UMD | Mapped hugepage 0x2500000000 to NOC address 0x840000000 (silicon_sysmem_manager.cpp:217)\n2026-10-22 21:19:08.902 | info     |     Distributed | Using auto discovery to generate mesh graph. (metal_context.cpp:993)\n2026-10-22 21:19:08.902 | info     |     Distributed | Constructing control plane using auto-discovery (no mesh graph descriptor). (metal_context.cpp:960)\n2026-10-22 21:19:08.903 | info     |          Fabric | Topology mapping search starting: target_graph_nodes=2, global_graph_nodes=2, target_degree_histogram={1:2}, global_degree_histogram={1:2} (topology_solver_internal.tpp:883)\n2026-10-22 21:19:08.903 | info     |          Fabric | Mapping validation succeeded: 2 target nodes mapped to 2 global nodes. DFS calls: 2, backtracks: 0. Required constraints satisfied: 2, preferred constraints satisfied: 0/0 (topology_solver_internal.tpp:1400)\n2026-10-22 21:19:08.903 | info     |          Fabric | Topology mapping search starting: target_graph_nodes=2, global_graph_nodes=2, target_degree_histogram={1:2}, global_degree_histogram={1:2} (topology_solver_internal.tpp:883)\n2026-10-22 21:19:08.903 | info     |          Fabric | Mapping validation succeeded: 2 target nodes mapped to 2 global nodes. DFS calls: 2, backtracks: 0. Required constraints satisfied: 2, preferred constraints satisfied: 0/0 (topology_solver_internal.tpp:1400)\n2026-10-22 21:19:08.908 | info     |    BuildKernels | Skipping deleting built cache (build.cpp:123)\n2026-10-22 21:19:08.908 | info     |    BuildKernels | Skipping deleting built cache (build.cpp:123)\n2026-10-22 21:19:10.226 | info     |          Device | Closing user mode device drivers (tt_cluster.cpp:476)\n2026-10-22 21:19:10.226 | info     |             UMD | Closing devices in cluster (cluster.cpp:977)\n",
+    "stderr_tail": ""
+  },
+  "outputs": [
+    {
+      "name": "output",
+      "passed": true,
+      "pcc": 1.0,
+      "max_abs": 0.0,
+      "note": null
+    }
+  ],
+  "tolerance": {
+    "metric": "max_abs",
+    "threshold": 0
+  }
+}
