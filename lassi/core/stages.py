@@ -214,7 +214,12 @@ never on the recipe's `faithful` flag:
   compile_loop builds such an S0 attempt's empty file, as upstream compiles
   the empty file it writes. With the fix on, the model answers with FILE
   blocks, which lassi.core.files parses, and an attempt with a FILE-block
-  error (S0, or S1 missing an expected file) is not built.
+  error (S0, or S1 missing an expected file) is not built. With the fix on
+  and the opt-in leniency extract.unfenced_file_lines true (no quirk: the
+  loader refuses it under faithful: true or with the fix off), generate and
+  every correction read a reply that holds no FILE block from its unfenced
+  FILE lines (extract_on; lassi.core.files), each file with a parse-stage
+  `unfenced-file` warning, which no rung of the ladder below reads.
 - `parsed_diagnostics` off: a correction prompt's error text is the whole
   raw stderr attachment of the build (BuildResult.stderr_ref), read as a
   file opened in text mode reads it (CRLF and CR become LF), uncapped, as
@@ -239,6 +244,8 @@ and reward reads (Design Principle 2):
 - S0, no extractable output: the FILE blocks gave no file (the reply held
   no FILE block, or each was dropped), or they had an error other than a
   missing expected file (a bad path, or a repeated or unclosed block).
+  Under extract.unfenced_file_lines, the unfenced FILE lines of a reply
+  with no FILE block are read the same way here and in S1.
 - S1, parses: the FILE blocks gave at least one file, and every FILE-block
   error is `missing-file`, an expected file with no block. That error is
   the build error of the Harness Contract: compile_loop feeds it back to
@@ -334,6 +341,8 @@ RAN_CLEAN = "S5"
 # The FILE-block error code (lassi.core.files parse_file_blocks) of an expected file with no block: the one block
 # error an S1 attempt may hold (see the module docstring).
 MISSING_FILE = "missing-file"
+# The extract leniency (lassi.core.recipe EXTRACT) that reads a reply with no FILE block from its unfenced FILE lines.
+UNFENCED_FILE_LINES = "unfenced_file_lines"
 
 # The end codes these stages set in final.end_reason (lassi.core.record END_REASONS).
 BASELINE_COMPILE = "baseline-compile"
@@ -544,6 +553,15 @@ def target_files(context: RunContext) -> list[str]:
 def fix_on(context: RunContext, name: str) -> bool:
     """Return True unless the recipe turns the named fix off (faithful: true turns every fix off)."""
     return context.recipe.data.get("fixes", {}).get(name, True) is not False
+
+
+def extract_on(context: RunContext, name: str) -> bool:
+    """Return True only when the recipe sets the named extract leniency true (lassi.core.recipe EXTRACT).
+
+    A leniency is off when absent, unlike a fix; the loader refuses one set
+    true under faithful: true or with fixes.fence_tag off.
+    """
+    return context.recipe.data.get("extract", {}).get(name, False) is True
 
 
 def source_as_read(context: RunContext) -> str:
@@ -816,15 +834,20 @@ def _storable(reply: str, before: str = "the FILE blocks were read") -> tuple[st
     return _SURROGATE.sub(_REPLACEMENT, reply), [_parse_warning("invalid-text", message)]
 
 
-def _parsed_attempt(index: int, prompt_ref: TextRef, reply: str, expected: Sequence[str]) -> Attempt:
+def _parsed_attempt(
+    index: int, prompt_ref: TextRef, reply: str, expected: Sequence[str], *, unfenced_file_lines: bool = False
+) -> Attempt:
     """Return the attempt for one model reply: its FILE blocks parsed, S1 when usable and S0 otherwise.
 
     The reply is usable when its blocks gave at least one file and every
     block error is MISSING_FILE. The diagnostics are parse_file_blocks'
-    own, after any `invalid-text` warning.
+    own, after any `invalid-text` warning. `unfenced_file_lines` is
+    parse_file_blocks' leniency: a reply with no FILE block is read from its
+    unfenced FILE lines, each file with an `unfenced-file` warning, which no
+    rung of the ladder reads.
     """
     text, warnings = _storable(reply)
-    parsed = parse_file_blocks(text, expected)
+    parsed = parse_file_blocks(text, expected, unfenced_file_lines=unfenced_file_lines)
     errors = [diagnostic for diagnostic in parsed.diagnostics if diagnostic.severity == "error"]
     usable = bool(parsed.files) and all(error.code == MISSING_FILE for error in errors)
     return Attempt(
@@ -870,11 +893,14 @@ def _reply_attempt(
 ) -> Attempt:
     """Return the attempt for one reply: FILE blocks with fixes.fence_tag on, the first fenced block with it off.
 
-    The attempt is not built yet, so its guards say why host_compute is
-    null (_unbuilt_guards); compile_loop changes that when it builds it.
+    With the fix on, extract.unfenced_file_lines (extract_on) lets a reply
+    with no FILE block be read from its unfenced FILE lines. The attempt is
+    not built yet, so its guards say why host_compute is null
+    (_unbuilt_guards); compile_loop changes that when it builds it.
     """
     if fix_on(context, "fence_tag"):
-        attempt = _parsed_attempt(index, prompt_ref, reply, expected)
+        unfenced = extract_on(context, UNFENCED_FILE_LINES)
+        attempt = _parsed_attempt(index, prompt_ref, reply, expected, unfenced_file_lines=unfenced)
     else:
         attempt = _fenced_attempt(index, prompt_ref, reply, expected)
     return dataclasses.replace(attempt, guards=_unbuilt_guards(context))
@@ -1217,6 +1243,8 @@ class GenerateStage:
         prompts = self.context.prompts
         source = f"the {prompts} fragments" if self.context.fragments else f"{prompts}/generate.txt"
         reply = "FILE blocks" if fix_on(self.context, "fence_tag") else "its first fenced block"
+        if fix_on(self.context, "fence_tag") and extract_on(self.context, UNFENCED_FILE_LINES):
+            reply += ", or unfenced FILE lines when the reply holds none"
         return f"generate: one {direction.source} to {direction.target} translation from {source}, parsed from {reply}"
 
 

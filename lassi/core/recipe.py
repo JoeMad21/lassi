@@ -9,9 +9,11 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
    kind section that names a new kind replaces the inherited one, an executor section that
    switches between its two forms replaces the inherited one, and a `device` mapping replaces the
    inherited one whole, since a device is one choice);
-5. materializes the defaults (`project`: the loaded file's recipe name; `faithful: false`; every fix on);
+5. materializes the defaults (`project`: the loaded file's recipe name; `faithful: false`; every fix on; no
+   `extract` leniency, which is off when absent, so a recipe without one keeps its resolved recipe and hash);
 6. applies the faithful overrides (bible, Project Recipes Notes; Design Principle 4);
-7. checks types and required choices, never picking a value for a choice left open;
+7. checks types and required choices, never picking a value for a choice left open, and refuses an EXTRACT
+   leniency set true under faithful: true or with fixes.fence_tag off, naming its key (_check_extract);
 8. binds components and checks their capabilities without constructing any (Component Interfaces), the
    adversary section's Agent among them, which must declare proposes_inputs (task P16.2); refuses a faithful
    recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES), a toolchain upstream
@@ -118,6 +120,17 @@ FIXES: dict[str, str] = {
         "run every compiling attempt within the correction cap;"
         " off keeps upstream's quirk that runs a compiling attempt only while its correction count is at most 7,"
         " so a later compiling attempt ends the trial unexecuted, with an earlier run's stdout as stale output"
+    ),
+}
+
+# Every opt-in leniency of the extract section and what turning it on changes. Unlike a fix, each is off when absent
+# and the loader materializes none, so a recipe without the section keeps its resolved recipe and hash. Each reads
+# this project's FILE-block format, which a reply has only with fixes.fence_tag on, and none is upstream behavior, so
+# one set true is refused under faithful: true or with fixes.fence_tag off (_check_extract), never turned off silently.
+EXTRACT: dict[str, str] = {
+    "unfenced_file_lines": (
+        "read a reply that holds no FILE block from its unfenced `// FILE: <path>` lines, each file running to the"
+        " next such line, with a parse-stage unfenced-file warning per file; off reads only fenced FILE blocks"
     ),
 }
 
@@ -493,6 +506,7 @@ SCHEMA = _Fields(
         "project": _STR,  # the first trial id segment; defaults to the loaded file's recipe name
         "faithful": _BOOL,
         "fixes": _Fields({name: _BOOL for name in FIXES}),
+        "extract": _Fields({name: _BOOL for name in EXTRACT}),  # opt-in leniencies; absent means off
         "llm": _Fields({"sampling": _Fields({"temperature": _NUMBER, "top_p": _NUMBER, "max_tokens": _INT})}),
         "loop": _Fields({"max_corrections": _CORRECTIONS}),
         "trials": _Fields({"n": _AT_LEAST_ONE}),
@@ -656,6 +670,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
         _check_required(data)
     except _SchemaError as exc:
         raise RecipeError(f"{path}: {exc}") from None
+    _check_extract(path, data)
     bindings = _bindings(data)
     registry = DEFAULT_REGISTRY if registry is None else registry
     try:
@@ -1151,6 +1166,32 @@ def _check_required(data: Mapping[str, Any], required: Sequence[str] = REQUIRED)
             if not isinstance(value, dict) or part not in value:
                 raise _SchemaError(_required_message(dotted))
             value = value[part]
+
+
+def _check_extract(path: Path, data: Mapping[str, Any]) -> None:
+    """Refuse an EXTRACT leniency set true under faithful: true or with fixes.fence_tag off, naming its key.
+
+    None is upstream behavior (Design Principle 4, Agent Rule 4), and each
+    reads this project's FILE-block format, which a reply has only with the
+    fence_tag fix on; faithful: true turns that fix off too, but its refusal
+    comes first, since it says why. Runs after the type check, so the
+    section, when present, maps known names to bools, and fixes.fence_tag is
+    set. A leniency set false, or absent, is never refused.
+    """
+    for name, on in sorted(data.get("extract", {}).items()):
+        if on is not True:
+            continue
+        key = f"extract.{name}"
+        if data["faithful"] is True:
+            raise RecipeError(
+                f"{path}: {key} is true, but faithful: true reproduces upstream, which has no such leniency; "
+                f"a recipe with faithful: true may not set it, so remove {key} or set faithful: false"
+            )
+        if data["fixes"]["fence_tag"] is not True:
+            raise RecipeError(
+                f"{path}: {key} is true, but fixes.fence_tag is off, so a reply is read as upstream reads it, from "
+                f"its first fenced block, and no FILE line is read; turn fixes.fence_tag on or remove {key}"
+            )
 
 
 def _check_faithful_bindings(

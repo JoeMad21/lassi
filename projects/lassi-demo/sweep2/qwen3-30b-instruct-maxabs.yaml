@@ -1,0 +1,6 @@
+# The second pass of the owner's RNGD sweep of 2026-10-23: ../sweep/qwen3-30b-instruct-maxabs.yaml with extract.unfenced_file_lines on, so a
+# reply that carries its files as unfenced FILE lines is read (with an unfenced-file warning per file) instead of
+# failing as missing-file. Served by plans/runs/rngd-sweep/run.sh from models2.tsv. Exploratory, one sample.
+extends: ../sweep/qwen3-30b-instruct-maxabs.yaml
+extract:
+  unfenced_file_lines: true

@@ -3,12 +3,14 @@
 # for every model in models.tsv beside this file, one model at a time on port 8123 (the owner's choice; Agent Rule
 # 8). Started from a clean commit on the build host as
 #   PYTHONIOENCODING=utf-8 uv run tools/rx.py job start --big --name rngd-sweep --timeout 21600 -- \
-#     'bash plans/runs/rngd-sweep/run.sh <deadline as epoch seconds>'
+#     'bash plans/runs/rngd-sweep/run.sh <deadline as epoch seconds> [recipe dir] [model table]'
+# The recipe dir defaults to projects/lassi-demo/sweep and the model table to models.tsv beside this file; the
+# second pass of the window uses projects/lassi-demo/sweep2 and models2.tsv.
 # For each model, in order: skip it when its artifact is not in $HF_HOME or less than 30 minutes are left; poll
 # `furiosa-smi status` every 60 s (each poll logged in card-polls.txt) until enough cards are free, then pick
 # them (npu0 to npu7, each at 0.00 GiB; Agent Rule 8 as the owner changed it on 2026-10-22, OQ-071); serve it
-# on 127.0.0.1:8123 and wait for /v1/models to list its id; run its two recipes (projects/lassi-demo/sweep/
-# <slug>-maxabs.yaml and -pcc.yaml) side by side under one time limit, the time left shared among the models still
+# on 127.0.0.1:8123 and wait for /v1/models to list its id; run its two recipes (<recipe dir>/<slug>-maxabs.yaml
+# and -pcc.yaml) side by side under one time limit, the time left shared among the models still
 # to run (at most 50 minutes); stop the server and wait for its exit, the port to close, and its cards to read
 # 0.00 GiB again (Agent Rule 8: no relaunch before a full exit). A run cut by its limit keeps every trial it
 # finished. Stop: create $LASSI_RUNS_ROOT/rngd-sweep/STOP (one rx exec); the sweep stops before the next model and
@@ -16,9 +18,13 @@
 # Output under $LASSI_RUNS_ROOT/rngd-sweep/<stamp>/: per model the serve log, the two run logs, and summary.tsv
 # (one row per finished trial); the run trees are $LASSI_RUNS_ROOT/runs/sweep-<stamp>-<slug>-<half>.
 set -u
-deadline=${1:?usage: run.sh <deadline as epoch seconds>}
+deadline=${1:?usage: run.sh <deadline as epoch seconds> [recipe dir] [model table]}
+recipes=${2:-projects/lassi-demo/sweep}
 here="$(cd "$(dirname "$0")" && pwd)"
+table=${3:-$here/models.tsv}
 cd "$here/../../.." || exit 2
+[ -d "$recipes" ] || { echo "run.sh: no recipe dir $recipes"; exit 2; }
+[ -f "$table" ] || { echo "run.sh: no model table $table"; exit 2; }
 prlimit --pid $$ --core=1:1 2>/dev/null || true
 scratch=${LASSI_SCRATCH:?LASSI_SCRATCH must be set; the gate sets it}
 runs=${LASSI_RUNS_ROOT:?LASSI_RUNS_ROOT must be set; the gate sets it}
@@ -76,7 +82,7 @@ PY
 
 echo "$(ts) sweep $stamp: deadline $(date -d "@$deadline" '+%H:%M:%S'), $(left) s left, output $out"
 printf 'slug\ttrial\tstage\talignment\tcorrections\tend\tattempts\n' > "$out/summary.tsv"
-mapfile -t rows < <(grep -v '^#' "$here/models.tsv" | grep -v '^$')
+mapfile -t rows < <(grep -v '^#' "$table" | grep -v '^$')
 total=${#rows[@]}
 for index in "${!rows[@]}"; do
   IFS=$'\t' read -r slug model rev cards parser venv <<< "${rows[$index]}"
@@ -122,7 +128,7 @@ for index in "${!rows[@]}"; do
   echo "$(ts) READY $slug: running both recipes for at most $limit s"
   pids=()
   for half in maxabs pcc; do
-    timeout --kill-after=60 "$limit" uv run lassi --graphics off run "projects/lassi-demo/sweep/$slug-$half.yaml" \
+    timeout --kill-after=60 "$limit" uv run lassi --graphics off run "$recipes/$slug-$half.yaml" \
       --run-id "sweep-$stamp-$slug-$half" > "$out/$slug-$half.log" 2>&1 &
     pids+=($!)
   done

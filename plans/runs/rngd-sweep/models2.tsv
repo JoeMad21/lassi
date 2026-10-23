@@ -1,0 +1,13 @@
+# The second pass of 2026-10-23: models.tsv's models, every one served without --reasoning-parser. With the parser,
+# Qwen3-32B spent max_tokens on reasoning and the server returned content null, which ended both its runs (rx job
+# 20261022-210057-rngd-sweep-491a); without it the reasoning and the answer are expected to come back together as
+# content (not yet seen on this host).
+qwen3-coder-30b	furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8	v2026.4	4	-	furiosa-venv-2026.4
+qwen3-32b	furiosa-ai/Qwen3-32B-FP8	v2026.4	4	-	furiosa-venv-2026.4
+qwen3-30b-instruct	furiosa-ai/Qwen3-30B-A3B-Instruct-2507-FP8	v2026.4	4	-	furiosa-venv-2026.4
+exaone4-32b	furiosa-ai/EXAONE-4.0-32B-FP8	v2026.4	4	-	furiosa-venv-2026.4
+gemma4-31b	furiosa-ai/gemma-4-31B-it-FP8-block	v2026.4	4	-	furiosa-venv-2026.4
+qwen3-8b	furiosa-ai/Qwen3-8B-FP8	v2026.4	1	-	furiosa-venv-2026.4
+llama31-8b-fp8	furiosa-ai/Meta-Llama-3.1-8B-Instruct-FP8-dynamic	v2026.4	1	-	furiosa-venv-2026.4
+mistral-nemo	furiosa-ai/Mistral-Nemo-Instruct-2407-FP8	v2026.4	2	-	furiosa-venv-2026.4
+llama31-8b	furiosa-ai/Llama-3.1-8B-Instruct	v2026.2	1	-	furiosa-venv
