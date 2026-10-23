@@ -918,7 +918,7 @@ Recommendation: none.
 Answer: Owner's choice (in the working session, 2026-10-22, about 23:58 EDT; recorded by the agent, in the owner's words): "I don't know where this don't use npu0 rule came from, but you can use npu0 if the card is available." Applied on 2026-10-23: Agent Rule 8 in docs/BIBLE.md (a Decision Log entry), the master bible, and AGENTS.md now claim npu0 under the same 0.00 GiB rule as every card; the Serving Rules, Host Facts, and Risks And Questions follow; tools/demo/lassi-live picks from npu0 to npu7; plans/runs/rngd-sweep/run.sh does too.
 
 ## OQ-072 The Sandboxed tt_silicon Executor: Hugepages, The Lock, Hangs, Device Risk, And Who Starts A Run
-State: OPEN
+State: ANSWERED
 Kind: decision
 Blocks: the tt_silicon executor task (to be planned; OQ-070)
 Evidence: plans/spikes/tt-silicon-executor.md; results/tt-silicon-smoke-20261023/summary.md; rx 20261022-213300-exec-7aeb (the smoke's two 1 GiB hugepage files and seven UMD lock files remain; 30 of 32 pages free); rx 20261022-214312-exec-59e3 (no hugetlb controller for the user's cgroup)
@@ -945,7 +945,7 @@ Recommendation:
 - (7) the number with the serial recorded.
 - (8) remove them.
 - (9) keep the smoke's environment.
-Answer:
+Answer: Owner's choice (in the working session, 2026-10-23; recorded by the agent, in the owner's words): "I'll be very clear. I want the sandbox to have access to all Tenstorrent cards in the cluster. It needs to happen." This answers the exposure: the sandbox gives a silicon run every Wormhole card in the cluster, not one card. Parts (1) to (9) above that this does not settle are asked again in OQ-075.
 
 ## OQ-073 P16.10's Host: alpha01 In The Owner's Window Of 2026-10-23
 State: CLOSED
@@ -969,3 +969,21 @@ Options:
 - (c) Keep everything and raise the cap to a value you name.
 Recommendation: (a) now, then (b) for every model but Qwen3-Coder-30B and Llama-3.1-8B (the demo model), unless the sweep's results argue for keeping another: most of the 215G back (PROJECTED; the size of each model's snapshot was not measured), and the cap holds again.
 Answer: Owner's choice (in the working session, 2026-10-23, about 01:27 EDT; recorded by the agent, in the owner's words): "The memory lift is extended." Applied: nothing is removed; the scratch root keeps the model weights, and the 150G cap and 145G stop line apply again only when the owner ends the lift (plans/LESSONS.md, Owner directions). Removing weights later is a new owner decision.
+
+## OQ-075 The All-Card tt_silicon Executor's Remaining Choices
+State: OPEN
+Kind: decision
+Blocks: P17.15 to P17.17 (the all-card tt_silicon executor, to be added)
+Evidence: OQ-072 and its answer (the sandbox gives a silicon run every Wormhole card); plans/spikes/tt-silicon-executor.md
+Question: With every card exposed, which settings should the executor use? Each is built as an explicit setting with no default until answered.
+Options:
+- (1) Hugepages: (1b) private per-run directories inside /dev/hugepages-1G, emptied before and after each run, up to two 1 GiB pages per card (16 of the 32 for all eight cards), no root needed; or (1c) hugetlbfs mounts you add as root (size-capped); or (1a) the host's whole directory.
+- (2) Concurrency: (2a) one silicon program at a time, as Agent Rule 9 says, using any or all cards; or (2b) several programs at once on different cards, an Agent Rule 9 change.
+- (3) After a hang, kill, or crash: (3a) quarantine every card the run held until a human clears a marker; or (3b) carry on.
+- (4) Device risk: (4a) a seccomp filter refusing the driver's reset ioctl in silicon runs; or (4b) none.
+- (5) Other users: confirm that nothing else uses the Wormholes during a LASSI window.
+- (6) Who starts a run: (6a) a command-line flag a recipe cannot set, never passed by an unattended session; or another mechanism you name.
+- (7) The smoke's leftover hugepage files and UMD lock files: remove them, or keep them.
+- (8) Environment: (8a) the smoke's settings (slow dispatch, TT_METAL_DISABLE_SFPLOADMACRO=1); or fast dispatch now.
+Recommendation: (1b), (2a), (3a), (4a), (6a), (7) remove, (8a); and (5) your confirmation.
+Answer:
