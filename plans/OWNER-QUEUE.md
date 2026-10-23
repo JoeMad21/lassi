@@ -895,7 +895,7 @@ Recommendation: (a). The row holds part (b) by your split (OQ-055, decision 12 (
 Answer:
 
 ## OQ-070 Running On The Tenstorrent Wormholes: The Gate's tt_silicon Class And A Silicon Executor
-State: OPEN
+State: ANSWERED
 Kind: access
 Blocks: none now; any run of a TT program on the Wormhole cards instead of ttsim
 Evidence: rx 20261021-201421-exec-4ea0 (lspci -d 1e52: lists eight Tenstorrent Wormhole devices, e8:00.0 to eb:00.0 and f1:00.0 to f4:00.0); the gate refused a probe naming tt-smi: "device class 'tt_silicon' is disabled by the owner" (2026-10-21, 20:14 alpha01 time); docs/BIBLE.md (Execution Backends: the tt_silicon row, "Not built"; Environment State); Agent Rule 9; plans/LESSONS.md (Owner directions, 2026-10-21)
@@ -905,7 +905,7 @@ Options:
 - (b) Keep tt_silicon disabled for now; TT programs stay on ttsim, and every result says so in its first lines.
 - (c) Enable tt_silicon and let the work start silicon runs itself during a window you grant: an Agent Rule 9 change, which needs your decision and a Decision Log entry.
 Recommendation: (a). It finds out what the cards need without opening them in a loop, keeps your start on every silicon run (Agent Rule 9), and gives the executor a measured basis.
-Answer:
+Answer: Owner's choice (in the working session of 2026-10-23, 00:00 to 06:00 EDT; recorded by the agent, in the owner's words): asked how to enable the gate, the owner edited the gate's config and said "I think I enabled it" (rx doctor then read devices_enabled tt_silicon true); to the proposal of one run of the loopback reference on card 0 alone, then the other Tier A references one at a time, and a silicon executor afterwards, the owner said "Do whatever you have to do. Go Go!" Applied so far: a read-only check (rx 20261022-211015-exec-9a1c, rx 20261022-211052-exec-939f: eight n300 cards, firmware bundle 19.5.0.0, driver 2.8.0, 32 free 1 GiB hugepages; no tt-smi on the host), and the five tt-pairs-v0 TT references ran once each on card 0 and passed binary_io (results/tt-silicon-smoke-20261023). Still to apply: the bible's Environment State and Execution Backends rows, and the sandboxed tt_silicon executor for model output (plans/spikes/tt-silicon-executor.md).
 
 ## OQ-071 npu0: Claimed Like Any Other RNGD Card When It Reads 0.00 GiB
 State: CLOSED
@@ -916,3 +916,33 @@ Question: The owner's own question, in the working session of 2026-10-22 minutes
 Options: none offered; the owner decided directly.
 Recommendation: none.
 Answer: Owner's choice (in the working session, 2026-10-22, about 23:58 EDT; recorded by the agent, in the owner's words): "I don't know where this don't use npu0 rule came from, but you can use npu0 if the card is available." Applied on 2026-10-23: Agent Rule 8 in docs/BIBLE.md (a Decision Log entry), the master bible, and AGENTS.md now claim npu0 under the same 0.00 GiB rule as every card; the Serving Rules, Host Facts, and Risks And Questions follow; tools/demo/lassi-live picks from npu0 to npu7; plans/runs/rngd-sweep/run.sh does too.
+
+## OQ-072 The Sandboxed tt_silicon Executor: Hugepages, The Lock, Hangs, Device Risk, And Who Starts A Run
+State: OPEN
+Kind: decision
+Blocks: the tt_silicon executor task (to be planned; OQ-070)
+Evidence: plans/spikes/tt-silicon-executor.md; results/tt-silicon-smoke-20261023/summary.md; rx 20261022-213300-exec-7aeb (the smoke's two 1 GiB hugepage files and seven UMD lock files remain; 30 of 32 pages free); rx 20261022-214312-exec-59e3 (no hugetlb controller for the user's cgroup)
+Question: Model-generated TT programs can reach a Wormhole only through a sandboxed executor (Agent Rule 6). Reading the pinned sources settled what such a run needs: the card's node, two read-only sysfs paths, and a writable hugetlbfs at /dev/hugepages-1G. Outside the sandbox, with TT_VISIBLE_DEVICES=0, UMD briefly opened all eight cards' nodes several times per program start (reading, not counted); inside it, with only one node bound, it can open no other card. Six choices remain, and three small ones. (1) Hugepages: where the writable /dev/hugepages-1G comes from. (2) The lock's scope. (3) After a hang or kill. (4) Accepting that model code controls the card: through its BARs and the 2.8.0 driver, which checks no capability, it can touch any register or reset the card or its PCIe link; the sandbox isolates the host, not the card. (5) Other users of the cards: the sandbox hides UMD's own /dev/shm locks, so a sandboxed run and any other process on the same card cannot see each other. (6) How a human starts a silicon run (Agent Rule 9). Small ones: (7) the card key, (8) the smoke's leftover hugepage files, (9) the silicon environment.
+Options:
+- (1a) Bind the host's whole /dev/hugepages-1G writable: simplest; the program can read, change, or delete any file there (mode 777, no sticky bit; other cards' and users' sysmem files are 0666; libvirt keeps a directory there), take every free 1 GiB page until cleanup, and leave bytes the next run on that card maps.
+- (1b) The executor makes a private directory per card inside /dev/hugepages-1G and empties it before and after every run, bound at /dev/hugepages-1G: the program sees only its own files, and each run starts from zeroed pages; it can still take all free 1 GiB pages (30 now) while it runs, since the user's cgroup has no hugetlb controller; one directory is added to a shared host mount.
+- (1c) As (1b), on a hugetlbfs mount you add once as root (for example one per card, size=2G, owned by joseph_ufl, mode 0700): also caps a run at its card's two pages; the host keeps a new mount.
+- (1d) No hugepages: UMD maps no host memory, and whether tt-metal runs at all then is unknown.
+- (2a) One lock for all cards: one placement at a time, as Agent Rule 9 says. (2b) A lock per card, so different cards can run at once: an Agent Rule 9 change.
+- (3a) After a hang, a kill, or a crash, quarantine the card (refuse it until a human checks it and clears a marker) and never rerun with Watcher on silicon. (3b) Continue, relying on the next run's start to reset the cores; whether that recovers the card is unmeasured.
+- (4a) Accept, with the seccomp filter refusing the driver's reset ioctl in tt_silicon runs (tt-metal never calls it) and (3a). (4b) Accept as is. (4c) Run only tracked references on silicon, never model output (no executor).
+- (5) Confirm that nothing else uses the cards during a LASSI silicon window, or name the cards LASSI may use.
+- (6a) The runner refuses tt_silicon unless its command line names the card in a flag a recipe cannot set, and unattended sessions never pass it; training methods and reward stages refuse tt_silicon outright. (6b) Another mechanism you name.
+- (7) The card key: the /dev/tenstorrent number, which the smoke used and a reboot may change, with the serial recorded in every result; or the serial itself.
+- (8) Remove /dev/hugepages-1G/tenstorrent and /dev/hugepages-1G/device_0_channel_1_tenstorrent, which return 2 pages to the pool (no run is using them), or keep them.
+- (9) Keep the smoke's environment (the ttsim row's settings without TT_METAL_SIMULATOR, so slow dispatch and TT_METAL_DISABLE_SFPLOADMACRO=1) for the first executor, so its runs compare with the smoke, and measure fast dispatch and SFPLOADMACRO in a later task; or drop the simulator-only settings now.
+Recommendation:
+- (1c) if you will add the mount, else (1b): no data passes between runs, and no other card's or user's file is in view.
+- (2a): the rule as written.
+- (3a): repeated opens of a card in a bad state are what Agent Rule 9 guards against.
+- (4a).
+- (6a).
+- (7) the number with the serial recorded.
+- (8) remove them.
+- (9) keep the smoke's environment.
+Answer:
