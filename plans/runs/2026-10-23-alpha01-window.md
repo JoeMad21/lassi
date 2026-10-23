@@ -1,6 +1,6 @@
 # Run 2026-10-23-alpha01-window
 
-Window: the owner's alpha01 window, 2026-10-23 00:00 to 06:00 EDT (2026-10-22 21:00 to 2026-10-23 03:00 on alpha01's clock, UTC-7). Session: one attended session; the owner approved work on the build host for the window ("You are go to start at 12am EST to 6am EST"), enabled the gate's tt_silicon class, and said "Do whatever you have to do. Go Go!" (OQ-070, OQ-073). End reason: PLACEHOLDER (the report is written as the window runs; the last section is filled at its end).
+Window: the owner's alpha01 window, 2026-10-23 00:00 to 06:00 EDT (2026-10-22 21:00 to 2026-10-23 03:00 on alpha01's clock, UTC-7). Session: one attended session; the owner approved work on the build host for the window ("You are go to start at 12am EST to 6am EST"), enabled the gate's tt_silicon class, and said "Do whatever you have to do. Go Go!" (OQ-070, OQ-073). End reason: the owner's token budget ran low at about 01:30 EDT, so the session handed the rest of the window to jobs on the build host that need no session (Remote State). The sweep's results are pulled and summarized by the next session.
 
 ## Completed
 
@@ -35,7 +35,15 @@ All through `uv run tools/rx.py`, from clean commits unless noted.
     - Qwen3-30B-Instruct: 10 trials, all S1 at the cap.
     - Stopped by the STOP file before EXAONE-4.
   - rngd-sweep2, 20261022-214907-rngd-sweep2-cd9a: second pass, cap 5, extract.unfenced_file_lines on, no reasoning parser (models2.tsv). Qwen3-Coder-30B: its trials reach S1 at the cap. Stopped before Qwen3-32B for the third pass.
-  - rngd-sweep3, 20261022-220226-rngd-sweep3-6fa1: third pass, cap 15. PLACEHOLDER (results at the window's end).
+  - rngd-sweep3, 20261022-220226-rngd-sweep3-6fa1: third pass, cap 15 (the owner asked for more corrections once nothing passed). Qwen3-Coder-30B:
+    - tt-cpp loopback passed at S5 with alignment 1.0 on its first attempt, the night's first passing code.
+    - tt-cpp eltwise_binary and eltwise_sfpu ran (S5) but missed the max_abs tolerance, which no correction addresses.
+    - Every cpp-tt trial stayed at S1 for 15 corrections.
+    - Stopped after this model for the fourth pass.
+  - rngd-sweep4-chain, 20261022-222829-rngd-sweep4-chain-cf48: waits for the third pass's run.sh to exit, then runs the fourth pass until 05:50 EDT, then tabulates.
+    - The fourth pass is projects/lassi-demo/sweep4: cap 15 plus the adversary stage after the oracle, with the fuzzer at the frozen seed 1 and budget 32. It runs models3.tsv, Qwen3-Coder-30B last.
+    - plans/runs/rngd-sweep/tabulate.py then writes $LASSI_RUNS_ROOT/rngd-sweep/tables/trials.tsv and passes.tsv.
+    - Its recipes passed the runner's own pre-flight checks on the host (rx 20261022-222250-p16-witness-726c, from a snapshot).
 - P16.10 (slot p16-witness, CPU only):
   - rx 20261022-212552-p16-witness-6488: tests/bench/test_adv_seeded_remote.py, 30 passed.
   - rx 20261022-214701-p16-witness-b32e: tests/agents/test_fuzzer.py, 246 passed.
@@ -63,7 +71,7 @@ Answered and applied: OQ-070 (the Wormholes), ANSWERED; closed once the executor
 
 ## Remote State
 
-Jobs running: PLACEHOLDER. Slots added: tt-silicon, p16-witness, rngd-sweep2, rngd-sweep3, rngd-sweep4.
+Jobs running at 01:30 EDT: rngd-sweep3, finishing Qwen3-Coder-30B and then stopped by the STOP file, and rngd-sweep4-chain (above). run.sh stops each server and checks the cards before the next model, and stops at the 05:50 EDT deadline. Slots added: tt-silicon, p16-witness, rngd-sweep2, rngd-sweep3, rngd-sweep4.
 
 Scratch space:
 - du of the scratch root: 318180212 KiB before the P16.10 adversary runs and 318333460 KiB after, about 303.4 to 303.6 GiB (rx 20261022-215349-p16-witness-78eb).
@@ -72,4 +80,10 @@ Scratch space:
 
 ## Next
 
-PLACEHOLDER.
+1. After 06:00 EDT, run `rx job status` for both jobs.
+2. Pull the sweep's output with `rx pull --path lassi-runs/rngd-sweep --into` the results directory rngd-sweep-20261023, and each job's provenance with `rx pull <id> --into` its subdirectory.
+3. Write the summary from tables/trials.tsv and passes.tsv. Label it exploratory, one sample per model, with TT programs on ttsim, a simulator, and count the unfenced-file warnings as reply-format failures.
+4. Check that the cards read 0.00 GiB and port 8123 is closed after the deadline (Agent Rule 8).
+5. Mirror this window's plans/OWNER-QUEUE.md and plans/LESSONS.md changes to p5-ir.
+6. OQ-072, the sandboxed tt_silicon executor, waits on the owner; once it is answered, plan the executor task.
+7. `uv run tools/status.py next` gives none: P16.G waits on P16.9 (OQ-067) and P16.11 (OQ-068).
