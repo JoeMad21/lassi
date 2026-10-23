@@ -34,9 +34,10 @@ left() { echo $((deadline - $(date +%s))); }
 
 free_cards() {
   # One npuN per line: each of npu0 to npu7 whose memory reads 0.00 GiB.
-  # A row reads "| rngd | npuN | <state> | <used>/<total> GiB | ...".
+  # A row reads "| RNGD | npuN | <used>/<total> GiB (<pct>) | <utilization> |"; memory is the field holding GiB.
   furiosa-smi status 2>/dev/null | grep -a -E '\| npu[0-7] ' |
-    awk -F'|' '{card=$3; gsub(/ /, "", card); split($5, mem, "/"); used=mem[1]; gsub(/ /, "", used);
+    awk -F'|' '{card=$3; gsub(/ /, "", card); used="";
+                for (i = 4; i <= NF; i++) if ($i ~ /GiB/) { split($i, mem, "/"); used=mem[1]; gsub(/ /, "", used); break }
                 if (used == "0.00") print card}'
 }
 
@@ -105,7 +106,7 @@ for index in "${!rows[@]}"; do
   ready=0
   for _ in $(seq 1 240); do
     if ! kill -0 "$server" 2>/dev/null; then break; fi
-    if curl -s -m 5 http://127.0.0.1:8123/v1/models | grep -q "\"id\":\"$model\""; then ready=1; break; fi
+    if curl -s -m 5 http://127.0.0.1:8123/v1/models | grep -q -E "\"id\": ?\"$model\""; then ready=1; break; fi
     [ -e "$stopfile" ] && break
     sleep 5
   done
