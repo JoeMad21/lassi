@@ -1013,3 +1013,16 @@ Options:
 - (c) Pass or fail only.
 Recommendation: (a).
 Answer: Owner's choice (in the working session, 2026-10-23; recorded by the agent, in the owner's words): "Go with option A."
+
+## OQ-078 tt_silicon And Host Memory: A Sandboxed Card Run Can DMA To Arbitrary Host RAM Under iommu=pt
+State: OPEN
+Kind: decision
+Blocks: P17.16 (the tt_silicon executor running model output on silicon); any silicon run of model-generated code
+Evidence: plans/spikes/tt-card-dma.md (UMD 0450f1be, tt-metal 5280a9cf, tt-kmd 2.8.0); plans/spikes/tt-silicon-executor.md, Finding 2 (the card's IOMMU domain type "identity" from iommu=pt; rx 20261022-214312-exec-59e3); OQ-075 (the all-card exposure and the reset-ioctl filter)
+Question: OQ-075 exposes every Wormhole card to a sandboxed silicon run, with a seccomp filter refusing the driver's reset ioctl as the only device-level mitigation. Reading the pinned sources shows that on alpha01, where each card sits in an identity IOMMU domain (iommu=pt), a program holding a card's node can map BAR2 and program the card's PCIe DMA engine or an outbound iATU region with a host address it chooses, and the card reads or writes that host physical address untranslated. The programming is MMIO stores, not syscalls, so the reset-ioctl filter does not reach it, and no KMD option or user-space or link-time measure closes it. So a sandboxed silicon run of model-generated code (Agent Rule 6) is not isolated from host memory: it can read or write all of host RAM, including other tenants' and the gate's. How should silicon runs of model output proceed?
+Options:
+- (a) Run the cards under a translating (DMA-mode) IOMMU before any model output runs on silicon. Root unbinds the tenstorrent driver from each card and writes "DMA" to the card's /sys/kernel/iommu_groups/<n>/type, or the host boots without iommu=pt so every group defaults to a DMA domain. Then every card transaction is checked by the host IOMMU and arbitrary host memory is unreachable (plans/spikes/tt-card-dma.md, Finding 5). The driver supports this (2.8.0); UMD switches to its no-hugepage IOMMU path automatically. Consequence: a host change only you or root can make, a reboot or a per-card unbind/rebind, and tt-metal end to end under the IOMMU path is unmeasured at the pin (a qualification step).
+- (b) Keep iommu=pt and run model output on silicon anyway, accepting that each silicon run can read or write host memory. Consequence: the sandbox does not isolate the host for these runs; a hostile or buggy candidate can corrupt the host, other tenants, or the gate. Not recommended.
+- (c) Never run model output on silicon under iommu=pt: build the tt_silicon executor, but let it run only tracked references a human starts (as the 2026-10-23 smoke did), and keep model-generated TT candidates on ttsim until (a) is in place. Consequence: no host-memory exposure from model code; silicon numbers for model output wait on (a).
+Recommendation: (a) if you will make the host change before P17.16 runs model output, else (c) until then; never (b). Either way the tt_silicon executor and its sandbox wiring can be built and tested with stand-ins now (P17.15 is done); only running model output on silicon waits on this.
+Answer:
