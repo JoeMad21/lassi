@@ -987,3 +987,16 @@ Options:
 - (8) Environment: (8a) the smoke's settings (slow dispatch, TT_METAL_DISABLE_SFPLOADMACRO=1); or fast dispatch now.
 Recommendation: (1b), (2a), (3a), (4a), (6a), (7) remove, (8a); and (5) your confirmation.
 Answer: Owner's choice (in the working session, 2026-10-23, after the agent explained each part; recorded by the agent, in the owner's words): "I approve the recommendation." Part (5), asked again in the session, the owner's words: "During our windows, we are the sole users of the Furiosas and Tenstorrents. However, sometimes the previous user takes a few minutes to relieve the cards. Be sure to poll and check first." Applied so far, part (7), done at 14:08 EDT, outside a window, which the owner's direction of the same day ("You cannot run anything on alpha01 outside of our approved windows.") forbids (plans/LESSONS.md): the smoke's two 1 GiB hugepage files, owned by joseph_ufl, were removed, leaving 32 of 32 pages free, and no UMD lock file of this account remained in /dev/shm (rx 20261023-110829-exec-02aa, rx 20261023-110839-exec-d90f). The other parts are built in P17.15 and P17.16.
+
+## OQ-076 Training For The Test Matrix: The Data And The Hardware
+State: OPEN
+Kind: decision
+Blocks: the matrix's training combinations (OQ-075's matrix, 2026-10-23); P7
+Evidence: lassi/train/ (the train layer: `lassi train`, the trl trainer, data from a synthetic fixture or a suite's train split, eval and unassigned items refused); assets/bench/tt-pairs-v0.yaml (every Tier A item unassigned, OQ-025); OQ-055 decision 8 (b) (the RTX 3080 serves the CUDA spike only, with no model inference or training)
+Question: The owner asked for training in the test matrix and for LASSI-DF development toward training tonight. Every Tier A program is a test item, and no host can train today. Two choices make training possible.
+Options:
+- (1) Data: (1a) tt-metal's example programs and documentation at the pin, without the five Tier A programs and their kernels, as instruction and code records (a test fails on any Tier A code in them); (1b) no training until a split is designed.
+- (2) Training hardware: (2a) the workstation's RTX 3080, for a LoRA fine-tune of a model of about 1 to 3B parameters (an OQ-055 decision 8 (b) change); (2b) none until a GPU host exists.
+- (3) Serving the trained model to the pipeline on alpha01: (3a) in process on alpha01's CPU (hf_local), slow but needing no compile; (3b) compiled for RNGD with furiosa-llm, untested for a fine-tuned model.
+Recommendation: (1a), (2a), and (3a) for a first trained run, measured like every other configuration and labeled exploratory; RNGD serving of a trained model as its own spike.
+Answer:
