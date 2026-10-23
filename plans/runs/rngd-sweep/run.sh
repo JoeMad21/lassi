@@ -4,8 +4,9 @@
 # 8). Started from a clean commit on the build host as
 #   PYTHONIOENCODING=utf-8 uv run tools/rx.py job start --big --name rngd-sweep --timeout 21600 -- \
 #     'bash plans/runs/rngd-sweep/run.sh <deadline as epoch seconds>'
-# For each model, in order: skip it when its artifact is not in $HF_HOME or less than 30 minutes are left; pick
-# free cards from `furiosa-smi status` (npu1 to npu7 only, never npu0, each at 0.00 GiB; Agent Rule 8); serve it
+# For each model, in order: skip it when its artifact is not in $HF_HOME or less than 30 minutes are left; poll
+# `furiosa-smi status` every 60 s (each poll logged in card-polls.txt) until enough cards are free, then pick
+# them (npu1 to npu7 only, never npu0, each at 0.00 GiB; Agent Rule 8); serve it
 # on 127.0.0.1:8123 and wait for /v1/models to list its id; run its two recipes (projects/lassi-demo/sweep/
 # <slug>-maxabs.yaml and -pcc.yaml) side by side under one time limit, the time left shared among the models still
 # to run (at most 50 minutes); stop the server and wait for its exit, the port to close, and its cards to read
@@ -83,7 +84,15 @@ for index in "${!rows[@]}"; do
   if [ "$(left)" -lt 1800 ]; then echo "$(ts) under 30 min left: stopping before $slug"; break; fi
   snap=$(ls -d "$HF_HOME/hub/models--${model/\//--}/snapshots/"* 2>/dev/null | head -1)
   if [ -z "$snap" ]; then echo "$(ts) SKIP $slug: $model is not in $HF_HOME"; continue; fi
-  mapfile -t free < <(free_cards)
+  # Poll the cards until enough of them read 0.00 GiB (other tenants done), every 60 s, logging each poll.
+  while :; do
+    furiosa-smi status 2>/dev/null | grep -a -E '\| npu' | sed "s/^/$(ts) /" >> "$out/card-polls.txt"
+    mapfile -t free < <(free_cards)
+    [ "${#free[@]}" -ge "$cards" ] && break
+    if [ -e "$stopfile" ] || [ "$(left)" -lt 1800 ]; then break; fi
+    echo "$(ts) WAIT $slug: ${#free[@]} card(s) at 0.00 GiB, needs $cards; polling again in 60 s"
+    sleep 60
+  done
   if [ "${#free[@]}" -lt "$cards" ]; then echo "$(ts) SKIP $slug: ${#free[@]} free card(s), needs $cards"; continue; fi
   if ss -ltn | grep -q ':8123 '; then echo "$(ts) ABORT: port 8123 is in use"; break; fi
   devices=$(printf '%s\n' "${free[@]:0:$cards}" | sed 's/^npu/npu:/' | paste -sd, -)
