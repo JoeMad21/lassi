@@ -1,0 +1,7 @@
+# The owner's RNGD model sweep of 2026-10-23 (00:00 to 06:00 EDT): tier-a-rngd-1trial-pcc.yaml with
+# furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8, served at revision v2026.4 on 4 RNGD card(s) by plans/runs/rngd-sweep/run.sh, which
+# runs every model of plans/runs/rngd-sweep/models.tsv in turn on port 8123. Exploratory: not faithful; one
+# sample of each model, one trial per item and direction.
+extends: ../tier-a-rngd-1trial-pcc.yaml  # the two matmul items (pcc), both directions, cap 5
+model:
+  id: furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8

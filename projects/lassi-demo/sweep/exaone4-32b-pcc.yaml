@@ -1,0 +1,10 @@
+# The owner's RNGD model sweep of 2026-10-23 (00:00 to 06:00 EDT): tier-a-rngd-1trial-pcc.yaml with
+# furiosa-ai/EXAONE-4.0-32B-FP8, served at revision v2026.4 on 4 RNGD card(s) by plans/runs/rngd-sweep/run.sh, which
+# runs every model of plans/runs/rngd-sweep/models.tsv in turn on port 8123. Exploratory: not faithful; one
+# sample of each model, one trial per item and direction.
+extends: ../tier-a-rngd-1trial-pcc.yaml  # the two matmul items (pcc), both directions, cap 5
+model:
+  id: furiosa-ai/EXAONE-4.0-32B-FP8
+llm:
+  sampling:
+    max_tokens: 16384  # a reasoning model: its thinking counts against max_tokens (served with --reasoning-parser exaone4)

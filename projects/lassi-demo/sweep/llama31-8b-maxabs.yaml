@@ -1,0 +1,7 @@
+# The owner's RNGD model sweep of 2026-10-23 (00:00 to 06:00 EDT): tier-a-rngd-1trial-maxabs.yaml with
+# furiosa-ai/Llama-3.1-8B-Instruct, served at revision v2026.2 on 1 RNGD card(s) by plans/runs/rngd-sweep/run.sh, which
+# runs every model of plans/runs/rngd-sweep/models.tsv in turn on port 8123. Exploratory: not faithful; one
+# sample of each model, one trial per item and direction.
+extends: ../tier-a-rngd-1trial-maxabs.yaml  # the three max_abs items, both directions, cap 5
+model:
+  id: furiosa-ai/Llama-3.1-8B-Instruct
