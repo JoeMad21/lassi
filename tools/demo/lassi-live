@@ -14,7 +14,7 @@ Usage:
                                       colorwheel, dense-embedding, entropy, jacobi, layout, matrix-rotate,
                                       pathfinder, randomAccess); a trial that hits the correction cap takes 5-8 min
   lassi-live --compile-only           OpenMP -> CUDA and CUDA -> OpenMP, compile only (nothing generated runs)
-  lassi-live --card npu2              use this card (never npu0); default: the first free card, npu1 to npu7
+  lassi-live --card npu2              use this card; default: the first free card, npu0 to npu7
   lassi-live --plain                  the same run with graphics off (no banner, no live table)
   lassi-live --show RUN_ID            print the outcome table of a finished run and exit (no card, no server)
   lassi-live --mock --both            no card, no server, no inference: the mock model replies with each
@@ -23,7 +23,7 @@ Usage:
                                       no card is free
 
 What happens:
-  1. Checks: `furiosa-smi ps` and `furiosa-smi status`; a card from npu1 to npu7 whose memory reads 0.00 GiB;
+  1. Checks: `furiosa-smi ps` and `furiosa-smi status`; a card from npu0 to npu7 whose memory reads 0.00 GiB;
      port 8123 closed; no server of this account still running.
   2. furiosa-llm serves furiosa-ai/Llama-3.1-8B-Instruct (revision v2026.2) on that card at 127.0.0.1:8123;
      the run starts once /v1/models returns that id (about 40 s).
@@ -70,7 +70,9 @@ TT_MAX_ABS_APPS = {"loopback", "eltwise_binary", "eltwise_sfpu"}
 TT_CORRECTIONS = 3
 READY_S = 300
 STOP_S = 60
-STATUS_ROW = re.compile(r"\|\s*rngd\s*\|\s*(npu\d+)\s*\|\s*(\S+)\s*\|\s*([\d.]+)/([\d.]+)\s*GiB")
+# A status row: Arch, Device, an optional State (older furiosa-smi releases), then Memory as <used>/<total> GiB.
+STATUS_ROW = re.compile(r"\|\s*rngd\s*\|\s*(npu\d+)\s*\|(?:\s*([a-z]\S*)\s*\|)?\s*([\d.]+)/([\d.]+)\s*GiB",
+                        re.IGNORECASE)
 ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 RULE = "=" * 78
 NAMES = {"cuda": "CUDA", "omp": "OpenMP", "cpp": "C++", "tt": "TT (ttsim)"}
@@ -115,10 +117,15 @@ def ascii_only(text: str) -> str:
 # Cards, port, and server
 
 
+def parse_status(text: str) -> dict[str, tuple[str, float, float]]:
+    """Return {card: (state, used GiB, total GiB)} from the text of `furiosa-smi status`; state is "-" when the
+    table has no State column."""
+    return {m.group(1): (m.group(2) or "-", float(m.group(3)), float(m.group(4))) for m in STATUS_ROW.finditer(text)}
+
+
 def card_status() -> dict[str, tuple[str, float, float]]:
     """Return {card: (state, used GiB, total GiB)} from `furiosa-smi status`."""
-    out = subprocess.run(["furiosa-smi", "status"], capture_output=True, text=True, check=False).stdout
-    return {m.group(1): (m.group(2), float(m.group(3)), float(m.group(4))) for m in STATUS_ROW.finditer(out)}
+    return parse_status(subprocess.run(["furiosa-smi", "status"], capture_output=True, text=True, check=False).stdout)
 
 
 def show_cards() -> dict[str, tuple[str, float, float]]:
@@ -127,21 +134,20 @@ def show_cards() -> dict[str, tuple[str, float, float]]:
     say("furiosa-smi ps (this account's processes only):")
     say(ps or "(no output)")
     cards = card_status()
-    rows = [[card, state, f"{used:.2f}/{total:.2f} GiB", "reserved (never used)" if card == "npu0" else
-             ("free" if used == 0 else "in use")] for card, (state, used, total) in sorted(cards.items())]
+    rows = [[card, state, f"{used:.2f}/{total:.2f} GiB", "free" if used == 0 else "in use"]
+            for card, (state, used, total) in sorted(cards.items())]
     say("furiosa-smi status (memory shows every tenant):")
     say(boxed(["Card", "State", "Memory", "For this demo"], rows))
     return cards
 
 
 def pick_card(cards: dict, wanted: str | None) -> str:
-    """Return the card to serve on: `wanted`, or the first free one from npu1 to npu7."""
-    if wanted == "npu0":
-        raise SystemExit("lassi-live: npu0 is reserved for another tenant and is never used")
-    choices = [wanted] if wanted else [f"npu{i}" for i in range(1, 8)]
+    """Return the card to serve on: `wanted`, or the first free one from npu0 to npu7 (Agent Rule 8: memory at
+    0.00 GiB, and the state alive where the table has a State column)."""
+    choices = [wanted] if wanted else [f"npu{i}" for i in range(8)]
     for card in choices:
         state, used, _ = cards.get(card, ("missing", -1.0, 0.0))
-        if state == "alive" and used == 0:
+        if state in ("alive", "-") and used == 0:
             return card
     raise SystemExit(f"lassi-live: no free card among {', '.join(choices)} (memory must read 0.00 GiB)")
 
@@ -350,7 +356,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--tt-apps", default=",".join(DEFAULT_TT_APPS), help="comma-separated Tier A items")
     parser.add_argument("--mock", action="store_true",
                         help="no card and no server: the mock model replies with each reference program")
-    parser.add_argument("--card", help="the card to serve on (never npu0)")
+    parser.add_argument("--card", help="the card to serve on (default: the first free card)")
     parser.add_argument("--run-id", help="the run id (default demo-live-<date>-<time>)")
     parser.add_argument("--plain", action="store_true", help="graphics off: no banner, no live table")
     parser.add_argument("--show", metavar="RUN_ID", help="print the outcome table of a finished run and exit")

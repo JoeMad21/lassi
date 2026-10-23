@@ -11,7 +11,7 @@ Tenstorrent number comes from ttsim, a simulator: label it simulator, never sili
    `lassi score` on the September 24 run demo-rngd-cpu-1: the run metrics table with Wilson 95% intervals and
    the paper's recount, one score per trial, and the start of the review packet. `--plain` turns graphics off.
 2. `lassi-live --both` (one RNGD card, about 10 to 20 minutes). It checks the cards (`furiosa-smi ps` and
-   `furiosa-smi status`; only a card from npu1 to npu7 at 0.00 GiB, never npu0), serves
+   `furiosa-smi status`; only a card at 0.00 GiB, npu0 included), serves
    furiosa-ai/Llama-3.1-8B-Instruct at v2026.2 on that card, and runs two segments against it with the
    LASSI-DF banner and the live inference table:
    - the CPU segment: the LASSI replication, CUDA -> OpenMP on matrix-rotate and entropy, every generated

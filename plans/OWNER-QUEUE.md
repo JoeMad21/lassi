@@ -906,3 +906,13 @@ Options:
 - (c) Enable tt_silicon and let the work start silicon runs itself during a window you grant: an Agent Rule 9 change, which needs your decision and a Decision Log entry.
 Recommendation: (a). It finds out what the cards need without opening them in a loop, keeps your start on every silicon run (Agent Rule 9), and gives the executor a measured basis.
 Answer:
+
+## OQ-071 npu0: Claimed Like Any Other RNGD Card When It Reads 0.00 GiB
+State: CLOSED
+Kind: policy
+Blocks: none
+Evidence: Agent Rule 8 (AGENTS.md, docs/BIBLE.md), as it stood: "Never claim npu0 (another tenant)."; rx 20261022-210011-exec-0726 (furiosa-smi status at 2026-10-22T21:00:11-07:00: npu0 to npu7 all at 0.00/47.50 GiB; furiosa-smi ps empty)
+Question: The owner's own question, in the working session of 2026-10-22 minutes before the 00:00 EDT start of the RNGD window, on reading the sweep's card rule: may npu0 be used when it is free?
+Options: none offered; the owner decided directly.
+Recommendation: none.
+Answer: Owner's choice (in the working session, 2026-10-22, about 23:58 EDT; recorded by the agent, in the owner's words): "I don't know where this don't use npu0 rule came from, but you can use npu0 if the card is available." Applied on 2026-10-23: Agent Rule 8 in docs/BIBLE.md (a Decision Log entry), the master bible, and AGENTS.md now claim npu0 under the same 0.00 GiB rule as every card; the Serving Rules, Host Facts, and Risks And Questions follow; tools/demo/lassi-live picks from npu0 to npu7; plans/runs/rngd-sweep/run.sh does too.

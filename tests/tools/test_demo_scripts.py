@@ -93,3 +93,40 @@ def test_mock_recipes_bind_the_mock_model_and_one_trial(live: ModuleType, segmen
     assert data["model"]["backend"] == "mock"
     assert data["model"]["id"] == "mock-reference"
     assert data["trials"]["n"] == 1
+
+
+# `furiosa-smi status` on alpha01 at 2026-10-22T21:00:11-07:00 (rx 20261022-210011-exec-0726), npu1 to npu7
+# trimmed to two rows and npu2's memory edited to show a card in use.
+STATUS_2026_10_22 = """\
++------+--------+---------------------------+-------------+
+| Arch | Device | Memory                    | Utilization |
++------+--------+---------------------------+-------------+
+| RNGD | npu0   |  0.00/47.50 GiB   (0.00%) |      -      |
++------+--------+---------------------------+-------------+
+| RNGD | npu1   |  0.00/47.50 GiB   (0.00%) |      -      |
++------+--------+---------------------------+-------------+
+| RNGD | npu2   | 12.30/47.50 GiB  (25.89%) |      -      |
++------+--------+---------------------------+-------------+
+"""
+
+
+def test_card_status_reads_the_table_without_a_state_column(live: ModuleType) -> None:
+    cards = live.parse_status(STATUS_2026_10_22)
+    assert cards == {"npu0": ("-", 0.0, 47.5), "npu1": ("-", 0.0, 47.5), "npu2": ("-", 12.3, 47.5)}
+
+
+def test_card_status_still_reads_the_table_with_a_state_column(live: ModuleType) -> None:
+    old = "| rngd | npu3 | alive | 0.00/47.50 GiB | 0.00% |\n| rngd | npu4 | alive | 3.10/47.50 GiB | 9.00% |\n"
+    assert live.parse_status(old) == {"npu3": ("alive", 0.0, 47.5), "npu4": ("alive", 3.1, 47.5)}
+
+
+def test_pick_card_takes_npu0_when_its_memory_reads_zero(live: ModuleType) -> None:
+    cards = live.parse_status(STATUS_2026_10_22)
+    assert live.pick_card(cards, None) == "npu0"
+    assert live.pick_card(cards, "npu0") == "npu0"
+
+
+def test_pick_card_refuses_a_card_in_use(live: ModuleType) -> None:
+    cards = live.parse_status(STATUS_2026_10_22)
+    with pytest.raises(SystemExit, match="no free card among npu2"):
+        live.pick_card(cards, "npu2")

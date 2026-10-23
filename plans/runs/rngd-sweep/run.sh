@@ -6,7 +6,7 @@
 #     'bash plans/runs/rngd-sweep/run.sh <deadline as epoch seconds>'
 # For each model, in order: skip it when its artifact is not in $HF_HOME or less than 30 minutes are left; poll
 # `furiosa-smi status` every 60 s (each poll logged in card-polls.txt) until enough cards are free, then pick
-# them (npu0 to npu7, each at 0.00 GiB; Agent Rule 8 as the owner changed it on 2026-10-23); serve it
+# them (npu0 to npu7, each at 0.00 GiB; Agent Rule 8 as the owner changed it on 2026-10-22, OQ-071); serve it
 # on 127.0.0.1:8123 and wait for /v1/models to list its id; run its two recipes (projects/lassi-demo/sweep/
 # <slug>-maxabs.yaml and -pcc.yaml) side by side under one time limit, the time left shared among the models still
 # to run (at most 50 minutes); stop the server and wait for its exit, the port to close, and its cards to read
