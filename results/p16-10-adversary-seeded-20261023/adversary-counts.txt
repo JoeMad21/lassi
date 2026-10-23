@@ -1,0 +1,34 @@
+Each trial.json adversary record under $LASSI_RUNS_ROOT/runs/p16-10-<recipe>-20261023, read on 2026-10-22T22:24:46-07:00
+== seeded-fuzzer
+pair_max/run01 stage S5 proposals 32 runs 64 refused 0 divergences 7
+pair_max/run02 stage S5 proposals 32 runs 64 refused 0 divergences 7
+piecewise_gate/run01 stage S5 proposals 32 runs 64 refused 0 divergences 9
+piecewise_gate/run02 stage S5 proposals 32 runs 64 refused 0 divergences 7
+piecewise_ops/run01 stage S5 proposals 32 runs 64 refused 0 divergences 23
+piecewise_ops/run02 stage S5 proposals 32 runs 64 refused 0 divergences 25
+prefix_sum/run01 stage S5 proposals 32 runs 64 refused 0 divergences 20
+prefix_sum/run02 stage S5 proposals 32 runs 64 refused 0 divergences 18
+scale_i64/run01 stage S5 proposals 32 runs 64 refused 0 divergences 25
+scale_i64/run02 stage S5 proposals 32 runs 64 refused 0 divergences 24
+signed_root/run01 stage S5 proposals 32 runs 64 refused 0 divergences 23
+signed_root/run02 stage S5 proposals 32 runs 64 refused 0 divergences 23
+== control-fuzzer
+pair_max/run01 stage S5 proposals 32 runs 64 refused 0 divergences 0
+piecewise_gate/run01 stage S5 proposals 32 runs 64 refused 0 divergences 0
+piecewise_ops/run01 stage S5 proposals 32 runs 64 refused 0 divergences 0
+prefix_sum/run01 stage S5 proposals 32 runs 64 refused 0 divergences 0
+scale_i64/run01 stage S5 proposals 32 runs 64 refused 0 divergences 0
+signed_root/run01 stage S5 proposals 32 runs 64 refused 0 divergences 0
+== seeded-llm
+pair_max/run01 stage S5 proposals 8 runs 0 refused 8 divergences 0
+pair_max/run02 stage S5 proposals 8 runs 0 refused 8 divergences 0
+piecewise_gate/run01 stage S5 proposals 8 runs 0 refused 8 divergences 0
+piecewise_gate/run02 stage S5 proposals 8 runs 0 refused 8 divergences 0
+piecewise_ops/run01 stage S5 proposals 8 runs 0 refused 8 divergences 0
+piecewise_ops/run02 stage S5 proposals 8 runs 0 refused 8 divergences 0
+prefix_sum/run01 stage S5 proposals 8 runs 0 refused 8 divergences 0
+prefix_sum/run02 stage S5 proposals 8 runs 0 refused 8 divergences 0
+scale_i64/run01 stage S5 proposals 8 runs 0 refused 8 divergences 0
+scale_i64/run02 stage S5 proposals 8 runs 0 refused 8 divergences 0
+signed_root/run01 stage S5 proposals 8 runs 0 refused 8 divergences 0
+signed_root/run02 stage S5 proposals 8 runs 0 refused 8 divergences 0
