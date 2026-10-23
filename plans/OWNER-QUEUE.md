@@ -971,7 +971,7 @@ Recommendation: (a) now, then (b) for every model but Qwen3-Coder-30B and Llama-
 Answer: Owner's choice (in the working session, 2026-10-23, about 01:27 EDT; recorded by the agent, in the owner's words): "The memory lift is extended." Applied: nothing is removed; the scratch root keeps the model weights, and the 150G cap and 145G stop line apply again only when the owner ends the lift (plans/LESSONS.md, Owner directions). Removing weights later is a new owner decision.
 
 ## OQ-075 The All-Card tt_silicon Executor's Remaining Choices
-State: OPEN
+State: ANSWERED
 Kind: decision
 Blocks: P17.15 to P17.17 (the all-card tt_silicon executor, to be added)
 Evidence: OQ-072 and its answer (the sandbox gives a silicon run every Wormhole card); plans/spikes/tt-silicon-executor.md
@@ -986,4 +986,4 @@ Options:
 - (7) The smoke's leftover hugepage files and UMD lock files: remove them, or keep them.
 - (8) Environment: (8a) the smoke's settings (slow dispatch, TT_METAL_DISABLE_SFPLOADMACRO=1); or fast dispatch now.
 Recommendation: (1b), (2a), (3a), (4a), (6a), (7) remove, (8a); and (5) your confirmation.
-Answer:
+Answer: Owner's choice (in the working session, 2026-10-23, after the agent explained each part; recorded by the agent, in the owner's words): "I approve the recommendation." Part (5), whether anyone else uses the Wormholes during a LASSI window, is a fact the owner has not stated; it is asked again in the session. Applied so far, part (7): the smoke's two 1 GiB hugepage files, owned by joseph_ufl, were removed, leaving 32 of 32 pages free, and no UMD lock file of this account remained in /dev/shm (rx 20261023-110829-exec-02aa, rx 20261023-110839-exec-d90f). The other parts are built in P17.15 and P17.16.
