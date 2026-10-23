@@ -958,7 +958,7 @@ Recommendation: (a).
 Answer: Owner's choice (in the working session, 2026-10-23, about 00:13 EDT; recorded by the agent, in the owner's words), to that question among others: "Do whatever you have to do. Go Go!" Applied: the witness checks, the fuzzer's tests, and the exploratory adversary-seeded runs ran on alpha01 through tools/rx.py; P16.G still runs in the LASSI distro as planned, where the pins (g++-12 12.3.0) are the same.
 
 ## OQ-074 The Scratch Root At About 303 GiB, Past The 150G Cap: Keep The Model Weights, Or Remove Them After The Window
-State: OPEN
+State: CLOSED
 Kind: policy
 Blocks: none now; every later build-host step that adds to the scratch root
 Evidence: rx 20261022-215349-p16-witness-78eb (du of the scratch root 318180212 KiB before the P16.10 adversary runs, 318333460 KiB after; the gate's scratch free space 120.5 GB before and 120.4 GB after); rx 20261022-222349-exec-ba36 (du: .cache/huggingface 215G, toolchains 16G, furiosa-venv 8.0G, furiosa-venv-2026.4 7.6G, lassi-runs 1.3G, lassi-wt 437M, tmp 296M; /mnt/nvme10 113G free); plans/runs/2026-10-20-local-1.md (142G on 2026-10-20); plans/LESSONS.md (the owner's direction of 2026-10-21: "Memory requirements are removed for today and tomorrow. Download whatever models you need.")
@@ -968,4 +968,4 @@ Options:
 - (b) After the window, remove the Hugging Face snapshots of the models you name, with your approval for each, as AGENTS.md asks. Every one is a pinned revision on Hugging Face (models.tsv), so it can be fetched again; no backup to the workstation, since 215G there is not worth it for re-downloadable files.
 - (c) Keep everything and raise the cap to a value you name.
 Recommendation: (a) now, then (b) for every model but Qwen3-Coder-30B and Llama-3.1-8B (the demo model), unless the sweep's results argue for keeping another: most of the 215G back (PROJECTED; the size of each model's snapshot was not measured), and the cap holds again.
-Answer:
+Answer: Owner's choice (in the working session, 2026-10-23, about 01:27 EDT; recorded by the agent, in the owner's words): "The memory lift is extended." Applied: nothing is removed; the scratch root keeps the model weights, and the 150G cap and 145G stop line apply again only when the owner ends the lift (plans/LESSONS.md, Owner directions). Removing weights later is a new owner decision.

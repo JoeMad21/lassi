@@ -57,7 +57,7 @@ New:
 - OQ-071 (npu0), CLOSED.
 - OQ-072 (the tt_silicon executor), OPEN.
 - OQ-073 (P16.10's host), CLOSED.
-- OQ-074 (the scratch root past the cap), OPEN.
+- OQ-074 (the scratch root past the cap), CLOSED: the owner extended the memory lift, so nothing is removed.
 
 Answered and applied: OQ-070 (the Wormholes), ANSWERED; closed once the executor question is settled.
 
@@ -68,7 +68,7 @@ Jobs running: PLACEHOLDER. Slots added: tt-silicon, p16-witness, rngd-sweep2, rn
 Scratch space:
 - du of the scratch root: 318180212 KiB before the P16.10 adversary runs and 318333460 KiB after, about 303.4 to 303.6 GiB (rx 20261022-215349-p16-witness-78eb).
 - Free space on the scratch disk: the gate measured 120.5 GB before and 120.4 GB after; `df -h /mnt/nvme10` showed 113G free after. On alpha01 (OQ-073) the scratch disk stands in for the C: drive the P16 plan names; nothing ran on the workstation.
-- The window's steps ran with the scratch root past the 145G stop line and the 150G cap. The cap had been lifted for 2026-10-21 and 2026-10-22, when the model weights were downloaded, and was not re-checked at the window's start. The Hugging Face cache holds 215G (rx 20261022-222349-exec-ba36). OQ-074 asks the owner what to do with the weights; agents delete nothing there.
+- The window's steps ran with the scratch root past the 145G stop line and the 150G cap. The cap had been lifted for 2026-10-21 and 2026-10-22, when the model weights were downloaded, and was not re-checked at the window's start. The Hugging Face cache holds 215G (rx 20261022-222349-exec-ba36). OQ-074 asked the owner what to do with the weights. The owner extended the memory lift at about 01:27 EDT, so the rest of the window ran under it; agents delete nothing there.
 
 ## Next
 
