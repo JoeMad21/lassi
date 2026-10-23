@@ -59,6 +59,8 @@ classes cite no source. The classes are this task's choice.
 ## Witnesses and the freeze
 
 Each witness was written from its candidate's trigger condition, never from the fuzzer's strategies or proposals
-(the Freeze decision). Nothing here has been built or run yet: task P16.10 builds and runs every reference,
-candidate, and witness natively in the sandbox, checks that each candidate passes binary_io on its item's held-out
-inputs and diverges on its witness, and then writes the freeze record that fixes these files' sha256.
+(the Freeze decision). Task P16.10 built and ran every reference, candidate, and witness natively in the sandbox on
+the build host (tests/bench/test_adv_seeded_remote.py, 30 passed, rx 20261022-212552-p16-witness-6488, clean commit
+c5a9a1f): every reference ran clean and repeatably, and every candidate passed binary_io on its item's held-out
+inputs and diverged on its witness, so none needed a fix. The freeze record, tests/fixtures/adversary/freeze.yaml,
+then fixed these files' sha256 (tests/agents/test_freeze.py checks it).

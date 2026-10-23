@@ -1,0 +1,89 @@
+# The P16 Freeze decision's record (task P16.10; plans/p16-adversarial.md, planning decision Freeze), written before
+# any adversary-stage run on adv-seeded-v0 or a Tier A item, after two checks on the build host, alpha01, in the
+# owner's window of 2026-10-23 (the owner approved build-host work in the working session):
+# - the witness checks, tests/bench/test_adv_seeded_remote.py, 30 passed (rx 20261022-212552-p16-witness-6488,
+#   clean commit c5a9a1f): every reference clean and repeatable, every seeded candidate passing on the held-out
+#   inputs and failing on its witness, so no candidate needed a fix;
+# - the fuzzer's tests, tests/agents/test_fuzzer.py, 246 passed (rx 20261022-214701-p16-witness-b32e, clean commit
+#   c5a9a1f), its known-answer sha256 among them, so lassi/agents/fuzzer.py gives the same bytes on Linux.
+# tests/agents/test_freeze.py recomputes every value here and fails on any difference, and on a file added under a
+# frozen directory. After the first adversary run on the set nothing here changes in response to a run: a changed
+# adversary, candidate, or recorded value is measured only on a fresh seeded set frozen before the changed adversary
+# first runs on it, or goes to the owner. A new recipe may join `recipes` as an addition (task P16.11).
+# - files: the sha256 of each file's bytes (.gitattributes keeps every one LF, so the bytes are the same on every
+#   host). Every file under a frozen directory is listed, README.md files excepted: prose that no code reads (the
+#   registry reads the files a manifest names, prompts load <name>.txt, recordings are bound by path), whose
+#   presence fixture tests check.
+# - witnesses: per candidate id, the sha256 of its index entry's `witness` value alone, serialized as
+#   json.dumps(witness, sort_keys=True, separators=(",", ":")) and encoded as ASCII. The spec is enough: the code that
+#   turns it into input bytes, lassi/agents/llm.py (parse_reply) and lassi/harness/lassi_io.py (write_inputs), is
+#   frozen above, and index.json itself is frozen too.
+# - recipes: each projects/adversary-seeded/ recipe's resolved adversary section (seed, budget, and, for the llm
+#   adversary, its backend, model, prompts, recording and its sha256, and sampling) as canonical JSON, its oracle
+#   metric and threshold, its model.recording, and its trials.n.
+suite: adv-seeded-v0
+files:
+  assets/bench/adv-seeded-v0.yaml: ca0253c9e24805acd175fd1e856360930c12730e430019bb6939b01f977cf059
+  assets/harness/c/lassi_io.h: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  lassi/agents/fuzzer.py: 84c5fb8ac03ffe0eb64fb8da2d598862cf02bcac6046ca425627bd582c074929
+  lassi/agents/llm.py: 3380be407f61999af024676b625a1e7f3ce30f649b97fd2f5a0a079069179af0
+  lassi/harness/lassi_io.py: 7c57ed1cee97c2e24c180c78c3f4902e52314f20588b224defcbd6d0c5d9582f
+  lassi/harness/contract.py: 6e7753375a2af0ad302e027630eeac8f0a6f5b0f39618cf2af3dc434238372c2
+  assets/bench/adv-seeded-v0/pair_max/cpp/pair_max.cpp: e3220e448b7481ff895cf5a9711f39881eaac29a33809ec8137178e1d1ea5cad
+  assets/bench/adv-seeded-v0/piecewise_gate/cpp/piecewise_gate.cpp: ae69c9769be2e49e97d06fa772df7522ffc81adb0c7bbcdff781a2d02189a5da
+  assets/bench/adv-seeded-v0/piecewise_ops/cpp/piecewise_ops.cpp: a55bb84020d0980991d94e0030f7e59c98df684ebcfce7c9cda3901993d2f0c4
+  assets/bench/adv-seeded-v0/prefix_sum/cpp/prefix_sum.cpp: c06e8191c6376bd8bfd5886c2c90c830ef014ce462230f23d756f8212a814e20
+  assets/bench/adv-seeded-v0/scale_i64/cpp/scale_i64.cpp: b0cf1d6f8af91d82f258c786dff18a27dd5bbe3e881a6a4e18d4bf403ab63043
+  assets/bench/adv-seeded-v0/signed_root/cpp/signed_root.cpp: a94e3b51663b26f4ea472513c3a11fad96fa8ac12d1f3a69338cedde0ab48cd5
+  tests/fixtures/adversary/seeded/break-contract.json: 817c77981efe81b3ee624fb6d6c46aa792d4758b8669f17726a87b200456ce7c
+  tests/fixtures/adversary/seeded/candidates/pair_max/special-fmax.cpp: 89d21a9089906c735ef48eed569fe10156dcdc04bd4f38ebdf2ffe5be718bbe6
+  tests/fixtures/adversary/seeded/candidates/pair_max/special-gt.cpp: f03865d5ebee5b563a3b23d63b453f1900e5ce302e1cc1f2b39d8e866d546baa
+  tests/fixtures/adversary/seeded/candidates/piecewise_gate/boundary-one.cpp: 6be0f325a967f01900d0d0e5dcaedff7c1b370037d4f51d7f378716ca9155472
+  tests/fixtures/adversary/seeded/candidates/piecewise_gate/boundary-zero.cpp: 88959fd9f70c245e8acd1fd2838af02fce3137718c0c561ec13cc47e3973c37f
+  tests/fixtures/adversary/seeded/candidates/piecewise_ops/arith-divide.cpp: 9524186e6ce8c68803a45adfb43c8239774c7bef8e513a0f847a8188666ac14e
+  tests/fixtures/adversary/seeded/candidates/piecewise_ops/arith-sign.cpp: ce41bab7b91848845e940ab05a80c9215d9ef4289d1e2e9cbdb34478b7bd2ef1
+  tests/fixtures/adversary/seeded/candidates/prefix_sum/precision-blocks.cpp: d425a6c0f2a2ec6c0e1e1dd5b48aa989f4d54089ebe240b0c19375fa850dc229
+  tests/fixtures/adversary/seeded/candidates/prefix_sum/precision-float.cpp: 1ea7dc3972390f452a9c39a754f20b94227de64eb0ad8e84292b3c63ff721183
+  tests/fixtures/adversary/seeded/candidates/scale_i64/narrow-float.cpp: c1825b9f83ee2dbfeeb4b2df18bfdad96b10a46d4c1faf5bc6dc765bfc6d1eba
+  tests/fixtures/adversary/seeded/candidates/scale_i64/narrow-wrap.cpp: 28dd01c1735abd8c467baa1e94341b50515d6a9e87fbaf08f0592d7d2b60585c
+  tests/fixtures/adversary/seeded/candidates/signed_root/sign-abs.cpp: f3c0a911b91805bfc24c488bb1e2564c7aebc157e8c0480f5d286fdddbb68bcd
+  tests/fixtures/adversary/seeded/candidates/signed_root/sign-unary.cpp: b596cedb4d0aa2c02c68cc62539afacceecfcd1f75b0db11ab4221226d46c0f6
+  tests/fixtures/adversary/seeded/index.json: 756b822101a5fdf65a33303b6aa0e8a112ed0fd619923107b3bc9e02aef9dc3a
+  tests/fixtures/adversary/seeded/seeded.json: 55203f92c4b7fbbf88d3b726a5c77fc6056744c515b1c347c5d2f1e2fe26f7ae
+  assets/prompts/adversary-v0/malformed.txt: d34156862760a69d71a1d02a37d9f33adccf267b5d234cec3e38a86d952c2506
+  assets/prompts/adversary-v0/propose.txt: 859747f20ada86395fe5e657bcb2e96b0d7955a6aca05228979612b2917c8f08
+  tests/fixtures/adversary/recordings/break-contract.json: 8055282e66a3ff8e4a46f0632bf0356d831955a82862bd58a0e11331f506f2e1
+  tests/fixtures/adversary/recordings/in-contract.json: adf34d055efbcbaff42b09b40a75b6e9d688be4a89eb954672fbd1b188fc3ae1
+  tests/fixtures/adversary/recordings/malformed.json: 30314b7d9c17ed4c50414d1c419efbd51285ab12ec747860a655b0222ef28db9
+witnesses:
+  special-gt: 5bb4893989125406902ac37cfc9c1798b826c02a470351cf359aa39b2a444791
+  special-fmax: 5bb4893989125406902ac37cfc9c1798b826c02a470351cf359aa39b2a444791
+  boundary-zero: e13ed920b3479b0a27cd61d8f256aee7960de6689178e8ad6e94e5104cb03d99
+  boundary-one: 587836d01420df6bef411ef2ae20fed7b04cf50a3676ecd573ac4d72a452d2dc
+  arith-sign: 483cd083e2359caaaf2afa6d3d63a0b601381912cd11e3631a6fe31e69caac12
+  arith-divide: 483cd083e2359caaaf2afa6d3d63a0b601381912cd11e3631a6fe31e69caac12
+  precision-float: 87606176a04993965aa0c82c1a821636b4efddcb70e402f56411d149619978ae
+  precision-blocks: 87606176a04993965aa0c82c1a821636b4efddcb70e402f56411d149619978ae
+  narrow-wrap: f6f13faab67338451370047d7935641f1f491112a42f0302e0c1b126121f41a1
+  narrow-float: 4c80e29c1af5325173abfa9ec7a8cacfeb2d475454c0c102ca68e0ad5fb75385
+  sign-abs: d60b20f7b818ce840f31df0db62b7ce046c8302f9cc83f96c06960b4ced7e0dc
+  sign-unary: d60b20f7b818ce840f31df0db62b7ce046c8302f9cc83f96c06960b4ced7e0dc
+recipes:
+  projects/adversary-seeded/control-fuzzer.yaml:
+    adversary: '{"budget":{"inputs":32},"kind":"fuzzer","seed":1}'
+    oracle_metric: max_abs
+    oracle_threshold: 0.001
+    model_recording: null
+    trials_n: 1
+  projects/adversary-seeded/seeded-fuzzer.yaml:
+    adversary: '{"budget":{"inputs":32},"kind":"fuzzer","seed":1}'
+    oracle_metric: max_abs
+    oracle_threshold: 0.001
+    model_recording: tests/fixtures/adversary/seeded/seeded.json
+    trials_n: 2
+  projects/adversary-seeded/seeded-llm.yaml:
+    adversary: '{"backend":"replay","budget":{"inputs":8,"steps":4,"tokens":200000},"kind":"llm","model":"adv-seeded-break-contract","prompts":"adversary-v0","recording":"tests/fixtures/adversary/seeded/break-contract.json","recording_sha256":"817c77981efe81b3ee624fb6d6c46aa792d4758b8669f17726a87b200456ce7c","sampling":{"max_tokens":2048,"temperature":0.2,"top_p":0.9}}'
+    oracle_metric: max_abs
+    oracle_threshold: 0.001
+    model_recording: tests/fixtures/adversary/seeded/seeded.json
+    trials_n: 2
