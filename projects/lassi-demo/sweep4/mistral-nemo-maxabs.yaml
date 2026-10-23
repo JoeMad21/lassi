@@ -1,0 +1,7 @@
+# The fourth pass of the owner's RNGD sweep of 2026-10-23: ../sweep3/mistral-nemo-maxabs.yaml (cap 15) with the adversary in the loop,
+# the fuzzer at the seeded set's frozen seed and budget (tests/fixtures/adversary/freeze.yaml), after the oracle: a
+# trial whose translation passes binary_io on the held-out inputs is probed with in-contract inputs. Exploratory,
+# not a gate run; served by plans/runs/rngd-sweep/run.sh from models3.tsv.
+extends: ../sweep3/mistral-nemo-maxabs.yaml
+stages: [baseline, generate, compile_loop, run_loop, oracle, adversary]
+adversary: {kind: fuzzer, budget: {inputs: 32}, seed: 1}
