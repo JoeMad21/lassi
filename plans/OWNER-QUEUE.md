@@ -1000,3 +1000,16 @@ Options:
 - (3) Serving the trained model to the pipeline on alpha01: (3a) in process on alpha01's CPU (hf_local), slow but needing no compile; (3b) compiled for RNGD with furiosa-llm, untested for a fine-tuned model.
 Recommendation: (1a), (2a), and (3a) for a first trained run, measured like every other configuration and labeled exploratory; RNGD serving of a trained model as its own spike.
 Answer: Owner's choice (in the working session, 2026-10-23; recorded by the agent, in the owner's words): "Approved, and remember, I want a variety of testing techniques tried. I want Full model training, frozen weights, LORA, and potentially training our own model as far reaching goal." Later the same day, changing (2): "At this point, don't train on the 3080. Just train if possible during our testing window."
+
+## OQ-077 What The Mismatch Correction Shows The Model: Coarse, Exact, Or Pass/Fail
+State: ANSWERED
+Kind: decision
+Blocks: loop.correct_on_mismatch in the test matrix
+Evidence: the rules audit of loop.correct_on_mismatch (2026-10-23): with exact statistics, an all-zero candidate output makes max_abs (and max_ulp) equal the reference's largest element, and a one-element output can be recovered in two corrections; a probe printed a reference element three times in one prompt line
+Question: The owner asked for out-of-tolerance results to be fed back to the model. Exact error statistics can reveal reference output values (Harness Contract). What should the correction prompt show?
+Options:
+- (a) A coarse report: per output, passed or failed, pcc, and roughly how far over the tolerance (an order of magnitude); only an order of magnitude can leak.
+- (b) Exact statistics (max_abs, max_ulp, the threshold), with the leak documented.
+- (c) Pass or fail only.
+Recommendation: (a).
+Answer: Owner's choice (in the working session, 2026-10-23; recorded by the agent, in the owner's words): "Go with option A."
