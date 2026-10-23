@@ -10,10 +10,12 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
    switches between its two forms replaces the inherited one, and a `device` mapping replaces the
    inherited one whole, since a device is one choice);
 5. materializes the defaults (`project`: the loaded file's recipe name; `faithful: false`; every fix on; no
-   `extract` leniency, which is off when absent, so a recipe without one keeps its resolved recipe and hash);
+   `extract` leniency and no LOOP_OPT_INS key, each off when absent, so a recipe without one keeps its resolved
+   recipe and hash);
 6. applies the faithful overrides (bible, Project Recipes Notes; Design Principle 4);
 7. checks types and required choices, never picking a value for a choice left open, and refuses an EXTRACT
-   leniency set true under faithful: true or with fixes.fence_tag off, naming its key (_check_extract);
+   leniency set true under faithful: true or with fixes.fence_tag off (_check_extract), and a LOOP_OPT_INS key
+   set true under faithful: true (_check_loop), naming its key;
 8. binds components and checks their capabilities without constructing any (Component Interfaces), the
    adversary section's Agent among them, which must declare proposes_inputs (task P16.2); refuses a faithful
    recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES), a toolchain upstream
@@ -131,6 +133,18 @@ EXTRACT: dict[str, str] = {
     "unfenced_file_lines": (
         "read a reply that holds no FILE block from its unfenced `// FILE: <path>` lines, each file running to the"
         " next such line, with a parse-stage unfenced-file warning per file; off reads only fenced FILE blocks"
+    ),
+}
+
+# Every opt-in key of the loop section beside max_corrections, each a bool, and what turning it on changes. Like an
+# extract leniency, each is off when absent and the loader materializes none, so a recipe without one keeps its
+# resolved recipe and hash. None is upstream behavior: upstream's loop corrects only compile errors and failed runs,
+# so one set true is refused under faithful: true (_check_loop), never turned off silently.
+LOOP_OPT_INS: dict[str, str] = {
+    "correct_on_mismatch": (
+        "ask for a correction after a clean run whose output files fail the oracle on the held-out inputs (an output"
+        " outside its threshold, or a missing or extra one), from a coarse per-output report (OQ-077), within"
+        " loop.max_corrections; off ends the loop at the first clean run, as upstream's loop does"
     ),
 }
 
@@ -508,7 +522,7 @@ SCHEMA = _Fields(
         "fixes": _Fields({name: _BOOL for name in FIXES}),
         "extract": _Fields({name: _BOOL for name in EXTRACT}),  # opt-in leniencies; absent means off
         "llm": _Fields({"sampling": _Fields({"temperature": _NUMBER, "top_p": _NUMBER, "max_tokens": _INT})}),
-        "loop": _Fields({"max_corrections": _CORRECTIONS}),
+        "loop": _Fields({"max_corrections": _CORRECTIONS, **{name: _BOOL for name in LOOP_OPT_INS}}),  # opt-ins off
         "trials": _Fields({"n": _AT_LEAST_ONE}),
         "runs_root": _STR,
         "sandbox": _Fields({"network": _BOOL, "wall_s": _NUMBER_OR_STR, "mem_gb": _NUMBER}),
@@ -671,6 +685,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     except _SchemaError as exc:
         raise RecipeError(f"{path}: {exc}") from None
     _check_extract(path, data)
+    _check_loop(path, data)
     bindings = _bindings(data)
     registry = DEFAULT_REGISTRY if registry is None else registry
     try:
@@ -1192,6 +1207,23 @@ def _check_extract(path: Path, data: Mapping[str, Any]) -> None:
                 f"{path}: {key} is true, but fixes.fence_tag is off, so a reply is read as upstream reads it, from "
                 f"its first fenced block, and no FILE line is read; turn fixes.fence_tag on or remove {key}"
             )
+
+
+def _check_loop(path: Path, data: Mapping[str, Any]) -> None:
+    """Refuse a LOOP_OPT_INS key set true under faithful: true, naming it: upstream's loop has no such correction.
+
+    Upstream corrects only compile errors and failed runs (Design Principle
+    4, Agent Rule 4). Runs after the type check, so the loop section maps
+    known names to their types. A key set false, or absent, is never refused.
+    """
+    for name in sorted(LOOP_OPT_INS):
+        if data["loop"].get(name) is not True or data["faithful"] is not True:
+            continue
+        key = f"loop.{name}"
+        raise RecipeError(
+            f"{path}: {key} is true, but faithful: true reproduces upstream, whose loop corrects only compile errors "
+            f"and failed runs; a recipe with faithful: true may not set it, so remove {key} or set faithful: false"
+        )
 
 
 def _check_faithful_bindings(

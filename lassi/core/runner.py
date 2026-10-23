@@ -305,6 +305,7 @@ from lassi.bench import registry as bench_registry
 from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and, through lassi.oracles, the oracles)
 from lassi.core.adversary_stage import ADVERSARY_KIND, RUNS_PROPOSALS, adversary_binding, budget_inputs
 from lassi.core.capabilities import (
+    ALIGNS_OUTPUT_FILES,
     DEVICE_KEY,
     MODEL_CHECK,
     SIMULATOR,
@@ -352,7 +353,7 @@ from lassi.core.record import (
     standing_attempt,
 )
 from lassi.core.registry import DEFAULT_REGISTRY, Binding, Entry, Registry, device_path
-from lassi.core.stages import BASELINE_X10, PURPOSE, RUNS_CODE, SANDBOXED, RunContext
+from lassi.core.stages import BASELINE_X10, CORRECT_ON_MISMATCH, PURPOSE, RUNS_CODE, SANDBOXED, RunContext
 from lassi.core.store import TextStore, write_trial
 from lassi.core.trial_md import fenced, fmt, fmt_provenance
 from lassi.executors import workdir
@@ -1520,7 +1521,8 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     declares `generates`, and a stage that declares `compiles` builds that
     attempt, so it comes after it. A stage that declares `builds_references`
     runs before any model call, so no stage that asks the model
-    (_asks_model) comes before it. The prompts are checked by _check_prompts.
+    (_asks_model) comes before it. The prompts are checked by _check_prompts,
+    and loop.correct_on_mismatch by _check_mismatch.
     """
     entries = [registry.get("Stage", name) for name in recipe.data["stages"]]
     _check_fixes(recipe, entries)
@@ -1551,6 +1553,44 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
                 )
     _check_source_toolchains(recipe, entries, settings)
     _check_prompts(recipe, entries, settings)
+    _check_mismatch(recipe, registry, entries, settings)
+
+
+def _check_mismatch(recipe: Recipe, registry: Registry, entries: Sequence[Any], settings: _Settings) -> None:
+    """Refuse loop.correct_on_mismatch set true when the run could not carry it out (lassi.core.stages).
+
+    It needs a listed stage that declares `mismatch_prompt_fields` (run_loop),
+    an Oracle that declares aligns_output_files, whose per-output statistics
+    the correction prompt's coarse report reads, and a template prompt set
+    in which each such template renders with empty fields; a fragment set
+    holds upstream's prompts, which have no such correction. A key that is
+    false or absent is never checked.
+    """
+    key = f"loop.{CORRECT_ON_MISMATCH}"
+    if recipe.data["loop"].get(CORRECT_ON_MISMATCH) is not True:
+        return
+    templates = [getattr(entry.factory, "mismatch_prompt_fields", None) for entry in entries]
+    templates = [fields for fields in templates if fields]
+    if not templates:
+        raise RunError(f"{recipe.path}: {key} is true, but no listed stage carries it out; list run_loop or remove it")
+    oracles = [binding for binding in recipe.bindings if binding.interface == "Oracle"]
+    if not any(ALIGNS_OUTPUT_FILES in registry.get("Oracle", binding.name).capabilities for binding in oracles):
+        raise RunError(
+            f"{recipe.path}: {key} is true, but the recipe binds no Oracle that declares {ALIGNS_OUTPUT_FILES!r}, "
+            f"whose per-output statistics the correction prompt's coarse report reads; bind one or remove {key}"
+        )
+    if settings.fragments:
+        raise RunError(
+            f"{recipe.path}: {key} is true, but {settings.prompts!r} is a fragment prompt set, upstream's prompts, "
+            f"which hold no oracle-mismatch correction; use a template set or remove {key}"
+        )
+    for fields in templates:
+        for prompt, names in fields.items():
+            try:
+                render(settings.prompts, prompt, dict.fromkeys(names, ""))
+            except ValueError as error:
+                message = f"{recipe.path}: {key} is true, but its correction prompt cannot render: {error}"
+                raise RunError(message) from error
 
 
 def _asks_model(entry: Any) -> bool:
@@ -2515,7 +2555,9 @@ def _final(trial: Trial, wall_s: float) -> Final:
     mean of the attempt whose output stands (standing_attempt; None when no
     attempt ran), and the end reason a stage set. A stage that sets the end
     reason ends the trial, so the oracle stage never aligns a trial that
-    ended at the correction cap, and its alignment stays None.
+    ended at the correction cap, and its alignment stays None, unless
+    run_loop judged the attempt whose output stands under
+    loop.correct_on_mismatch, whose alignment then stands.
     """
     last = trial.attempts[-1].stage_reached if trial.attempts else None
     named = standing_attempt(trial)

@@ -122,6 +122,42 @@ The runner checks either kind before any model is asked.
   trial's RunContext (RunContext.artifacts), in memory and not in the
   record, so an attempt cannot be run again from the record alone.
 
+  Oracle mismatches (loop.correct_on_mismatch; corrects_on_mismatch). An
+  opt-in departure from upstream, whose loop corrects only compile errors
+  and failed runs (the owner's decision of 2026-10-23); the loader refuses
+  it under faithful: true, and with it off or absent nothing here changes.
+  With it true, each attempt whose run is clean (S5) is judged at once by
+  the recipe's Oracle that compares output files, against the target
+  reference's output files on the held-out inputs, bound as the oracle
+  stage binds it (agreement_bound): the attempt takes the Alignment, and
+  when an output fails (outside its threshold, missing, extra, repeated,
+  or unreadable) it gains a run-stage error, code ORACLE_MISMATCH, naming
+  each failed output in the coarse words below, and stays S5, since output
+  agreement is never a rung. While the cap leaves room, the correction is
+  asked with the template MISMATCH_PROMPT, whose field `outputs` is
+  mismatch_text, a coarse report (OQ-077, option (a)): one line per output
+  with its name, passed or failed, its pcc rounded to PCC_PLACES decimals
+  when it was computed, and output_reading's fixed words, which say how far
+  the output is from its tolerance as an order of magnitude only
+  (tolerance_band) or name the kind of a failure the metric's value does
+  not explain (a missing, extra, repeated, or unreadable output among
+  them). It never shows the exact max_abs, max_ulp, or threshold, nor the
+  Oracle's note text, which quotes element values and an unreadable file's
+  first bytes: exact statistics give reference output values away (an
+  all-zero candidate makes max_abs the reference's largest magnitude), and
+  only an order of magnitude can leak. Nor does it show a held-out input
+  or the seed (Harness Contract). The request is recorded under run_loop,
+  and the reply is built, run, and judged again under the same count and
+  cap; a mismatch left at the cap ends the trial with
+  `correction-cap`. An attempt the oracle stage would not align either (no
+  output files recorded, or a target reference whose workdir came back
+  incomplete) is not judged here and ends the loop as before. The runner
+  refuses the key, before any directory exists, without a listed stage that
+  declares `mismatch_prompt_fields` (this one), without an Oracle that
+  compares output files, with a fragment set (upstream's prompts hold no
+  such correction), and with a template set whose MISMATCH_PROMPT does not
+  render.
+
   Profiles (task P17.7). When the recipe binds a profiler
   (RunContext.profiler), every attempt run is profiled, whatever its
   outcome (profiled_run): start() right after the backend's unload, then
@@ -171,7 +207,8 @@ before sending, system messages included, and appends a Request with those
 references, the attempt its reply became (None for a context request), and
 the reply as kept. A correction is recorded under the loop stage that asked
 for it: compile_loop for a compile error (a kernel JIT failure included),
-run_loop for a failed run. An
+run_loop for a failed run or, under loop.correct_on_mismatch, an oracle
+mismatch. An
 attempt's own `invalid-text` warning stays on the attempt; Trial.context
 carries no diagnostics, so a context reply that held a lone surrogate gives
 its request one parse-stage `invalid-text` warning.
@@ -192,8 +229,9 @@ trial before the request is recorded (_send); an attempt event after
 generate or a correction appends an attempt (with its request recorded),
 after compile_loop builds the last attempt (_build_last; the event carries
 the host-compute reading), and after run_loop runs it (_run_last). Later
-changes (run_loop's `stale-output` warning, an end reason, the oracle
-stage's alignment) reach the observer with the runner's trial-end event.
+changes (run_loop's `stale-output` warning, its oracle-mismatch reading,
+an end reason, the oracle stage's alignment) reach the observer with the
+next request-sent event or the runner's trial-end event.
 
 Upstream quirks are reproduced when their fixes (lassi.core.recipe.FIXES)
 are off, and each stage class names the fixes it reproduces in
@@ -316,6 +354,7 @@ from lassi.core.record import (
     Diagnostic,
     EndReason,
     Guards,
+    OutputStats,
     Profile,
     Request,
     RequestMessage,
@@ -327,6 +366,7 @@ from lassi.core.record import (
 )
 from lassi.core.registry import DEFAULT_REGISTRY, Registry, register
 from lassi.core.store import BlobStore, TextStore
+from lassi.core.tolerance import STAT_FIELDS, within
 from lassi.executors.workdir import build_dir, fresh_build_dir
 from lassi.prompts import render
 
@@ -409,9 +449,13 @@ RUN_CPUS = REFERENCE_CPUS
 # the references' agreement, and the oracle stage puts it on each attempt it does not align against a cut target.
 REFERENCE_WORKDIR_INCOMPLETE = "reference-workdir-incomplete"
 
-# The run-stage Diagnostic codes run_loop sets: a failed run (error) and stale output (warning).
+# The run-stage Diagnostic codes run_loop sets: a failed run (error), stale output (warning), and, under
+# loop.correct_on_mismatch, a clean run whose output files failed the oracle (error).
 RUN_ERROR = "run-error"
 STALE_OUTPUT = "stale-output"
+ORACLE_MISMATCH = "oracle-mismatch"
+# The opt-in key of the loop section (lassi.core.recipe LOOP_OPT_INS) that feeds an oracle mismatch back.
+CORRECT_ON_MISMATCH = "correct_on_mismatch"
 # Each RunResult flag run_loop records, with the code and the message of the run-stage warning it becomes.
 RUN_FLAGS = {
     "stdout_truncated": (
@@ -459,6 +503,42 @@ RUN_LOOP_KEYS = (
 # The fields each prompt template gets; a template may use any of them and no other.
 GENERATE_FIELDS = ("source_language", "target_language", "source_files", "target_files", "kernel_files")
 CORRECT_FIELDS = ("target_language", "files", "diagnostics", "target_files", "kernel_files")
+# The template of an oracle mismatch's correction (loop.correct_on_mismatch) and its fields: `outputs` is the
+# Oracle's coarse per-output report (mismatch_text), in place of correct.txt's diagnostics.
+MISMATCH_PROMPT = "correct_mismatch"
+MISMATCH_FIELDS = ("target_language", "files", "outputs", "target_files", "kernel_files")
+# The words of that report (OQ-077, option (a)): exact statistics give reference values away, so each output shows
+# its verdict, its pcc to PCC_PLACES decimals, and one of these fixed phrases, never a value, a threshold, or a note.
+PCC_PLACES = 3
+WITHIN_TOLERANCE = "within tolerance"
+PCC_BELOW = "pattern match below the required level"
+NO_ERROR_ALLOWED = "not an exact match, where the tolerance allows no error"
+# How many times its threshold a max_abs or ulp value is, as an order of magnitude: the phrase of the first bound
+# the ratio does not pass, else ERROR_OVER.
+ERROR_BANDS = (
+    (10, "up to 10 times the allowed error"),
+    (100, "about 10 to 100 times the allowed error"),
+    (1000, "about 100 to 1000 times the allowed error"),
+)
+ERROR_OVER = "over 1000 times the allowed error"
+# A compared output that failed for a reason other than its metric's value (bible Oracles, binary_io rules).
+UNMATCHED_SPECIAL = "unmatched NaN or infinity"
+INTEGER_DIFFERS = "not an exact match, which an integer output needs"
+TOO_LARGE = "a difference too large for a double"
+NO_THRESHOLD = "no threshold recorded for this output"
+# An output whose statistics were not computed, named by how lassi.oracles.binary_io's note starts (run_loop
+# compares with the default sides, so a candidate note says "the candidate"); change the two together. NOT_COMPARED
+# names one whose note starts otherwise. UNMATCHED_NOTE starts the note of an unmatched NaN or infinity.
+NOT_COMPARED_KINDS = (
+    ("missing output:", "missing output"),
+    ("extra output:", "extra output"),
+    ("the candidate wrote the array ", "repeated output"),
+    ("the candidate's output file ", "unreadable output"),
+    ("dtype mismatch:", "dtype mismatch"),
+    ("shape mismatch:", "shape mismatch"),
+)
+NOT_COMPARED = "not compared"
+UNMATCHED_NOTE = "unmatched "
 # A support file is a kernel when its build path has a directory of this name, where the kernel JIT finds it.
 # The TT host toolchain's is_kernel_source applies the same rule to place a kernel; change the two together.
 KERNEL_DIR = "kernels"
@@ -553,6 +633,15 @@ def target_files(context: RunContext) -> list[str]:
 def fix_on(context: RunContext, name: str) -> bool:
     """Return True unless the recipe turns the named fix off (faithful: true turns every fix off)."""
     return context.recipe.data.get("fixes", {}).get(name, True) is not False
+
+
+def corrects_on_mismatch(context: RunContext) -> bool:
+    """Return True only when the recipe sets loop.correct_on_mismatch true (lassi.core.recipe LOOP_OPT_INS).
+
+    The key is off when absent; the loader refuses it set true under
+    faithful: true.
+    """
+    return context.recipe.data.get("loop", {}).get(CORRECT_ON_MISMATCH, False) is True
 
 
 def extract_on(context: RunContext, name: str) -> bool:
@@ -671,6 +760,111 @@ def output_file_oracle(context: RunContext) -> OutputFileOracle | None:
             if ALIGNS_OUTPUT_FILES in entry.capabilities:
                 return cast(OutputFileOracle, entry.factory(**binding.config))
     return None
+
+
+def agreement_bound(oracle: OutputFileOracle, trial: Trial) -> OutputFileOracle:
+    """Return `oracle` bound to Trial.reference_agreement when it reads one (agreement_setting), else `oracle`.
+
+    The oracle stage and run_loop (loop.correct_on_mismatch) both bind it
+    so. Raises ValueError starting with the trial id when the agreement is
+    needed but was not recorded; the message adds any
+    REFERENCE_WORKDIR_INCOMPLETE note the baseline made.
+    """
+    if oracle.agreement_setting is None:
+        return oracle
+    try:
+        return oracle.with_baseline(trial.reference_agreement)
+    except ValueError as error:
+        notes = [note.message for note in trial.baseline_diagnostics if note.code == REFERENCE_WORKDIR_INCOMPLETE]
+        why = f" (the baseline noted: {'; '.join(notes)})" if notes else ""
+        raise ValueError(f"{trial.trial_id}: {error}{why}") from error
+
+
+def stored_files(blobs: BlobStore, outputs: Mapping[str, str]) -> dict[str, Path]:
+    """Return a run's recorded output files as file -> its file in the binary store, each checked against its hash."""
+    return {file: blobs.path(digest) for file, digest in outputs.items()}
+
+
+def tolerance_band(metric: str, value: float, threshold: float) -> str:
+    """Return how far a metric's `value` is from `threshold` in fixed words, an order of magnitude at most.
+
+    WITHIN_TOLERANCE when the value meets it (lassi.core.tolerance within).
+    A pcc below it is PCC_BELOW, with no figure. A max_abs or ulp value past
+    it is the ERROR_BANDS phrase of value / threshold (ERROR_OVER past the
+    last bound), or NO_ERROR_ALLOWED when the threshold is 0. Neither number
+    appears in the phrase.
+    """
+    if within(metric, value, threshold):
+        return WITHIN_TOLERANCE
+    if metric == "pcc":
+        return PCC_BELOW
+    if threshold == 0:
+        return NO_ERROR_ALLOWED
+    return next((words for bound, words in ERROR_BANDS if value <= bound * threshold), ERROR_OVER)
+
+
+def output_reading(oracle: OutputFileOracle, entry: OutputStats) -> str:
+    """Return how output `entry` compared with the reference, in fixed words that hold no number of either run.
+
+    An output whose statistics were not computed (pcc None) is named by its
+    kind (NOT_COMPARED_KINDS: a missing, extra, repeated, or unreadable
+    output, or a dtype or shape mismatch). A compared output that passed is
+    WITHIN_TOLERANCE. One that failed for a reason other than its metric's
+    value names that reason (an unmatched NaN or infinity, an integer
+    output that differs, a difference too large for a double, or no
+    threshold), and any other is placed by tolerance_band against the
+    oracle's threshold for it. The note's text is read only to name a kind
+    and is never returned.
+    """
+    note = entry.note or ""
+    if entry.pcc is None:
+        return next((kind for start, kind in NOT_COMPARED_KINDS if note.startswith(start)), NOT_COMPARED)
+    if entry.passed:
+        return WITHIN_TOLERANCE
+    if note.startswith(UNMATCHED_NOTE):
+        return UNMATCHED_SPECIAL
+    if entry.max_ulp is None:  # binary_io records no max_ulp for an integer output, which must match exactly
+        return INTEGER_DIFFERS
+    if entry.max_abs is None:
+        return TOO_LARGE
+    threshold = oracle.threshold_for(entry.name)
+    if threshold is None:
+        return NO_THRESHOLD
+    return tolerance_band(oracle.metric, getattr(entry, STAT_FIELDS[oracle.metric]), threshold)
+
+
+def _rounded_pcc(pcc: float) -> str:
+    """Return `pcc` to PCC_PLACES decimals, a negative zero written as zero."""
+    text = f"{pcc:.{PCC_PLACES}f}"
+    return text.lstrip("-") if float(text) == 0 else text
+
+
+def output_line(oracle: OutputFileOracle, entry: OutputStats) -> str:
+    """Return one output as an oracle mismatch's correction prompt shows it, on one line (OQ-077, option (a)).
+
+    `<name>: <passed|failed>; pcc <pcc>; <reading>`, with pcc to PCC_PLACES
+    decimals and the reading of output_reading, or `<name>: failed;
+    <kind>` for an output whose statistics were not computed. The exact
+    max_abs, max_ulp, and threshold and the oracle's note never appear.
+    pcc is kept for every output size: it is free of scale and shift, so no
+    report gives an element's value, though across corrections a candidate
+    built to probe it (a one-hot array) reads one element's standardized
+    deviation per correction (OQ-077, option a). A one-element output's pcc is 1 (equal) or 0,
+    and a two-element output's is 1 or -1 (the order of its two elements
+    agrees or is reversed) or 0 (a side is constant), so even rounded it
+    recovers no element of either. Nothing here reads an input or an output
+    array.
+    """
+    verdict = "passed" if entry.passed else "failed"
+    reading = output_reading(oracle, entry)
+    if entry.pcc is None:
+        return f"{entry.name}: {verdict}; {reading}"
+    return f"{entry.name}: {verdict}; pcc {_rounded_pcc(entry.pcc)}; {reading}"
+
+
+def mismatch_text(oracle: OutputFileOracle, stats: Sequence[OutputStats]) -> str:
+    """Return the field `outputs` of MISMATCH_PROMPT: output_line for every output, in the oracle's order."""
+    return "\n".join(output_line(oracle, entry) for entry in stats)
 
 
 def _ended(trial: Trial, code: str, message: str) -> Trial:
@@ -1514,20 +1708,37 @@ class RunLoopStage:
     It runs model-generated code (`runs_model_code`), so an executor that
     runs programs must declare SANDBOXED; the runner refuses one that does
     not before any directory exists, and the stage refuses it too.
+    `mismatch_prompt_fields` names the template an oracle mismatch's
+    correction renders and its fields: a stage that declares it honors
+    loop.correct_on_mismatch, and the runner renders it, before any
+    directory exists, only when that key is true.
     """
 
     name = "run_loop"
     capabilities = frozenset({"compiles"})
     requires = {"Toolchain": {"diagnostics"}}
     prompt_fields = {"correct": CORRECT_FIELDS}
+    mismatch_prompt_fields = {MISMATCH_PROMPT: MISMATCH_FIELDS}
     fragment_keys = RUN_LOOP_KEYS
     reproduces = frozenset({"execution_gate", "fence_tag", "prompt_newlines", "parsed_diagnostics"})
     runs_model_code = True
 
     def __init__(self, *, context: RunContext) -> None:
-        """Keep the trial's run context, and whether the recipe's Oracle compares output files."""
+        """Keep the trial's run context, the recipe's Oracle when it compares output files, and the mismatch key.
+
+        Raises ValueError when loop.correct_on_mismatch is true but the
+        recipe binds no Oracle that compares output files; the runner
+        refuses such a recipe first.
+        """
         self.context = context
-        self.keeps_outputs = output_file_oracle(context) is not None
+        self.files_oracle = output_file_oracle(context)
+        self.keeps_outputs = self.files_oracle is not None
+        self.on_mismatch = corrects_on_mismatch(context)
+        if self.on_mismatch and self.files_oracle is None:
+            raise ValueError(
+                f"{context.recipe.path}: loop.{CORRECT_ON_MISMATCH} is true, but the recipe binds no Oracle that "
+                f"declares {ALIGNS_OUTPUT_FILES!r}, whose per-output statistics its correction prompt's report reads"
+            )
 
     def __call__(self, trial: Trial) -> Trial:
         """Return `trial` with its compiling attempts run and any corrections appended.
@@ -1544,7 +1755,9 @@ class RunLoopStage:
         (_gap_message), with no correction. A failed run with the cap
         reached ends the trial with `correction-cap`; below it, the
         execute-error correction is appended and compile_loop builds and
-        corrects it.
+        corrects it. Under loop.correct_on_mismatch a clean run is judged
+        (_judged), and an oracle mismatch is read as a failed run is, with
+        the mismatch prompt (module docstring, Oracle mismatches).
         """
         context = self.context
         compile_loop = CompileLoopStage(context=context)
@@ -1557,29 +1770,74 @@ class RunLoopStage:
                 "model-generated code only in the sandbox (Agent Rule 6)"
             )
         cap = context.max_corrections
-        simulator = declares(context.executor, SIMULATOR)
         while trial.final.end_reason is None and trial.attempts[-1].stage_reached == COMPILED:
             index = trial.attempts[-1].index
             if not fix_on(context, "execution_gate") and index > EXECUTION_GATE_CORRECTIONS:
                 return _past_gate(trial)
             trial, run, limits = self._run_last(trial)
             reached = trial.attempts[-1].stage_reached
-            if reached == RAN_CLEAN:
-                break
             if reached == PARSED:
                 trial = compile_loop(trial)
                 continue
-            if run.sim_gap is not None:
+            outputs = None
+            if reached == RAN_CLEAN:
+                trial, outputs = self._judged(trial)
+                if outputs is None:
+                    break
+            elif run.sim_gap is not None:
                 return _ended(trial, SIM_GAP, _gap_message(index, run.sim_gap))
             if cap is not None and index >= cap:
-                message = f"a run error remained after {cap} correction(s), the cap loop.max_corrections sets"
+                left = "a run error" if outputs is None else "an oracle mismatch"
+                message = f"{left} remained after {cap} correction(s), the cap loop.max_corrections sets"
                 return _ended(trial, CORRECTION_CAP, message)
-            errors = run_error_text(run, limits, context.fragments, simulator=simulator)
-            corrected = _corrected(context, trial, self.name, target_files(context), errors, run_error=True)
+            corrected = self._correction(trial, run, limits, outputs)
             if corrected.final.end_reason is not None:
                 return corrected
             trial = compile_loop(corrected)
         return trial
+
+    def _correction(self, trial: Trial, run: RunResult, limits: Limits, outputs: str | None) -> Trial:
+        """Return `trial` with the correction of its last attempt appended (_corrected), recorded under run_loop.
+
+        With `outputs` None the last run failed: the execute-error prompt,
+        whose error text is run_error_text's. Otherwise `outputs` is the
+        oracle mismatch's mismatch_text, sent with MISMATCH_PROMPT.
+        """
+        context = self.context
+        expected = target_files(context)
+        if outputs is not None:
+            return _corrected(context, trial, self.name, expected, outputs, run_error=True, mismatch=True)
+        errors = run_error_text(run, limits, context.fragments, simulator=declares(context.executor, SIMULATOR))
+        return _corrected(context, trial, self.name, expected, errors, run_error=True)
+
+    def _judged(self, trial: Trial) -> tuple[Trial, str | None]:
+        """Return `trial` with its clean last attempt judged by the output-file Oracle, and the mismatch text or None.
+
+        Nothing is judged, and the trial comes back unchanged with None,
+        unless loop.correct_on_mismatch is true, the attempt's run recorded
+        output files, and the target reference recorded complete ones: the
+        oracle stage aligns no other attempt either. Otherwise the attempt
+        takes the Oracle's Alignment, bound as the oracle stage binds it
+        (agreement_bound); when every output passes the text is None, and
+        when one fails the attempt also gains an ORACLE_MISMATCH run-stage
+        error naming each failed output, and the text is mismatch_text.
+        """
+        attempt, reference = trial.attempts[-1], trial.reference_run
+        if self.files_oracle is None or not self.on_mismatch or attempt.run.outputs is None:
+            return trial, None
+        if reference.outputs is None or reference.workdir_incomplete is True:
+            return trial, None
+        oracle = agreement_bound(self.files_oracle, trial)
+        blobs = BlobStore(self.context.store.root)
+        aligned = oracle.alignment(stored_files(blobs, reference.outputs), stored_files(blobs, attempt.run.outputs))
+        stats = aligned.outputs or []
+        failed = [entry for entry in stats if not entry.passed]
+        judged = dataclasses.replace(attempt, alignment=aligned)
+        if failed:
+            error = _mismatch_error(oracle, failed, len(stats))
+            judged = dataclasses.replace(judged, diagnostics=[*attempt.diagnostics, error])
+        trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], judged])
+        return trial, (mismatch_text(oracle, stats) if failed else None)
 
     def describe(self) -> str:
         """Return a one-line description of the stage."""
@@ -1591,7 +1849,10 @@ class RunLoopStage:
             if fix_on(context, "execution_gate")
             else f"a compiling attempt while its correction count is at most {EXECUTION_GATE_CORRECTIONS}"
         )
-        return f"run_loop: run {gate} and correct each failed run, sharing compile_loop's correction count"
+        mismatch = ""
+        if self.on_mismatch:
+            mismatch = f" and each clean run whose output files fail the oracle (loop.{CORRECT_ON_MISMATCH})"
+        return f"run_loop: run {gate} and correct each failed run{mismatch}, sharing compile_loop's correction count"
 
     def _run_last(self, trial: Trial) -> tuple[Trial, RunResult, Limits]:
         """Run the last attempt's program; return the trial with its run recorded, the RunResult, and the limits.
@@ -1802,6 +2063,18 @@ def _gap_message(index: int, gap: str) -> str:
     )
 
 
+def _mismatch_error(oracle: OutputFileOracle, failed: Sequence[OutputStats], count: int) -> Diagnostic:
+    """Return the ORACLE_MISMATCH run-stage error of a clean run whose `failed` outputs, of `count`, failed the oracle.
+
+    Its message names each failed output with its output_reading, the
+    correction prompt's coarse words; the attempt's Alignment keeps the
+    exact statistics in the record.
+    """
+    named = "; ".join(f"{entry.name} ({output_reading(oracle, entry)})" for entry in failed)
+    message = f"the run was clean, but {len(failed)} of {count} output(s) failed the oracle on the held-out inputs: "
+    return Diagnostic(stage="run", severity="error", code=ORACLE_MISMATCH, message=message + named)
+
+
 def _run_flag_warnings(run: RunResult) -> list[Diagnostic]:
     """Return one run-stage warning per RunResult flag that is set, in RUN_FLAGS order."""
     return [
@@ -1836,12 +2109,20 @@ def _past_gate(trial: Trial) -> Trial:
 
 
 def _corrected(
-    context: RunContext, trial: Trial, stage: str, expected: Sequence[str], errors: str, *, run_error: bool
+    context: RunContext,
+    trial: Trial,
+    stage: str,
+    expected: Sequence[str],
+    errors: str,
+    *,
+    run_error: bool,
+    mismatch: bool = False,
 ) -> Trial:
     """Return `trial` with the next attempt appended and its request recorded under `stage`.
 
     The correction prompt for the last attempt with `errors` comes from
-    _correction_messages. With fixes.prompt_newlines off every line feed is
+    _correction_messages (`mismatch`: an oracle mismatch's, with `errors`
+    its mismatch_text). With fixes.prompt_newlines off every line feed is
     removed from it before it is stored and sent. The reply is read as
     generate reads attempt 0 (_reply_attempt), and the attempt keeps its diff
     from the last attempt's files. A request the backend refuses as past its
@@ -1849,7 +2130,7 @@ def _corrected(
     no attempt appended (_context_end).
     """
     previous = trial.attempts[-1]
-    system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error)
+    system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error, mismatch=mismatch)
     if not fix_on(context, "prompt_newlines"):
         prompt = prompt.replace("\n", "")
     try:
@@ -1864,27 +2145,42 @@ def _corrected(
 
 
 def _correction_messages(
-    context: RunContext, previous: Attempt, expected: Sequence[str], errors: str, *, run_error: bool
+    context: RunContext,
+    previous: Attempt,
+    expected: Sequence[str],
+    errors: str,
+    *,
+    run_error: bool,
+    mismatch: bool = False,
 ) -> tuple[str | None, str]:
     """Return the system prompt (None for a template set) and the correction prompt for `previous` with `errors`.
 
     A template set gives correct.txt, with `errors` as its diagnostics and
-    the item's kernels (kernel_files). A fragment set gives the direction's
-    system prompt and upstream's correction prompt, whose code is the
-    previous target file (FILE blocks when the target has more than one
-    file): the compile-error form, or with `run_error` the execute-error
-    form, which joins the execute-error lead (CORRECT_RUN_HEAD,
-    CORRECT_RUN_TAIL) around the same compiler and flag text.
+    the item's kernels (kernel_files), or, with `mismatch`, MISMATCH_PROMPT
+    with `errors` as its outputs (loop.correct_on_mismatch). A fragment set
+    gives the direction's system prompt and upstream's correction prompt,
+    whose code is the previous target file (FILE blocks when the target has
+    more than one file): the compile-error form, or with `run_error` the
+    execute-error form, which joins the execute-error lead
+    (CORRECT_RUN_HEAD, CORRECT_RUN_TAIL) around the same compiler and flag
+    text. Upstream has no mismatch prompt, so `mismatch` with a fragment set
+    raises ValueError (the runner refuses the key first).
     """
     if not context.fragments:
+        name, field_name = (MISMATCH_PROMPT, "outputs") if mismatch else ("correct", "diagnostics")
         fields = {
             "target_language": context.direction.target,
             "files": render_file_blocks(previous.files) if previous.files else "",
-            "diagnostics": errors,
+            field_name: errors,
             "target_files": ", ".join(expected),
             "kernel_files": kernel_files(context),
         }
-        return None, render(context.prompts, "correct", fields)
+        return None, render(context.prompts, name, fields)
+    if mismatch:
+        raise ValueError(
+            f"loop.{CORRECT_ON_MISMATCH}: the fragment prompt set {context.prompts!r} holds upstream's prompts, "
+            "which have no oracle-mismatch correction"
+        )
     direction, fragments = context.direction, context.fragments
     code = previous.files.get(expected[0], "") if len(expected) == 1 else render_file_blocks(previous.files)
     if run_error:

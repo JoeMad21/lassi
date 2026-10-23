@@ -1,18 +1,20 @@
 """Tests for the tt-host-v0 prompt set, Tier A's C++ <-> TT template set.
 
-tt-host-v0 is a template set like p0-smoke (no MANIFEST.yaml): generate.txt
-and correct.txt under assets/prompts/tt-host-v0/, filled with string.Template
-by lassi.prompts.render. One set serves both directions of a recipe, so the
-templates carry fixed text for both language ids, cpp and tt. The render
-tests fill the templates for every tt-pairs-v0 item in both directions
-through the stages' own prompt builders, given stand-in contexts:
-GenerateStage._prompt, with the item's tracked source files and the target
-language's file names from assets/bench/tt-pairs-v0.yaml, and
-_correction_messages, with the previous files and a compile error or a run
-error (CompileLoopStage, RunLoopStage). The other tests read the template
-text.
+tt-host-v0 is a template set like p0-smoke (no MANIFEST.yaml): generate.txt,
+correct.txt, and correct_mismatch.txt under assets/prompts/tt-host-v0/,
+filled with string.Template by lassi.prompts.render. One set serves both
+directions of a recipe, so the templates carry fixed text for both language
+ids, cpp and tt. The render tests fill the templates for every tt-pairs-v0
+item in both directions through the stages' own prompt builders, given
+stand-in contexts: GenerateStage._prompt, with the item's tracked source
+files and the target language's file names from
+assets/bench/tt-pairs-v0.yaml, and _correction_messages, with the previous
+files and a compile error, a run error (CompileLoopStage, RunLoopStage), or
+an oracle mismatch's coarse per-output report (RunLoopStage under the
+opt-in key loop.correct_on_mismatch; OQ-077). The other tests read the
+template text.
 
-Both templates show the item's kernels (the owner's decision of
+Every template shows the item's kernels (the owner's decision of
 2026-10-06): the field kernel_files holds each support file of the
 direction's two languages whose build path has a directory named kernels,
 as FILE blocks in path order, under a short lead that says the harness
@@ -46,6 +48,8 @@ from lassi.core.record import Diagnostic
 from lassi.core.stages import (
     CORRECT_FIELDS,
     GENERATE_FIELDS,
+    MISMATCH_FIELDS,
+    MISMATCH_PROMPT,
     PURPOSE,
     GenerateStage,
     _correction_messages,
@@ -61,7 +65,12 @@ SUITE = load_suite(REPO / "assets" / "bench" / "tt-pairs-v0.yaml")
 DIRECTIONS = (Direction("cpp", "tt"), Direction("tt", "cpp"))
 CASES = [(item, direction) for item in sorted(SUITE.items) for direction in DIRECTIONS]
 IDS = [f"{item}-{direction.source}-to-{direction.target}" for item, direction in CASES]
-FIELDS = {"generate": GENERATE_FIELDS, "correct": CORRECT_FIELDS}
+FIELDS = {"generate": GENERATE_FIELDS, "correct": CORRECT_FIELDS, MISMATCH_PROMPT: MISMATCH_FIELDS}
+# A SYNTHETIC oracle mismatch as run_loop gives it (lassi.core.stages mismatch_text): one coarse line per output.
+MISMATCH_TEXT = (
+    "result: failed; pcc 0.990; about 10 to 100 times the allowed error\n"
+    "debug: failed; extra output"
+)
 # A short template is one a small model reads whole.
 MAX_LINES = 60
 # The harness header both languages build with; a prompt names it but never shows it as a file.
@@ -197,14 +206,16 @@ def previous_files(item: str, direction: Direction, sources: Path) -> dict[str, 
     return SUITE.source_files(item, Direction(direction.target, direction.source), sources, purpose=PURPOSE)
 
 
-def correct_prompt(item: str, direction: Direction, sources: Path, errors: str, *, run_error: bool) -> str:
+def correct_prompt(
+    item: str, direction: Direction, sources: Path, errors: str, *, run_error: bool, mismatch: bool = False
+) -> str:
     """Return the prompt _correction_messages gives when the last answer was the target reference."""
     context: Any = SimpleNamespace(
         fragments={}, suite=SUITE, item=item, direction=direction, sources_root=sources, prompts=SET
     )
     previous: Any = SimpleNamespace(files=previous_files(item, direction, sources))
     expected = expected_files(item, direction)
-    system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error)
+    system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error, mismatch=mismatch)
     assert system is None
     return prompt
 
@@ -322,6 +333,26 @@ def test_correct_shows_every_kernel_of_the_item_once(
     text = compile_errors(item) if errors == "compile" else run_errors(direction)
     rendered = correct_prompt(item, direction, sources, text, run_error=errors == "run")
     check_kernels(rendered, item, direction, sources)
+
+
+@pytest.mark.parametrize(("item", "direction"), CASES, ids=IDS)
+def test_mismatch_renders_for_every_item_and_direction_with_its_kernels(
+    item: str, direction: Direction, sources: Path
+) -> None:
+    rendered = correct_prompt(item, direction, sources, MISMATCH_TEXT, run_error=True, mismatch=True)
+    check_rendered(rendered, MISMATCH_PROMPT, item, direction)
+    assert MISMATCH_TEXT in rendered and render_file_blocks(previous_files(item, direction, sources)) in rendered
+    check_kernels(rendered, item, direction, sources)
+
+
+def test_mismatch_says_the_program_ran_and_shows_no_input_or_expected_value() -> None:
+    # The template is item-independent: it says what the coarse report holds and that no value or exact error is
+    # shown (Agent Rule 5; OQ-077, option (a)).
+    text = " ".join(template_text(MISMATCH_PROMPT).split()).lower()
+    for words in ("ran", "did not match", "not shown", "order of magnitude", "exact errors"):
+        assert words in text, words
+    for statistic in ("max_abs", "max_ulp", "threshold"):
+        assert statistic not in text, statistic
 
 
 def test_correct_does_not_say_the_build_failed_for_a_run_error() -> None:

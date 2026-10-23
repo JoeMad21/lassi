@@ -247,9 +247,18 @@ class OutputFileOracle(Protocol):
     Output files are given as RunResult.output_files holds them: each
     file's relative path -> the path of its bytes. `sides` names the two
     runs of a comparison in the notes, (reference, candidate) by default.
+    `metric` and threshold_for serve run_loop's coarse correction report
+    under loop.correct_on_mismatch (lassi.core.stages mismatch_text), which
+    places an output's error in an order-of-magnitude band and never shows
+    the threshold.
     """
 
     name: str
+    metric: str
+
+    def threshold_for(self, name: str) -> float | None:
+        """Return the threshold output `name` is judged against, or None when there is none."""
+        ...
 
     @property
     def agreement_setting(self) -> str | None:

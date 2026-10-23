@@ -66,14 +66,13 @@ directory is created.
 from __future__ import annotations
 
 import dataclasses
-from pathlib import Path
 from typing import Protocol, cast
 
 from lassi.core.capabilities import ALIGNS_OUTPUT_FILES, OutputFileOracle
 from lassi.core.interfaces import RunResult
 from lassi.core.record import Attempt, Diagnostic, RunInfo, Trial
 from lassi.core.registry import DEFAULT_REGISTRY, Binding, register
-from lassi.core.stages import PURPOSE, REFERENCE_WORKDIR_INCOMPLETE, RunContext
+from lassi.core.stages import PURPOSE, REFERENCE_WORKDIR_INCOMPLETE, RunContext, agreement_bound, stored_files
 from lassi.core.store import BlobStore
 from lassi.oracles import alignment, load_masks
 
@@ -196,21 +195,14 @@ class OracleStage:
             )
         if trial.reference_run.workdir_incomplete is True:
             return self.unaligned_output_files(trial)
-        if oracle.agreement_setting is not None:
-            try:
-                oracle = oracle.with_baseline(trial.reference_agreement)
-            except ValueError as error:
-                cut = REFERENCE_WORKDIR_INCOMPLETE
-                notes = [note.message for note in trial.baseline_diagnostics if note.code == cut]
-                why = f" (the baseline noted: {'; '.join(notes)})" if notes else ""
-                raise ValueError(f"{trial.trial_id}: {error}{why}") from error
+        oracle = agreement_bound(oracle, trial)
         blobs = BlobStore(self.context.store.root)
-        reference_files = _stored_files(blobs, reference)
+        reference_files = stored_files(blobs, reference)
         attempts = []
         for attempt in trial.attempts:
             outputs = attempt.run.outputs
             if outputs is not None:
-                aligned = oracle.alignment(reference_files, _stored_files(blobs, outputs))
+                aligned = oracle.alignment(reference_files, stored_files(blobs, outputs))
                 attempt = dataclasses.replace(attempt, alignment=aligned)
             attempts.append(attempt)
         return dataclasses.replace(trial, attempts=attempts)
@@ -274,11 +266,6 @@ def _warned_cut_reference(attempt: Attempt) -> Attempt:
         stage="run", severity="warning", code=REFERENCE_WORKDIR_INCOMPLETE, message=REFERENCE_WORKDIR_INCOMPLETE_MESSAGE
     )
     return dataclasses.replace(attempt, diagnostics=[*attempt.diagnostics, warning])
-
-
-def _stored_files(blobs: BlobStore, outputs: dict[str, str]) -> dict[str, Path]:
-    """Return a run's recorded output files as file -> its file in the binary store, each checked against its hash."""
-    return {file: blobs.path(digest) for file, digest in outputs.items()}
 
 
 def _oracle_binding(context: RunContext) -> Binding:

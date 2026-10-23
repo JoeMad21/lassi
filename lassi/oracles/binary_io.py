@@ -408,7 +408,7 @@ class BinaryIOOracle:
             elif name not in candidate:
                 stats.append(_not_compared(name, f"missing output: the {sides[1]} wrote no array named {name!r}"))
             else:
-                stats.append(_compared(reference[name], candidate[name], self.metric, self._threshold(name), sides))
+                stats.append(_compared(reference[name], candidate[name], self.metric, self.threshold_for(name), sides))
         for name in sorted(set(candidate) - set(reference)):
             note = repeated.get(name, f"extra output: the {sides[0]} wrote no array named {name!r}")
             stats.append(_not_compared(name, note))
@@ -431,9 +431,16 @@ class BinaryIOOracle:
         mean = self.alignment(reference.output_files, candidate.output_files).mean
         return 0.0 if mean is None else mean
 
-    def _threshold(self, name: str) -> float | None:
-        """Return the threshold of output `name`: the recipe's number, or its value in the bound agreement."""
-        if self._agreement is None:
-            return float(self.threshold)
-        return self._agreement.get(name)
+    def threshold_for(self, name: str) -> float | None:
+        """Return the threshold of output `name`: the recipe's number, or its value in the bound agreement.
+
+        None when the bound agreement gives the output no value. An unbound
+        from_baseline oracle has no number to give and raises ValueError, as
+        compare does.
+        """
+        if self._agreement is not None:
+            return self._agreement.get(name)
+        if self.threshold == FROM_BASELINE:
+            raise ValueError(f"oracle.threshold {FROM_BASELINE} has no threshold until with_baseline binds it")
+        return float(self.threshold)
 
