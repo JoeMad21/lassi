@@ -62,7 +62,7 @@ trials within its time share, so a higher cap would finish fewer trials. Free sp
 | --- | --- | --- |
 | API reference (the tt-metalium pack in the prompts) | P17.21 is not built: the template prompt set cannot carry a context pack yet | Design in plans/p17-portable.md; the usage limit stopped its work at about 15:50 EDT |
 | Retrieval over the tt-metal docs (RAG) | P17.22 is not built: no stage calls the retriever yet | The retriever and its corpus spec exist, uncommitted; same stop |
-| Training (full, LoRA, prompt tuning, from scratch) | P17.18 and P17.19 are unfinished, so no trained checkpoint exists | Uncommitted work in lassi/train; same stop |
+| Training (full, LoRA, prompt tuning, from scratch) | P17.18 and P17.19 were unfinished at the start, so no trained checkpoint exists; asked at 00:03 EDT on 2026-10-24 whether to train the four CPU recipes beside the sweep from an unaudited snapshot, the owner chose "Not tonight" | The four recipes are in projects/train, uncommitted and under audit; plans/runs/train-window/run.sh, also uncommitted, runs them in a later window; OQ-079 records the decision |
 | Model output on the Wormhole cards | OQ-078: under iommu=pt a program holding a card node can reach host memory; the tt_silicon executor (P17.16) is not built | plans/spikes/tt-card-dma.md |
 
 ## What Ran
@@ -75,8 +75,9 @@ window"). The recipes and scripts above are committed for the next window.
 - rx 20261023-165250-exec-c546 (19:52 EDT), read-only: `furiosa-smi ps` empty; `furiosa-smi status` npu0 to npu7
   at 0.00/47.50 GiB; /mnt/nvme10 111G free (97% used); the scratch root 305G; no STOP file.
 - `rx pull --path lassi-runs/rngd-sweep/tables`: trials.tsv and passes.tsv of the first to fourth passes, written by
-  rx 20261022-222829-rngd-sweep4-chain-cf48, copied to the workstation for the cap decision only. They are not in
-  results/ yet: a pull by that job's id, which writes provenance.json, is the next window's first step.
+  rx 20261022-222829-rngd-sweep4-chain-cf48, copied to the workstation for the cap decision only. Their rows are
+  now also in results/rngd-sweep5-20261024/tables, which the fifth pass's tabulator wrote over every sweep run, under
+  that pass's provenance; results/rngd-sweep5-20261024/summary.md names each earlier pass's job.
 
 ## The Second Window
 
@@ -95,6 +96,15 @@ approved.
   load time again.
 - rx 20261023-202206-exec-af35 (23:22 EDT): EXAONE-4.0-32B serving, its four recipes running, no trial finished yet.
 
+- The job ended at 02:25 EDT with rc 0 (results/rngd-sweep5-20261024/provenance.json). Llama-3.1-8B, the last
+  model, finished 5 of its 10 trials per recipe before its time share (SWEEP_MAX_SHARE=4800) ended them, about 80
+  minutes before the deadline: the share caps the last model as it caps the others.
+- rx 20261023-233453-rngd-sweep5b-0a2a, started 02:34 EDT from clean commit e482997 in its own slot (sweep5b), from
+  the session's clean scratch worktree: a second sample of Qwen3-Coder-30B's four sweep5 recipes
+  (plans/runs/rngd-sweep/models5-qwen.tsv), deadline 1792828200 (03:50 EDT), tables into tables5b. Its results are
+  PLACEHOLDER until pulled.
+
 ## Results
 
-PLACEHOLDER: the fifth pass's passes.tsv per model and combination, from tables5, with its provenance file.
+The fifth pass: results/rngd-sweep5-20261024/summary.md, with its provenance and the pulled tables. Exploratory:
+the snapshot reads dirty.

@@ -71,6 +71,16 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 
 ## alpha01
 
+- run.sh's per-model time share (SWEEP_MAX_SHARE) caps the last model too, so a sweep can end long before its
+  deadline with that model's trials cut short: the fifth pass of 2026-10-24 ended at 02:25 EDT, 79 minutes early,
+  with Llama-3.1-8B at 5 of 10 trials per recipe, its recipes ending rc 124 at the 4800 s share (rx
+  20261023-201813-rngd-sweep5-226a, the job's log). Size the cap so the last model may use
+  the time left, or follow the sweep with a second job, as rx 20261023-233453-rngd-sweep5b-0a2a did.
+- Stashing the tree to start a job from a clean commit also stashes an uncommitted .gitignore line, which then
+  exposes the files it hid as untracked, and rx sends the tree as a dirty snapshot (rx
+  20261023-201813-rngd-sweep5-226a, snapshot 9099a15). Start window jobs from a clean worktree of the commit instead (git worktree, then rx from inside it, with
+  its own --slot), which leaves the agents' working files untouched.
+
 - It is shared and changes under us. It had rebooted about 1h46m before rx 20260925-153149-exec-4e68 (its uptime). The shared disk's free space was 427 GB at the P4.1 spike's rx doctor (plans/spikes/p4-tt-pins.md) and 179 GB at an rx doctor on 2026-09-25 about 15:31 (doctor output, no rx id). All eight RNGD cards were held by other tenants on the evening of 2026-09-24 (rx 20260924-204044-exec-641f, 20260924-204055-exec-6e99). Run `rx doctor` and a `du` check before every big job, and check `furiosa-smi status` early whenever a card is needed.
 - `rx pull --path <file>` extracts into .rx/pulls/<basename>, so two single-file pulls overwrite each other and `--into` copies nothing for a file. Pull a directory into its own folder, then pick files.
 - A directory pull merges too: `rx pull --path .../report --into results/<name>` extracted into an existing .rx/pulls/report left by earlier pulls and copied all of it, so results/p5-tier-b first held 28 stale files from P4.11's and P17's pulls beside the batch's 38 (caught by comparing against a clean re-extraction, 2026-10-10). Before a `--path` pull, move any .rx/pulls/<basename> aside, or give each batch's report directory a unique name.

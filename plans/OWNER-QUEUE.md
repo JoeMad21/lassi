@@ -1026,3 +1026,16 @@ Options:
 - (c) Never run model output on silicon under iommu=pt: build the tt_silicon executor, but let it run only tracked references a human starts (as the 2026-10-23 smoke did), and keep model-generated TT candidates on ttsim until (a) is in place. Consequence: no host-memory exposure from model code; silicon numbers for model output wait on (a).
 Recommendation: (a) if you will make the host change before P17.16 runs model output, else (c) until then; never (b). Either way the tt_silicon executor and its sandbox wiring can be built and tested with stand-ins now (P17.15 is done); only running model output on silicon waits on this.
 Answer:
+
+## OQ-079 Training In The Window Of 2026-10-24, Beside The Sweep
+State: CLOSED
+Kind: decision
+Blocks: none
+Evidence: plans/runs/2026-10-23-evening-window.md (Not In Tonight's Runs); plans/runs/train-window/run.sh; projects/train (both uncommitted then, under audit)
+Question: Asked in the working session at 00:03 EDT on 2026-10-24: start CPU training on alpha01 beside the sweep, one job in its own slot ending by 03:50, building the tt-train-v0 records, downloading the pinned Qwen3-0.6B and Qwen3-1.7B, and training the four recipes in turn, from an unaudited snapshot (exploratory)?
+Options:
+- Start training now, exploratory.
+- Hold until audited, about 20 more minutes, then start from a clean commit.
+- Not tonight: only the sweep runs.
+Recommendation: none given; the question set out the three.
+Answer: Owner's choice (in the working session, 2026-10-24, 00:03 EDT; recorded by the agent): "Not tonight". No training ran.
