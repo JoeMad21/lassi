@@ -1,0 +1,3 @@
+# The second window's last hour (2026-10-24, to 03:50 EDT): Qwen3-Coder-30B alone, a second sample of
+# projects/lassi-demo/sweep5/qwen3-coder-30b/, served without --reasoning-parser.
+qwen3-coder-30b	furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8	v2026.4	4	-	furiosa-venv-2026.4
