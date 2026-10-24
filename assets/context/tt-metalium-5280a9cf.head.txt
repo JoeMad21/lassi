@@ -1,0 +1,9 @@
+# TT-Metalium host API reference (tt-metal 5280a9cf)
+
+Declarations only, without comments, at tt-metal commit 5280a9cf: the tt-metalium headers a tt program includes,
+then, as many as fit the pack's size limit, first the headers that define tt-metal types the generate prompt names
+and after them the other tt-metalium headers the first ones include, directly or through another header, in
+breadth-first include order. A header that does not fit whole is left out, so some of these headers are missing.
+Function bodies, members that are not public, detail namespaces, and forward, friend, deprecated, and specialized
+declarations are left out too. Each part starts with the include line that declares it.
+// ==== #include <{include}> ====

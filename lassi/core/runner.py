@@ -1138,8 +1138,9 @@ def _recipe_assets(recipe: Recipe) -> tuple[dict[str, str], dict[str, str]]:
     a fragment set joins a pack into its prompts. Otherwise
     lassi.prompts.load_recipe_assets loads the set and the packs from the
     default assets root, checking every file against its manifest. A pack
-    serves the language its one entry key ends in
-    (lassi.core.fragments.pack_language). Raises RunError, with the loader's
+    serves the language its entry keys end in, read from its first key
+    (lassi.core.fragments.pack_language; the loader refuses a pack whose
+    keys end in different languages). Raises RunError, with the loader's
     message, for a set or pack that does not load, and when two packs serve
     one language.
     """

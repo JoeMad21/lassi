@@ -301,8 +301,18 @@ def test_gitignore_leaves_the_hand_written_prompt_set_tracked() -> None:
 
 
 def test_only_the_manifests_are_tracked_in_the_generated_trees() -> None:
+    # Every pack under assets/context is generated (tools/build_tt_context.py writes the tt-metalium one), so only
+    # manifests are tracked inside a pack directory; this extractor's three are among them. A pack's own source text
+    # may sit beside its directory at the top of assets/context as `<pack>.head.txt` (this repository's text, which
+    # OQ-018 does not restrict), and only when that pack's manifest is tracked.
     listed = git("ls-files", "--", "assets/prompts/lassi-2024", "assets/context").stdout.split()
-    assert sorted(listed) == sorted(f"assets/{tree}/{MANIFEST}" for tree in TREES)
+    top = "assets/context/"
+    heads = {name for name in listed
+             if name.startswith(top) and name.endswith(".head.txt") and "/" not in name[len(top):]
+             and f"{name[:-len('.head.txt')]}/{MANIFEST}" in listed}
+    generated = [name for name in listed if name not in heads]
+    assert all(name.endswith(f"/{MANIFEST}") for name in generated), f"generated text is tracked: {generated}"
+    assert {f"assets/{tree}/{MANIFEST}" for tree in TREES} <= set(listed)
 
 
 def test_committed_manifests_have_the_manifest_fields(manifests) -> None:

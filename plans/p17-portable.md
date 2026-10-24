@@ -180,7 +180,7 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Host: alpha01 in the owner's window. Depends: P17.16; OQ-075; OQ-078 for the two stored translations and Tier A, which are model output (plans/spikes/tt-card-dma.md: under iommu=pt a program holding a card node can reach host memory).
 
 ### P17.21 The API reference: the context stage under a template prompt set
-- Added on 2026-10-23 from the owner's direction ("Okay, get that built and added."). The pack tt-metalium-5280a9cf is built by tools/build_tt_context.py from tt-metal at the pin; only its manifest is tracked.
+- Added on 2026-10-23 from the owner's direction ("Okay, get that built and added."). The pack tt-metalium-5280a9cf is built by tools/build_tt_context.py from tt-metal at the pin; only its manifest and the head file are tracked.
 - Bible: Component Interfaces (the stages), Harness Contract, Design Principle 3, Agent Rule 5.
 - Accept: a template set that holds summarize_context.txt and knowledge.txt may serve context packs; summarize_context sends the pack under it; the summary goes before every later prompt; a recipe without the pack keeps every prompt byte for byte and its recipe hash (golden tests); the pack names no Tier A file (test).
 - Files: lassi/core/stages.py, lassi/core/runner.py, assets/prompts/tt-host-v0/, tools/build_tt_context.py, tests/.

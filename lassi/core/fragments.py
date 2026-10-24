@@ -10,8 +10,10 @@ with summarize_context, describe_source, generate, and compile_loop. A key templ
 `{target}` (the target language as written in the recipe); fragment_key
 fills them.
 
-Context packs are one-entry manifest trees; a pack serves the language its
-entry key ends in (`<name>.<language>`), and pack_language reads it.
+Context packs are manifest trees of one or more entries, whose texts the
+loader joins in manifest order (lassi.prompts.assets.pack_text); a pack
+serves the language its entry keys all end in (`<name>.<language>`), and
+pack_language reads it.
 
 The functions here are pure text functions. The toggles that select
 upstream's quirks (lassi.core.recipe.FIXES) are read by the stages:
@@ -117,7 +119,12 @@ def fragment_key(template: str, direction: Direction) -> str:
 
 
 def pack_language(entry_key: str) -> str:
-    """Return the language a context pack serves: the last dot-separated part of its one entry key."""
+    """Return the language a context pack serves: the last dot-separated part of an entry key of the pack.
+
+    Every entry key of a pack ends in the one language it serves
+    (lassi.prompts.assets.pack_text refuses a pack whose keys differ), so
+    any of its keys gives it.
+    """
     return entry_key.rsplit(".", 1)[-1]
 
 
