@@ -1,0 +1,146 @@
+# The corpus of the Tenstorrent documentation retriever (owner direction of 2026-10-23; lassi.prompts.retrieval,
+# lassi.prompts.rag_corpus, tools/build_tt_rag.py): the fallback beside the fixed API-reference context pack, which
+# a recipe may later opt in to. Upstream LASSI used fixed context packs only, so retrieval is a departure from it,
+# never part of a faithful recipe.
+#
+# tools/build_tt_rag.py builds the index from the pinned tt-metal tree (an install at $LASSI_TOOLCHAINS/<PREFIX_NAME>
+# whose lassi-install.txt names the pin, or a directory `build_tt_rag.py fetch` filled from GitHub at the pin's
+# commit, each file checked against its git blob sha1) and writes MANIFEST.yaml beside this file. Only this spec and
+# the manifest are tracked; the index holds the corpus text and lives under $LASSI_SCRATCH, never in git (OQ-018).
+corpus: tt-metal-docs
+# toolchains/tt-metal.pin: the tree must be at its COMMIT, from its URL.
+pin: tt-metal
+# Globs over the tree's POSIX paths (`**/` spans directories; `*` and `?` stay in one).
+include:
+  - METALIUM_GUIDE.md
+  - docs/**/*.rst
+  - docs/**/*.md
+  - tech_reports/**/*.md
+  - tt_metal/api/tt-metalium/**/*.hpp
+  - tt_metal/api/tt-metalium/**/*.h
+  - tt_metal/api/tt-metalium/**/*.md
+  - tt_metal/programming_examples/**/*.cpp
+  - tt_metal/programming_examples/**/*.hpp
+  - tt_metal/programming_examples/**/*.h
+  - tt_metal/programming_examples/**/*.md
+# Every file this Doxyfile's INPUT lists joins the corpus: the headers whose comments the API reference pages render
+# (most kernel API pages under docs/ are a doxygen directive alone, so without these headers they say nothing).
+doxygen: docs/Doxyfile
+# Agent Rule 5 (lassi.prompts.rag_corpus, the module docstring): every file under a Tier A item's example directory
+# is excluded and is a reference, with the suite's tracked programs. A run is run_lines consecutive lines under the
+# code normalization (comments and brace-only lines skipped) or the literal one (every non-blank line), alike on
+# both sides; a file more than max_file_overlap of whose runs under either are reference runs is excluded whole as a
+# copy, and in any other file every line of a reference run is excised from every chunk.
+tier_a:
+  suite: assets/bench/tt-pairs-v0.yaml
+  # Every Tier A example directory must lie under this tree directory.
+  examples: tt_metal/programming_examples
+  # Consecutive lines that make a run: two quoted lines are not a copy, three are.
+  run_lines: 3
+  # The fraction of a file's runs (under either normalization) above which the file is a copy and goes whole.
+  max_file_overlap: 0.1
+  # The build-time similarity report (MANIFEST.yaml similar): every indexed code file whose indexed text reaches a
+  # token similarity of report_at to a Tier A code reference is recorded with its closest reference, so a renamed
+  # copy that no run shows is flagged again at every pin bump. It is a record for review; the build never refuses.
+  similarity:
+    # The report line, a difflib ratio in [0, 1] over the tokens below.
+    report_at: 0.7
+    # Lower-case names that keep their own token, the tt-metal kernel API's prefixes; every other lower-case name
+    # reads as one placeholder, so renaming a copy's locals does not hide it.
+    api_prefixes: [cb_, noc_, get_, tile_, pack_, copy_, add_, mm_, matmul_]
+# Files excluded whole. Pages: each a walkthrough of a Tier A example, of a program built on one, or a lab whose
+# exercise is one; their prose narrates the reference solution even where their code is excised, so the whole page
+# goes. Code: a Tier A example's code renamed or reflowed past the run check, and a program's host when the kernels
+# it launches are copies of a Tier A example's (vecadd_multi_core, distributed_eltwise_add), copies the run check
+# marks (tier-a-overlap in MANIFEST.yaml) or a reading shows to be that example's code renamed. A host whose only
+# marked kernel is excluded and whose own code is its own stays (sfpu_eltwise_chain, below); shared device-setup
+# boilerplate alone excludes nothing.
+#
+# Reviewed and kept, each with its reference runs excised:
+# - vecadd_sharding/kernels/add_sharding.cpp: its add loop reads sharded circular buffers with no reader or wait, 2 of
+#   its 21 code runs match, and its token similarity (0.61 for the whole file, 0.54 as indexed) is under the line.
+# - vecadd_sharding/vecadd_sharding.cpp: a sharded vector add with no reader or writer kernel; its reference runs are
+#   its includes and device setup (7 of 172 code runs).
+# - add_2_integers_in_riscv/add_2_integers_in_riscv.md: its kernel adds on a data movement core by bank-id reads, no
+#   reference run; its program's overlap is shared host boilerplate (namespaces, prefix guard, device setup).
+# - tech_reports/prog_examples/shard_data_rm/shard_data_rm.md: a row-major sharding walkthrough, no Tier A pattern;
+#   its program's overlap is shared host boilerplate.
+# - sfpu_eltwise_chain/sfpu_eltwise_chain.cpp: the kernel the run check marks (its compute kernel) is excluded, and
+#   its own code is the softplus setup: 0.06 of its 30-token windows match a reference (token similarity 0.40 as
+#   indexed, from shared setup); its reference runs are excised, and its walkthrough page is listed below.
+# - sfpu_eltwise_chain/kernels/dataflow/writer.cpp: it reaches 0.701 only through the shared writer API skeleton; it
+#   writes one tile, with no loop or start_id.
+# - pad_multi_core/kernels/pad_writer_dims_rm_interleaved.cpp: it reaches 0.701 only through the shared writer API
+#   skeleton; it writes row-major sticks with its own stride.
+# - custom_sfpi_smoothstep/kernels/compute/tiles_smoothstep.cpp: its kept pieces are the standard SFPU compute loop,
+#   0.44 as indexed.
+exclude:
+  - path: docs/source/tt-metalium/tt_metal/examples/dram_loopback.rst
+    reason: walks through the Tier A example loopback
+  - path: docs/source/tt-metalium/tt_metal/examples/eltwise_binary.rst
+    reason: walks through the Tier A example eltwise_binary
+  - path: docs/source/tt-metalium/tt_metal/examples/eltwise_sfpu.rst
+    reason: walks through the Tier A example eltwise_sfpu
+  - path: docs/source/tt-metalium/tt_metal/examples/matmul_single_core.rst
+    reason: walks through the Tier A example matmul_single_core
+  - path: docs/source/tt-metalium/tt_metal/examples/matmul_multi_core.rst
+    reason: walks through the Tier A example matmul_multi_core
+  - path: docs/source/tt-metalium/tt_metal/examples/matmul_multi_core_optimizations/data_reuse.rst
+    reason: walks through an optimization of the Tier A example matmul_multi_core, built on its code
+  - path: docs/source/tt-metalium/tt_metal/examples/matmul_multi_core_optimizations/data_mcast.rst
+    reason: walks through an optimization of the Tier A example matmul_multi_core, built on its code
+  - path: docs/source/tt-metalium/tt_metal/examples/matmul_multi_core_optimized.rst
+    reason: introduces the two optimizations of the Tier A example matmul_multi_core above
+  - path: tech_reports/prog_examples/matmul_multi_core_optimized/data_reuse.md
+    reason: the Markdown copy of the data_reuse walkthrough above
+  - path: tech_reports/prog_examples/matmul_multi_core_optimized/data_mcast.md
+    reason: the Markdown copy of the data_mcast walkthrough above
+  - path: tech_reports/prog_examples/matmul_multi_core_optimized/matmul_multi_core_optimized.md
+    reason: the Markdown copy of the matmul_multi_core_optimized introduction above
+  - path: docs/source/tt-metalium/tt_metal/labs/matmul/lab1/lab1.rst
+    reason: a lab that walks through an elementwise binary add and sets single-core matmul (Tier A) as its exercise
+  - path: docs/source/tt-metalium/tt_metal/labs/matmul/lab2/lab2.rst
+    reason: a lab that sets multi-core matmul (the Tier A example matmul_multi_core) as its exercise
+  - path: docs/source/tt-metalium/tt_metal/examples/custom_sfpi_add.rst
+    reason: walks through custom_sfpi_add, a near-copy of the Tier A example eltwise_binary (its reader and writer
+      kernels are eltwise_binary's, and over half its host program's code runs)
+  - path: docs/source/tt-metalium/tt_metal/examples/custom_sfpi_smoothstep.rst
+    reason: walks through custom_sfpi_smoothstep, built on the Tier A example eltwise_binary (its reader and writer
+      kernels are eltwise_binary's, and much of its host program)
+  - path: tt_metal/programming_examples/add_2_integers_in_compute/add_2_integers_in_compute.md
+    reason: walks through add_2_integers_in_compute, a one-tile copy of the Tier A example eltwise_binary (its
+      reader, add, and writer kernels are eltwise_binary's)
+  - path: tech_reports/prog_examples/sfpu_eltwise_chain/sfpu_eltwise_chain.md
+    reason: walks through sfpu_eltwise_chain, built on the Tier A example eltwise_sfpu (its compute kernel is
+      eltwise_sfpu's with two operations chained after exp_tile)
+  - path: METALIUM_GUIDE.md
+    reason: its vector addition walkthrough gives the Tier A example eltwise_binary's reader, compute, and writer
+      kernels with renamed variables, which the run check catches only where lines match
+  - path: tt_metal/programming_examples/vecadd_multi_core/kernels/interleaved_tile_read_multi_core.cpp
+    reason: the Tier A example eltwise_binary's reader kernel (read_tiles.cpp) renamed (in0 and in1 to a and b),
+      offset by start_tile_id, and reflowed, so the run check excised only 8 of its lines (token similarity 0.86 as
+      it would be indexed, 0.899 for the whole file)
+  - path: tt_metal/programming_examples/vecadd_multi_core/vecadd_multi_core.cpp
+    reason: the host of a program built on the Tier A example eltwise_binary; all three kernels it launches are
+      eltwise_binary's (add_multi_core and tile_write_multi_core excluded as copies, the reader listed above), and
+      its comments narrate them
+  - path: tt_metal/programming_examples/distributed/3_distributed_eltwise_add/distributed_eltwise_add.cpp
+    reason: the host of a program built on the Tier A example eltwise_binary; every kernel it launches is a
+      near-copy of eltwise_binary's (the contributed/vecadd reader, writer, and add kernels, token similarity 1.0,
+      1.0, and 0.976, each excluded as a copy)
+# How files are cut into chunks (lassi.prompts.rag_corpus, the module docstring): at headings in Markdown and
+# reStructuredText and at blank lines in code, never at a blank line inside a fenced or literal block; a block over
+# max_lines or max_chars, a fenced or literal one too, is cut into pieces of whole lines, and a line is never cut.
+chunking:
+  # The most lines one chunk holds; a longer block is cut into pieces of whole lines.
+  max_lines: 40
+  # The most characters one chunk holds, each line counted with its newline; a longer line stays whole.
+  max_chars: 3000
+  # Of a chunk an excision cut, a piece with fewer non-blank lines than this is dropped and recorded as excised.
+  min_piece_lines: 3
+# The BM25 ranking parameters (lassi.prompts.retrieval Index.search), recorded in the index's meta.
+bm25:
+  # Term-frequency saturation: how much a term repeated in one chunk adds to its score (greater than 0).
+  k1: 1.2
+  # Length normalization, in [0, 1]: 0 ignores a chunk's length, 1 scales fully by it against the average chunk.
+  b: 0.75
