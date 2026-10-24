@@ -78,7 +78,9 @@ tests pass from a clean commit. One command runs each program:
      device exposure (DEVICE_SETUP_SCRIPT, below) are the listed nodes
      bound there too, right after the six, and each listed /sys directory
      bound to a staging directory under /tmp while the host's /sys is
-     still in view;
+     still in view; only with a Tenstorrent exposure (below) is the run's
+     hugepage directory then bound on a directory hugepages-1G there, its
+     owner checked, and the one bind made writable again (noexec);
   7. hides each hidden root under a tmpfs, makes the path skeleton to the
      workdir, the harness, and the toolchains root, moves the overlay onto
      the workdir and the harness and toolchains binds back to their paths,
@@ -89,13 +91,15 @@ tests pass from a clean commit. One command runs each program:
      /var (snap and container runtimes) are out of view (observed,
      probe L, exploratory). Only with a device exposure is each staged
      /sys directory then bound at its target below its cover, which is
-     reopened for the mkdir and the bind and made read-only again;
+     reopened for the mkdir and the bind and made read-only again (a
+     Tenstorrent run first raises its /sys/bus cover's inode cap);
   9. mounts a private tmpfs on /var/tmp and /run when they exist, and on
      /tmp last. The /run mount hides the user and system bus sockets, so
      the program cannot ask a service manager to start anything outside;
   10. fails closed unless every writable mount in /proc/self/mountinfo is
       one of its own (MOUNT_CHECK: a lassi-* tmpfs, devpts, or overlay),
-      before the ready marker (probe J2);
+      before the ready marker (probe J2); a Tenstorrent run's check
+      (TENSTORRENT_MOUNT_CHECK) also trusts its one hugepage bind;
   11. reads the clock (/proc/uptime: CLOCK_BOOTTIME cut to 10 ms, read with
       the read builtin, so no tool and no substitution) and runs the
       program in a nested `unshare --pid --ipc --fork --kill-child`, so the
@@ -132,7 +136,9 @@ tests pass from a clean commit. One command runs each program:
         likely stay reachable by its serial, new session keyring or not (an
         inference from the kernel source, not measured; on this kernel @u
         itself resolves per user namespace). The refusal is what is checked
-        (test_the_program_holds_none_of_the_callers_keys, remote). Once the
+        (test_the_program_holds_none_of_the_callers_keys, remote). A
+        Tenstorrent run that sets reset_filter embeds confine_program(True)
+        instead, whose filter also refuses the driver's reset ioctl. Once the
         filter is in place it prints READY_MARKER on stderr and execs the
         timeout, so the marker follows every step of the chain before the
         program;
@@ -224,7 +230,7 @@ Device access (task P17.5; bible Sandbox, the gpu program runs bullet). A
 spec without SandboxSpec.devices runs SETUP_SCRIPT, byte for byte the
 script every earlier remote test measured, with the layout above, so
 native, ttsim, and compile runs see the six nodes of the private /dev and
-no more. Only the gpu executor (lassi.executors.gpu) sets devices, a
+no more. The gpu executor (lassi.executors.gpu) sets devices to a
 DeviceExposure: device nodes, each a DeviceBind of a host node under /dev
 and a path inside the private /dev, and /sys directories, each a host
 directory under /sys and a path strictly below an entry step 8 covers
@@ -235,7 +241,7 @@ layout adds three blocks, each a count and then its values: the nodes
 targets with the cover each lies under after the hidden roots. Nodes are
 bound, never opened, by the setup; every bind stays read-only, since the
 host is read-only from step 3 on. GPU_VISIBILITY_NAMES are on
-ENVIRONMENT_NAMES, and a spec holds one only with an exposure. Each cover
+ENVIRONMENT_NAMES, and a spec holds one only with a DeviceExposure. Each cover
 is reopened and closed with `mount -t tmpfs -o remount,rw lassi-sys
 <cover>` (and remount,ro): given the mount point alone, mount reads the
 cover's options back from mountinfo, where tmpfs prints uid= and gid= in
@@ -244,6 +250,47 @@ the host's ids, which the user namespace cannot map, so the remount fails
 v5.15 mm/shmem.c:3572-3577 and :3398-3405; with a source and a point,
 context.c:2498 reads no table). This was seen in WSL, not measured on
 alpha01.
+
+Tenstorrent access (task P17.15; bible Sandbox and Execution Backends, the
+tt_silicon row; OQ-072, OQ-075; plans/spikes/tt-silicon-executor.md,
+Findings 1 to 5). A silicon run's spec sets devices to a
+TenstorrentExposure, which the tt_silicon executor (task P17.16) is to
+build: every card's node, bound at its numbered path /dev/tenstorrent/<n>,
+since UMD opens each numbered node it lists there (Finding 1); each card's
+PCI directory, bound read-only at /sys/bus/pci/devices/<address>, beside
+the host's slot list PCI_SLOTS at its own path, both of which UMD and
+hwloc read (Finding 2); the run's own hugepage directory, strictly under
+HUGEPAGE_POINT, where UMD makes its 1 GiB files (Finding 3; OQ-075 (1b));
+and reset_filter, an explicit setting (OQ-075 (4a)). A PCI directory's
+source must end in its target's address. A node's source may be any path
+under /dev, so the remote tests can bind stand-ins; the executor is to
+bind each card's node at its own path. The driver version and the 1 GiB
+page count stay in view on the host's /sys, read-only, as in every run.
+Such a spec runs TENSTORRENT_SETUP_SCRIPTS[reset_filter]:
+DEVICE_SETUP_SCRIPT with HUGEPAGE_STEP after DEVICE_NODES_STEP, which binds
+the directory on a directory hugepages-1G in the private /dev, fails the
+setup closed (exit 2) unless the running user owns that bind's root, and
+makes that one bind writable with
+`mount -o remount,bind,rw,nosuid,nodev,noexec` (the user namespace locks
+the host mount's nosuid and nodev, and a remount that dropped them would
+fail with EPERM; Finding 5 item 3); BUS_COVER_STEP before DEVICE_SYS_STEP,
+which raises the /sys/bus cover's inode cap to TENSTORRENT_BUS_INODES,
+read-only, so the cover holds the directories for every card, where the 8
+inodes of every cover hold only four cards; its own mount check,
+TENSTORRENT_MOUNT_CHECK, which trusts exactly one writable hugetlbfs mount
+at HUGEPAGE_POINT whose root in its filesystem is the run's directory and
+whose superblock has 1 GiB pages (HUGEPAGE_OPTION), and refuses every
+other writable host mount, so a plain directory bound there fails the
+setup closed; and the confinement confine_program(reset_filter), whose
+filter with reset_filter set also refuses ioctl(2) with the driver's reset
+request RESET_IOCTL, _IO(0xFA, 6) (Finding 5 item 1). Its layout is
+DEVICE_SETUP_SCRIPT's with the hugepage pair, the directory and that root,
+after the /sys sources (_tenstorrent_layout). None of this was measured:
+the remote tests (tests/executors/test_sandbox_tenstorrent_remote.py) bind
+stand-ins and open no device. None of it isolates the host from a
+silicon run's program: on alpha01 a card's DMA can reach host memory, and
+the reset filter does not stop it (a reading, not run; Known limits;
+OQ-078).
 
 Setup took 88 to 107 ms in the composite probes (I1, J2b, J3). Not measured:
 the backstop, TasksMax, the IPC and UTS namespaces, and the kernel warning
@@ -298,6 +345,10 @@ Known limits:
 - MOUNT_CHECK trusts a writable mount by its source name (lassi-*) and type,
   not by its mount point; every host mount is read-only before the setup
   mounts anything, so a host mount could pass only by carrying such a name.
+  TENSTORRENT_MOUNT_CHECK trusts its hugepage bind by type, point, root,
+  and page size only, and the expected root assumes the host's hugetlbfs at
+  HUGEPAGE_POINT is mounted with root /; on a host where it is not, the
+  check refuses the bind, so the run fails closed.
 - The seccomp filter leaves the rest of an unprivileged user's syscall
   surface open, such as bpf and userfaultfd where the host's sysctls allow
   them. With the keyring calls refused, /proc/keys still lists the host
@@ -326,10 +377,43 @@ Known limits:
 - Device access (known cases, not complete): a read-only mount does not
   stop I/O on a character device, so a bound node opens as its own
   permissions allow (intended, as for /dev/null); the private /dev tmpfs
-  (64 KiB, 64 inodes) and each /sys cover (4 KiB, 8 inodes) bound how many
+  (64 KiB, 64 inodes) and each /sys cover (4 KiB, 8 inodes, or
+  TENSTORRENT_BUS_INODES for a Tenstorrent run's /sys/bus) bound how many
   nodes and how deep a /sys target may be; a missing source, a cover that
   does not exist, or a source with mounts beneath it fails the setup
   before the ready marker, so nothing runs.
+- Tenstorrent access (reading, not measured; spike, Findings 2 to 5): a
+  bound card node gives the program the driver's whole interface to that
+  card (its BARs, DMA, and the card and link resets; the driver checks no
+  capability), and the reset filter refuses only the reset ioctl, not a
+  reset through a register. Hugetlb pages count toward neither MemoryMax
+  nor --fsize, so the program may map every free 1 GiB page while it
+  runs; the P17.16 executor is to empty the run's directory before and
+  after it. UMD's per-card locks live in /dev/shm, which stays private, so
+  they do not reach other processes. Each card's iommu_group link climbs
+  out of its bind, so UMD reads "no IOMMU" inside.
+- The sandbox does not isolate the host from a silicon run's program
+  (reading, not run; plans/spikes/tt-card-dma.md; OQ-078, open):
+  - on alpha01, card 0's IOMMU domain type reads identity
+    (tt-silicon-executor.md, Finding 2, probe 59e3; the other cards' were
+    not read), the passthrough type that iommu=pt gives (neither spike
+    records the kernel command line), and an identity domain does not
+    restrict which host memory a device's DMA reaches;
+  - a program holding a card's node maps the card's BAR2, as UMD does for
+    all device access, and can program the card's PCIe DMA engine or an
+    outbound iATU region (the card's host-address window) with a host
+    address it chooses, with plain stores and no capability check; under
+    the identity domain the card reads or writes that host physical
+    address untranslated (tt-card-dma.md, Findings 1 to 3);
+  - those stores are not system calls, so no seccomp rule reaches them:
+    the reset filter is not a host isolation boundary;
+  - with every card bound, the driver's peer-BAR ioctl
+    (TENSTORRENT_IOCTL_MAP_PEER_BAR, which needs another card's
+    descriptor) now has peers to name, so a program can also reach
+    another card (tt-card-dma.md, Finding 4), where the one-card design of
+    the sibling spike's Finding 5 item 1 left it none.
+  Only a translating (DMA) IOMMU domain for the cards closes this, a host
+  change outside the sandbox (tt-card-dma.md, Finding 5; OQ-078).
 """
 
 from __future__ import annotations
@@ -400,7 +484,7 @@ TT_METAL_NAMES = (
     "TT_METAL_WATCHER",
 )
 # The GPU runtimes' device lists and CUDA's device order, which only the gpu executor sets (lassi.executors.gpu,
-# task P17.5), to the in-sandbox indices 0,...,n-1; SandboxSpec refuses each without a device exposure.
+# task P17.5), to the in-sandbox indices 0,...,n-1; SandboxSpec refuses each without a DeviceExposure.
 GPU_VISIBILITY_NAMES = ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES")
 # The only names SandboxSpec.environment may hold (P0.20), by group: PATH, the locale (LANG, LC_ALL), and TMPDIR,
 # which programs and compiles get; each variable a pin names (lassi.toolchains.pins PREFIX_VARIABLES,
@@ -430,6 +514,33 @@ RESERVED_DEV_NAMES = frozenset(
 )
 # One segment of a device bind's path: no blank, no shell character, no leading dot, so no "." or "..".
 _DEVICE_SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*")
+# UMD's fixed hugepage directory (umd hugepage.cpp:28; plans/spikes/tt-silicon-executor.md, Finding 3): a
+# Tenstorrent run binds its own directory, which lies strictly under the host's, there.
+HUGEPAGE_POINT = "/dev/hugepages-1G"
+# The superblock option of a hugetlbfs with 1 GiB pages, which TENSTORRENT_MOUNT_CHECK requires as one whole element
+# of mountinfo's last field (the super options). hugetlbfs prints ",pagesize=%lu%c" for every mount, with no
+# condition, 1048576 KiB as 1024M (Linux v6.6 fs/hugetlbfs/inode.c:1185-1191), and mountinfo puts those options
+# last (v6.6 fs/proc_namespace.c:186-191); UMD looks for the same element in /proc/mounts (umd hugepage.cpp:111).
+# The Tenstorrent steps' kernel citations are read at v6.6, the base of alpha01's 6.6.29 kernel (uname -r,
+# plans/spikes/p0-sandbox.md); the Device access paragraph's are read at v5.15. The UMD citations are read at
+# 0450f1be, the UMD of tt-metal 5280a9cf; none of them is a run.
+HUGEPAGE_OPTION = "pagesize=1024M"
+# The host's PCI slot list, which UMD reads for every card (umd pcie/pci_device.cpp:134-175; Finding 2): a
+# Tenstorrent run gets it read-only at its own path.
+PCI_SLOTS = "/sys/bus/pci/slots"
+# The inode cap of a Tenstorrent run's /sys/bus cover (BUS_COVER_STEP), where every cover gets 8: its root, pci,
+# slots, devices, and one directory per card take 4 + n, 12 for alpha01's eight cards, so 32 holds up to
+# TENSTORRENT_CARDS_MAX = 28 cards' PCI directories; SandboxSpec refuses more.
+TENSTORRENT_BUS_INODES = 32
+TENSTORRENT_CARDS_MAX = TENSTORRENT_BUS_INODES - 4
+# The tenstorrent driver's reset ioctl request, _IO(0xFA, 6) (umd pcie/ioctl.h:24; Finding 5 item 1), which the
+# filter of confine_program(True) refuses.
+RESET_IOCTL = 0xFA06
+# A Tenstorrent exposure's node target, /dev/tenstorrent/<n> with n in decimal and no leading zero (UMD opens only
+# all-digit names there; Finding 1), and its PCI directory target, /sys/bus/pci/devices/<address> (the kernel's
+# <domain>:<bus>:<device>.<function>, in lower-case hex).
+_TENSTORRENT_NODE = re.compile(r"/dev/tenstorrent/(?:0|[1-9][0-9]*)")
+_PCI_DIRECTORY = re.compile(r"/sys/bus/pci/devices/[0-9a-f]{4,8}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]")
 # The positional element that tells SETUP_SCRIPT that the program's environment follows it, one NAME=value
 # element per variable, right before the program argv. sandbox_command refuses a program argv that starts with it.
 ENVIRONMENT_MARKER = "lassi-sandbox-environment"
@@ -481,7 +592,8 @@ if libc.syscall(442, -100, b"/", 0x8000, attr, 32) != 0:
 # socket(AF_VSOCK), setrlimit(RLIMIT_CORE), and a prlimit64 that sets RLIMIT_CORE or any limit of another
 # process fail with EPERM; everything else is allowed. A failure exits
 # nonzero with a "lassi-sandbox confine:" line, before the ready line when it comes before the exec, and argv
-# never runs. Importing it under another __name__ only defines FILTER and confine (the local tests do that).
+# never runs. Importing it under another __name__ only defines FILTER and confine (the local tests do that). A
+# Tenstorrent run that sets reset_filter embeds confine_program(True) instead (task P17.15).
 CONFINE_PROGRAM = """from __future__ import annotations
 import ctypes, errno, os, struct, sys
 NR, ARCH, ARG0, ARG1, ARG2, ARG2_HIGH = 0, 4, 16, 24, 32, 36
@@ -534,6 +646,70 @@ if __name__ == "__main__":
     except OSError as exc:
         sys.exit("lassi-sandbox confine: %s" % exc)
 """.replace("@READY_MARKER@", READY_MARKER)
+
+# The FILTER of confine_program(True): CONFINE_PROGRAM's rows with ioctl(2), x86_64 syscall 16, sent to rows 25
+# and 26, which fail it with EPERM when its request is RESET_IOCTL and allow it otherwise, and every jump offset
+# moved to match. The request is compared in its low 32 bits, since the kernel reads it as an unsigned int, so high
+# bits set in the register still mean the reset. No other syscall or request changes (tests compare both filters).
+_RESET_FILTER = """FILTER = [
+    (LOAD, 0, 0, ARCH),  # 0: load the audit architecture
+    (JEQ, 1, 0, 0xC000003E),  # 1: x86_64 -> 3, else 2
+    (RET, 0, 0, KILL),  # 2: any other ABI: kill the process
+    (LOAD, 0, 0, NR),  # 3: load the syscall number
+    (JGE, 23, 0, 0x40000000),  # 4: an x32 syscall -> 28 EPERM, else 5
+    (JEQ, 7, 0, 160),  # 5: setrlimit -> 13, else 6
+    (JEQ, 8, 0, 302),  # 6: prlimit64 -> 15, else 7
+    (JEQ, 15, 0, 41),  # 7: socket -> 23, else 8
+    (JEQ, 16, 0, 16),  # 8: ioctl -> 25, else 9
+    (JGE, 17, 0, 428),  # 9: 428 and above -> 27 ALLOW, else 10
+    (JGE, 17, 0, 425),  # 10: io_uring (425 to 427) -> 28 EPERM, else 11
+    (JGE, 15, 0, 251),  # 11: 251 to 424 -> 27 ALLOW, else 12
+    (JGE, 15, 14, 248),  # 12: add_key, request_key, keyctl (248 to 250) -> 28 EPERM, else 27 ALLOW
+    (LOAD, 0, 0, ARG0),  # 13: setrlimit: load the resource
+    (JEQ, 13, 12, 4),  # 14: RLIMIT_CORE -> 28 EPERM, else 27 ALLOW
+    (LOAD, 0, 0, ARG2),  # 15: prlimit64: load the low half of new_limit
+    (JEQ, 0, 2, 0),  # 16: low half 0 -> 17, else 19
+    (LOAD, 0, 0, ARG2_HIGH),  # 17: load the high half of new_limit
+    (JEQ, 8, 0, 0),  # 18: new_limit NULL, a read -> 27 ALLOW, else 19
+    (LOAD, 0, 0, ARG0),  # 19: load the pid
+    (JEQ, 0, 7, 0),  # 20: pid 0, itself -> 21, else 28 EPERM
+    (LOAD, 0, 0, ARG1),  # 21: load the resource
+    (JEQ, 5, 4, 4),  # 22: RLIMIT_CORE -> 28 EPERM, else 27 ALLOW
+    (LOAD, 0, 0, ARG0),  # 23: socket: load the address family
+    (JEQ, 3, 2, 40),  # 24: AF_VSOCK -> 28 EPERM, else 27 ALLOW
+    (LOAD, 0, 0, ARG1),  # 25: ioctl: load the low half of the request, all the kernel reads
+    (JEQ, 1, 0, @RESET_IOCTL@),  # 26: the tenstorrent reset request _IO(0xFA, 6) -> 28 EPERM, else 27 ALLOW
+    (RET, 0, 0, ALLOW),  # 27: allow the call
+    (RET, 0, 0, EPERM),  # 28: fail the call with EPERM
+]
+""".replace("@RESET_IOCTL@", f"0x{RESET_IOCTL:04X}")
+
+
+def _reset_confine_program() -> str:
+    """Return CONFINE_PROGRAM with _RESET_FILTER in place of its FILTER assignment, which must occur once."""
+    head, opened, rest = CONFINE_PROGRAM.partition("FILTER = [\n")
+    _rows, closed, tail = rest.partition("\n]\n")
+    if not (opened and closed) or opened in rest:
+        raise AssertionError("CONFINE_PROGRAM must hold exactly one FILTER assignment")
+    return head + _RESET_FILTER + tail
+
+
+_RESET_CONFINE_PROGRAM = _reset_confine_program()
+
+
+def confine_program(reset_filter: bool) -> str:
+    """Return the confinement program a run embeds for its reset setting (task P17.15; OQ-075 (4a)).
+
+    confine_program(False) is CONFINE_PROGRAM byte for byte, the program of
+    every run; confine_program(True), for a Tenstorrent run that asks for
+    the reset filter, differs from it only in FILTER (_RESET_FILTER): ioctl
+    with the request RESET_IOCTL fails with EPERM, and nothing else
+    changes. Raise ValueError when `reset_filter` is not a bool.
+    """
+    if not isinstance(reset_filter, bool):
+        raise ValueError(f"reset_filter must be True or False, got {reset_filter!r}")
+    return _RESET_CONFINE_PROGRAM if reset_filter else CONFINE_PROGRAM
+
 
 # Run as `python3 -I -S -c COPY_BACK_PROGRAM <upper> <target> <cap bytes>` once the program's namespace has ended.
 # It lists the upper layer's directories and regular files first, leaving out entries more than COPY_DEPTH
@@ -665,6 +841,28 @@ END {
   exit bad
 }"""
 
+# MOUNT_CHECK's line that splits a mount's options, and the exception a Tenstorrent run's check puts right after
+# it: the first writable hugetlbfs mount at HUGEPAGE_POINT whose root in its filesystem (mountinfo's fourth field)
+# is the awk variable run_root, the run's own hugepage directory, and whose super options (the last field, $NF,
+# since mountinfo ends each line with them) hold HUGEPAGE_OPTION as a whole element, is trusted; any
+# other, a second such mount included, goes on to MOUNT_CHECK's refusal. The root is compared as a string
+# ($4 ""), never as a number, so two roots that read as the same number (1 and 1.0) never match. An empty
+# run_root matches no mount, so the check fails closed.
+_OPTIONS_LINE = '  split($6, options, ",")\n'
+_HUGEPAGE_EXCEPTION = """\
+  if (options[1] == "rw" && fs == "hugetlbfs" && $5 == "@HUGEPAGE_POINT@" && ($4 "") == run_root && !pages &&
+      index("," $NF ",", ",@HUGEPAGE_OPTION@,")) {
+    pages = 1
+    next
+  }
+""".replace("@HUGEPAGE_POINT@", HUGEPAGE_POINT).replace("@HUGEPAGE_OPTION@", HUGEPAGE_OPTION)
+if MOUNT_CHECK.count(_OPTIONS_LINE) != 1:
+    raise AssertionError("MOUNT_CHECK must split the options exactly once")
+# Run as `awk -v run_root=<root> TENSTORRENT_MOUNT_CHECK /proc/self/mountinfo` in a Tenstorrent run (task P17.15):
+# MOUNT_CHECK with _HUGEPAGE_EXCEPTION, so it trusts exactly one writable host mount, the run's hugepage bind, and
+# refuses every other writable mount MOUNT_CHECK refuses, a plain directory bound at HUGEPAGE_POINT included.
+TENSTORRENT_MOUNT_CHECK = MOUNT_CHECK.replace(_OPTIONS_LINE, _OPTIONS_LINE + _HUGEPAGE_EXCEPTION)
+
 # Positional layout: workdir, harness or "", toolchains root or "", disk cap in bytes, N, the N hidden roots, cpu
 # seconds, wall seconds, kill-after seconds, then, only when the spec sets the program's environment,
 # ENVIRONMENT_MARKER and one NAME=value element per variable, then the program argv. The marker makes the
@@ -678,7 +876,9 @@ END {
 # command or arithmetic substitution, and the clock readings for the done line come from the read builtin; the
 # private /tmp covers the staging tmpfs until the copy-back unmounts it. The slot lines @DEVICE_NODES@ and
 # @DEVICE_SYS@ are removed for SETUP_SCRIPT and filled with the device steps for DEVICE_SETUP_SCRIPT, whose
-# layout adds the device blocks (module docstring, Device access; _device_layout).
+# layout adds the device blocks (module docstring, Device access; _device_layout). A Tenstorrent run's script
+# fills them with the device steps and its own (HUGEPAGE_STEP, BUS_COVER_STEP) and has _TENSTORRENT_CHECK_CALL in
+# place of _CHECK_CALL (module docstring, Tenstorrent access; _tenstorrent_layout).
 _SETUP_TEMPLATE = r"""set -eu
 for tool in env nice setpriv prlimit timeout python3 awk unshare; do
   command -v "$tool" > /dev/null
@@ -880,29 +1080,87 @@ done
 """
 
 
-def _setup_script(device_steps: bool) -> str:
-    """Return the setup script: the template's slot lines removed, or filled with the device steps, then embedded."""
+# A Tenstorrent run's step right after DEVICE_NODES_STEP, while the host's /dev is in view: it reads the hugepage
+# pair (the run's hugepage directory, and the root a bind of it shows in mountinfo, which TENSTORRENT_MOUNT_CHECK
+# expects), binds the directory on an empty directory hugepages-1G in the private /dev, exits 2 unless the running
+# user owns the bind's root, and makes that one bind writable again. Inside, uid 0 is the host user, and a
+# directory of any other host user shows the overflow uid, so `[ -O ]` holds only for the user's own directory.
+# The remount keeps nosuid and nodev, which the user namespace locks on the host mount, so a remount without them
+# would fail (plans/spikes/tt-silicon-executor.md, Finding 5 item 3); naming no atime option, it keeps the mount's
+# atime setting, which is locked too. It adds noexec, which the kernel allows, since it refuses only the clearing
+# of a locked flag (Linux v6.6 fs/namespace.c:2744-2769), and which UMD does not need: it maps its hugepage files
+# read-write, never executable (umd chip_helpers/silicon_sysmem_manager.cpp:153). Everything else in the private
+# /dev stays read-only.
+HUGEPAGE_STEP = r"""hugepages=$1
+hugepages_root=$2
+shift 2
+mkdir /tmp/dev/hugepages-1G
+mount --bind "$hugepages" /tmp/dev/hugepages-1G
+[ -O /tmp/dev/hugepages-1G ] || exit 2
+mount -o remount,bind,rw,nosuid,nodev,noexec /tmp/dev/hugepages-1G
+"""
+
+# A Tenstorrent run's step right before DEVICE_SYS_STEP: it raises the /sys/bus cover's inode cap from 8 to
+# TENSTORRENT_BUS_INODES and keeps it read-only, so DEVICE_SYS_STEP can make the slot list's and every card's
+# directories below it. It names the cover's type and source, as DEVICE_SYS_STEP's remounts do (module docstring,
+# Device access); tmpfs takes a new inode cap on remount (Linux v6.6 mm/shmem.c:4172-4175, shmem_reconfigure; read
+# at v6.6, alpha01's kernel base, where the Device access paragraph reads v5.15).
+BUS_COVER_STEP = """mount -t tmpfs -o remount,ro,nr_inodes=@INODES@ lassi-sys /sys/bus
+""".replace("@INODES@", str(TENSTORRENT_BUS_INODES))
+
+# The setup's mount check call, and a Tenstorrent run's, which hands TENSTORRENT_MOUNT_CHECK the expected root of
+# the hugepage bind as an awk variable, one argv element (its segments hold no backslash for awk to unescape).
+_CHECK_CALL = "awk '@MOUNT_CHECK@' /proc/self/mountinfo\n"
+_TENSTORRENT_CHECK_CALL = "awk -v \"run_root=$hugepages_root\" '@MOUNT_CHECK@' /proc/self/mountinfo\n"
+
+
+def _compose(nodes_step: str, sys_step: str, check_call: str, check: str, confine: str) -> str:
+    """Return the template with its slot lines filled by the two steps and the check's call, then embedded.
+
+    `check` and `confine` are the mount check and the confinement program
+    embedded. Each replaced text must occur exactly once in the template.
+    """
     template = _SETUP_TEMPLATE
-    for slot, step in (("@DEVICE_NODES@\n", DEVICE_NODES_STEP), ("@DEVICE_SYS@\n", DEVICE_SYS_STEP)):
+    for slot, text in (("@DEVICE_NODES@\n", nodes_step), ("@DEVICE_SYS@\n", sys_step), (_CHECK_CALL, check_call)):
         if template.count(slot) != 1:
-            raise AssertionError(f"the setup template must hold the slot line {slot.strip()} exactly once")
-        template = template.replace(slot, step if device_steps else "")
+            raise AssertionError(f"the setup template must hold {slot.strip()} exactly once")
+        template = template.replace(slot, text)
     return _embed(
         template,
         {
             "READONLY_PROGRAM": READONLY_PROGRAM,
-            "MOUNT_CHECK": MOUNT_CHECK,
-            "CONFINE_PROGRAM": CONFINE_PROGRAM,
+            "MOUNT_CHECK": check,
+            "CONFINE_PROGRAM": confine,
             "COPY_BACK_PROGRAM": COPY_BACK_PROGRAM,
             "ENVIRONMENT_MARKER": ENVIRONMENT_MARKER,
         },
     )
 
 
+def _setup_script(device_steps: bool) -> str:
+    """Return the setup script: the template's slot lines removed, or filled with the device steps, then embedded."""
+    steps = (DEVICE_NODES_STEP, DEVICE_SYS_STEP) if device_steps else ("", "")
+    return _compose(*steps, _CHECK_CALL, MOUNT_CHECK, CONFINE_PROGRAM)
+
+
+def _tenstorrent_script(reset_filter: bool) -> str:
+    """Return a Tenstorrent run's script: the device steps with HUGEPAGE_STEP and BUS_COVER_STEP, and its own check.
+
+    It embeds TENSTORRENT_MOUNT_CHECK and confine_program(reset_filter).
+    """
+    nodes_step, sys_step = DEVICE_NODES_STEP + HUGEPAGE_STEP, BUS_COVER_STEP + DEVICE_SYS_STEP
+    check, confine = TENSTORRENT_MOUNT_CHECK, confine_program(reset_filter)
+    return _compose(nodes_step, sys_step, _TENSTORRENT_CHECK_CALL, check, confine)
+
+
 # The script of every run without a device exposure: byte for byte the script before task P17.5.
 SETUP_SCRIPT = _setup_script(device_steps=False)
 # The script of a run with a device exposure (only the gpu executor's): SETUP_SCRIPT with the two device steps.
 DEVICE_SETUP_SCRIPT = _setup_script(device_steps=True)
+# The scripts of a run with a TenstorrentExposure (task P17.15), by its reset_filter setting.
+TENSTORRENT_SETUP_SCRIPTS: Mapping[bool, str] = MappingProxyType(
+    {reset_filter: _tenstorrent_script(reset_filter) for reset_filter in (False, True)}
+)
 
 
 class SandboxUnavailableError(RuntimeError):
@@ -1056,7 +1314,7 @@ def _check_devices(devices: object) -> None:
     (sys_cover). No target appears twice.
     """
     if not isinstance(devices, DeviceExposure):
-        raise ValueError(f"devices must be a DeviceExposure or None, got {devices!r}")
+        raise ValueError(f"devices must be a DeviceExposure, a TenstorrentExposure, or None, got {devices!r}")
     if not devices.nodes:
         raise ValueError("a device exposure needs at least one device node")
     targets: list[str] = []
@@ -1073,6 +1331,109 @@ def _check_devices(devices: object) -> None:
             if target in targets:
                 raise ValueError(f"the device target {target!r} is named twice")
             targets.append(target)
+
+
+@dataclass(frozen=True)
+class TenstorrentExposure:
+    """What a Tenstorrent silicon run sees beyond the private /dev's six nodes (task P17.15; OQ-072, OQ-075).
+
+    `nodes` are the cards' device nodes, each bound at its numbered path
+    /dev/tenstorrent/<n> in the private /dev (a source may be any path
+    under /dev, so the remote tests can bind stand-ins; the P17.16
+    executor is to bind each card's node at its own path); `pci_dirs` are
+    the cards' PCI sysfs directories, each bound read-only at
+    /sys/bus/pci/devices/<address> below the /sys/bus cover, its source's
+    last segment being that address, beside the host's slot list
+    PCI_SLOTS, which such a run always gets read-only at its own path;
+    `hugepages` is the run's own hugepage directory, strictly under
+    HUGEPAGE_POINT, bound there writable (OQ-075 (1b)); `reset_filter` is
+    True when the seccomp filter refuses the driver's reset ioctl (OQ-075
+    (4a); confine_program), an explicit setting with no default. Both
+    sequences are kept as tuples; SandboxSpec checks every field
+    (_check_tenstorrent).
+    """
+
+    nodes: tuple[DeviceBind, ...]
+    pci_dirs: tuple[DeviceBind, ...]
+    hugepages: PurePosixPath
+    reset_filter: bool
+
+    def __post_init__(self) -> None:
+        """Keep both sequences as tuples."""
+        object.__setattr__(self, "nodes", tuple(self.nodes))
+        object.__setattr__(self, "pci_dirs", tuple(self.pci_dirs))
+
+
+def _check_card_binds(
+    field: str, binds: tuple[object, ...], top: str, target: re.Pattern[str], *, same_name: bool = False
+) -> None:
+    """Raise ValueError naming `field` unless each bind is a DeviceBind from under /<top>/ to a distinct `target`.
+
+    Both paths must pass _bind_text, and the target must match `target`
+    whole. With `same_name`, the source's last segment must also be the
+    target's (for a PCI directory, its address).
+    """
+    seen: set[str] = set()
+    for bind in binds:
+        if not isinstance(bind, DeviceBind):
+            raise ValueError(f"the Tenstorrent exposure's {field} hold DeviceBinds, got {bind!r}")
+        source = _bind_text(f"{field} source", bind.source, top)
+        text = _bind_text(f"{field} target", bind.target, top)
+        if not target.fullmatch(text):
+            raise ValueError(f"the Tenstorrent exposure's {field} target {text!r} must match {target.pattern}")
+        if same_name and source.rsplit("/", 1)[1] != text.rsplit("/", 1)[1]:
+            raise ValueError(
+                f"the Tenstorrent exposure's {field} source {source!r} must end in its target's last segment "
+                f"{text.rsplit('/', 1)[1]!r}"
+            )
+        if text in seen:
+            raise ValueError(f"the Tenstorrent exposure's {field} name the target {text!r} twice")
+        seen.add(text)
+
+
+def _hugepage_root(path: object) -> str:
+    """Return the root a bind of the run's hugepage directory `path` shows in mountinfo, or raise ValueError.
+
+    `path` must be a PurePath strictly under HUGEPAGE_POINT whose every
+    segment below it matches _DEVICE_SEGMENT; the root is its path below
+    HUGEPAGE_POINT, as /<segment>..., the host's hugetlbfs there being
+    mounted with root / (module docstring, Known limits).
+    """
+    text = path.as_posix() if isinstance(path, PurePath) else ""
+    below = text[len(HUGEPAGE_POINT) :] if text.startswith(HUGEPAGE_POINT + "/") else ""
+    if not below or not all(_DEVICE_SEGMENT.fullmatch(part) for part in below.split("/")[1:]):
+        raise ValueError(
+            f"the Tenstorrent exposure's hugepages {path!r} must be the run's own directory, a path strictly under "
+            f"{HUGEPAGE_POINT} whose segments match {_DEVICE_SEGMENT.pattern}"
+        )
+    return below
+
+
+def _check_tenstorrent(devices: TenstorrentExposure) -> None:
+    """Raise ValueError, naming the field, unless the Tenstorrent exposure `devices` is one the setup can apply.
+
+    nodes: at least one, each a DeviceBind of a source under /dev at a
+    target /dev/tenstorrent/<n>, n in decimal without a leading zero, no
+    target twice; the source may be any path under /dev (the remote tests'
+    stand-ins), and the P17.16 executor is to bind each card's node at its
+    own path. pci_dirs: at most TENSTORRENT_CARDS_MAX, each a DeviceBind of
+    a source under /sys whose last segment is its target's address, at a
+    target /sys/bus/pci/devices/<address>, no target twice. hugepages: as
+    _hugepage_root takes it, so never the host's whole HUGEPAGE_POINT.
+    reset_filter: a bool.
+    """
+    if not devices.nodes:
+        raise ValueError("the Tenstorrent exposure's nodes need at least one card node")
+    _check_card_binds("nodes", devices.nodes, "dev", _TENSTORRENT_NODE)
+    if len(devices.pci_dirs) > TENSTORRENT_CARDS_MAX:
+        raise ValueError(
+            f"the Tenstorrent exposure's pci_dirs hold {len(devices.pci_dirs)} directories; its /sys/bus cover "
+            f"holds at most {TENSTORRENT_CARDS_MAX}"
+        )
+    _check_card_binds("pci_dirs", devices.pci_dirs, "sys", _PCI_DIRECTORY, same_name=True)
+    _hugepage_root(devices.hugepages)
+    if not isinstance(devices.reset_filter, bool):
+        raise ValueError(f"the Tenstorrent exposure's reset_filter must be True or False, got {devices.reset_filter!r}")
 
 
 @dataclass(frozen=True)
@@ -1094,11 +1455,13 @@ class SandboxSpec:
     command; a mapping gives the program exactly those variables, with
     names from ENVIRONMENT_NAMES and string values without NUL, and is kept
     as a read-only copy. `devices` is the gpu executor's DeviceExposure
-    (task P17.5): None, the default, exposes nothing beyond the private
-    /dev's six nodes and runs SETUP_SCRIPT; an exposure runs
-    DEVICE_SETUP_SCRIPT, and only then may the environment hold any of
-    GPU_VISIBILITY_NAMES. ValueError is raised for an exposure
-    _check_devices refuses, for a visibility name without an exposure,
+    (task P17.5) or a silicon run's TenstorrentExposure (task P17.15):
+    None, the default, exposes nothing beyond the private /dev's six nodes
+    and runs SETUP_SCRIPT; a DeviceExposure runs DEVICE_SETUP_SCRIPT, and
+    only then may the environment hold any of GPU_VISIBILITY_NAMES; a
+    TenstorrentExposure runs TENSTORRENT_SETUP_SCRIPTS[reset_filter].
+    ValueError is raised for an exposure _check_devices or
+    _check_tenstorrent refuses, for a visibility name without a DeviceExposure,
     when a path is relative or lies under one of PRIVATE_DIRS (the private
     tmpfs would hide it), when the workdir, the harness, or the toolchains
     root lies under one of SYSTEM_DIRS, when a hidden root is a filesystem
@@ -1118,7 +1481,7 @@ class SandboxSpec:
     tasks_max: int = 256
     disk_mb: int = WORKDIR_DISK_MB
     environment: Mapping[str, str] | None = None
-    devices: DeviceExposure | None = None
+    devices: DeviceExposure | TenstorrentExposure | None = None
 
     def __post_init__(self) -> None:
         """Normalize the paths to Path, copy the environment, and check every field; ValueError on the first problem."""
@@ -1149,12 +1512,14 @@ class SandboxSpec:
         _check_int("tasks_max", self.tasks_max)
         _check_int("disk_mb", self.disk_mb)
         environment = _checked_environment(self.environment)
-        if self.devices is not None:
+        if isinstance(self.devices, TenstorrentExposure):
+            _check_tenstorrent(self.devices)
+        elif self.devices is not None:
             _check_devices(self.devices)
-        else:
+        if not isinstance(self.devices, DeviceExposure):
             for name in GPU_VISIBILITY_NAMES:
                 if name in (environment or {}):
-                    raise ValueError(f"the sandbox environment may set {name} only with a device exposure")
+                    raise ValueError(f"the sandbox environment may set {name} only with a DeviceExposure (a GPU's)")
         object.__setattr__(self, "environment", None if environment is None else MappingProxyType(environment))
 
 
@@ -1282,11 +1647,14 @@ def sandbox_command(spec: SandboxSpec, argv: Sequence[str], limits: Limits) -> l
     positional layout. When spec.environment is set, ENVIRONMENT_MARKER and
     one NAME=value element per variable, in name order, come right before
     argv, which stays the command's tail; with None the command is the
-    P0.16 command. With spec.devices set the script is
+    P0.16 command. With a DeviceExposure the script is
     DEVICE_SETUP_SCRIPT and the device blocks (_device_layout) go into the
     layout: the nodes and the /sys sources after the root count, the /sys
-    targets after the hidden roots; without it the command is exactly the
-    one before task P17.5. Raise ValueError when argv is empty or names the program
+    targets after the hidden roots; with a TenstorrentExposure the script is
+    TENSTORRENT_SETUP_SCRIPTS[reset_filter] and the layout the same with
+    the hugepage pair after the /sys sources (_tenstorrent_layout); without
+    an exposure the command is exactly the one before task P17.5. Raise
+    ValueError when argv is empty or names the program
     as _check_request refuses, or wall_s is not > 0, or memory_mb or cpus
     is below 1.
     """
@@ -1300,17 +1668,43 @@ def sandbox_command(spec: SandboxSpec, argv: Sequence[str], limits: Limits) -> l
     scope += ["-p", f"MemoryMax={limits.memory_mb}M", "-p", "MemorySwapMax=0", "-p", f"TasksMax={spec.tasks_max}"]
     scope += ["-p", f"RuntimeMaxSec={wall + KILL_AFTER_S + OUTER_MARGIN_S}", "-p", "TimeoutStopSec=1"]
     namespaces = ["unshare", "-rinmpfu", "--mount-proc", "--kill-child"]
-    layout = [str(spec.workdir), *optional, str(workdir_cap_bytes(spec, limits)), str(len(roots))]
-    if spec.devices is None:
-        script, layout = SETUP_SCRIPT, [*layout, *roots]
-    else:
-        nodes, sources, targets = _device_layout(spec.devices)
-        script, layout = DEVICE_SETUP_SCRIPT, [*layout, *nodes, *sources, *roots, *targets]
+    head = [str(spec.workdir), *optional, str(workdir_cap_bytes(spec, limits)), str(len(roots))]
+    script, layout = _script_and_layout(spec.devices, head, roots)
     layout += [str(cpu), str(wall), str(KILL_AFTER_S)]
     if spec.environment is not None:
         layout += [ENVIRONMENT_MARKER, *(f"{name}={spec.environment[name]}" for name in sorted(spec.environment))]
     setup = ["sh", "-c", script, "sh", *layout]
     return ["prlimit", "--core=1", "--", *environment, *scope, *namespaces, *setup, *argv]
+
+
+def _script_and_layout(
+    devices: DeviceExposure | TenstorrentExposure | None, head: list[str], roots: list[str]
+) -> tuple[str, list[str]]:
+    """Return the setup script for `devices` and its layout up to the limits: `head`, the blocks, and the roots.
+
+    `head` is the workdir, the harness, the toolchains root, the disk cap,
+    and the root count; `roots` the hidden roots.
+    """
+    if devices is None:
+        return SETUP_SCRIPT, [*head, *roots]
+    if isinstance(devices, TenstorrentExposure):
+        nodes, sources, hugepages, targets = _tenstorrent_layout(devices)
+        return TENSTORRENT_SETUP_SCRIPTS[devices.reset_filter], [*head, *nodes, *sources, *hugepages, *roots, *targets]
+    nodes, sources, targets = _device_layout(devices)
+    return DEVICE_SETUP_SCRIPT, [*head, *nodes, *sources, *roots, *targets]
+
+
+def _tenstorrent_layout(devices: TenstorrentExposure) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Return a Tenstorrent run's four blocks: the nodes, the /sys sources, the hugepage pair, and the /sys targets.
+
+    The nodes and both /sys blocks are _device_layout's for the nodes and
+    the /sys directories PCI_SLOTS (at its own path) and then each PCI
+    directory, all under the /sys/bus cover. The hugepage pair is the run's
+    directory and the root a bind of it shows in mountinfo (_hugepage_root).
+    """
+    slots = DeviceBind(PurePosixPath(PCI_SLOTS), PurePosixPath(PCI_SLOTS))
+    nodes, sources, targets = _device_layout(DeviceExposure(nodes=devices.nodes, sys_dirs=(slots, *devices.pci_dirs)))
+    return nodes, sources, [devices.hugepages.as_posix(), _hugepage_root(devices.hugepages)], targets
 
 
 def _device_layout(devices: DeviceExposure) -> tuple[list[str], list[str], list[str]]:

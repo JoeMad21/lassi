@@ -918,7 +918,7 @@ Recommendation: none.
 Answer: Owner's choice (in the working session, 2026-10-22, about 23:58 EDT; recorded by the agent, in the owner's words): "I don't know where this don't use npu0 rule came from, but you can use npu0 if the card is available." Applied on 2026-10-23: Agent Rule 8 in docs/BIBLE.md (a Decision Log entry), the master bible, and AGENTS.md now claim npu0 under the same 0.00 GiB rule as every card; the Serving Rules, Host Facts, and Risks And Questions follow; tools/demo/lassi-live picks from npu0 to npu7; plans/runs/rngd-sweep/run.sh does too.
 
 ## OQ-072 The Sandboxed tt_silicon Executor: Hugepages, The Lock, Hangs, Device Risk, And Who Starts A Run
-State: ANSWERED
+State: CLOSED
 Kind: decision
 Blocks: the tt_silicon executor task (to be planned; OQ-070)
 Evidence: plans/spikes/tt-silicon-executor.md; results/tt-silicon-smoke-20261023/summary.md; rx 20261022-213300-exec-7aeb (the smoke's two 1 GiB hugepage files and seven UMD lock files remain; 30 of 32 pages free); rx 20261022-214312-exec-59e3 (no hugetlb controller for the user's cgroup)

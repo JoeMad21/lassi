@@ -51,6 +51,7 @@ jobs:
           tests/llm/test_hf_local_runs.py
           tests/executors/test_gpu.py
           tests/executors/test_sandbox.py
+          tests/executors/test_sandbox_tenstorrent.py
           tests/executors/test_sandbox_compile.py
           tests/toolchains/test_hipcc.py
           tests/profilers

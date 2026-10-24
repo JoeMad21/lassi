@@ -164,7 +164,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P16.12 | BLOCKED | Part (b): the adversarial training method | P16.5,P16.7 | BLOCKED on P8 (MI300X access; the Build Roadmap's P16 row, part (b)); planned with P8 |
 | P16.G | READY | Phase gate: adversary finds oracle-confirmed divergences on seeded faulty candidates | P16.4,P16.6,P16.7,P16.9,P16.10 | the phase's state after a pass follows OQ-069 |
 | P16.13 | DONE | The replay backend bound from a recipe | - | model.recording under tests/fixtures/, its sha256 in the resolved recipe, checked again when the runner builds replay; bible Project Recipes Notes and Decision Log 2026-10-20 (master rev 311) |
-| P17.15 | ACTIVE | The sandbox's Tenstorrent exposure: every card in the cluster | - | OQ-072 answered (all cards); settings explicit per OQ-075; on branch p16-adversarial; tests being written |
+| P17.15 | DONE | The sandbox's Tenstorrent exposure: every card in the cluster | - | exposure built and audited; its remote tests have not run on Linux yet (a window); bible master rev 339 |
 | P17.16 | READY | The tt_silicon executor | P17.15 |  |
 | P17.17 | BLOCKED | Silicon qualification and Tier A with the cards in the loop | P17.16 | the owner's window of 2026-10-23, 20:00 to 24:00 EDT; OQ-075 |
 | P17.18 | READY | tt-train-v0: training records from tt-metal's non-test examples | - | OQ-076 (1a); Tier A excluded by test |
