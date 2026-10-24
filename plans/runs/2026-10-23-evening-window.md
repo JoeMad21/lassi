@@ -101,10 +101,16 @@ approved.
   minutes before the deadline: the share caps the last model as it caps the others.
 - rx 20261023-233453-rngd-sweep5b-0a2a, started 02:34 EDT from clean commit e482997 in its own slot (sweep5b), from
   the session's clean scratch worktree: a second sample of Qwen3-Coder-30B's four sweep5 recipes
-  (plans/runs/rngd-sweep/models5-qwen.tsv), deadline 1792828200 (03:50 EDT), tables into tables5b. Its results are
-  PLACEHOLDER until pulled.
+  (plans/runs/rngd-sweep/models5-qwen.tsv), deadline 1792828200 (03:50 EDT), tables into tables5b; it ended at
+  03:07 EDT with rc 0.
+- rx 20261024-001735-rngd-matrix-short-496a, started 03:17 EDT from clean commit d6d27c8, once the API reference and
+  retrieval were committed (2ac6df3): matrix.sh on Qwen3-Coder-30B alone (MATRIX_MODELS=models5-qwen.tsv), deadline
+  1792828500 (03:55 EDT). It built the context pack and the docs index on the host, each matching its tracked
+  manifest, ran the 16 sweep6 recipes, and ended at 03:45 EDT with rc 0; the cards were free before 04:00.
 
 ## Results
 
-The fifth pass: results/rngd-sweep5-20261024/summary.md, with its provenance and the pulled tables. Exploratory:
-the snapshot reads dirty.
+- The fifth pass: results/rngd-sweep5-20261024/summary.md. Exploratory: the snapshot reads dirty.
+- The second sample: results/rngd-sweep5b-20261024/summary.md, from a clean commit.
+- The first feature-matrix pass: results/rngd-matrix-short-20261024/summary.md, from a clean commit; too few trials
+  to compare the combinations.
