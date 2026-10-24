@@ -67,7 +67,7 @@ trials within its time share, so a higher cap would finish fewer trials. Free sp
 
 ## What Ran
 
-The window was lost: the fifth pass never started. After the owner approved the batch, the session held the job
+The first window was lost: the fifth pass did not start in it. After the owner approved the batch, the session held the job
 for a confirmation question on the correction cap and saw the clock at 23:14 EDT; with under 46 minutes left the
 owner chose to skip the rest of the window (plans/LESSONS.md, Owner directions, 2026-10-23, "Commit to testing in a
 window"). The recipes and scripts above are committed for the next window.
@@ -78,6 +78,23 @@ window"). The recipes and scripts above are committed for the next window.
   rx 20261022-222829-rngd-sweep4-chain-cf48, copied to the workstation for the cap decision only. They are not in
   results/ yet: a pull by that job's id, which writes provenance.json, is the next window's first step.
 
+## The Second Window
+
+The owner then booked 2026-10-24 00:00 to 04:00 EDT and said to begin at once (about 23:17 EDT on 2026-10-23: "I
+booked you more time from 12am to 4am Saturday, so go ahead and begin testing now."), under the batch already
+approved.
+
+- rx 20261023-201813-rngd-sweep5-226a, started 23:18 EDT: the job of step 3 with deadline 1792827900 (03:45 EDT on
+  2026-10-24), SWEEP_MAX_SHARE=4800, `--timeout 16500`, output $LASSI_RUNS_ROOT/rngd-sweep/20261023-2018 and
+  tables5.
+- Its slot holds rx snapshot 9099a15 of 36286f3, not 36286f3 itself, so its records read dirty and are exploratory
+  (AGENTS.md, Results). The in-progress work in the tree was stashed for the start, but the stash also took the
+  uncommitted .gitignore line that hides the generated pack files, which then showed as untracked; the snapshot adds
+  only assets/context/tt-metalium-5280a9cf/host_api.tt.txt and metalium_guide.tt.txt (rx
+  20261023-201911-exec-a4e0), which no sweep5 recipe reads. The job was left running rather than lose the model's
+  load time again.
+- rx 20261023-202206-exec-af35 (23:22 EDT): EXAONE-4.0-32B serving, its four recipes running, no trial finished yet.
+
 ## Results
 
-None: no run of tonight's recipes took place.
+PLACEHOLDER: the fifth pass's passes.tsv per model and combination, from tables5, with its provenance file.
