@@ -1,0 +1,7 @@
+# The fifth pass (prepared for the evening window of 2026-10-23, run in the next): three models, each with projects/lassi-demo/sweep5/<slug>/
+# (two recipes, fz and mmfz, at two halves: four feature combinations), served without --reasoning-parser. EXAONE-4.0-32B and Llama-3.1-8B
+# gave the two cpp -> tt translations that passed on ttsim on 2026-10-23 (the tables of rx 20261022-222829-rngd-sweep4-chain-cf48), and
+# Qwen3-Coder-30B the first passing code of the night (tt -> cpp loopback; plans/runs/2026-10-23-alpha01-window.md).
+exaone4-32b	furiosa-ai/EXAONE-4.0-32B-FP8	v2026.4	4	-	furiosa-venv-2026.4
+qwen3-coder-30b	furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8	v2026.4	4	-	furiosa-venv-2026.4
+llama31-8b	furiosa-ai/Llama-3.1-8B-Instruct	v2026.2	1	-	furiosa-venv

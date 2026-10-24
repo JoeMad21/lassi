@@ -5,11 +5,13 @@ Usage, on the build host from a clean commit (the run trees are read, never chan
     python3 plans/runs/rngd-sweep/tabulate.py <runs root> <output dir>
 
 It reads <runs root>/runs/sweep-<stamp>-<slug>-<half>/**/trial.json, where stamp is the pass's start (run.sh) and half
-is maxabs or pcc, and writes <output dir>/trials.tsv with one row per trial: the pass stamp, model slug, half, the
+is maxabs or pcc, and the fifth pass's sweep-<stamp>-<slug>--<combo>-<half> (one recipe per feature combination), and
+writes <output dir>/trials.tsv with one row per trial: the pass stamp, model slug, half, the
 trial's direction, item, and run, the stage reached, alignment, corrections, end reason, the number of attempts, the
 number of unfenced-file warnings over its attempts, and, when the trial has an adversary record, its proposals,
-refusals, runs, and divergences. It also writes <output dir>/passes.tsv with each pass's counts per model: trials,
-trials at S5, trials whose alignment is 1.0, and trials with a divergence. Every value is copied from a trial record;
+refusals, runs, and divergences, and last the combination (base for a run id without one). It also writes
+<output dir>/passes.tsv with each pass's counts per model and combination: trials, trials at S5, trials whose
+alignment is 1.0, and trials with a divergence. Every value is copied from a trial record;
 none is a measurement of speed.
 """
 
@@ -21,10 +23,10 @@ from collections import defaultdict
 from pathlib import Path
 
 HEADER = ("pass", "slug", "half", "direction", "item", "run", "stage", "alignment", "corrections", "end", "attempts",
-          "unfenced_warnings", "adv_proposals", "adv_refused", "adv_runs", "adv_divergences")
+          "unfenced_warnings", "adv_proposals", "adv_refused", "adv_runs", "adv_divergences", "combo")
 
 
-def trial_row(stamp: str, slug: str, half: str, path: Path) -> list[str]:
+def trial_row(stamp: str, slug: str, half: str, path: Path, combo: str = "base") -> list[str]:
     """Return one TSV row for the trial record at `path`."""
     trial = json.loads(path.read_text(encoding="utf-8"))
     final = trial.get("final") or {}
@@ -40,7 +42,7 @@ def trial_row(stamp: str, slug: str, half: str, path: Path) -> list[str]:
     end = (final.get("end_reason") or {}).get("code") or "-"
     stage, alignment = str(final.get("stage_reached")), str(final.get("alignment"))
     return [stamp, slug, half, parts[3], parts[4], parts[5], stage, alignment,
-            str(final.get("corrections")), end, str(len(attempts)), str(unfenced), *adv]
+            str(final.get("corrections")), end, str(len(attempts)), str(unfenced), *adv, combo]
 
 
 def main(argv: list[str]) -> int:
@@ -53,23 +55,24 @@ def main(argv: list[str]) -> int:
     rows = []
     for tree in sorted(runs.glob("sweep-*")):
         _, date, clock, *rest = tree.name.split("-")
-        slug, half = "-".join(rest[:-1]), rest[-1]
+        slug, _, combo = "-".join(rest[:-1]).partition("--")
+        half = rest[-1]
         for path in sorted(tree.rglob("trial.json")):
-            rows.append(trial_row(f"{date}-{clock}", slug, half, path))
+            rows.append(trial_row(f"{date}-{clock}", slug, half, path, combo or "base"))
     with (out / "trials.tsv").open("w", encoding="ascii", newline="\n") as handle:
         handle.write("\t".join(HEADER) + "\n")
         handle.writelines("\t".join(row) + "\n" for row in rows)
-    counts: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0])
+    counts: dict[tuple[str, str, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0])
     for row in rows:
-        entry = counts[(row[0], row[1])]
+        entry = counts[(row[0], row[1], row[16])]
         entry[0] += 1
         entry[1] += row[6] == "S5"
         entry[2] += row[7] == "1.0"
         entry[3] += row[15] not in ("-", "0")
     with (out / "passes.tsv").open("w", encoding="ascii", newline="\n") as handle:
-        handle.write("pass\tslug\ttrials\ts5\talignment_1\twith_divergence\n")
-        for (stamp, slug), (n, s5, exact, diverged) in sorted(counts.items()):
-            handle.write(f"{stamp}\t{slug}\t{n}\t{s5}\t{exact}\t{diverged}\n")
+        handle.write("pass\tslug\ttrials\ts5\talignment_1\twith_divergence\tcombo\n")
+        for (stamp, slug, combo), (n, s5, exact, diverged) in sorted(counts.items()):
+            handle.write(f"{stamp}\t{slug}\t{n}\t{s5}\t{exact}\t{diverged}\t{combo}\n")
     print(f"{len(rows)} trials from {len({(r[0], r[1]) for r in rows})} pass-model pairs into {out}")
     return 0
 

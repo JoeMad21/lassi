@@ -9,14 +9,16 @@
 # For each model, in order: skip it when its artifact is not in $HF_HOME or less than 30 minutes are left; poll
 # `furiosa-smi status` every 60 s (each poll logged in card-polls.txt) until enough cards are free, then pick
 # them (npu0 to npu7, each at 0.00 GiB; Agent Rule 8 as the owner changed it on 2026-10-22, OQ-071); serve it
-# on 127.0.0.1:8123 and wait for /v1/models to list its id; run its two recipes (<recipe dir>/<slug>-maxabs.yaml
-# and -pcc.yaml) side by side under one time limit, the time left shared among the models still
-# to run (at most 50 minutes); stop the server and wait for its exit, the port to close, and its cards to read
+# on 127.0.0.1:8123 and wait for /v1/models to list its id; run its recipes side by side under one time limit, the
+# time left shared among the models still to run (at most SWEEP_MAX_SHARE seconds, 3000 when unset): every
+# <recipe dir>/<slug>/<combo>-<half>.yaml when that directory exists (the fifth pass, one recipe per feature
+# combination), else the two halves <recipe dir>/<slug>-maxabs.yaml and -pcc.yaml; stop the server and wait for its exit, the port to close, and its cards to read
 # 0.00 GiB again (Agent Rule 8: no relaunch before a full exit). A run cut by its limit keeps every trial it
 # finished. Stop: create $LASSI_RUNS_ROOT/rngd-sweep/STOP (one rx exec); the sweep stops before the next model and
 # at its next check, and always stops its server on exit. Every TT program runs on ttsim, a simulator.
-# Output under $LASSI_RUNS_ROOT/rngd-sweep/<stamp>/: per model the serve log, the two run logs, and summary.tsv
-# (one row per finished trial); the run trees are $LASSI_RUNS_ROOT/runs/sweep-<stamp>-<slug>-<half>.
+# Output under $LASSI_RUNS_ROOT/rngd-sweep/<stamp>/: per model the serve log, one log per recipe, and summary.tsv
+# (one row per finished trial); the run trees are $LASSI_RUNS_ROOT/runs/sweep-<stamp>-<slug>-<half>, or
+# sweep-<stamp>-<slug>--<combo>-<half> for a recipe directory.
 set -u
 deadline=${1:?usage: run.sh <deadline as epoch seconds> [recipe dir] [model table]}
 recipes=${2:-projects/lassi-demo/sweep}
@@ -32,6 +34,7 @@ export HF_HOME="$scratch/.cache/huggingface" HF_HUB_OFFLINE=1
 stamp=$(date +%Y%m%d-%H%M)
 out="$runs/rngd-sweep/$stamp"
 stopfile="$runs/rngd-sweep/STOP"
+max_share=${SWEEP_MAX_SHARE:-3000}  # the most seconds one model's recipes may run
 mkdir -p "$out"
 server=""
 
@@ -123,17 +126,30 @@ for index in "${!rows[@]}"; do
   fi
   curl -s -m 5 http://127.0.0.1:8123/v1/models > "$out/$slug.models.json"
   share=$(( ($(left) - 600) / remaining ))
-  limit=$(( share < 3000 ? share : 3000 ))
+  limit=$(( share < max_share ? share : max_share ))
   [ "$limit" -lt 300 ] && limit=300
-  echo "$(ts) READY $slug: running both recipes for at most $limit s"
+  # The model's recipes: every <recipe dir>/<slug>/<combo>-<half>.yaml, run as <slug>--<combo>-<half>, or else the
+  # two halves <recipe dir>/<slug>-maxabs.yaml and -pcc.yaml, run as <slug>-<half>.
+  ids=()
+  paths=()
+  if [ -d "$recipes/$slug" ]; then
+    for path in "$recipes/$slug"/*.yaml; do
+      [ -e "$path" ] || continue  # an empty directory leaves the pattern itself
+      ids+=("$slug--$(basename "$path" .yaml)")
+      paths+=("$path")
+    done
+  else
+    for half in maxabs pcc; do ids+=("$slug-$half"); paths+=("$recipes/$slug-$half.yaml"); done
+  fi
+  echo "$(ts) READY $slug: running ${#ids[@]} recipes side by side for at most $limit s"
   pids=()
-  for half in maxabs pcc; do
-    timeout --kill-after=60 "$limit" uv run lassi --graphics off run "$recipes/$slug-$half.yaml" \
-      --run-id "sweep-$stamp-$slug-$half" > "$out/$slug-$half.log" 2>&1 &
+  for i in "${!ids[@]}"; do
+    timeout --kill-after=60 "$limit" uv run lassi --graphics off run "${paths[$i]}" \
+      --run-id "sweep-$stamp-${ids[$i]}" > "$out/${ids[$i]}.log" 2>&1 &
     pids+=($!)
   done
   for pid in "${pids[@]}"; do wait "$pid"; rc=$?; echo "$(ts) $slug run $pid ended rc=$rc"; done
-  for half in maxabs pcc; do summarize "sweep-$stamp-$slug-$half" "$slug"; done
+  for id in "${ids[@]}"; do summarize "sweep-$stamp-$id" "$id"; done
   stop_server
   free_after=$(free_cards | wc -l)
   echo "$(ts) DONE $slug; free cards now $free_after; $(left) s left"

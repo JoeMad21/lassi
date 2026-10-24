@@ -1,0 +1,8 @@
+# The fifth pass of the owner's RNGD sweep, prepared for the evening window of 2026-10-23 and run in the next, by
+# plans/runs/rngd-sweep/run.sh from models5.tsv. Exploratory, one sample. Every TT program runs on ttsim, a
+# simulator. Correction cap 15, the owner's choice for the window (plans/runs/2026-10-23-evening-window.md).
+# Combinations base and fz: ../../sweep4/qwen3-coder-30b-pcc.yaml unchanged (cap 15, the fuzzer adversary after the
+# oracle, at the seeded set's frozen seed and budget). The adversary
+# never feeds the loop, so each trial's oracle outcome is the base combination's and its adversary record the
+# fuzzer's.
+extends: ../../sweep4/qwen3-coder-30b-pcc.yaml

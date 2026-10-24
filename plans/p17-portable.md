@@ -177,7 +177,27 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
   - the two translations that passed on ttsim on 2026-10-23, Llama-3.1-8B's cpp -> tt eltwise_binary and EXAONE-4-32B's matmul_single_core, from their stored replies;
   - Tier A cpp -> tt with tt_silicon as the TT executor and RNGD-served models.
 - Files: projects/lassi-demo/, results/.
-- Host: alpha01 in the owner's window. Depends: P17.16; OQ-075.
+- Host: alpha01 in the owner's window. Depends: P17.16; OQ-075; OQ-078 for the two stored translations and Tier A, which are model output (plans/spikes/tt-card-dma.md: under iommu=pt a program holding a card node can reach host memory).
+
+### P17.21 The API reference: the context stage under a template prompt set
+- Added on 2026-10-23 from the owner's direction ("Okay, get that built and added."). The pack tt-metalium-5280a9cf is built by tools/build_tt_context.py from tt-metal at the pin; only its manifest is tracked.
+- Bible: Component Interfaces (the stages), Harness Contract, Design Principle 3, Agent Rule 5.
+- Accept: a template set that holds summarize_context.txt and knowledge.txt may serve context packs; summarize_context sends the pack under it; the summary goes before every later prompt; a recipe without the pack keeps every prompt byte for byte and its recipe hash (golden tests); the pack names no Tier A file (test).
+- Files: lassi/core/stages.py, lassi/core/runner.py, assets/prompts/tt-host-v0/, tools/build_tt_context.py, tests/.
+- Host: Windows. Depends: none.
+
+### P17.22 Retrieval over the tt-metal docs in generation and corrections
+- Added on 2026-10-23 from the owner's direction ("Ready a RAG of Tenstorrent documentation as well in case this is not sufficient.").
+- Bible: Component Interfaces (the stages), Project Recipes, Harness Contract, Agent Rules 4 and 5.
+- Accept: an opt-in recipe section `retrieval` (index, k, max_chars, prompts), refused under faithful: true and with a fragment set; passages from a BM25 index over tt-metal's docs at the pin, queried from the kernels and source for generate and from the reported errors for a correction (compiler-guided lookup); passages are dropped whole past max_chars, never cut; each request's passages recorded; a recipe without it keeps every prompt and its hash; the corpus excludes Tier A files (test).
+- Files: lassi/core/stages.py, lassi/core/runner.py, lassi/core/recipe.py, lassi/prompts/retrieval.py, tools/build_tt_rag.py, assets/rag/, assets/prompts/tt-host-v0/, tests/.
+- Host: Windows. Depends: none.
+
+### P17.23 The feature matrix in the owner's windows
+- Added on 2026-10-23 from the owner's direction ("do separate tests for all combinations of features added to base LASSI (RAG, API Reference, training, fuzzing, returning benchmark and tolerance reports)").
+- Accept: one recipe per combination of the features built so far, per model, run by plans/runs/rngd-sweep/run.sh in the owner's windows, with tables per combination and provenance under results/; a feature not yet built is listed with its reason in the window's run report, never silently left out. The evening window of 2026-10-23 runs the mismatch report and the fuzzer (four combinations, projects/lassi-demo/sweep5; plans/runs/2026-10-23-evening-window.md); the API reference, retrieval, and training join as P17.21, P17.22, and P17.19 land.
+- Files: projects/lassi-demo/, plans/runs/rngd-sweep/, results/.
+- Host: Windows, then alpha01 in the owner's windows. Depends: P17.21, P17.22 for their combinations.
 
 ### P17.11 Gate part (a): recipes and the hardware-free evidence
 - Bible: Build Roadmap (P17 row, Gate part (a)), Agent Rules 1, 7, and 10; AGENTS.md Phase Gate and Results.
