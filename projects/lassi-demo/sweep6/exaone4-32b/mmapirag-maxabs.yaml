@@ -1,0 +1,8 @@
+# The sixth pass of the owner's RNGD sweep, the feature matrix (owner, 2026-10-23: "do separate tests for all
+# combinations of features added to base LASSI"), run by plans/runs/rngd-sweep/matrix.sh in an owner's window.
+# cpp -> tt only: the API reference pack serves the tt target only. The fuzzer adversary is in every recipe; it
+# runs after the oracle and never feeds the loop. Exploratory, one sample; every TT program runs on ttsim, a
+# simulator. Combination mmapirag: API reference on, retrieval on, mismatch report on.
+extends: apirag-maxabs.yaml
+loop:
+  correct_on_mismatch: true

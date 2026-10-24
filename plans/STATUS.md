@@ -172,4 +172,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.20 | BLOCKED | Training runs on the RTX 3080 and their evaluation on alpha01's CPU | P17.19 | the owner's windows; OQ-076 (3a) |
 | P17.21 | DONE | The API reference: the context stage under a template prompt set | - | the pack (4b33af6) and the template-set wiring; bible mirror; master sync follows |
 | P17.22 | DONE | Retrieval over the tt-metal docs in generation and corrections | - | the retriever (7f5fd1d) and the stage wiring; bible mirror; master sync follows |
-| P17.23 | READY | The feature matrix for the owner's window of 2026-10-23, 20:00 to 24:00 EDT | P17.21,P17.22 |  |
+| P17.23 | ACTIVE | The feature matrix for the owner's window of 2026-10-23, 20:00 to 24:00 EDT | P17.21,P17.22 | the feature matrix (sweep6, matrix.sh, start-matrix.sh) is ready for the next window; the fifth pass ran (170e9cc) |

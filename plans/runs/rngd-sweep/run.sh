@@ -96,6 +96,7 @@ for index in "${!rows[@]}"; do
   if [ -z "$snap" ]; then echo "$(ts) SKIP $slug: $model is not in $HF_HOME"; continue; fi
   # Poll the cards until enough of them read 0.00 GiB (other tenants done), every 60 s, logging each poll.
   while :; do
+    furiosa-smi ps 2>/dev/null | sed "s/^/$(ts) ps: /" >> "$out/card-polls.txt"
     furiosa-smi status 2>/dev/null | grep -a -E '\| npu' | sed "s/^/$(ts) /" >> "$out/card-polls.txt"
     mapfile -t free < <(free_cards)
     [ "${#free[@]}" -ge "$cards" ] && break
@@ -135,6 +136,10 @@ for index in "${!rows[@]}"; do
   if [ -d "$recipes/$slug" ]; then
     for path in "$recipes/$slug"/*.yaml; do
       [ -e "$path" ] || continue  # an empty directory leaves the pattern itself
+      # SWEEP_SKIP, an extended regex over the recipe's name (<combo>-<half>), leaves out the recipes it matches.
+      if [ -n "${SWEEP_SKIP:-}" ] && [[ "$(basename "$path" .yaml)" =~ $SWEEP_SKIP ]]; then
+        echo "$(ts) SKIP $slug--$(basename "$path" .yaml): matches SWEEP_SKIP"; continue
+      fi
       ids+=("$slug--$(basename "$path" .yaml)")
       paths+=("$path")
     done

@@ -1,0 +1,4 @@
+# The sixth pass, the feature matrix (projects/lassi-demo/sweep6, run by matrix.sh): Qwen3-Coder-30B first, then
+# EXAONE-4.0-32B, the order of the fifth pass's runs; each with 16 recipes side by side, served without --reasoning-parser.
+qwen3-coder-30b	furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8	v2026.4	4	-	furiosa-venv-2026.4
+exaone4-32b	furiosa-ai/EXAONE-4.0-32B-FP8	v2026.4	4	-	furiosa-venv-2026.4
