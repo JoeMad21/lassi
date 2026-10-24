@@ -1,0 +1,47 @@
+Your tt program built and ran without an error, but its output did not match the output
+of the reference program on the test inputs. The files from your last answer are below, each in a
+fenced code block whose first line is // FILE: <path>.
+
+```cpp
+// FILE: scale.cpp
+// SYNTHETIC candidate 2
+int main() { return 0; }
+```
+
+How each output compared with the reference follows, one output per line: its name; passed or failed;
+its pcc (its correlation with the reference, from -1 to 1, to 3 decimal places); and how far it is
+from the tolerance, as an order of magnitude only: within tolerance, or its largest error is up to 10
+times, about 10 to 100 times, about 100 to 1000 times, or over 1000 times the allowed error, or, for an
+output judged by its correlation, a pattern match below the required level. An output that could not
+be compared, or that failed for another reason, names the reason instead and may show no pcc: a missing
+output is one your program did not write, an extra output is one the reference does not write, a
+repeated output is one your program wrote in two files, and an unreadable output is a file that is not
+a lassi_io file. The test inputs, the expected output values, and the exact errors are not shown.
+result: failed; pcc 1.000; about 100 to 1000 times the allowed error
+
+Remember what the language ids mean:
+- cpp: a C++ program for the host CPU, built by g++ 12 with -O3 -fopenmp.
+- tt: a tt-metal host program in C++20 for tt-metal commit 5280a9cf, built by clang++-20. Every output
+  value must be computed by the device kernels, never by the host.
+Both kinds of program read inputs and write outputs only through "lassi_io.h", with the input files and
+then the output files as arguments. The harness provides lassi_io.h; never return it.
+
+The harness provides the kernel files below at these paths, read-only; never return a file at one of
+these paths. A tt program launches each kernel by its path here, and a cpp program must reproduce the
+math the kernels compute.
+
+```cpp
+// FILE: scale/kernels/compute/scale_tiles.cpp
+// SYNTHETIC compute kernel
+void kernel_main() {
+    cb_wait_front(tt::CBIndex::c_0, 1);
+    zorbquant_tile(0);
+}
+```
+
+Fix the program so that every output matches and return the complete corrected tt program as these files: scale.cpp.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

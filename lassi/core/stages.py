@@ -58,7 +58,9 @@ The runner checks either kind before any model is asked.
   Trial.baseline_diagnostics gains a `reference-workdir-incomplete` warning.
 - summarize_context sends [system, user]: the general system prompt, then
   the summary request followed by the target language's context pack. The
-  reply fills Trial.context.knowledge_summary.
+  reply fills Trial.context.knowledge_summary. Under a template set (task
+  P17.21) it sends one user message and no system prompt:
+  SUMMARY_PROMPT rendered with the target language and that pack.
 - describe_source sends the general system prompt and the description
   request followed by the source. The reply fills
   Trial.context.source_description.
@@ -193,6 +195,30 @@ The runner checks either kind before any model is asked.
   stay among the attempt's diagnostics. The hang text is the ttsim hint
   (circular buffers and semaphores are tt-metal constructs); any executor
   that declares `simulator` gets it.
+
+Context blocks under a template set (with_context_blocks). Each model
+prompt after summarize_context (generate.txt, every correct.txt, and
+MISMATCH_PROMPT) gets, before it, the knowledge block, KNOWLEDGE_PROMPT
+rendered with Trial.context.knowledge_summary, when that summary is not
+empty (task P17.21). With the recipe's retrieval section (task P17.22;
+lassi.core.recipe, an opt-in the loader refuses under faithful: true and
+the runner refuses with a fragment set), the prompts it lists (generate,
+correct) get the retrieved block after it: the passages
+(retrieved_passages) that Index.search (lassi.prompts.retrieval, on the
+one index the runner loads per run, RunContext.retrieval) ranks for the
+prompt's query, each skipped whole when it would take their text past
+retrieval.max_chars, rendered with PASSAGE_PROMPT and joined into
+RETRIEVED_PROMPT. Queries are built only from what the prompt shows:
+generate's is the item's kernels and then its source files
+(generate_query); a compile correction's is query_from_diagnostic of each
+error its prompt lists, and a run-error correction's is its run error
+text (correction_query). An oracle mismatch's correction gets no passages,
+since its report names no API, and an empty query gives none. Each block
+goes before the prompt without its trailing line feeds, one blank line
+apart (with_blocks), and a request that carried passages gets one
+RETRIEVED_CODE note on its Request (retrieved_note), never on an attempt,
+so it never enters a prompt. With neither feature a prompt is byte for
+byte what it was before.
 
 A context stage names the Trial.context field it fills in `fills_context`,
 and generate names the fields its fragment prompt joins, when a pack serves
@@ -344,7 +370,7 @@ from lassi.core.interfaces import (
     Toolchain,
 )
 from lassi.core.progress import ATTEMPT, REQUEST_SENT, Observer, notify
-from lassi.core.recipe import Recipe
+from lassi.core.recipe import RETRIEVAL, RETRIEVAL_CORRECT, RETRIEVAL_GENERATE, Recipe
 from lassi.core.record import (
     GUARD_NOT_CHECKED,
     NO_GUARD,
@@ -369,6 +395,7 @@ from lassi.core.store import BlobStore, TextStore
 from lassi.core.tolerance import STAT_FIELDS, within
 from lassi.executors.workdir import build_dir, fresh_build_dir
 from lassi.prompts import render
+from lassi.prompts.retrieval import SCORE_DIGITS, Index, Passage, query_from_diagnostic
 
 # The purpose every bench read here serves: these stages evaluate, they never train (Agent Rule 5).
 PURPOSE = "eval"
@@ -507,6 +534,24 @@ CORRECT_FIELDS = ("target_language", "files", "diagnostics", "target_files", "ke
 # Oracle's coarse per-output report (mismatch_text), in place of correct.txt's diagnostics.
 MISMATCH_PROMPT = "correct_mismatch"
 MISMATCH_FIELDS = ("target_language", "files", "outputs", "target_files", "kernel_files")
+# The templates a template set needs to serve context packs (task P17.21), with their fields: the summary request
+# summarize_context sends, and the knowledge block that goes before each later prompt once the summary is filled.
+# The runner renders both, before any directory exists, when the recipe names packs or lists summarize_context.
+SUMMARY_PROMPT = "summarize_context"
+SUMMARY_FIELDS = ("target_language", "context_pack")
+KNOWLEDGE_PROMPT = "knowledge"
+KNOWLEDGE_FIELDS = ("knowledge_summary",)
+CONTEXT_PROMPTS = {SUMMARY_PROMPT: SUMMARY_FIELDS, KNOWLEDGE_PROMPT: KNOWLEDGE_FIELDS}
+# The templates of the retrieved block (task P17.22), with their fields: the block, whose `passages` are the
+# passages one blank line apart, and one passage. The runner renders both when the recipe sets retrieval.
+RETRIEVED_PROMPT = "retrieved"
+RETRIEVED_FIELDS = ("passages",)
+PASSAGE_PROMPT = "passage"
+PASSAGE_FIELDS = ("path", "heading", "start", "end", "text")
+RETRIEVAL_PROMPTS = {RETRIEVED_PROMPT: RETRIEVED_FIELDS, PASSAGE_PROMPT: PASSAGE_FIELDS}
+# The code of the note on a request that carried passages, and what joins one block (or passage) to the next.
+RETRIEVED_CODE = "retrieved"
+BLOCK_JOINER = "\n\n"
 # The words of that report (OQ-077, option (a)): exact statistics give reference values away, so each output shows
 # its verdict, its pcc to PCC_PLACES decimals, and one of these fixed phrases, never a value, a threshold, or a note.
 PCC_PLACES = 3
@@ -577,7 +622,9 @@ class RunContext:
     binds none; run_loop brackets each attempt run with it (profiled_run).
     `registry` is the run's registry (task P16.5), from which a stage that
     builds a component per trial builds it (the adversary stage, its
-    Agent); None means DEFAULT_REGISTRY.
+    Agent); None means DEFAULT_REGISTRY. `retrieval` is the run's
+    documentation index (task P17.22), loaded once per run when the recipe
+    sets retrieval and shared read-only by every trial, else None.
     """
 
     recipe: Recipe
@@ -600,6 +647,7 @@ class RunContext:
     observer: Observer | None = None
     profiler: Profiler | None = None
     registry: Registry | None = None
+    retrieval: Index | None = None
 
 
 def executor_for(context: RunContext, language: str) -> Executor:
@@ -699,19 +747,29 @@ def diagnostics_text(diagnostics: Sequence[Diagnostic]) -> str:
     When any is left out, a last line says how many; when none is, the text
     is exactly the joined lines.
     """
-    lines: list[str] = []
-    used = 0
-    for diagnostic in diagnostics:
-        line = diagnostic_line(diagnostic)
-        size = len(line.encode("utf-8", "surrogatepass")) + 1
-        if len(lines) == DIAGNOSTIC_COUNT_CAP or used + size > DIAGNOSTIC_BYTES_CAP:
-            break
-        lines.append(line)
-        used += size
+    lines = [diagnostic_line(diagnostic) for diagnostic in listed_diagnostics(diagnostics)]
     left_out = len(diagnostics) - len(lines)
     if left_out:
         lines.append(f"[{left_out} more diagnostic(s) not shown]")
     return "\n".join(lines)
+
+
+def listed_diagnostics(diagnostics: Sequence[Diagnostic]) -> list[Diagnostic]:
+    """Return the diagnostics diagnostics_text shows, in order: the first ones within both caps, whole lines only.
+
+    At most DIAGNOSTIC_COUNT_CAP of them, whose lines (diagnostic_line, each
+    line's UTF-8 bytes plus one line feed) take at most DIAGNOSTIC_BYTES_CAP
+    bytes.
+    """
+    listed: list[Diagnostic] = []
+    used = 0
+    for diagnostic in diagnostics:
+        size = len(diagnostic_line(diagnostic).encode("utf-8", "surrogatepass")) + 1
+        if len(listed) == DIAGNOSTIC_COUNT_CAP or used + size > DIAGNOSTIC_BYTES_CAP:
+            break
+        listed.append(diagnostic)
+        used += size
+    return listed
 
 
 def reference_limits(context: RunContext) -> Limits:
@@ -965,6 +1023,141 @@ def prompt_diagnostics(diagnostics: Sequence[Diagnostic]) -> list[Diagnostic]:
     the guard's outcome is never fed back to the model).
     """
     return [item for item in diagnostics if not (item.code or "").startswith(GUARD_CODE_PREFIX)]
+
+
+def retrieval_on(context: RunContext, kind: str) -> bool:
+    """Return True when the recipe's retrieval section lists the prompt kind `kind` (generate or correct).
+
+    The section is off when absent (lassi.core.recipe RETRIEVAL); the loader
+    refuses it under faithful: true, and the runner with a fragment set.
+    """
+    section = context.recipe.data.get(RETRIEVAL)
+    return isinstance(section, Mapping) and kind in section["prompts"]
+
+
+def generate_query(context: RunContext) -> str:
+    """Return generate's retrieval query: the item's kernels (kernel_files), then its source files, one line feed apart.
+
+    Both are FILE blocks exactly as generate.txt shows them ($kernel_files
+    and $source_files); an empty part is left out.
+    """
+    sources = context.suite.source_files(context.item, context.direction, context.sources_root, purpose=PURPOSE)
+    return "\n".join(part for part in (kernel_files(context), render_file_blocks(sources)) if part)
+
+
+def correction_query(previous: Attempt, errors: str, *, run_error: bool) -> str:
+    """Return a correction's retrieval query, built from the errors its prompt reports.
+
+    A run-error correction's is `errors`, the run error text its prompt
+    shows. A compile correction's is query_from_diagnostic
+    (lassi.prompts.retrieval) of each error-severity diagnostic of
+    `previous` that its prompt lists (listed_diagnostics of
+    prompt_diagnostics), one per line.
+    """
+    if run_error:
+        return errors
+    listed = listed_diagnostics(prompt_diagnostics(previous.diagnostics))
+    return "\n".join(query_from_diagnostic(item) for item in listed if item.severity == "error")
+
+
+def retrieved_passages(context: RunContext, query: str) -> list[Passage]:
+    """Return the passages one prompt carries for `query`: Index.search(query, retrieval.k), in rank order.
+
+    A passage whose text would take the passages' total text past
+    retrieval.max_chars is skipped whole, never cut, and a later smaller
+    one may still fit. A blank query gives none and searches nothing.
+    Raises ValueError when the RunContext carries no index or the prompt
+    set is a fragment set; the runner refuses both first.
+    """
+    if not query.strip():
+        return []
+    if context.retrieval is None or context.fragments:
+        raise ValueError(
+            f"{context.recipe.path}: {RETRIEVAL} needs a template prompt set and the run's index, which the runner "
+            "loads once per run; run the recipe with lassi run"
+        )
+    section = context.recipe.data[RETRIEVAL]
+    carried: list[Passage] = []
+    total = 0
+    for passage in context.retrieval.search(query, section["k"]):
+        if total + len(passage.text) > section["max_chars"]:
+            continue
+        carried.append(passage)
+        total += len(passage.text)
+    return carried
+
+
+def with_blocks(blocks: Sequence[str], prompt: str) -> str:
+    """Return `prompt` with `blocks` before it, in order, each without its trailing line feeds, one blank line apart."""
+    return BLOCK_JOINER.join([*(block.rstrip("\n") for block in blocks), prompt])
+
+
+def with_context_blocks(
+    context: RunContext, trial: Trial, prompt: str, passages: Sequence[Passage] = ()
+) -> tuple[str, list[Diagnostic]]:
+    """Return a template set's `prompt` with its context blocks before it, and the notes its request gets.
+
+    The blocks (with_blocks) are KNOWLEDGE_PROMPT with
+    Trial.context.knowledge_summary when that is not empty, then, when
+    `passages` holds any, the retrieved block (retrieved_block), for which
+    the request gets one note (retrieved_note). With neither, the prompt
+    comes back unchanged with no note. A fragment set's prompt is never
+    changed: its own generation prompt joins the summary.
+    """
+    if context.fragments:
+        return prompt, []
+    blocks: list[str] = []
+    summary = trial.context.knowledge_summary
+    if summary:
+        blocks.append(render(context.prompts, KNOWLEDGE_PROMPT, {"knowledge_summary": summary}))
+    if not passages:
+        return with_blocks(blocks, prompt), []
+    blocks.append(retrieved_block(context.prompts, passages))
+    return with_blocks(blocks, prompt), [retrieved_note(passages)]
+
+
+def retrieved_block(prompts: str, passages: Sequence[Passage]) -> str:
+    """Return RETRIEVED_PROMPT of set `prompts` with `passages`, each PASSAGE_PROMPT rendered, one blank line apart."""
+    texts = [render(prompts, PASSAGE_PROMPT, _passage_fields(passage)).rstrip("\n") for passage in passages]
+    return render(prompts, RETRIEVED_PROMPT, {"passages": BLOCK_JOINER.join(texts)})
+
+
+def _passage_fields(passage: Passage) -> dict[str, str]:
+    """Return the PASSAGE_FIELDS of one passage: its file, heading path, first and last line, and text."""
+    return {
+        "path": passage.path,
+        "heading": passage.heading,
+        "start": str(passage.start_line),
+        "end": str(passage.end_line),
+        "text": passage.text,
+    }
+
+
+def retrieved_note(passages: Sequence[Passage]) -> Diagnostic:
+    """Return the note of a request that carried `passages`: code RETRIEVED_CODE, severity note.
+
+    Its message lists each passage as <path>:<start>-<end> with its score
+    (to SCORE_DIGITS decimals, as the search rounds it), in rank order. Its
+    stage is parse, the stage of a request's other notes, since the record
+    has no stage for a prompt. It rides on the Request, never on an
+    attempt, whose diagnostics a correction lists, so it never enters a
+    prompt.
+    """
+    listing = ", ".join(
+        f"{passage.path}:{passage.start_line}-{passage.end_line} (score {passage.score:.{SCORE_DIGITS}f})"
+        for passage in passages
+    )
+    message = f"the prompt carried {len(passages)} documentation passage(s), in rank order: {listing}"
+    return Diagnostic(stage="parse", severity="note", code=RETRIEVED_CODE, message=message)
+
+
+def passages_described(context: RunContext, kind: str) -> str:
+    """Return what describe() adds when retrieval is on for the prompt kind `kind`, else ""."""
+    if not retrieval_on(context, kind):
+        return ""
+    section = context.recipe.data[RETRIEVAL]
+    where = "the prompt" if kind == RETRIEVAL_GENERATE else "each compile or run correction prompt"
+    return f", with up to {section['k']} {section['index']} documentation passages before {where}"
 
 
 def _harness_build(
@@ -1375,16 +1568,22 @@ class GenerateStage:
     def __call__(self, trial: Trial) -> Trial:
         """Return `trial` with attempt 0 appended: S1 when the reply yields usable files, else S0.
 
-        The prompt comes from _prompt; with the prompt_spaces fix off, each
-        run of spaces in it is cut to one. It is kept in the text store and
-        sent as the user message, after the system prompt when there is one.
-        With the fence_tag fix on the reply's FILE blocks are parsed, and with
-        it off its first fenced block is read as upstream reads it. The
-        request is recorded with attempt 0 as the attempt its reply became.
+        The prompt comes from _prompt, after the context blocks of a
+        template set (with_context_blocks: the knowledge block, then the
+        passages for generate_query when retrieval lists generate); with
+        the prompt_spaces fix off, each run of spaces in it is cut to one.
+        It is kept in the text store and sent as the user message, after the
+        system prompt when there is one. With the fence_tag fix on the
+        reply's FILE blocks are parsed, and with it off its first fenced
+        block is read as upstream reads it. The request is recorded with
+        attempt 0 as the attempt its reply became, and the blocks' note.
         """
         context = self.context
         expected = target_files(context)
         system, prompt = self._prompt(trial, expected)
+        on = retrieval_on(context, RETRIEVAL_GENERATE)
+        passages = retrieved_passages(context, generate_query(context)) if on else []
+        prompt, notes = with_context_blocks(context, trial, prompt, passages)
         if not fix_on(context, "prompt_spaces"):
             prompt = fragment_text.collapse_spaces(prompt)
         try:
@@ -1392,7 +1591,7 @@ class GenerateStage:
         except ContextExceeded as error:
             return _context_end(trial, self.name, error)
         attempt = _reply_attempt(context, 0, messages[-1].ref, reply, expected)
-        trial = _recorded(context, trial.with_attempt(attempt), self.name, 0, messages, attempt.response_text)
+        trial = _recorded(context, trial.with_attempt(attempt), self.name, 0, messages, attempt.response_text, notes)
         notify(context.observer, ATTEMPT, trial, self.name)
         return trial
 
@@ -1439,7 +1638,11 @@ class GenerateStage:
         reply = "FILE blocks" if fix_on(self.context, "fence_tag") else "its first fenced block"
         if fix_on(self.context, "fence_tag") and extract_on(self.context, UNFENCED_FILE_LINES):
             reply += ", or unfenced FILE lines when the reply holds none"
-        return f"generate: one {direction.source} to {direction.target} translation from {source}, parsed from {reply}"
+        passages = passages_described(self.context, RETRIEVAL_GENERATE)
+        return (
+            f"generate: one {direction.source} to {direction.target} translation from {source}, parsed from "
+            f"{reply}{passages}"
+        )
 
 
 @register("Stage", "summarize_context")
@@ -1449,7 +1652,7 @@ class SummarizeContextStage:
     name = "summarize_context"
     capabilities: frozenset[str] = frozenset()
     requires = {"LLMBackend": {"chat"}}
-    prompt_fields: dict[str, tuple[str, ...]] = {}
+    prompt_fields = {SUMMARY_PROMPT: SUMMARY_FIELDS}
     fragment_keys = fragment_text.SUMMARY_KEYS
     needs_context = True
     fills_context = ("knowledge_summary",)
@@ -1461,23 +1664,37 @@ class SummarizeContextStage:
     def __call__(self, trial: Trial) -> Trial:
         """Return `trial` with context.knowledge_summary set to the model's reply; no attempt.
 
-        The general system prompt and the summary request, followed by the
-        target language's pack, go to the backend unchanged. The reply is
+        The request (_prompt) goes to the backend unchanged. The reply is
         kept as returned, except that each lone surrogate becomes U+FFFD, and
         the request is recorded (_context_reply).
         """
         context = self.context
-        pack = context.packs[context.direction.target]
-        prompt = fragment_text.summary_request(context.fragments, context.direction, pack)
+        system, prompt = self._prompt(context.packs[context.direction.target])
         try:
-            messages, reply = _send(context, trial, self.name, prompt, context.fragments[fragment_text.GENERAL_SYSTEM])
+            messages, reply = _send(context, trial, self.name, prompt, system)
         except ContextExceeded as error:
             return _context_end(trial, self.name, error)
         return _context_reply(context, trial, self.name, "knowledge_summary", messages, reply)
 
+    def _prompt(self, pack: str) -> tuple[str | None, str]:
+        """Return the system prompt (None for a template set) and the summary request for the target's `pack`.
+
+        A template set gives SUMMARY_PROMPT filled with the target language
+        and the pack (task P17.21). A fragment set gives the general system
+        prompt and the summary request followed by the pack.
+        """
+        context = self.context
+        if not context.fragments:
+            fields = {"target_language": context.direction.target, "context_pack": pack}
+            return None, render(context.prompts, SUMMARY_PROMPT, fields)
+        prompt = fragment_text.summary_request(context.fragments, context.direction, pack)
+        return context.fragments[fragment_text.GENERAL_SYSTEM], prompt
+
     def describe(self) -> str:
-        """Return a one-line description of the stage."""
-        return f"summarize_context: summarize the {self.context.direction.target} context pack ({self.context.prompts})"
+        """Return a one-line description of the stage, naming the template under a template set."""
+        context = self.context
+        source = context.prompts if context.fragments else f"{context.prompts}/{SUMMARY_PROMPT}.txt"
+        return f"summarize_context: summarize the {context.direction.target} context pack ({source})"
 
 
 @register("Stage", "describe_source")
@@ -1576,7 +1793,7 @@ class CompileLoopStage:
         errors = "parsed diagnostics" if fix_on(context, "parsed_diagnostics") else "the raw compiler stderr"
         return (
             f"compile_loop: build {context.direction.target} with {builder}, then correct from {source} with "
-            f"{errors} while an error remains ({limit})"
+            f"{errors} while an error remains ({limit}){passages_described(context, RETRIEVAL_CORRECT)}"
         )
 
     @staticmethod
@@ -1852,7 +2069,11 @@ class RunLoopStage:
         mismatch = ""
         if self.on_mismatch:
             mismatch = f" and each clean run whose output files fail the oracle (loop.{CORRECT_ON_MISMATCH})"
-        return f"run_loop: run {gate} and correct each failed run{mismatch}, sharing compile_loop's correction count"
+        passages = passages_described(context, RETRIEVAL_CORRECT)
+        return (
+            f"run_loop: run {gate} and correct each failed run{mismatch}, sharing compile_loop's correction count"
+            f"{passages}"
+        )
 
     def _run_last(self, trial: Trial) -> tuple[Trial, RunResult, Limits]:
         """Run the last attempt's program; return the trial with its run recorded, the RunResult, and the limits.
@@ -2122,15 +2343,22 @@ def _corrected(
 
     The correction prompt for the last attempt with `errors` comes from
     _correction_messages (`mismatch`: an oracle mismatch's, with `errors`
-    its mismatch_text). With fixes.prompt_newlines off every line feed is
-    removed from it before it is stored and sent. The reply is read as
-    generate reads attempt 0 (_reply_attempt), and the attempt keeps its diff
-    from the last attempt's files. A request the backend refuses as past its
-    context (ContextExceeded) ends the trial at CONTEXT_EXCEEDED instead, with
-    no attempt appended (_context_end).
+    its mismatch_text), after the context blocks of a template set
+    (with_context_blocks: the knowledge block, then, when retrieval lists
+    correct and this is no mismatch, the passages for correction_query).
+    With fixes.prompt_newlines off every line feed is removed from it
+    before it is stored and sent. The reply is read as generate reads
+    attempt 0 (_reply_attempt), and the attempt keeps its diff from the last
+    attempt's files; the request keeps the blocks' note. A request the
+    backend refuses as past its context (ContextExceeded) ends the trial at
+    CONTEXT_EXCEEDED instead, with no attempt appended (_context_end).
     """
     previous = trial.attempts[-1]
     system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error, mismatch=mismatch)
+    passages: list[Passage] = []
+    if not mismatch and retrieval_on(context, RETRIEVAL_CORRECT):
+        passages = retrieved_passages(context, correction_query(previous, errors, run_error=run_error))
+    prompt, notes = with_context_blocks(context, trial, prompt, passages)
     if not fix_on(context, "prompt_newlines"):
         prompt = prompt.replace("\n", "")
     try:
@@ -2139,7 +2367,9 @@ def _corrected(
         return _context_end(trial, stage, error)
     attempt = _reply_attempt(context, previous.index + 1, messages[-1].ref, reply, expected)
     attempt = dataclasses.replace(attempt, diff_from_previous=unified_diff(previous.files, attempt.files))
-    trial = _recorded(context, trial.with_attempt(attempt), stage, attempt.index, messages, attempt.response_text)
+    trial = _recorded(
+        context, trial.with_attempt(attempt), stage, attempt.index, messages, attempt.response_text, notes
+    )
     notify(context.observer, ATTEMPT, trial, stage)
     return trial
 

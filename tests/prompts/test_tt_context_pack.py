@@ -337,11 +337,18 @@ def test_context_recipe_loads_and_adds_the_context_stage_for_tt(path: Path) -> N
 
 
 @pytest.mark.parametrize("path", recipe_paths(), ids=lambda path: path.stem)
-def test_context_recipe_is_still_refused_by_the_runner(path: Path) -> None:
-    # Until task P17.21's second half lets a template prompt set carry a pack, the runner refuses these recipes
-    # before any directory exists: tt-host-v0 is a template set, and only a fragment set uses context packs.
-    with pytest.raises(RunError, match="not a fragment set"):
-        runner_module._settings(load_recipe(path))
+def test_context_recipe_passes_the_runners_context_checks(path: Path) -> None:
+    # Task P17.21: tt-host-v0 holds summarize_context.txt and knowledge.txt, so it serves the pack. The runner's
+    # recipe settings (the pack loaded by language) and its stage and prompt checks, which run before any directory
+    # exists, accept each recipe. A full run is not started here: it needs the fetched kernels and a served model.
+    recipe = load_recipe(path)
+    if not generated():
+        with pytest.raises(RunError, match=re.escape(GENERATOR)):
+            runner_module._settings(recipe)
+        return
+    settings = runner_module._settings(recipe)
+    assert settings.fragments == {} and set(settings.packs) == {"tt"}, "a template set with the tt pack"
+    runner_module._check_stages(recipe, DEFAULT_REGISTRY, settings)
 
 
 @pytest.mark.parametrize("path", recipe_paths(), ids=lambda path: path.stem)

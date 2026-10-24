@@ -5,7 +5,8 @@ under a temporary assets root with their manifests, so these tests need no
 upstream checkout and copy no upstream text (OQ-018). They cover the pure
 helpers of lassi.core.fragments, the runner's checks of a fragment set
 (a missing fragment, a stage of the other prompt kind, a missing or doubled
-pack, context with a template set, a context field no earlier stage fills,
+pack, context with a template set that lacks the context templates, a
+context field no earlier stage fills,
 an item with two source files), the generation prompt without context, a
 reply with no fenced block, and a lone surrogate in a context reply. No
 model, compiler, or upstream code runs, and no value here is a measurement.
@@ -295,9 +296,17 @@ def test_a_fragment_set_refuses_an_item_with_more_than_one_source_file(
             {"stages": ["generate", "compile_loop"], "toolchain": {"cuda": "fake-cc"}},
             r"'compile_loop': the prompt set 'synthetic-fragments' has no fragment correct\.compile_error_head",
         ),
-        ({"stages": ["summarize_context", "generate"], "prompts": "p0-smoke"}, r"is a template prompt set"),
+        # Under a template set summarize_context renders summarize_context.txt (task P17.21), which p0-smoke lacks.
+        (
+            {"stages": ["summarize_context", "generate"], "prompts": "p0-smoke"},
+            r"'summarize_context' cannot use the prompt set: no prompt file .*summarize_context\.txt",
+        ),
         ({"directions": [{"source": "cuda", "target": "omp"}]}, r"no fragment .*CUDA_to_OMP"),
-        ({"prompts": "p0-smoke", "context": ["cuda-pack"]}, r"only a fragment prompt set uses context packs"),
+        # A template set serves context packs only with summarize_context.txt and knowledge.txt (task P17.21).
+        (
+            {"prompts": "p0-smoke", "context": ["cuda-pack"]},
+            r"context names packs, so the template prompt set 'p0-smoke' needs summarize_context\.txt",
+        ),
         (
             {"context": ["cuda-pack"]},
             r"'generate' joins the Trial\.context field\(s\) knowledge_summary, source_description into its prompt "

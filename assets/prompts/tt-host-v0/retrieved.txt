@@ -1,0 +1,4 @@
+Excerpts from the tt-metal documentation at commit 5280a9cf follow, found by searching it for the code or
+the errors in the task after them. They may help; each starts with its file, its lines, and its section.
+
+$passages

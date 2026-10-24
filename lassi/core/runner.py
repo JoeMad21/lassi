@@ -23,13 +23,22 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    (`source_build_fix`, as baseline declares for baseline_both) when no
    toolchain is bound for a direction's source language;
    a template prompt set that lacks a template a stage renders or uses a
-   placeholder the stage does not fill; context packs with a prompt set
-   that is not a fragment set; a fragment prompt set or context packs that
+   placeholder the stage does not fill; context packs, or a listed stage
+   that declares `needs_context`, with a template set whose
+   summarize_context.txt or knowledge.txt (lassi.core.stages
+   CONTEXT_PROMPTS) is missing or does not render with its fields (task
+   P17.21); a fragment prompt set or context packs that
    do not load (lassi.prompts.load_recipe_assets, which checks every file
-   against its manifest), two packs that serve one language, a fragment a
+   against its manifest; a template set's packs are checked the same way,
+   _template_set_pack), two packs that serve one language, a fragment a
    stage needs for a direction, a context pack a stage needs for a target
-   language, and a Trial.context field a stage joins into its prompt that
-   no earlier stage fills; a project (the recipe's `project`, the first
+   language, and a Trial.context field a stage joins into a fragment
+   set's prompt that no earlier stage fills; the retrieval section (task
+   P17.22) with a fragment set, with a template set whose retrieved.txt or
+   passage.txt (RETRIEVAL_PROMPTS) is missing or does not render, or with
+   a corpus whose manifest is missing or whose index file is missing or
+   fails the manifest's sha256 (_retrieval_index, which loads the index
+   once per run); a project (the recipe's `project`, the first
    trial id segment) that is not one plain segment or that names an entry
    of the run tree; trial ids that repeat; missing bench sources; an
    item with more than one source file under a fragment set, or more than
@@ -137,8 +146,9 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    language's executor, which runs every attempt, with executors per
    language every language's executor, so the baseline runs each reference
    on its own language's, the run's profiler, which run_loop wraps
-   around every attempt run, and the run's registry, from which the
-   adversary stage builds the trial's adversary), then the
+   around every attempt run, the run's registry, from which the
+   adversary stage builds the trial's adversary, and the run's one
+   documentation index when the recipe sets retrieval), then the
    trial's final block, whose alignment is that of the attempt whose output
    stands (_final). A stage that sets final.end_reason ends the trial:
    no later stage runs, and the final block keeps the end reason. With
@@ -331,6 +341,7 @@ from lassi.core.progress import STAGE_START, TRIAL_END, TRIAL_START, GuardedObse
 from lassi.core.recipe import (
     RECORDING_KEY,
     RECORDING_SHA256_KEY,
+    RETRIEVAL,
     UNCAPPED,
     Recipe,
     RecipeError,
@@ -353,14 +364,25 @@ from lassi.core.record import (
     standing_attempt,
 )
 from lassi.core.registry import DEFAULT_REGISTRY, Binding, Entry, Registry, device_path
-from lassi.core.stages import BASELINE_X10, CORRECT_ON_MISMATCH, PURPOSE, RUNS_CODE, SANDBOXED, RunContext
+from lassi.core.stages import (
+    BASELINE_X10,
+    CONTEXT_PROMPTS,
+    CORRECT_ON_MISMATCH,
+    PURPOSE,
+    RETRIEVAL_PROMPTS,
+    RUNS_CODE,
+    SANDBOXED,
+    RunContext,
+)
 from lassi.core.store import TextStore, write_trial
 from lassi.core.trial_md import fenced, fmt, fmt_provenance
 from lassi.executors import workdir
 from lassi.executors.sandbox import SandboxedCompileRunner
 from lassi.llm import ServingError, model_info, serving_line
 from lassi.prompts import assets as prompt_assets
-from lassi.prompts import load_recipe_assets, render
+from lassi.prompts import load_recipe_assets, rag_corpus, render
+from lassi.prompts.retrieval import GENERATOR as INDEX_GENERATOR
+from lassi.prompts.retrieval import Index, load_index
 from lassi.scoring.run_scoring import (
     RunMetrics,
     ScoringPlan,
@@ -413,6 +435,12 @@ _VERSION_ARGS = ("--version",)
 _LAYOUT_PROBE = "lassi-layout-check"
 # The environment variables that name the roots every compile hides (P0.20), in order.
 _COMPILE_HIDDEN_VARIABLES = ("HOME", "LASSI_SCRATCH", "LASSI_RUNS_ROOT")
+# A context pack's name, as lassi.prompts.assets checks it: one plain path segment (_template_set_pack).
+_PACK_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+# The retrieval corpora under the assets root, and the index file's name where the generator writes it by default:
+# $LASSI_SCRATCH/rag/<corpus>@<VERSION of the manifest's source pin>/index.json (task P17.22; _retrieval_index).
+RAG_DIR = "rag"
+INDEX_FILE = "index.json"
 
 
 class RunError(RuntimeError):
@@ -562,7 +590,8 @@ class _Run:
     (probe_devices). `serving` is the backend's serving record when it declares
     model_check, else None (_served_model). `profiler` is the run's one
     Profiler, built before the first trial (_built_profiler), or None when
-    the recipe binds none.
+    the recipe binds none. `retrieval` is the run's one documentation index
+    (_retrieval_index), or None when the recipe sets no retrieval section.
     """
 
     recipe: Recipe
@@ -584,6 +613,7 @@ class _Run:
     devices: tuple[DeviceRecord, ...] = ()
     serving: Mapping[str, Any] | None = None
     profiler: Profiler | None = None
+    retrieval: Index | None = None
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -636,6 +666,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         raise RunError(f"the run directory {run_dir} already exists; choose another run id")
     bench = _bench(recipe, settings, options)
     _check_plan(recipe, registry, settings, bench)
+    retrieval = _retrieval_index(recipe)
     _check_adversary(recipe, registry, settings, bench)
     devices = probe_devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
     _check_one_role(recipe, registry, devices)
@@ -674,6 +705,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         devices=devices,
         serving=serving,
         profiler=profiler,
+        retrieval=retrieval,
     )
 
 
@@ -1133,11 +1165,12 @@ def _check_carried_out(recipe: Recipe) -> None:
 def _recipe_assets(recipe: Recipe) -> tuple[dict[str, str], dict[str, str]]:
     """Return the fragments of the recipe's prompt set and its context packs keyed by the language each serves.
 
-    A template set (no MANIFEST.yaml under the assets root) with no context
-    gives two empty mappings, and with context it is a RunError, since only
-    a fragment set joins a pack into its prompts. Otherwise
-    lassi.prompts.load_recipe_assets loads the set and the packs from the
-    default assets root, checking every file against its manifest. A pack
+    A fragment set (a MANIFEST.yaml under the assets root) and its packs
+    load with lassi.prompts.load_recipe_assets from the default assets
+    root, checking every file against its manifest. A template set has no
+    fragments (an empty mapping), and its packs load with
+    _template_set_pack, checked the same way (task P17.21; the runner then
+    checks that the set can serve them, _check_template_context). A pack
     serves the language its entry keys end in, read from its first key
     (lassi.core.fragments.pack_language; the loader refuses a pack whose
     keys end in different languages). Raises RunError, with the loader's
@@ -1148,15 +1181,12 @@ def _recipe_assets(recipe: Recipe) -> tuple[dict[str, str], dict[str, str]]:
     root = prompt_assets.default_root()
     names = data.get("context", [])
     manifest = root / "prompts" / str(data["prompts"]) / prompt_assets.MANIFEST
-    if not manifest.is_file():
-        if not names:
-            return {}, {}
-        raise RunError(
-            f"{recipe.path}: context names packs, but the prompt set {data['prompts']!r} is not a fragment set "
-            f"(there is no {manifest}); only a fragment prompt set uses context packs, so drop context or name one"
-        )
     try:
-        assets = load_recipe_assets(data, root=root)
+        if manifest.is_file():
+            assets = load_recipe_assets(data, root=root)
+            fragments, texts = dict(assets.fragments), dict(assets.packs)
+        else:
+            fragments, texts = {}, {name: _template_set_pack(root, name) for name in names}
         packs: dict[str, str] = {}
         by_language: dict[str, str] = {}
         for name in names:
@@ -1166,10 +1196,66 @@ def _recipe_assets(recipe: Recipe) -> tuple[dict[str, str], dict[str, str]]:
                     f"{recipe.path}: the context packs {by_language[language]!r} and {name!r} both serve "
                     f"{language!r}; name one pack per language"
                 )
-            packs[language], by_language[language] = assets.packs[name], name
+            packs[language], by_language[language] = texts[name], name
     except ValueError as error:
         raise RunError(f"{recipe.path}: {error}") from error
-    return dict(assets.fragments), packs
+    return fragments, packs
+
+
+def _template_set_pack(root: Path, name: Any) -> str:
+    """Return the text of context pack `name` for a template prompt set, checked as load_recipe_assets checks one.
+
+    load_recipe_assets loads packs only beside a fragment set's fragments,
+    so here the same public steps run alone: `name` must be one plain path
+    segment, <root>/context/<name> a directory, every file what its
+    manifest records (lassi.prompts.assets load_tree), and the text is the
+    entries joined (pack_text). Raises ValueError naming the pack.
+    """
+    if not isinstance(name, str) or not _PACK_NAME.fullmatch(name):
+        raise ValueError(f"the recipe's context must name packs matching {_PACK_NAME.pattern}, got {name!r}")
+    pack_dir = root / "context" / name
+    if not pack_dir.is_dir():
+        raise ValueError(f"unknown context pack {name!r}: {pack_dir} is not a directory")
+    return prompt_assets.pack_text(name, prompt_assets.load_tree(pack_dir))
+
+
+def _retrieval_index(recipe: Recipe) -> Index | None:
+    """Load the documentation index the recipe's retrieval section names, once per run; None without the section.
+
+    The corpus is <assets root>/RAG_DIR/<retrieval.index> under
+    lassi.prompts.assets.default_root(), whose MANIFEST.yaml
+    lassi.prompts.rag_corpus.read_manifest checks. The index file is where
+    the generator writes it by default, $LASSI_SCRATCH/rag/<the manifest's
+    corpus>@<VERSION of its source pin>/INDEX_FILE, and it loads only with
+    the manifest's sha256 (lassi.prompts.retrieval load_index). A missing
+    manifest, an unset LASSI_SCRATCH, and an index that is missing or
+    fails its sha256 are each a RunError naming retrieval.index, raised
+    before any directory exists.
+    """
+    section = recipe.data.get(RETRIEVAL)
+    if section is None:
+        return None
+    where = f"{recipe.path}: {RETRIEVAL}.index {section['index']!r}"
+    manifest = prompt_assets.default_root() / RAG_DIR / section["index"] / prompt_assets.MANIFEST
+    if not manifest.is_file():
+        raise RunError(
+            f"{where} names no corpus: {manifest} does not exist; name a directory under assets/{RAG_DIR}/ that "
+            f"holds its {prompt_assets.MANIFEST}"
+        )
+    scratch = os.environ.get("LASSI_SCRATCH", "")
+    if not scratch:
+        raise RunError(f"{where}: its index lies under $LASSI_SCRATCH, where {INDEX_GENERATOR} writes it, "
+                       "but LASSI_SCRATCH is not set")
+    try:
+        document = rag_corpus.read_manifest(manifest)
+        source = document["source"]
+        pin = source.get("pin") if isinstance(source, dict) else None
+        if not isinstance(pin, str):
+            raise ValueError(f"{manifest} names no source pin; regenerate it with uv run {INDEX_GENERATOR} build")
+        path = Path(scratch) / RAG_DIR / f"{document['corpus']}@{read_pin(pin)['VERSION']}" / INDEX_FILE
+        return load_index(path, sha256=document["index"]["sha256"])
+    except (OSError, KeyError, ValueError) as error:
+        raise RunError(f"{where}: {error}") from error
 
 
 def resolve_runs_root(option: Path | None, recipe: Recipe) -> Path:
@@ -1523,7 +1609,9 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     attempt, so it comes after it. A stage that declares `builds_references`
     runs before any model call, so no stage that asks the model
     (_asks_model) comes before it. The prompts are checked by _check_prompts,
-    and loop.correct_on_mismatch by _check_mismatch.
+    loop.correct_on_mismatch by _check_mismatch, a template set's context by
+    _check_template_context, and the retrieval section's prompts by
+    _check_retrieval_prompts.
     """
     entries = [registry.get("Stage", name) for name in recipe.data["stages"]]
     _check_fixes(recipe, entries)
@@ -1555,6 +1643,64 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     _check_source_toolchains(recipe, entries, settings)
     _check_prompts(recipe, entries, settings)
     _check_mismatch(recipe, registry, entries, settings)
+    _check_template_context(recipe, entries, settings)
+    _check_retrieval_prompts(recipe, settings)
+
+
+def _check_template_context(recipe: Recipe, entries: Sequence[Any], settings: _Settings) -> None:
+    """Refuse context packs, or a stage that summarizes one, that a template prompt set cannot serve (task P17.21).
+
+    A fragment set is checked by _check_prompts. Under a template set, a
+    listed stage that declares `needs_context` needs a pack for every target
+    language, and when the recipe names packs or lists such a stage, each
+    template of CONTEXT_PROMPTS (lassi.core.stages: the summary request and
+    the knowledge block) must render with its fields.
+    """
+    if settings.fragments:
+        return
+    needing = [entry for entry in entries if getattr(entry.factory, "needs_context", False)]
+    for entry in needing:
+        for direction in settings.directions:
+            _check_pack(f"{recipe.path}: stage {entry.name!r}", entry, settings, direction)
+    if settings.packs or needing:
+        why = "context names packs" if settings.packs else f"stage {needing[0].name!r} summarizes a context pack"
+        _check_templates(recipe, settings, why, CONTEXT_PROMPTS)
+
+
+def _check_retrieval_prompts(recipe: Recipe, settings: _Settings) -> None:
+    """Refuse the retrieval section with a fragment set, or a template set that cannot render its blocks (P17.22).
+
+    Upstream's prompts hold no passages, so a fragment set cannot carry
+    them; a template set needs each template of RETRIEVAL_PROMPTS
+    (lassi.core.stages: the retrieved block and one passage) rendering with
+    its fields. A recipe without the section is never checked.
+    """
+    if RETRIEVAL not in recipe.data:
+        return
+    if settings.fragments:
+        raise RunError(
+            f"{recipe.path}: {RETRIEVAL} is set, but {settings.prompts!r} is a fragment prompt set, upstream's "
+            f"prompts, which carry no documentation passages; use a template set or remove {RETRIEVAL}"
+        )
+    _check_templates(recipe, settings, f"{RETRIEVAL} is set", RETRIEVAL_PROMPTS)
+
+
+def _check_templates(
+    recipe: Recipe, settings: _Settings, why: str, templates: Mapping[str, Sequence[str]]
+) -> None:
+    """Refuse a template of `templates` (name -> fields) that the template set lacks or cannot render with its fields.
+
+    Each is rendered once with every field set to "", which finds a missing
+    file and a placeholder no field fills; `why` says why the run needs it.
+    """
+    for prompt, fields in templates.items():
+        try:
+            render(settings.prompts, prompt, dict.fromkeys(fields, ""))
+        except ValueError as error:
+            raise RunError(
+                f"{recipe.path}: {why}, so the template prompt set {settings.prompts!r} needs {prompt}.txt, "
+                f"rendering with the fields {', '.join(fields)}: {error}"
+            ) from error
 
 
 def _check_mismatch(recipe: Recipe, registry: Registry, entries: Sequence[Any], settings: _Settings) -> None:
@@ -1639,7 +1785,8 @@ def _check_prompts(recipe: Recipe, entries: Sequence[Any], settings: _Settings) 
     With a template set, each stage's `prompt_fields` templates are rendered
     once with empty fields, which finds a missing set or file and a
     placeholder the stage does not fill; a stage that reads only fragments
-    is refused. With a fragment set, a stage that renders templates but
+    is refused (its context packs are checked by _check_template_context).
+    With a fragment set, a stage that renders templates but
     declares no `fragment_keys` is refused, every key a stage declares must
     be in the set for every direction, a stage that declares
     `needs_context` needs a pack for every target language, and each
@@ -1672,12 +1819,17 @@ def _check_prompts(recipe: Recipe, entries: Sequence[Any], settings: _Settings) 
                        if key not in settings.fragments]
             if missing:
                 raise RunError(f"{where}: the prompt set {settings.prompts!r} has no fragment {', '.join(missing)}")
-            if getattr(entry.factory, "needs_context", False) and direction.target not in settings.packs:
-                served = ", ".join(sorted(settings.packs)) or "none"
-                raise RunError(
-                    f"{where} needs a context pack for the target language {direction.target!r}; "
-                    f"the recipe's context serves: {served}"
-                )
+            _check_pack(where, entry, settings, direction)
+
+
+def _check_pack(where: str, entry: Any, settings: _Settings, direction: Direction) -> None:
+    """Refuse a stage that declares `needs_context` when no context pack of the recipe serves the target language."""
+    if getattr(entry.factory, "needs_context", False) and direction.target not in settings.packs:
+        served = ", ".join(sorted(settings.packs)) or "none"
+        raise RunError(
+            f"{where} needs a context pack for the target language {direction.target!r}; "
+            f"the recipe's context serves: {served}"
+        )
 
 
 def _check_context_order(where: str, entry: Any, settings: _Settings, filled: set[str]) -> None:
@@ -2499,6 +2651,7 @@ def _context(run: _Run, backend: Any, direction: Direction, item: str) -> RunCon
         observer=run.observer,
         profiler=run.profiler,
         registry=run.registry,
+        retrieval=run.retrieval,
     )
 
 
