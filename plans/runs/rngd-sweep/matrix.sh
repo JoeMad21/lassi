@@ -74,7 +74,7 @@ pattern=""
 [ "${#skip[@]}" -gt 0 ] && pattern=$(IFS='|'; echo "${skip[*]}")
 # The share caps each model but the last, which takes the time left (two models: the first gets about half).
 SWEEP_SKIP="$pattern" SWEEP_MAX_SHARE=${SWEEP_MAX_SHARE:-14400} bash plans/runs/rngd-sweep/run.sh "$deadline" \
-  projects/lassi-demo/sweep6 plans/runs/rngd-sweep/models6.tsv
+  projects/lassi-demo/sweep6 "${MATRIX_MODELS:-plans/runs/rngd-sweep/models6.tsv}"  # MATRIX_MODELS: another table
 python3 plans/runs/rngd-sweep/tabulate.py "$runs" "$runs/rngd-sweep/tables6"
 echo "$(ts) scratch root: $(du -sh "$scratch" 2>/dev/null | cut -f1) at the end"
 echo "$(ts) matrix ended"
