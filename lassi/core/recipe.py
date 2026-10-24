@@ -604,6 +604,8 @@ SCHEMA = _Fields(
                 "seed": _SEED,
                 RECORDING_KEY: _STR,
                 RECORDING_SHA256_KEY: _SHA256,
+                "checkpoint": _STR,  # a trained checkpoint hf_local serves, and its content digest (2026-10-23)
+                "checkpoint_sha256": _SHA256,
             }
         ),
         "arms": _STRINGS,
@@ -657,15 +659,17 @@ _KIND_SECTIONS: tuple[tuple[str, str, frozenset[str]], ...] = (
 )
 
 # The train recipe's names (bible Training Module, Algorithms and Weight Modes; the train.yaml block's comments),
-# and its two data sources: synthetic fixtures (data.synthetic) and bench items (bench).
+# and its three data sources: synthetic fixtures (data.synthetic), bench items (bench), and a built corpus
+# (data.corpus, a manifest under assets/train/; lassi.train.data load_corpus). prompt_tuning is the frozen-weights mode.
 METHODS: tuple[str, ...] = ("sft", "rft", "dpo", "grpo", "gspo", "ppo", "adversarial")
-WEIGHT_MODES: tuple[str, ...] = ("full", "lora", "qlora", "dora")
+WEIGHT_MODES: tuple[str, ...] = ("full", "lora", "qlora", "dora", "prompt_tuning")
 EPISODES: tuple[str, ...] = ("single_turn", "multi_turn")
-DATA_SOURCES: tuple[str, ...] = ("synthetic", "bench")
+DATA_SOURCES: tuple[str, ...] = ("synthetic", "bench", "corpus")
 # The one split a train recipe may read (Agent Rule 5).
 TRAIN_SPLIT = "train"
 # A synthetic fixture's file name: one plain name ending in .jsonl, read from the fixture directory.
 _SYNTHETIC_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.jsonl")
+_CORPUS_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 # The Trainer's declarations the loader reads: the recipe key whose value must be among them, the attribute, and
 # what the value is called in a refusal.
 _DECLARATIONS = (("method", "methods", "method"), ("weights", "weight_modes", "weight mode"))
@@ -679,6 +683,11 @@ def _one_of(names: Sequence[str]) -> _Leaf:
 def _is_synthetic_name(value: Any) -> bool:
     """Return True for a fixture file name: one plain name ending in .jsonl."""
     return isinstance(value, str) and _SYNTHETIC_TEXT.fullmatch(value) is not None
+
+
+def _is_corpus_name(value: Any) -> bool:
+    """Return True for a corpus name: one plain name, the directory of its manifest under assets/train/."""
+    return isinstance(value, str) and _CORPUS_TEXT.fullmatch(value) is not None
 
 
 # Every key a train recipe may hold: the bible's train.yaml block, plus extends, runs_root (where the train tree
@@ -702,9 +711,11 @@ TRAIN_SCHEMA = _Fields(
         "adversary": _KIND,
         "export": _Fields({"merge": _BOOL, "fxb": _STR, "register_as": _STR}),
         "trainer": _KIND,
-        "data": _Fields(
-            {"synthetic": _Leaf("a fixture file name: one plain name ending in .jsonl", _is_synthetic_name)},
-            required=frozenset({"synthetic"}),
+        "data": _Fields(  # exactly one of the two keys (_check_train_source)
+            {
+                "synthetic": _Leaf("a fixture file name: one plain name ending in .jsonl", _is_synthetic_name),
+                "corpus": _Leaf("a corpus name: one plain name, a directory under assets/train", _is_corpus_name),
+            }
         ),
     }
 )
@@ -803,8 +814,10 @@ def load_train_recipe(path: Path, *, roots: Sequence[Path] | None = None, regist
 
 
 def train_data_source(data: Mapping[str, Any]) -> str:
-    """Return the data source of a loaded train recipe's mapping: "bench" or "synthetic" (DATA_SOURCES)."""
-    return "bench" if "bench" in data else "synthetic"
+    """Return the data source of a loaded train recipe's mapping: "bench", "corpus", or "synthetic" (DATA_SOURCES)."""
+    if "bench" in data:
+        return "bench"
+    return "corpus" if "corpus" in data.get("data", {}) else "synthetic"
 
 
 def resolved_data(path: Path, *, roots: Sequence[Path] | None = None) -> dict[str, Any]:
@@ -1506,12 +1519,20 @@ def recording_file(value: object, where: str) -> Path:
 
 
 def _check_train_source(path: Path, data: Mapping[str, Any]) -> None:
-    """Refuse a train recipe that names both data sources, bench and data.synthetic, or neither."""
+    """Refuse a train recipe that names more than one data source (bench, data.synthetic, data.corpus) or none."""
     named = [key for key in ("bench", "data") if key in data]
     if len(named) != 1:
         found = "both" if named else "neither"
         raise RecipeError(
-            f"{path}: a train recipe names exactly one data source, bench or data.synthetic; this one names {found}"
+            f"{path}: a train recipe names exactly one data source, bench or data.synthetic (or data.corpus); this "
+            f"one names {found}"
+        )
+    sources = [f"data.{key}" for key in ("synthetic", "corpus") if key in data.get("data", {})]
+    if "data" in data and len(sources) != 1:
+        found = " and ".join(sources) if sources else "neither"
+        raise RecipeError(
+            f"{path}: data.synthetic is a required choice with no value unless data.corpus names a corpus; a train "
+            f"recipe names exactly one of data.synthetic and data.corpus, and this one names {found}"
         )
 
 
@@ -1548,7 +1569,7 @@ def _check_trainer_declares(path: Path, data: Mapping[str, Any], binding: Bindin
         )
     source = train_data_source(data)
     checks = [(key, data[key], attribute, noun) for key, attribute, noun in _DECLARATIONS]
-    checks.append(("bench" if source == "bench" else "data.synthetic", source, "data_sources", "data source"))
+    checks.append(("bench" if source == "bench" else f"data.{source}", source, "data_sources", "data source"))
     for key, value, attribute, noun in checks:
         declared = _declared_names(path, who, entry.factory, attribute)
         if value not in declared:

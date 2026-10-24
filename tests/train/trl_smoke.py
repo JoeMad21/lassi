@@ -34,13 +34,22 @@ BASE_DIR = SYNTHETIC_DIR / BASE_NAME
 BASE_FILES = ("config.json", "tokenizer.json", "tokenizer_config.json")
 
 METHODS = ("sft", "dpo", "grpo")
-WEIGHT_MODES = ("full", "lora")
-DATA_SOURCES = ("synthetic",)
+WEIGHT_MODES = ("full", "lora", "prompt_tuning")
+DATA_SOURCES = ("synthetic", "corpus")
+# The weight modes each method's smoke runs with: prompt_tuning, the frozen-weights mode, is carried out for sft only.
+SMOKE_MODES = {"sft": ("full", "lora", "prompt_tuning"), "dpo": ("full", "lora"), "grpo": ("full", "lora")}
 # The distributions the trainer records as its framework pins, in its declared order.
 PACKAGES = (
     "torch", "transformers", "trl", "peft", "accelerate", "datasets", "tokenizers", "huggingface-hub", "safetensors",
 )
-CONFIG_KEYS = frozenset({"steps", "seed", "batch_size", "learning_rate", "max_completion_length"})
+CONFIG_KEYS = frozenset({
+    "steps", "seed", "batch_size", "learning_rate", "max_completion_length", "max_length", "gradient_checkpointing",
+    "virtual_tokens", "chat_format",
+})
+# The optional sft settings (2026-10-23), which no committed smoke recipe sets: TRL's sequence limit, its gradient
+# checkpointing switch, and the chat format. VIRTUAL_TOKENS is the prompt_tuning smoke's soft prompt length.
+SIZING = {"max_length": 256, "gradient_checkpointing": False, "chat_format": False}
+VIRTUAL_TOKENS = 4
 # The framework modules the trainer needs; building it without one is refused, naming it and the extra.
 FRAMEWORK_MODULES = ("torch", "transformers", "trl", "peft", "accelerate", "datasets")
 EXTRA_HINT = "--extra cpu"
@@ -92,8 +101,9 @@ def settings(method: str) -> dict[str, Any]:
 def smoke_recipe(method: str, weights: str, **changes: Any) -> dict[str, Any]:
     """Return the smoke train recipe for `method` and `weights`; `changes` replace top-level keys, MISSING drops one.
 
-    lora is set exactly for lora weights and rollout exactly for grpo, the
-    device is the CPU, and the data is the method's committed smoke fixture.
+    lora is set exactly for lora weights, trainer.virtual_tokens exactly for
+    prompt_tuning weights, and rollout exactly for grpo; the device is the
+    CPU, and the data is the method's committed smoke fixture.
     """
     data: dict[str, Any] = {
         "base_model": BASE_MODEL,
@@ -104,6 +114,8 @@ def smoke_recipe(method: str, weights: str, **changes: Any) -> dict[str, Any]:
     }
     if weights == "lora":
         data["lora"] = dict(LORA)
+    if weights == "prompt_tuning":
+        data["trainer"]["virtual_tokens"] = VIRTUAL_TOKENS
     if method == "grpo":
         data["rollout"] = dict(ROLLOUT)
     for key, value in changes.items():

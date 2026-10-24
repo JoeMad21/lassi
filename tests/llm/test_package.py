@@ -62,8 +62,9 @@ FOUND_MODULES = tuple(
 LLM_MODULES = tuple(dict.fromkeys(NAMED_MODULES + (FRAMEWORK_MODULE,) + FOUND_MODULES))
 # The only imports outside the standard library and lassi that a lassi.llm module may hold, and only inside the
 # functions of FRAMEWORK_MODULE: the framework extra's packages, imported when hf_local loads (task P17.4), and
-# huggingface_hub, which transformers requires and whose offline flag hf_local sets.
-FRAMEWORK_IMPORTS = frozenset({"torch", "transformers", "huggingface_hub"})
+# huggingface_hub, which transformers requires and whose offline flag hf_local sets, and peft, which applies a trained
+# checkpoint's adapter (2026-10-23).
+FRAMEWORK_IMPORTS = frozenset({"torch", "transformers", "huggingface_hub", "peft"})
 NUMBER_WORDS = {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
 
 BACKENDS = {"mock": MockBackend, "openai_compat": OpenAICompatBackend, "ollama": OllamaBackend}
@@ -177,7 +178,7 @@ def test_hf_local_is_registered() -> None:
     entry = DEFAULT_REGISTRY.get("LLMBackend", "hf_local")
     assert entry.factory is getattr(llm, "HFLocalBackend", None)
     assert entry.capabilities == frozenset({"chat", "model_check", "takes_device"})
-    assert entry.config_keys == frozenset({"revision", "seed"})
+    assert entry.config_keys == frozenset({"revision", "seed", "checkpoint", "checkpoint_sha256"})
     assert llm.hf_local is importlib.import_module(FRAMEWORK_MODULE)
 
 

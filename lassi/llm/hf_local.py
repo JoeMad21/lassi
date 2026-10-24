@@ -44,6 +44,26 @@ the config's max_position_embeddings raises ContextExceeded
 framework() reads torch's build metadata only, never a call that
 initializes a device runtime (OQ-002). serving() returns the record a run
 writes to provenance.json as `serving`.
+
+Trained checkpoints (2026-10-23; OQ-076 (3a)). Two optional settings,
+model.checkpoint (an absolute path to a checkpoint directory lassi train
+wrote) and model.checkpoint_sha256 (its content digest, lassi.core.digest
+tree_sha256, which lassi train records in provenance.json as
+checkpoint_sha256), are set together or not at all; without them hf_local
+loads exactly as above. model.id and model.revision still pin the Hub
+snapshot the checkpoint was trained from: its base, or a scratch base's
+tokenizer. check() refuses, before any framework import, a checkpoint whose
+digest differs, whose checkpoint.json (CHECKPOINT_RECORDS) names a fixture
+base or a base other than model.id at model.revision, whose weights are
+not full, lora, or prompt_tuning (an adapter needs a Hub base), or, for
+prompt_tuning, whose peft record is not a mapping naming num_virtual_tokens
+of at least 1. Full weights load from the checkpoint directory alone; lora
+and prompt_tuning load the base from HF_HOME's hub cache at the revision and
+apply the adapter with PEFT's PeftModel.from_pretrained (is_trainable
+False). The tokenizer is the checkpoint's own. A prompt-tuned model's soft prompt takes
+num_virtual_tokens positions, which the context rule counts
+(prompt_positions). serving() adds checkpoint and checkpoint_sha256 when a
+checkpoint is served.
 """
 
 from __future__ import annotations
@@ -51,16 +71,18 @@ from __future__ import annotations
 import importlib
 import importlib.metadata
 import importlib.util
+import json
 import os
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from types import ModuleType
 from typing import Any
 
 from lassi.core.capabilities import MODEL_CHECK, TAKES_DEVICE
 from lassi.core.devices import DeviceSpec, FrameworkBuild, parse_device
+from lassi.core.digest import tree_sha256
 from lassi.core.interfaces import Completion, ContextExceeded, Message, Sampling
 from lassi.core.registry import register
 from lassi.llm._http import ServingError
@@ -73,7 +95,12 @@ VERSION_NAMES = ("torch", "transformers", "tokenizers", "huggingface-hub", "safe
 # A Hub repository id, <owner>/<name>; a path ("", "/x", "C:/x", "./x", "../x") never fits.
 _REPO_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*")
 _REVISION = re.compile(r"[0-9a-f]{40}")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 _SEED_LIMIT = 2**32
+# The records file lassi train writes into every checkpoint (lassi.train.checkpoint RECORDS_JSON; named here, since
+# lassi.train imports this module), and the weight modes a checkpoint is served in.
+CHECKPOINT_RECORDS = "checkpoint.json"
+ADAPTER_WEIGHTS = ("lora", "prompt_tuning")
 
 
 class FrameworkMissing(ImportError):
@@ -175,7 +202,7 @@ def _hub_cache() -> Path:
 
 @dataclass(frozen=True)
 class _Loaded:
-    """A loaded model: tokenizer, model, context, stop ids, pad id, torch device, and dtype."""
+    """A loaded model: tokenizer, model, context, stop ids, pad id, torch device, dtype, and soft-prompt length."""
 
     tokenizer: Any
     model: Any
@@ -184,6 +211,12 @@ class _Loaded:
     pad: int
     device: str
     dtype: str
+    virtual_tokens: int = 0
+
+
+def prompt_positions(prompt_tokens: int, loaded: _Loaded) -> int:
+    """Return the context positions a prompt takes: its tokens plus a prompt-tuned model's soft prompt."""
+    return prompt_tokens + loaded.virtual_tokens
 
 
 def _as_ids(value: Any) -> list[int]:
@@ -213,6 +246,13 @@ def _load(model_id: str, revision: str, device: str) -> _Loaded:
         raise ServingError(
             f"hf_local could not load {where} from HF_HOME's hub cache with the hub offline: {error}"
         ) from error
+    return _finish(transformers, where, config, tokenizer, model, device)
+
+
+def _finish(
+    transformers: ModuleType, where: str, config: Any, tokenizer: Any, model: Any, device: str, virtual_tokens: int = 0
+) -> _Loaded:
+    """Check the context, chat template, and end ids, set the neutral generation config, and place the model."""
     context = getattr(config, "max_position_embeddings", None)
     if not isinstance(context, int) or isinstance(context, bool) or context <= 0:
         raise ServingError(f"hf_local refuses {where}: its config has no positive max_position_embeddings")
@@ -229,7 +269,81 @@ def _load(model_id: str, revision: str, device: str) -> _Loaded:
     model.to(device)
     model.eval()
     dtype = str(model.dtype).removeprefix("torch.")
-    return _Loaded(tokenizer, model, context, stops, int(pad), device, dtype)
+    return _Loaded(tokenizer, model, context, stops, int(pad), device, dtype, virtual_tokens)
+
+
+@dataclass(frozen=True)
+class _Trained:
+    """What a checkpoint's records say hf_local needs: its weight mode and its soft prompt's length (0 for none)."""
+
+    weights: str
+    virtual_tokens: int
+
+
+def _base_pin(base: Any) -> tuple[str, str] | None:
+    """Return (repo, revision) a checkpoint's base_model record pins: a Hub base's, or a scratch base's tokenizer's."""
+    if not isinstance(base, dict):
+        return None
+    pinned = base if base.get("kind") == "hub" else base.get("tokenizer") if base.get("kind") == "scratch" else None
+    if not isinstance(pinned, dict):
+        return None
+    return pinned.get("repo"), pinned.get("revision")
+
+
+def _trained(checkpoint: Path, expected: str, model_id: str, revision: str) -> _Trained:
+    """Check the checkpoint's digest and records against the settings; ServingError naming what differs."""
+    where = f"the checkpoint {checkpoint}"
+    try:
+        found = tree_sha256(checkpoint)
+        records = json.loads((checkpoint / CHECKPOINT_RECORDS).read_bytes().decode("ascii"))["trainer_records"]
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise ServingError(f"hf_local cannot read {where} and its {CHECKPOINT_RECORDS}: {error}") from error
+    if found != expected:
+        raise ServingError(f"hf_local refuses {where}: its content digest is {found}, not model.checkpoint_sha256 "
+                           f"{expected}")
+    base, weights = records.get("base_model"), records.get("weights")
+    pin = _base_pin(base)
+    if pin is None:
+        name = base.get("name") if isinstance(base, dict) else base
+        raise ServingError(f"hf_local refuses {where}: its base {name!r} is a fixture or unpinned base, and only a "
+                           "Hub or scratch base is served")
+    if pin != (model_id, revision):
+        raise ServingError(f"hf_local refuses {where}: it was trained from {pin[0]} at {pin[1]}, not model.id "
+                           f"{model_id} at model.revision {revision}")
+    if weights not in ("full", *ADAPTER_WEIGHTS) or (weights in ADAPTER_WEIGHTS and base.get("kind") != "hub"):
+        raise ServingError(f"hf_local refuses {where}: it serves full weights, and lora or prompt_tuning on a Hub "
+                           f"base, not {weights!r} on a {base.get('kind')} base")
+    if weights != "prompt_tuning":
+        return _Trained(weights=weights, virtual_tokens=0)
+    peft = records.get("peft")
+    virtual = peft.get("num_virtual_tokens") if isinstance(peft, dict) else None
+    if not isinstance(virtual, int) or isinstance(virtual, bool) or virtual < 1:
+        raise ServingError(f"hf_local refuses {where}: a prompt_tuning checkpoint's peft record must be a mapping "
+                           f"whose num_virtual_tokens is an integer of at least 1, not {peft!r}")
+    return _Trained(weights=weights, virtual_tokens=virtual)
+
+
+def _load_checkpoint(model_id: str, revision: str, checkpoint: Path, expected: str, device: str) -> _Loaded:
+    """Load a trained checkpoint pinned by its digest, with the hub offline, on `device`; ServingError if not."""
+    trained = _trained(checkpoint, expected, model_id, revision)
+    where = f"the checkpoint {checkpoint} of {model_id} at revision {revision}"
+    local = {"local_files_only": True, "trust_remote_code": False}
+    try:
+        _, transformers = _import_framework()
+        hub_offline()
+        tokenizer = transformers.AutoTokenizer.from_pretrained(str(checkpoint), **local)
+        if trained.weights == "full":
+            config = transformers.AutoConfig.from_pretrained(str(checkpoint), **local)
+            model = transformers.AutoModelForCausalLM.from_pretrained(str(checkpoint), config=config, dtype="auto",
+                                                                      **local)
+        else:
+            options = {"revision": revision, "cache_dir": str(_hub_cache()), **local}
+            config = transformers.AutoConfig.from_pretrained(model_id, **options)
+            base = transformers.AutoModelForCausalLM.from_pretrained(model_id, config=config, dtype="auto", **options)
+            model = _import("peft").PeftModel.from_pretrained(base, str(checkpoint), is_trainable=False)
+    except (OSError, ValueError, ImportError) as error:
+        raise ServingError(f"hf_local could not load {where} with the hub offline: {error}") from error
+    return _finish(transformers, where, config, tokenizer, model, device, trained.virtual_tokens)
 
 
 def _encode(tokenizer: Any, messages: Sequence[Message]) -> Any:
@@ -268,6 +382,24 @@ def _checked_settings(model_id: Any, revision: Any, seed: Any, device: Any) -> D
     return parse_device(device, "model.device")
 
 
+def _checked_checkpoint(checkpoint: Any, sha: Any) -> tuple[Path | None, str | None]:
+    """Return model.checkpoint as a Path and model.checkpoint_sha256, both None when neither is set; reads no file."""
+    if checkpoint is None and sha is None:
+        return None, None
+    if checkpoint is None:
+        raise ValueError("model.checkpoint_sha256 is set without model.checkpoint, the directory it pins")
+    absolute = isinstance(checkpoint, str) and (PurePosixPath(checkpoint).is_absolute()
+                                                or PureWindowsPath(checkpoint).is_absolute())
+    if not absolute:
+        raise ValueError(f"model.checkpoint must be an absolute path to a checkpoint directory, not {checkpoint!r}")
+    if not isinstance(sha, str) or _SHA256.fullmatch(sha) is None:
+        raise ValueError(
+            f"model.checkpoint_sha256 must be the checkpoint's content digest, 64 lowercase hex digits (lassi train "
+            f"records it in provenance.json as checkpoint_sha256), not {sha!r}"
+        )
+    return Path(checkpoint), sha
+
+
 @register("LLMBackend", "hf_local")
 class HFLocalBackend:
     """Serves a model in process on Transformers and PyTorch, loaded once by check() from HF_HOME at a pinned revision.
@@ -279,7 +411,7 @@ class HFLocalBackend:
     name = "hf_local"
     capabilities = frozenset({"chat", MODEL_CHECK, TAKES_DEVICE})
     # The model-section keys a recipe may set beside model.device; the runner passes them as keyword settings.
-    config_keys = frozenset({"revision", "seed"})
+    config_keys = frozenset({"revision", "seed", "checkpoint", "checkpoint_sha256"})
 
     def __init__(
         self,
@@ -288,13 +420,15 @@ class HFLocalBackend:
         device: Mapping[str, Any] | None = None,
         revision: str | None = None,
         seed: int | None = None,
+        checkpoint: str | None = None,
+        checkpoint_sha256: str | None = None,
     ) -> None:
         """Keep the checked settings; load nothing.
 
         Raises FrameworkMissing (an ImportError) when torch or transformers is
         not installed, found without importing either; then ValueError naming
-        model.id, model.revision, model.seed, or model.device for a missing or
-        malformed setting.
+        model.id, model.revision, model.seed, model.device, model.checkpoint,
+        or model.checkpoint_sha256 for a missing or malformed setting.
         """
         for module in FRAMEWORK_MODULES:
             if importlib.util.find_spec(module) is None:
@@ -305,6 +439,7 @@ class HFLocalBackend:
         self.seed = seed
         self.device = spec
         self._torch_device = torch_device(spec)
+        self.checkpoint, self.checkpoint_sha256 = _checked_checkpoint(checkpoint, checkpoint_sha256)
         self._loaded: _Loaded | None = None
         self._calls = 0
 
@@ -338,11 +473,15 @@ class HFLocalBackend:
 
         It holds model, revision, max_position_embeddings, dtype, device,
         threads (torch's CPU thread count), seed, stop_token_ids, and the
-        installed versions of VERSION_NAMES (null when one is not installed).
+        installed versions of VERSION_NAMES (null when one is not installed),
+        plus checkpoint and checkpoint_sha256 when a checkpoint is served.
         Each call returns a fresh record.
         """
         loaded = self._model()
         torch, _ = _import_framework()
+        served = {} if self.checkpoint is None else {
+            "checkpoint": str(self.checkpoint), "checkpoint_sha256": self.checkpoint_sha256,
+        }
         return {
             "model": self.model_id,
             "revision": self.revision,
@@ -353,14 +492,16 @@ class HFLocalBackend:
             "seed": self.seed,
             "stop_token_ids": list(loaded.stops),
             "versions": {name: _version(name) for name in VERSION_NAMES},
+            **served,
         }
 
     def complete(self, messages: Sequence[Message], sampling: Sampling) -> Completion:
         """Return the model's reply to `messages` under `sampling`, with the tokenizer's token counts.
 
         Calls check() first. Call k (from 0, counted when it starts) samples
-        under torch.manual_seed(seed + k). A request whose prompt tokens plus
-        max_tokens pass the context raises ContextExceeded before generating;
+        under torch.manual_seed(seed + k). A request whose prompt positions
+        (prompt_positions) plus max_tokens pass the context raises
+        ContextExceeded before generating;
         nothing is truncated. completion_tokens counts the ids generated, an
         end id included when one stopped generation.
         """
@@ -371,8 +512,8 @@ class HFLocalBackend:
         torch, transformers = _import_framework()
         encoded = _encode(loaded.tokenizer, messages)
         prompt_tokens = int(encoded["input_ids"].shape[1])
-        if prompt_tokens + sampling.max_tokens > loaded.context:
-            raise ContextExceeded(prompt_tokens, sampling.max_tokens, loaded.context)
+        if prompt_positions(prompt_tokens, loaded) + sampling.max_tokens > loaded.context:
+            raise ContextExceeded(prompt_positions(prompt_tokens, loaded), sampling.max_tokens, loaded.context)
         encoded = encoded.to(loaded.device)
         torch.manual_seed(self.seed + index)
         with torch.inference_mode():
@@ -386,6 +527,11 @@ class HFLocalBackend:
 
     def _model(self) -> _Loaded:
         """Return the loaded model, loading it on the first successful call."""
+        if self._loaded is None and self.checkpoint is not None:
+            assert self.checkpoint_sha256 is not None
+            self._loaded = _load_checkpoint(
+                self.model_id, self.revision, self.checkpoint, self.checkpoint_sha256, self._torch_device
+            )
         if self._loaded is None:
             self._loaded = _load(self.model_id, self.revision, self._torch_device)
         return self._loaded

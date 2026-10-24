@@ -14,12 +14,14 @@ The contract these tests fix (lassi.train.trl_trainer):
 
 - TRLTrainer is registered as Trainer "trl" when lassi.train is imported,
   with no framework imported. It declares takes_device, methods (sft, dpo,
-  grpo), weight_modes (full, lora), data_sources (synthetic), the packages
-  it records as pins (torch, transformers, trl, peft, accelerate, datasets,
-  tokenizers, huggingface-hub, safetensors), config_keys (steps, seed,
-  batch_size, learning_rate, max_completion_length), a staticmethod
-  framework() that reads torch's build only, check(recipe, data), and
-  train(job).
+  grpo), weight_modes (full, lora, prompt_tuning), data_sources
+  (synthetic, corpus), the packages it records as pins (torch,
+  transformers, trl, peft, accelerate, datasets, tokenizers,
+  huggingface-hub, safetensors), config_keys (steps, seed, batch_size,
+  learning_rate, max_completion_length, and the optional max_length,
+  gradient_checkpointing, and virtual_tokens of 2026-10-23, fixed in
+  tests/train/test_trl_bases.py), a staticmethod framework() that reads
+  torch's build only, check(recipe, data), and train(job).
 - Built as factory(**config) from its trainer section, it raises
   ValueError, in this order, for: a missing or malformed setting, naming
   trainer.<key> (steps and batch_size integers of at least 1, seed an
@@ -34,8 +36,9 @@ The contract these tests fix (lassi.train.trl_trainer):
 - check(recipe, data) raises ValueError naming the key, the value, or the
   record (by its 1-based number) for each value it does not carry out:
   a base_model that is not `fixture:<one plain name>` naming a directory
-  under tests/fixtures/train/ with the three base files (a Hub id needs a
-  revision pin, Agent Rule 10; P7); lora missing for lora weights or set
+  under tests/fixtures/train/ with the three base files, or one of the two
+  other kinds of tests/train/test_trl_bases.py (a Hub id without a revision
+  pin is refused, Agent Rule 10); lora missing for lora weights or set
   for full weights; lora.r missing; lora.targets other than all-linear;
   rollout missing for grpo or set for sft and dpo; rollout.engine other
   than transformers (vllm is P8's); rollout.group_size missing or below 2,
@@ -100,6 +103,8 @@ from trl_smoke import (
     METHODS,
     PACKAGES,
     ROLLOUT,
+    SIZING,
+    SMOKE_MODES,
     SYNTHETIC_BUILD,
     SYNTHETIC_DIR,
     TRAINER,
@@ -489,7 +494,7 @@ def test_the_layer_refuses_each_value_before_any_directory(
     assert layer_ready.events == [], "no step ran"
 
 
-SMOKE = [(method, weights) for method in METHODS for weights in WEIGHT_MODES]
+SMOKE = [(method, weights) for method in METHODS for weights in SMOKE_MODES[method]]
 
 
 @pytest.mark.parametrize(("method", "weights"), SMOKE, ids=[f"{m}-{w}" for m, w in SMOKE])
@@ -625,7 +630,8 @@ def test_the_trl_trainer_calls_the_shared_helper() -> None:
 
 
 def test_the_smoke_settings_cover_every_config_key() -> None:
-    keys: set[str] = set()
+    # SIZING and the prompt_tuning smoke's virtual_tokens are the optional settings (tests/train/test_trl_bases.py).
+    keys: set[str] = set(SIZING) | {"virtual_tokens"}
     for method in METHODS:
         keys.update(settings(method))
     assert keys == set(CONFIG_KEYS)

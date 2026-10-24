@@ -1,0 +1,47 @@
+# Full fine-tuning of Qwen3-0.6B on tt-train-v0 (OQ-076: data (1a); the owner's direction of 2026-10-23: train on
+# alpha01's CPU in the owner's window only, as a niced background job, through the trl trainer's CPU path).
+# Every number below is PROJECTED: arithmetic, or a workstation reading from a dirty tree (2026-10-23 and 2026-10-24,
+# logged with its command and output in plans/spikes/own-model.md, Readings), never a measurement of a run.
+#
+# Before the run, once, in the window: uv run --extra cpu tools/prepare_train.py projects/train/tt-full-qwen3-0.6b.yaml
+# downloads the base into $HF_HOME/hub, about 1.52 GB at this revision (PROJECTED: the Hub's X-Linked-Size headers
+# read on the workstation, model.safetensors 1,503,300,328 bytes and tokenizer.json 11,422,654 bytes). lassi train
+# never downloads.
+#
+# Data (PROJECTED, a workstation count with this revision's tokenizer, tokenizers 0.22.1): 8 records, 13,027 tokens a
+# pass in the chat format, the longest 3,058; the token-weighted mean causal position is 1,004.
+#
+# Arithmetic (PROJECTED). Parameters N = 596.0M (a workstation count on the meta device; config.json's arithmetic
+# gives the same): embedding 151,936 x 1,024 = 155.6M (tied with the output layer) + 28 layers x 15.73M (attention
+# 2.10M + 1.05M + 1.05M + 2.10M, MLP 3 x 1,024 x 3,072 = 9.44M).
+# - Compute per token: 6N = 3.58 GFLOP (forward 2N, backward 4N; no recompute, gradient checkpointing off) plus
+#   attention, 3 x 4 x 1,004 x 2,048 (16 heads x 128) x 28 layers = 0.69 GFLOP: about 4.3 GFLOP a token.
+# - A pass: 13,027 x 4.3 GFLOP = 5.6e13 FLOP. 4 passes (32 steps of 1 record) = 2.2e14 FLOP.
+# - Time: at a sustained 0.5 TFLOP/s for one process on alpha01's EPYC 9534 under bf16 autocast (an assumption),
+#   7 minutes; 15 minutes at 0.25 TFLOP/s, 4 at 1.0. Loading and saving add a few minutes. checkpoint.json's
+#   train_summary records TRL's train_runtime, which measures it.
+# - Memory: float32 weights 2.4 GB + gradients 2.4 GB + AdamW moments 4.8 GB = 9.5 GB, plus activations without
+#   checkpointing, about 34 bytes x 3,058 tokens x 1,024 x 28 layers = 3.0 GB, and TRL's chunked loss (256-token
+#   chunks of the 151,936-entry output): under 16 GB, a small share of the 2,945 GB alpha01 had available (the
+#   gate's host record, mem_gb 3169.6 and mem_avail_gb 2945.3, in results/rngd-sweep5-20261024/provenance.json, rx
+#   20261023-201813-rngd-sweep5-226a, 2026-10-23), so gradient checkpointing stays off; run.sh logs `free -g` first.
+#
+# Serving the result (OQ-076 (3a)): hf_local on alpha01's CPU binds output/checkpoint-32 with model.id
+# Qwen/Qwen3-0.6B, model.revision below, model.checkpoint, and model.checkpoint_sha256 from the run's
+# provenance.json. Qwen3ForCausalLM is an architecture furiosa-llm's ArtifactBuilder supports (plans/spikes/
+# own-model.md, Readings), so a full fine-tune can later be compiled for RNGD; that build is a later spike.
+base_model: Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca  # a HEAD request read X-Repo-Commit equal to it
+method: sft
+weights: full  # every weight trains, from float32 master weights under TRL's bf16 mixed precision
+trainer:
+  kind: trl
+  device: {kind: cpu}  # alpha01's CPU (owner, 2026-10-23); no GPU trains
+  steps: 32  # 4 passes over the 8 records, one record a step
+  seed: 7
+  batch_size: 1  # no padding; 32 steps x 1 record = 4 passes
+  learning_rate: 0.00001  # a common full fine-tuning rate; nothing here is tuned
+  max_length: 4096  # above the longest record (3,058 tokens); a longer record is refused, never cut
+  gradient_checkpointing: false  # memory is plentiful on the CPU host, and recompute would cost a third more compute
+  chat_format: true  # train in the chat template hf_local serves with
+data:
+  corpus: tt-train-v0  # assets/train/tt-train-v0/manifest.json; records under $LASSI_SCRATCH/train-data

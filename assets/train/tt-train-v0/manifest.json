@@ -1,0 +1,994 @@
+{
+  "corpus": "tt-train-v0",
+  "generator": "tools/build_tt_train.py",
+  "note": "Generated from the spec and the pinned tree; do not edit. The records it pins are generated under $LASSI_SCRATCH/train-data, never in the repository, since they hold tt-metal's text.",
+  "spec": "assets/train/tt-train-v0/dataset.yaml",
+  "spec_sha256": "c453c47abab50b2cfc955e63824a8b3b78c8b7bb210dc9b902755a108cac5e4d",
+  "source": {
+    "pin": "tt-metal",
+    "repo": "https://github.com/tenstorrent/tt-metal.git",
+    "commit": "5280a9cfb00998fd49667a29523d03aee905c129",
+    "version": "5280a9cf",
+    "root": "tt_metal/programming_examples"
+  },
+  "records": {
+    "file": "tt-train-v0.jsonl",
+    "sha256": "86bc79319ffbe8a77620ef4bc76e43bcbdbacaaf6a6150e30623a2f7e7db8518",
+    "bytes": 52215,
+    "count": 8,
+    "fields": [
+      "prompt",
+      "completion"
+    ],
+    "prompt_chars": 6939,
+    "completion_chars": 43699
+  },
+  "held_out": {
+    "suite": "tt-pairs-v0",
+    "suite_manifest": "assets/bench/tt-pairs-v0.yaml",
+    "suite_sha256": "ff9729d845dc0746671e73c9993152dbbf3e1742804bdffcac0de0900a543e38",
+    "items": [
+      "eltwise_binary",
+      "eltwise_sfpu",
+      "loopback",
+      "matmul_multi_core",
+      "matmul_single_core"
+    ],
+    "run_lines": 3,
+    "near_copy": 0.5,
+    "references": [
+      {
+        "path": "assets/bench/tt-pairs-v0/eltwise_binary/cpp/eltwise_binary.cpp",
+        "sha256": "bdd23e2c719306d450d63a77cc0ec00a13342898630bc70b45358032f27686dd"
+      },
+      {
+        "path": "assets/bench/tt-pairs-v0/eltwise_binary/tt/eltwise_binary.cpp",
+        "sha256": "cc6f2fba6f6f40ce7525e5d29559b5ead62e5f980d67dd7ac925a86a70877ce0"
+      },
+      {
+        "path": "assets/bench/tt-pairs-v0/eltwise_sfpu/cpp/eltwise_sfpu.cpp",
+        "sha256": "4cdc0c8c0facfd398429aa163c13abf118ec2dc24e9c73a8504e5022c5a0f841"
+      },
+      {
+        "path": "assets/bench/tt-pairs-v0/eltwise_sfpu/tt/eltwise_sfpu.cpp",
+        "sha256": "135f9d308dd1f4617bc1e6dd4e4cd37541fc373801df434930e86ee5ddb4cb94"
+      },
+      {
+        "path": "assets/bench/tt-pairs-v0/loopback/cpp/loopback.cpp",
+        "sha256": "83e57e146589e6a3798f28dd324ad1ce760b08a75bd538bd99c6dceec5952d3d"
+      },
+      {
+        "path": "assets/bench/tt-pairs-v0/loopback/tt/loopback.cpp",
+        "sha256": "c35e9858ad416094bb514f01160497fc142d3fa4f0d03e0bbb7ff8c423c1457b"
+      },
+      {
+        "path": "assets/bench/tt-pairs-v0/matmul_multi_core/cpp/matmul_multi_core.cpp",
+        "sha256": "fbc952d8a066f2bb5b2d6c761f7df3db5d9357a485c8a0d7f7c5feb8f7ef160b"
+      },
+      {
+        "path": "assets/bench/tt-pairs-v0/matmul_multi_core/tt/matmul_multi_core.cpp",
+        "sha256": "87c04009c8e5ac92e44e6e51c2997bd10c7ccba1fed6445a8dec9d6214046806"
+      },
+      {
+        "path": "assets/bench/tt-pairs-v0/matmul_single_core/cpp/matmul_single_core.cpp",
+        "sha256": "9b7273bccc03231b048c4c8192f817bee7249fb2f4d1432294ad84e6b601c215"
+      },
+      {
+        "path": "assets/bench/tt-pairs-v0/matmul_single_core/tt/matmul_single_core.cpp",
+        "sha256": "edcddaab1223ab9cdccdcbabb4a6958f78f60876120ddf2238199a55a2f02669"
+      }
+    ],
+    "example_dirs": [
+      {
+        "path": "tt_metal/programming_examples/eltwise_binary",
+        "item": "eltwise_binary"
+      },
+      {
+        "path": "tt_metal/programming_examples/eltwise_sfpu",
+        "item": "eltwise_sfpu"
+      },
+      {
+        "path": "tt_metal/programming_examples/loopback",
+        "item": "loopback"
+      },
+      {
+        "path": "tt_metal/programming_examples/matmul/matmul_multi_core",
+        "item": "matmul_multi_core"
+      },
+      {
+        "path": "tt_metal/programming_examples/matmul/matmul_single_core",
+        "item": "matmul_single_core"
+      }
+    ],
+    "upstream": [
+      {
+        "path": "tt_metal/programming_examples/eltwise_binary/eltwise_binary.cpp",
+        "sha256": "82b11f7ab766228ff4a7e94a3f26d414ae14ca8c55079e0a3b790fa8b3c0297b"
+      },
+      {
+        "path": "tt_metal/programming_examples/eltwise_binary/kernels/compute/tiles_add.cpp",
+        "sha256": "f3a596d336425cfaf938b10574340c8a5b870bdfdd640484970597b07f9103b3"
+      },
+      {
+        "path": "tt_metal/programming_examples/eltwise_binary/kernels/dataflow/read_tiles.cpp",
+        "sha256": "4f667427aa88e9c85bed20109eda7c0ec71e7f2171f56ac98b51f22f16bb2c6e"
+      },
+      {
+        "path": "tt_metal/programming_examples/eltwise_binary/kernels/dataflow/write_tile.cpp",
+        "sha256": "9c7fa7775ef350eada5e60a2db20d51af4e8244398ebd886585bc6b7c9b86b95"
+      },
+      {
+        "path": "tt_metal/programming_examples/eltwise_sfpu/eltwise_sfpu.cpp",
+        "sha256": "c8a5b835c9c2abb1afe50fadf0cb5416de62fb2fd8d38d3da78b7fddddb7a513"
+      },
+      {
+        "path": "tt_metal/programming_examples/eltwise_sfpu/kernels/compute/eltwise_sfpu.cpp",
+        "sha256": "43757a074a6c9e5bbfbfd0369ed93eb0522b2860bce4b565d80d8789e82070ea"
+      },
+      {
+        "path": "tt_metal/programming_examples/eltwise_sfpu/kernels/dataflow/read_tile.cpp",
+        "sha256": "6cadb4ef111bcc20369688aeaf447065d69a8969e20b36838ebf3398760c972c"
+      },
+      {
+        "path": "tt_metal/programming_examples/eltwise_sfpu/kernels/dataflow/write_tile.cpp",
+        "sha256": "4e271495b72d57d4dfec3e23665cdb9d34339e96b546a2f5f73defe454fdc734"
+      },
+      {
+        "path": "tt_metal/programming_examples/loopback/kernels/loopback_dram_copy.cpp",
+        "sha256": "f247ed9ae024f47efac707e598379f3b47ce602c6140a9dfa2a6cc01bd263af1"
+      },
+      {
+        "path": "tt_metal/programming_examples/loopback/loopback.cpp",
+        "sha256": "f7c217730c7ff5a4d518f8806b60424b2c3b34dbc71ad2874c708320d085b2b7"
+      },
+      {
+        "path": "tt_metal/programming_examples/matmul/matmul_multi_core/kernels/compute/mm.cpp",
+        "sha256": "15b9b6f921ecb67d2edeebf2ba3d6fb83446d9023cce6d8cd5dc2d93f6132250"
+      },
+      {
+        "path": "tt_metal/programming_examples/matmul/matmul_multi_core/kernels/dataflow/reader_mm_output_tiles_partitioned.cpp",
+        "sha256": "2d5924b5f7d4150fe090e72fe6caaaf501191c88b2b8a2663a67a8fd41cb473e"
+      },
+      {
+        "path": "tt_metal/programming_examples/matmul/matmul_multi_core/kernels/dataflow/writer_unary_interleaved_start_id.cpp",
+        "sha256": "ac78a2919007fb5dde5052c4eb096e88e582bc8b3bb138b55ef9e5dcb82f8e68"
+      },
+      {
+        "path": "tt_metal/programming_examples/matmul/matmul_multi_core/matmul_multi_core.cpp",
+        "sha256": "f564c60d483bfc8f30050535092b3bee2baa337a7948ade7b0f36d6184cb7843"
+      },
+      {
+        "path": "tt_metal/programming_examples/matmul/matmul_single_core/kernels/compute/mm.cpp",
+        "sha256": "19552c7297839909006edc6710df30702233987a84478786658d321bb9f21f92"
+      },
+      {
+        "path": "tt_metal/programming_examples/matmul/matmul_single_core/kernels/dataflow/reader_single_core_mm.cpp",
+        "sha256": "89161eed9b7fd04443be27c46122e60771bdce2a6b72545da1d94ad57f7b71a2"
+      },
+      {
+        "path": "tt_metal/programming_examples/matmul/matmul_single_core/kernels/dataflow/writer_single_core_mm.cpp",
+        "sha256": "baa540e3daf6066dc94183bb8d0b1ec59d8999b3bedabced9cec06364524a12a"
+      },
+      {
+        "path": "tt_metal/programming_examples/matmul/matmul_single_core/matmul_single_core.cpp",
+        "sha256": "8ebd1c486e14fa01131a199b6e0dc37ac4846008444b0c918552ba2c904bdcd5"
+      }
+    ]
+  },
+  "examples": [
+    {
+      "example": "add_2_integers_in_riscv",
+      "record": 1,
+      "described_from": "add_2_integers_in_riscv/add_2_integers_in_riscv.md and the host program's comments",
+      "judgment": "kept beside Tier A eltwise_binary, which it resembles only in adding: it adds one uint32 value to another on a data-movement RISC-V core with plain loads and stores through three L1 scratch buffers, with no tile, no circular buffer, no compute kernel, and no bfloat16, so it teaches the buffer and kernel-launch calls every program uses, not eltwise_binary's tile pipeline (reader, add_tiles compute kernel, writer over circular buffers), whose one-tile form add_2_integers_in_compute is excluded above as a duplicate",
+      "prompt_chars": 875,
+      "completion_chars": 10248,
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/add_2_integers_in_riscv/add_2_integers_in_riscv.cpp",
+          "sha256": "8d71570eaf89a0971b7e71672153a949bf2e818baa157cd17a9e4f5bdf8d40de",
+          "bytes": 7681
+        },
+        {
+          "path": "tt_metal/programming_examples/add_2_integers_in_riscv/kernels/reader_writer_add_in_riscv.cpp",
+          "sha256": "3094fc619dbdecc69e95077b34a6ecdb970ce875e9484f1d67e2215984b1b59e",
+          "bytes": 2461
+        }
+      ],
+      "upstream_overlap": 0.0667
+    },
+    {
+      "example": "distributed/1_distributed_program_dispatch",
+      "record": 2,
+      "described_from": "the host program's comments",
+      "judgment": null,
+      "prompt_chars": 733,
+      "completion_chars": 2391,
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/distributed/1_distributed_program_dispatch/distributed_program_dispatch.cpp",
+          "sha256": "b0581688005434cdc4c2b624cba853c1ff176b9c2d38bbc1730197090c3343dc",
+          "bytes": 1850
+        },
+        {
+          "path": "tt_metal/programming_examples/distributed/1_distributed_program_dispatch/kernels/void_kernel.cpp",
+          "sha256": "1f2da4f91119cf5c93ccba14738dfb886d9d959e045c47223518eb04900af645",
+          "bytes": 445
+        }
+      ],
+      "upstream_overlap": 0.125
+    },
+    {
+      "example": "distributed/2_distributed_buffer_rw",
+      "record": 3,
+      "described_from": "the host program's comments",
+      "judgment": "kept beside Tier A loopback, which it resembles only in writing data to the device and reading it back: it has no kernel and creates no program, so nothing on the device moves data; the host writes a sharded L1 mesh buffer and reads the same buffer back through the command queue, where loopback's kernel copies one DRAM buffer to another through an L1 buffer",
+      "prompt_chars": 754,
+      "completion_chars": 2789,
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/distributed/2_distributed_buffer_rw/distributed_buffer_rw.cpp",
+          "sha256": "791ebf332126464ad167859d4e1803d9b540950fc81c2019cf0b00552df68025",
+          "bytes": 2744
+        }
+      ],
+      "upstream_overlap": 0.0227
+    },
+    {
+      "example": "hello_world_compute_kernel",
+      "record": 4,
+      "described_from": "hello_world_compute_kernel/hello_world_compute.md",
+      "judgment": null,
+      "prompt_chars": 847,
+      "completion_chars": 3984,
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/hello_world_compute_kernel/hello_world_compute_kernel.cpp",
+          "sha256": "fdf8edf23f5c0a0c464be57acca9ad4cd1a652660c475dfcce2cb30f5178f557",
+          "bytes": 3235
+        },
+        {
+          "path": "tt_metal/programming_examples/hello_world_compute_kernel/kernels/compute/void_compute_kernel.cpp",
+          "sha256": "1642d6f7de1d0488799343bffe602993afe7bdc1604aa96a08c1c290e41bbb4d",
+          "bytes": 639
+        }
+      ],
+      "upstream_overlap": 0.1
+    },
+    {
+      "example": "hello_world_datamovement_kernel",
+      "record": 5,
+      "described_from": "hello_world_datamovement_kernel/hello_world_data_movement.md",
+      "judgment": null,
+      "prompt_chars": 826,
+      "completion_chars": 4879,
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/hello_world_datamovement_kernel/hello_world_datamovement_kernel.cpp",
+          "sha256": "299a7f809bd9b1fde083d9465a4daca412fe5f9cd6e93dec860efdd096706701",
+          "bytes": 3801
+        },
+        {
+          "path": "tt_metal/programming_examples/hello_world_datamovement_kernel/kernels/dataflow/void_dataflow_kernel.cpp",
+          "sha256": "c5f670c20169001d3492cc0f3640f216793f602cec5a24ba9fe9755601d3828a",
+          "bytes": 961
+        }
+      ],
+      "upstream_overlap": 0.0909
+    },
+    {
+      "example": "hello_world_datatypes_kernel",
+      "record": 6,
+      "described_from": "the host program's comments",
+      "judgment": null,
+      "prompt_chars": 811,
+      "completion_chars": 4983,
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/hello_world_datatypes_kernel/hello_world_datatypes_kernel.cpp",
+          "sha256": "ca4201b65d1da42a3fdb901a75a697cd9478cfc5c5e43ef9d9de47f3bf091880",
+          "bytes": 3838
+        },
+        {
+          "path": "tt_metal/programming_examples/hello_world_datatypes_kernel/kernels/dataflow/float_dataflow_kernel.cpp",
+          "sha256": "98073ead716e938c010175f537697b04bed2253987035296efa12aca664b7558",
+          "bytes": 1032
+        }
+      ],
+      "upstream_overlap": 0.125
+    },
+    {
+      "example": "profiler/test_device_api_debugger",
+      "record": 7,
+      "described_from": "the host program and its kernel",
+      "judgment": "kept beside Tier A loopback, whose kernel its loop resembles (an async read into L1, a barrier, an async write from L1, a barrier): it moves 64 bytes at a time to and from one remote core's L1 address on the experimental NoC API, a round trip to the same address, with no DRAM buffer and no copy from one buffer to another, and runs as a device profiler trace whose result is the profiler's record, where loopback copies a DRAM buffer to a second DRAM buffer through L1 and checks the copy",
+      "prompt_chars": 1080,
+      "completion_chars": 4292,
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/profiler/test_device_api_debugger/kernels/debug_packets.cpp",
+          "sha256": "421fa3ed16ea776580adb8f420487fcbfd288465d327035d4470156362489651",
+          "bytes": 1133
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_device_api_debugger/test_device_api_debugger.cpp",
+          "sha256": "ec24527340442a99a0986db2e680f2fa9d92dee97ca8c5bf1c31b9be9c61be79",
+          "bytes": 3065
+        }
+      ],
+      "upstream_overlap": 0.0541
+    },
+    {
+      "example": "shard_data_rm",
+      "record": 8,
+      "described_from": "the host program's comments",
+      "judgment": null,
+      "prompt_chars": 1013,
+      "completion_chars": 10133,
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/shard_data_rm/kernels/reader_sharded_rm.cpp",
+          "sha256": "bb51fb6af31d838588db4e6de56ea3f7972bbe29be03f6497b1b2f393bc2eaed",
+          "bytes": 2022
+        },
+        {
+          "path": "tt_metal/programming_examples/shard_data_rm/shard_data_rm.cpp",
+          "sha256": "ba122b7f200f5aa0a2488a2819db6f1b0b0f54782202da4dd50985957d073918",
+          "bytes": 8024
+        }
+      ],
+      "upstream_overlap": 0.0448
+    }
+  ],
+  "excluded": [
+    {
+      "example": "eltwise_binary",
+      "reason": "Tier A item eltwise_binary (unassigned; Agent Rule 5)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/eltwise_binary/eltwise_binary.cpp",
+          "sha256": "82b11f7ab766228ff4a7e94a3f26d414ae14ca8c55079e0a3b790fa8b3c0297b",
+          "bytes": 11392
+        },
+        {
+          "path": "tt_metal/programming_examples/eltwise_binary/kernels/compute/tiles_add.cpp",
+          "sha256": "f3a596d336425cfaf938b10574340c8a5b870bdfdd640484970597b07f9103b3",
+          "bytes": 2550
+        },
+        {
+          "path": "tt_metal/programming_examples/eltwise_binary/kernels/dataflow/read_tiles.cpp",
+          "sha256": "4f667427aa88e9c85bed20109eda7c0ec71e7f2171f56ac98b51f22f16bb2c6e",
+          "bytes": 2502
+        },
+        {
+          "path": "tt_metal/programming_examples/eltwise_binary/kernels/dataflow/write_tile.cpp",
+          "sha256": "9c7fa7775ef350eada5e60a2db20d51af4e8244398ebd886585bc6b7c9b86b95",
+          "bytes": 1504
+        }
+      ]
+    },
+    {
+      "example": "eltwise_sfpu",
+      "reason": "Tier A item eltwise_sfpu (unassigned; Agent Rule 5)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/eltwise_sfpu/eltwise_sfpu.cpp",
+          "sha256": "c8a5b835c9c2abb1afe50fadf0cb5416de62fb2fd8d38d3da78b7fddddb7a513",
+          "bytes": 7843
+        },
+        {
+          "path": "tt_metal/programming_examples/eltwise_sfpu/kernels/compute/eltwise_sfpu.cpp",
+          "sha256": "43757a074a6c9e5bbfbfd0369ed93eb0522b2860bce4b565d80d8789e82070ea",
+          "bytes": 2252
+        },
+        {
+          "path": "tt_metal/programming_examples/eltwise_sfpu/kernels/dataflow/read_tile.cpp",
+          "sha256": "6cadb4ef111bcc20369688aeaf447065d69a8969e20b36838ebf3398760c972c",
+          "bytes": 1871
+        },
+        {
+          "path": "tt_metal/programming_examples/eltwise_sfpu/kernels/dataflow/write_tile.cpp",
+          "sha256": "4e271495b72d57d4dfec3e23665cdb9d34339e96b546a2f5f73defe454fdc734",
+          "bytes": 1504
+        }
+      ]
+    },
+    {
+      "example": "loopback",
+      "reason": "Tier A item loopback (unassigned; Agent Rule 5)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/loopback/kernels/loopback_dram_copy.cpp",
+          "sha256": "f247ed9ae024f47efac707e598379f3b47ce602c6140a9dfa2a6cc01bd263af1",
+          "bytes": 1841
+        },
+        {
+          "path": "tt_metal/programming_examples/loopback/loopback.cpp",
+          "sha256": "f7c217730c7ff5a4d518f8806b60424b2c3b34dbc71ad2874c708320d085b2b7",
+          "bytes": 7929
+        }
+      ]
+    },
+    {
+      "example": "matmul/matmul_multi_core",
+      "reason": "Tier A item matmul_multi_core (unassigned; Agent Rule 5)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_multi_core/kernels/compute/mm.cpp",
+          "sha256": "15b9b6f921ecb67d2edeebf2ba3d6fb83446d9023cce6d8cd5dc2d93f6132250",
+          "bytes": 3563
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_multi_core/kernels/dataflow/reader_mm_output_tiles_partitioned.cpp",
+          "sha256": "2d5924b5f7d4150fe090e72fe6caaaf501191c88b2b8a2663a67a8fd41cb473e",
+          "bytes": 2835
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_multi_core/kernels/dataflow/writer_unary_interleaved_start_id.cpp",
+          "sha256": "ac78a2919007fb5dde5052c4eb096e88e582bc8b3bb138b55ef9e5dcb82f8e68",
+          "bytes": 1991
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_multi_core/matmul_multi_core.cpp",
+          "sha256": "f564c60d483bfc8f30050535092b3bee2baa337a7948ade7b0f36d6184cb7843",
+          "bytes": 17297
+        }
+      ]
+    },
+    {
+      "example": "matmul/matmul_single_core",
+      "reason": "Tier A item matmul_single_core (unassigned; Agent Rule 5)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_single_core/kernels/compute/mm.cpp",
+          "sha256": "19552c7297839909006edc6710df30702233987a84478786658d321bb9f21f92",
+          "bytes": 3723
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_single_core/kernels/dataflow/reader_single_core_mm.cpp",
+          "sha256": "89161eed9b7fd04443be27c46122e60771bdce2a6b72545da1d94ad57f7b71a2",
+          "bytes": 2496
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_single_core/kernels/dataflow/writer_single_core_mm.cpp",
+          "sha256": "baa540e3daf6066dc94183bb8d0b1ec59d8999b3bedabced9cec06364524a12a",
+          "bytes": 1941
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_single_core/matmul_single_core.cpp",
+          "sha256": "8ebd1c486e14fa01131a199b6e0dc37ac4846008444b0c918552ba2c904bdcd5",
+          "bytes": 11944
+        }
+      ]
+    },
+    {
+      "example": "matmul/matmul_common",
+      "reason": "duplicate of the Tier A matmul items: the shared kernels and bmm_op.hpp of the matmul examples",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_common/bmm_op.hpp",
+          "sha256": "0b924f53a37fd90be5ec858165fa2c8d66199123e3b704847dce6db38e9d00f4",
+          "bytes": 7084
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_common/kernels/compute/bmm.cpp",
+          "sha256": "aeca6aa9c79eb986995c610cdbecb5d34c56c7eed70b59a68b7fb2437e04c870",
+          "bytes": 1698
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_common/kernels/compute/bmm_large_block_zm.cpp",
+          "sha256": "8c59140dbaf49e584af6fd1ea443d00be684f3a708bfb0fd8a7ff735539aec30",
+          "bytes": 5566
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/reader_bmm_8bank_output_tiles_partitioned.cpp",
+          "sha256": "165a38a4c77b66ef1e2d83e36edf0f262b780e3f2d20dc42d64f159c6c47aec6",
+          "bytes": 3798
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout.cpp",
+          "sha256": "8bc4f61e7780d664ed7825757fdfdc440f05fe50c8060cdfb809803b681267ef",
+          "bytes": 4349
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_receiver.cpp",
+          "sha256": "c893a77b3566f5af187c55f9afffe7c5c9ecce442ad51c7a5470053859df4ca0",
+          "bytes": 4906
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_sender.cpp",
+          "sha256": "793023368a44508b537c7c119ccc00928fdb2e8ff8ec30249c31b4a01d126988",
+          "bytes": 8621
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_receiver.cpp",
+          "sha256": "c6d1e619e3c792806183c50b2c50394889e1574bf8c260e52806325ee310cd07",
+          "bytes": 8409
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_sender.cpp",
+          "sha256": "31dd377003eb2bc302bd508a9603591e28838f8d6d0a0e4fc28581c0ba50cebd",
+          "bytes": 12159
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/writer_bmm_tile_layout.cpp",
+          "sha256": "e17aec12dd837bba1d91e66ec455611df745ff07c897f6172acd821329c1b600",
+          "bytes": 3357
+        },
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/writer_unary_interleaved_start_id.cpp",
+          "sha256": "d8b18ea63c2e31ba62fa8d6487ef969533980ab77d86df286a71c861913afdb9",
+          "bytes": 1665
+        }
+      ]
+    },
+    {
+      "example": "matmul/matmul_multicore_reuse",
+      "reason": "duplicate of Tier A matmul_multi_core (the same matmul with data reuse)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_multicore_reuse/matmul_multicore_reuse.cpp",
+          "sha256": "cc6881fedc2cfcc37f77b3111d024e0d168b494a2f267797be90fe2ad2b9aba9",
+          "bytes": 17752
+        }
+      ]
+    },
+    {
+      "example": "matmul/matmul_multicore_reuse_mcast",
+      "reason": "duplicate of Tier A matmul_multi_core (the same matmul with reuse and multicast)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/matmul/matmul_multicore_reuse_mcast/matmul_multicore_reuse_mcast.cpp",
+          "sha256": "4d376bc3a072081de635bd1e0f4ae4ce02e4cfe24aeb783a01efb808b7f5b97c",
+          "bytes": 25955
+        }
+      ]
+    },
+    {
+      "example": "add_2_integers_in_compute",
+      "reason": "duplicate of Tier A eltwise_binary: an elementwise add of two tiles with a reader, an add_tiles compute kernel, and a writer, eltwise_binary's structure on one tile",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/add_2_integers_in_compute/add_2_integers_in_compute.cpp",
+          "sha256": "f68b05ea26b414326949c6dcc602bc998e6fcb5eb70c0f59918a8847fdf7e787",
+          "bytes": 10387
+        },
+        {
+          "path": "tt_metal/programming_examples/add_2_integers_in_compute/kernels/compute/add_2_tiles.cpp",
+          "sha256": "8ae0134cbab5fa46a5d1945fce925aa3db43163fe23ba9183431090cfa57d84e",
+          "bytes": 1809
+        },
+        {
+          "path": "tt_metal/programming_examples/add_2_integers_in_compute/kernels/dataflow/reader_binary_1_tile.cpp",
+          "sha256": "272613f158c6757242c04f67a531196af06980e2bc7624c0da1ccd179086b08c",
+          "bytes": 2063
+        },
+        {
+          "path": "tt_metal/programming_examples/add_2_integers_in_compute/kernels/dataflow/writer_1_tile.cpp",
+          "sha256": "63c5c183be3ba70c2a465fdf925ac2a5e1199629c70315b9850b0e7b7c4b2f36",
+          "bytes": 1337
+        }
+      ]
+    },
+    {
+      "example": "contributed/vecadd",
+      "reason": "duplicate of Tier A eltwise_binary (an elementwise add of two bfloat16 vectors in tiles)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/contributed/vecadd/kernels/add.cpp",
+          "sha256": "41d7414e6b1594a157083d75e388607f6eadceb1d74a7d2ea4aa98758d59cae4",
+          "bytes": 2629
+        },
+        {
+          "path": "tt_metal/programming_examples/contributed/vecadd/kernels/interleaved_tile_read.cpp",
+          "sha256": "688e423d913f5e96f6f2e76b9bc2785d0a20ebd7d64d7bacc8556c38c075d3ff",
+          "bytes": 2899
+        },
+        {
+          "path": "tt_metal/programming_examples/contributed/vecadd/kernels/tile_write.cpp",
+          "sha256": "64e9f53c2c0d7dd8a912c2981a77ddcc6c5a523cd1d1601ae2a0ed03cf61399b",
+          "bytes": 1543
+        },
+        {
+          "path": "tt_metal/programming_examples/contributed/vecadd/vecadd.cpp",
+          "sha256": "48d977f56d16efdc04c4a348b842362f6f8869685ab97ddfe3a022be3c9ac49c",
+          "bytes": 11339
+        }
+      ]
+    },
+    {
+      "example": "vecadd_multi_core",
+      "reason": "duplicate of Tier A eltwise_binary (the same elementwise add split across cores)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/vecadd_multi_core/kernels/add_multi_core.cpp",
+          "sha256": "0d0c8fb1301dc5e0cc06349d43c9bf0ef1496166b79a6b13e9db99c23599260d",
+          "bytes": 2977
+        },
+        {
+          "path": "tt_metal/programming_examples/vecadd_multi_core/kernels/interleaved_tile_read_multi_core.cpp",
+          "sha256": "c044be02a23eaf2447e77ff6b37d0023355b6a2a4bed5a2686f24dd64780970f",
+          "bytes": 3434
+        },
+        {
+          "path": "tt_metal/programming_examples/vecadd_multi_core/kernels/tile_write_multi_core.cpp",
+          "sha256": "fd273d6022c361740530a2bfbc34664a39676ccd0c04306f484b266fb5a3fc4b",
+          "bytes": 1647
+        },
+        {
+          "path": "tt_metal/programming_examples/vecadd_multi_core/vecadd_multi_core.cpp",
+          "sha256": "47d87f1f1f587effcfada6f9190c80261d4c0aa4dcef21c6ecc25adf9fcb871e",
+          "bytes": 14634
+        }
+      ]
+    },
+    {
+      "example": "vecadd_sharding",
+      "reason": "duplicate of Tier A eltwise_binary (the same elementwise add on sharded buffers)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/vecadd_sharding/kernels/add_sharding.cpp",
+          "sha256": "9b89bd03d6e8dedec93c8a778f9aa204f56fa3f8d639f350f32fd41ec316b2fd",
+          "bytes": 2319
+        },
+        {
+          "path": "tt_metal/programming_examples/vecadd_sharding/vecadd_sharding.cpp",
+          "sha256": "4a55c43eba23907307bb5f66f19f2b69ee4d3545b60181641d891d9abd5245a2",
+          "bytes": 12493
+        }
+      ]
+    },
+    {
+      "example": "distributed/3_distributed_eltwise_add",
+      "reason": "duplicate of Tier A eltwise_binary: the same elementwise add on a mesh, with the kernels of contributed/vecadd",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/distributed/3_distributed_eltwise_add/distributed_eltwise_add.cpp",
+          "sha256": "d4b19f691e33795ca65a1144f00897f47893291e5acf5ae97b0b3af28dd8c782",
+          "bytes": 8277
+        }
+      ]
+    },
+    {
+      "example": "distributed/4_distributed_trace_and_events",
+      "reason": "duplicate of Tier A eltwise_binary: its programs are elementwise add, multiply, and subtract of tiles with the library's eltwise_binary compute kernel, captured in a trace",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/distributed/4_distributed_trace_and_events/distributed_trace_and_events.cpp",
+          "sha256": "dd5cdd726c3f1087d25a52e16c03d19ce6cad647c70858e25381f3d8f35f898a",
+          "bytes": 15467
+        }
+      ]
+    },
+    {
+      "example": "custom_sfpi_add",
+      "reason": "duplicate of Tier A eltwise_binary: an elementwise add of two tile vectors in a custom SFPI kernel, whose reader and writer kernels are byte-identical to eltwise_binary's (rule 4 too)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/custom_sfpi_add/custom_sfpi_add.cpp",
+          "sha256": "bc9be824ee82041a29100a070c95cef3070edf3975e9c1377673735fcff42ea7",
+          "bytes": 10947
+        },
+        {
+          "path": "tt_metal/programming_examples/custom_sfpi_add/kernels/compute/tiles_add.cpp",
+          "sha256": "51e2619e8d3a1f577718db2ee3ebd8cd85021945613ae26a42f7799fee764f1d",
+          "bytes": 7073
+        },
+        {
+          "path": "tt_metal/programming_examples/custom_sfpi_add/kernels/dataflow/read_tiles.cpp",
+          "sha256": "4f667427aa88e9c85bed20109eda7c0ec71e7f2171f56ac98b51f22f16bb2c6e",
+          "bytes": 2502
+        },
+        {
+          "path": "tt_metal/programming_examples/custom_sfpi_add/kernels/dataflow/write_tile.cpp",
+          "sha256": "9c7fa7775ef350eada5e60a2db20d51af4e8244398ebd886585bc6b7c9b86b95",
+          "bytes": 1504
+        }
+      ]
+    },
+    {
+      "example": "profiler/test_noc_event_profiler",
+      "reason": "duplicate of Tier A loopback (its kernel is a DRAM-to-DRAM loopback copy)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/profiler/test_noc_event_profiler/kernels/loopback_dram_copy.cpp",
+          "sha256": "a42babe738304850c0e764258147935c47b8fbe0da8720738b69646ffd9396f1",
+          "bytes": 1507
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_noc_event_profiler/test_noc_event_profiler.cpp",
+          "sha256": "90e25358a9c9eb8b8ff3d6d7512f743674267d8951f84ff09cf1ea32e8a9416d",
+          "bytes": 3912
+        }
+      ]
+    },
+    {
+      "example": "NoC_tile_transfer",
+      "reason": "duplicate of Tier A loopback: it moves one 2048-byte tile of 16-bit data from a DRAM buffer through L1 back to a second DRAM buffer and checks the copy, loopback's DRAM-to-DRAM copy through L1, by way of a second core's L1 over the NoC (as profiler/test_noc_event_profiler, a loopback copy, is excluded); found by the audit of 2026-10-24",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/NoC_tile_transfer/kernels/dataflow/reader0.cpp",
+          "sha256": "de19a56f80f7e23b63a70ce57da65318fea0330ba3fec94b5301ece85237cf7d",
+          "bytes": 1379
+        },
+        {
+          "path": "tt_metal/programming_examples/NoC_tile_transfer/kernels/dataflow/reader1.cpp",
+          "sha256": "e24c7d6b49c9d782b9a2d8d0c25b23ed17700487bc5265c57c555477ab594542",
+          "bytes": 1527
+        },
+        {
+          "path": "tt_metal/programming_examples/NoC_tile_transfer/kernels/dataflow/writer0.cpp",
+          "sha256": "3007553539348195fcebe6b7eb2b37548d9463cef76af86e0e2eb2fb432cf9c7",
+          "bytes": 1789
+        },
+        {
+          "path": "tt_metal/programming_examples/NoC_tile_transfer/kernels/dataflow/writer1.cpp",
+          "sha256": "24fd1dd28e84bd66145e0120bd95fedda0b190f5fe6253e4a670dacd98c3c1fa",
+          "bytes": 1402
+        },
+        {
+          "path": "tt_metal/programming_examples/NoC_tile_transfer/noc_tile_transfer.cpp",
+          "sha256": "eb22b36642887e1225c29459ec7d4b3551f91cec58d246b7a0acd74997eb991d",
+          "bytes": 5566
+        }
+      ]
+    },
+    {
+      "example": "custom_sfpi_smoothstep",
+      "reason": "rule 4: its writer kernel is byte-identical to the Tier A eltwise_binary example's write_tile.cpp, and its reader kernel and host program are built on eltwise_binary's; and rule 3: it holds the run `} | return 0; | }` of assets/bench/tt-pairs-v0/matmul_multi_core/cpp/matmul_multi_core.cpp",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/custom_sfpi_smoothstep/custom_sfpi_smoothstep.cpp",
+          "sha256": "97e1739934d9256f30a360ccbbad09a56f8a88966bc8c02db181e1f31ddaa0ce",
+          "bytes": 10236
+        },
+        {
+          "path": "tt_metal/programming_examples/custom_sfpi_smoothstep/kernels/compute/tiles_smoothstep.cpp",
+          "sha256": "45700390006eb79affe7147bbd254f5e44f8d3e34ecc25c9a3f5a84d7060f887",
+          "bytes": 3761
+        },
+        {
+          "path": "tt_metal/programming_examples/custom_sfpi_smoothstep/kernels/dataflow/read_tiles.cpp",
+          "sha256": "12f568c2265cca93819bbcb2da32f7bf400d4354d733b0ee91e493c91ee1252c",
+          "bytes": 2113
+        },
+        {
+          "path": "tt_metal/programming_examples/custom_sfpi_smoothstep/kernels/dataflow/write_tile.cpp",
+          "sha256": "9c7fa7775ef350eada5e60a2db20d51af4e8244398ebd886585bc6b7c9b86b95",
+          "bytes": 1504
+        }
+      ]
+    },
+    {
+      "example": "sfpu_eltwise_chain",
+      "reason": "rule 3: its host program holds an include run of assets/bench/tt-pairs-v0/matmul_multi_core/tt/matmul_multi_core.cpp (it also applies exp, the Tier A eltwise_sfpu function, as the first step of softplus)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/sfpu_eltwise_chain/kernels/compute/compute.cpp",
+          "sha256": "5b196142792a9a28b52c2f6075be35eae74ad491285da8b38caec425aacd2b05",
+          "bytes": 2615
+        },
+        {
+          "path": "tt_metal/programming_examples/sfpu_eltwise_chain/kernels/dataflow/reader.cpp",
+          "sha256": "e258d38caffc59caa4ee147d0be073d815fa030324c4ec7f1700a8bcf3f6abbf",
+          "bytes": 2490
+        },
+        {
+          "path": "tt_metal/programming_examples/sfpu_eltwise_chain/kernels/dataflow/writer.cpp",
+          "sha256": "4e3ceb17df796b34184ecbbc32e218ad2d2c3e4476ee7a6c14ab23d33c89fbda",
+          "bytes": 1011
+        },
+        {
+          "path": "tt_metal/programming_examples/sfpu_eltwise_chain/sfpu_eltwise_chain.cpp",
+          "sha256": "4e69f4567c597de5cc2af4a15a46d2429a133025e2e377df85d19ce8cd0affa3",
+          "bytes": 9427
+        }
+      ]
+    },
+    {
+      "example": "contributed/multicast",
+      "reason": "rule 3: its host program holds the runs `using namespace tt; | using namespace tt::tt_metal; | using namespace tt::constants;` of the matmul_multi_core tt reference and `} | } | }` of its cpp reference",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/contributed/multicast/kernels/compute/void_compute_kernel.cpp",
+          "sha256": "6bfa632aef9fbf6418b0720d6df00c65aa9ac08f4ba255dd0346d39eede8069b",
+          "bytes": 531
+        },
+        {
+          "path": "tt_metal/programming_examples/contributed/multicast/kernels/dataflow/coordinator_kernel.cpp",
+          "sha256": "841a057cd0cea271b7b4d8cae86c77b649ca5bde8f0033a66c9bec8e43ee313b",
+          "bytes": 3364
+        },
+        {
+          "path": "tt_metal/programming_examples/contributed/multicast/kernels/dataflow/inbound_kernel.cpp",
+          "sha256": "d6bbfa96dcc5445f1e10202ae57377d7e8a08295b0a7bafdc63b0675bdad8694",
+          "bytes": 3286
+        },
+        {
+          "path": "tt_metal/programming_examples/contributed/multicast/kernels/dataflow/outbound_kernel.cpp",
+          "sha256": "56faba1292e8d9b1fc10ad7b9477f588d24cab6b8ab81be421b6d3fa0c1045cd",
+          "bytes": 1181
+        },
+        {
+          "path": "tt_metal/programming_examples/contributed/multicast/multicast.cpp",
+          "sha256": "50c3da4cf819ec7469129436a81f1ad3fd40b894496ddc1001912e7b36804e23",
+          "bytes": 14840
+        }
+      ]
+    },
+    {
+      "example": "pad_multi_core",
+      "reason": "rule 3, the run `} | } | }` of assets/bench/tt-pairs-v0/matmul_multi_core/cpp/matmul_multi_core.cpp",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/pad_multi_core/kernels/pad_reader_dims_rm_interleaved.cpp",
+          "sha256": "31ad8a0d23a9dca3eebc6da3d4b8c740c23a02e27e4ed711262318773e17482b",
+          "bytes": 5216
+        },
+        {
+          "path": "tt_metal/programming_examples/pad_multi_core/kernels/pad_writer_dims_rm_interleaved.cpp",
+          "sha256": "ee711f0765c06c770261681e5cd6b6cacb9cd99023945ad4c366113a5af4903b",
+          "bytes": 1417
+        },
+        {
+          "path": "tt_metal/programming_examples/pad_multi_core/pad_multi_core.cpp",
+          "sha256": "b5276a0ffaa83ce86e16f3d6fb7652fd847e44d49dcfbe18cf793d66b41d50a4",
+          "bytes": 11099
+        }
+      ]
+    },
+    {
+      "example": "profiler/test_custom_cycle_count",
+      "reason": "rule 3, the runs `} | } | }` and `} | return 0; | }` of the matmul_multi_core cpp reference",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/profiler/test_custom_cycle_count/kernels/custom_cycle_count.cpp",
+          "sha256": "4dc17f45524d7bbfcb10e35d19c550d29b4f2f202f15759e6a257803cfa80be1",
+          "bytes": 963
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_custom_cycle_count/kernels/custom_cycle_count_compute.cpp",
+          "sha256": "277984a4b0441eaac913b2e8b55a102332d36a62d000ca3049361a8b6640cc31",
+          "bytes": 1007
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_custom_cycle_count/test_custom_cycle_count.cpp",
+          "sha256": "3f3b65833d59492cad273c1e0407d30fc887b7ec3d482305017e266572ff7349",
+          "bytes": 3619
+        }
+      ]
+    },
+    {
+      "example": "profiler/test_custom_cycle_count_slow_dispatch",
+      "reason": "rule 3, the same runs as profiler/test_custom_cycle_count",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/profiler/test_custom_cycle_count_slow_dispatch/kernels/custom_cycle_count_compute_slow_dispatch.cpp",
+          "sha256": "277984a4b0441eaac913b2e8b55a102332d36a62d000ca3049361a8b6640cc31",
+          "bytes": 1007
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_custom_cycle_count_slow_dispatch/kernels/custom_cycle_count_slow_dispatch.cpp",
+          "sha256": "4dc17f45524d7bbfcb10e35d19c550d29b4f2f202f15759e6a257803cfa80be1",
+          "bytes": 963
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_custom_cycle_count_slow_dispatch/test_custom_cycle_count_slow_dispatch.cpp",
+          "sha256": "cdfeb6481f70d01471022cdd2249a71be9661ad8d76cb000b48ad4a94c9122b0",
+          "bytes": 3594
+        }
+      ]
+    },
+    {
+      "example": "profiler/test_dispatch_cores",
+      "reason": "rule 3, the run `} | return 0; | }` of the matmul_multi_core cpp reference (and its kernels are test_custom_cycle_count's)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/profiler/test_dispatch_cores/test_dispatch_cores.cpp",
+          "sha256": "90390478e5372bf72c6c8509d6fbea9d77ff07fa8e062a97164cfa5fbfb84cea",
+          "bytes": 3548
+        }
+      ]
+    },
+    {
+      "example": "profiler/test_full_buffer",
+      "reason": "rule 3, the runs `} | } | }` and `} | return 0; | }` of the matmul_multi_core cpp reference",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/profiler/test_full_buffer/kernels/full_buffer.cpp",
+          "sha256": "eff653b4b0e828a283dc9330fcfad45cc9197957aab199cb841cd63cbfbfb312",
+          "bytes": 351
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_full_buffer/kernels/full_buffer_compute.cpp",
+          "sha256": "27fa01737c74354da7719370805d5c8e972ae1386a4a330a6e60067e7308094f",
+          "bytes": 441
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_full_buffer/kernels/full_buffer_ether.cpp",
+          "sha256": "8d682907a664e5473d1324e2d18cb01e7e8a85bd5cf55647713181c4cbfba9d9",
+          "bytes": 352
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_full_buffer/test_full_buffer.cpp",
+          "sha256": "64b5caabcad415fa7625e95d73daeb0a69f6636547cb1cf8f877e7eb67e6aa87",
+          "bytes": 4515
+        }
+      ]
+    },
+    {
+      "example": "profiler/test_multi_op",
+      "reason": "rule 3, the runs `} | } | }` and `} | return 0; | }` of the matmul_multi_core cpp reference",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/profiler/test_multi_op/kernels/multi_op.cpp",
+          "sha256": "9afcce1a7d99c8ba6ae5a5577f12a1a405592d66e2c45bcfdea131520c560da4",
+          "bytes": 298
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_multi_op/kernels/multi_op_compute.cpp",
+          "sha256": "1fd41d0077ade72deece69f4222b86a4562406ffc4d6b6d80254f73ef3dc0114",
+          "bytes": 388
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_multi_op/test_multi_op.cpp",
+          "sha256": "428edef617829261a1cc5749cde844b79018548433595f4391ce9b3f05a2bc85",
+          "bytes": 3585
+        }
+      ]
+    },
+    {
+      "example": "profiler/test_multi_op_buffer_overflow",
+      "reason": "rule 3, the run `} | return 0; | }` of the matmul_multi_core cpp reference (and its kernels are test_multi_op's)",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/profiler/test_multi_op_buffer_overflow/test_multi_op_buffer_overflow.cpp",
+          "sha256": "7d6e18ac3335616c53af6d16b242ef773ad24bd0b6da1f3de46ce072abf51461",
+          "bytes": 3220
+        }
+      ]
+    },
+    {
+      "example": "profiler/test_timestamped_events",
+      "reason": "rule 3, the runs `} | } | }` and `} | return 0; | }` of the matmul_multi_core cpp reference",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/profiler/test_timestamped_events/kernels/timestamped_events.cpp",
+          "sha256": "cc08c7a3bbdab5e322d224c413325dc6b75d4aff7b39c86ade494c8ffae74e12",
+          "bytes": 445
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_timestamped_events/kernels/timestamped_events_compute.cpp",
+          "sha256": "0ea1f3a3aa5b11379b167da93124b01141a5b00ae6850d76ad6df55104835146",
+          "bytes": 535
+        },
+        {
+          "path": "tt_metal/programming_examples/profiler/test_timestamped_events/test_timestamped_events.cpp",
+          "sha256": "40a3d8e82843a3e6cebe6605d2a677ba744c30999709b2fe2a8ef2cddee3ebe8",
+          "bytes": 4441
+        }
+      ]
+    },
+    {
+      "example": "tests",
+      "reason": "not an example: the package's build and integration tests",
+      "files": [
+        {
+          "path": "tt_metal/programming_examples/tests/mesh_device_test.cpp",
+          "sha256": "6f035af5d9ae8f55c5c4587cbf07f350e032da366e08003e55631bf58e64a7ab",
+          "bytes": 886
+        },
+        {
+          "path": "tt_metal/programming_examples/tests/out_of_tree_test.cpp",
+          "sha256": "9d450313666c2e40a97137eb8c44c4f446cd9bdc8201f7c95a37d9299abcd43b",
+          "bytes": 2070
+        },
+        {
+          "path": "tt_metal/programming_examples/tests/package_integration_test.cpp",
+          "sha256": "f3aa611f4f92a528daa10232b8b3501f1e20b74d21db5af5e4fcfa4d465f7906",
+          "bytes": 1254
+        }
+      ]
+    }
+  ]
+}

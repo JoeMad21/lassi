@@ -167,8 +167,8 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.15 | DONE | The sandbox's Tenstorrent exposure: every card in the cluster | - | exposure built and audited; its remote tests have not run on Linux yet (a window); bible master rev 339 |
 | P17.16 | READY | The tt_silicon executor | P17.15 |  |
 | P17.17 | BLOCKED | Silicon qualification and Tier A with the cards in the loop | P17.16 | the owner's window of 2026-10-23, 20:00 to 24:00 EDT; OQ-075 |
-| P17.18 | READY | tt-train-v0: training records from tt-metal's non-test examples | - | OQ-076 (1a); Tier A excluded by test |
-| P17.19 | READY | Trainer modes: pinned Hub bases, cuda:0, full, LoRA, prompt tuning, from scratch | P17.18 | OQ-076: CPU training on alpha01 in the owner's windows only, never the RTX 3080 (owner, 2026-10-23) |
+| P17.18 | DONE | tt-train-v0: training records from tt-metal's non-test examples | - | tt-train-v0 (8 records) and data.corpus; audited; bible master rev 345 |
+| P17.19 | DONE | Trainer modes: pinned Hub bases, cuda:0, full, LoRA, prompt tuning, from scratch | P17.18 | CPU only (the title's cuda:0 is superseded by the owner's direction of 2026-10-23): Hub and scratch bases, prompt_tuning, four recipes, hf_local checkpoints; no run yet |
 | P17.20 | BLOCKED | Training runs on the RTX 3080 and their evaluation on alpha01's CPU | P17.19 | the owner's windows; OQ-076 (3a) |
 | P17.21 | DONE | The API reference: the context stage under a template prompt set | - | the pack (4b33af6) and the template-set wiring; bible mirror; master sync follows |
 | P17.22 | DONE | Retrieval over the tt-metal docs in generation and corrections | - | the retriever (7f5fd1d) and the stage wiring; bible mirror; master sync follows |

@@ -48,6 +48,7 @@ jobs:
           tests/core/test_recipe_model_pin.py
           tests/llm/test_hf_local.py
           tests/llm/test_hf_local_settings.py
+          tests/llm/test_hf_local_checkpoint.py
           tests/llm/test_hf_local_runs.py
           tests/executors/test_gpu.py
           tests/executors/test_sandbox.py

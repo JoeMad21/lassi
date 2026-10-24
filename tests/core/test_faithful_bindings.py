@@ -226,8 +226,15 @@ def test_the_recipe_check_reads_runs_code_from_capabilities_and_stages_agrees() 
 
 
 def committed_recipes() -> list[Path]:
-    """Return every recipe under projects/ but base.yaml, the shared base that states no bench or stages."""
-    return sorted(path for path in PROJECTS.rglob("*.yaml") if path != PROJECTS / "base.yaml")
+    """Return every run recipe under projects/ but base.yaml, the shared base that states no bench or stages.
+
+    The train recipes under projects/train/ are train recipes, which
+    load_train_recipe loads (tests/train/test_train_recipes.py), not run
+    recipes, so they are left out (2026-10-23).
+    """
+    train = PROJECTS / "train"
+    found = PROJECTS.rglob("*.yaml")
+    return sorted(path for path in found if path != PROJECTS / "base.yaml" and train not in path.parents)
 
 
 def load_committed(path: Path, directory: Path) -> Recipe:

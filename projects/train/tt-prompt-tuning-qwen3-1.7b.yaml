@@ -1,0 +1,44 @@
+# Prompt tuning on Qwen3-1.7B on tt-train-v0, the frozen-weights mode (weights: prompt_tuning): every base weight is
+# frozen and only a soft prompt of 32 virtual-token embeddings trains (OQ-076: data (1a); the owner's direction of
+# 2026-10-23: train on alpha01's CPU in the owner's window only, as a niced background job).
+# Every number below is PROJECTED: arithmetic, or a workstation reading from a dirty tree (2026-10-23 and 2026-10-24,
+# logged with its command and output in plans/spikes/own-model.md, Readings), never a measurement of a run.
+#
+# Before the run, once, in the window: uv run --extra cpu tools/prepare_train.py
+# projects/train/tt-prompt-tuning-qwen3-1.7b.yaml (the same snapshot as the LoRA recipe, about 4.08 GB, PROJECTED;
+# nothing is fetched twice). lassi train never downloads.
+#
+# Data (PROJECTED, a workstation count with the Qwen3 tokenizer, tokenizers 0.22.1): 8 records, 13,027 tokens a pass
+# in the chat format, the longest 3,058; the soft prompt adds 32 positions to each record, 13,283 a pass.
+#
+# Arithmetic (PROJECTED). N = 1,720.6M (see tt-lora-qwen3-1.7b.yaml); trainable 32 x 2,048 = 65,536 parameters.
+# - Compute per token: forward 2N and backward 2N for the activations (the gradient must reach the input
+#   embeddings through every layer, so the backward pass is the frozen base's whole activation backward) = 6.88
+#   GFLOP, plus attention 0.69 GFLOP: about 7.6 GFLOP a token.
+# - A pass: 13,283 x 7.6 GFLOP = 1.0e14 FLOP. Prompt tuning needs many more steps than LoRA: 12 passes (96 steps of
+#   1 record) = 1.2e15 FLOP.
+# - Time: at a sustained 0.5 TFLOP/s for one process on alpha01's EPYC 9534 under bf16 autocast (an assumption),
+#   40 minutes; 81 minutes at 0.25 TFLOP/s, 20 at 1.0. checkpoint.json's train_summary records TRL's train_runtime.
+# - Memory: the float32 base 6.9 GB and activations of about 6.0 GB without checkpointing: about 13 GB.
+#
+# Serving the result (OQ-076 (3a)): hf_local on alpha01's CPU only. A soft prompt is input embeddings, and
+# furiosa-llm's server and LLM class take only text and token ids (plans/spikes/own-model.md, Readings, item 6, read
+# 2026-10-24), so a prompt-tuned model is not served by furiosa-llm or RNGD;
+# hf_local loads the base at model.revision below and applies the soft prompt with PEFT (model.checkpoint,
+# model.checkpoint_sha256 from the run's provenance.json), and its 32 positions count against the context.
+base_model: Qwen/Qwen3-1.7B@70d244cc86ccca08cf5af4e1e306ecf908b1ad5e  # a HEAD request read X-Repo-Commit equal to it
+method: sft  # the trl trainer carries out prompt tuning for sft only
+weights: prompt_tuning
+trainer:
+  kind: trl
+  device: {kind: cpu}  # alpha01's CPU (owner, 2026-10-23); no GPU trains
+  steps: 96  # 12 passes over the 8 records, one record a step
+  seed: 7
+  batch_size: 1
+  learning_rate: 0.01  # a soft prompt trains at a far higher rate than weights; nothing here is tuned
+  virtual_tokens: 32  # the soft prompt's length, initialized at random (PEFT's PromptTuningInit RANDOM)
+  max_length: 4096  # above the longest record; a longer record is refused, never cut
+  gradient_checkpointing: false
+  chat_format: true
+data:
+  corpus: tt-train-v0

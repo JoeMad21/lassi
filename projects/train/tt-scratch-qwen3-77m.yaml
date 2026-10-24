@@ -1,0 +1,49 @@
+# The from-scratch baseline (the owner's "training our own model", OQ-076): a Qwen3-style model of about 77.2M
+# parameters built from assets/train/scratch/qwen3-77m/config.json with random weights under the seed, trained on
+# tt-train-v0 alone, on alpha01's CPU in the owner's window only, as a niced background job (the owner's direction of
+# 2026-10-23). It is a pipeline baseline, not a useful model: 13,027 tokens is about one part in 119,000 of the 1.5B
+# tokens a compute-optimal run of this size would see (20 tokens a parameter; plans/spikes/own-model.md), so expect
+# it to memorize the 8 programs and to fail every Tier A item (PROJECTED).
+# Every number below is PROJECTED: arithmetic, or a workstation reading from a dirty tree (2026-10-23 and 2026-10-24,
+# logged with its command and output in plans/spikes/own-model.md, Readings), never a measurement of a run.
+#
+# Before the run, once, in the window,
+#   uv run --extra cpu tools/prepare_train.py projects/train/tt-scratch-qwen3-77m.yaml
+# downloads only the tokenizer that tokenizer-pin.json pins (Qwen/Qwen3-0.6B at c1899de, about 11 MB of tokenizer
+# files, PROJECTED; the 0.6B recipe's snapshot already holds them). lassi train never downloads.
+#
+# The config: Qwen3ForCausalLM (an architecture furiosa-llm's ArtifactBuilder supports; plans/spikes/own-model.md,
+# Readings), hidden 384, MLP 1,024, 12 layers, 6 query heads of 64 and 2 key-value heads, the Qwen3 vocabulary of
+# 151,936 entries, tied embeddings, 4,096 positions. Parameters (PROJECTED, the config's arithmetic and a workstation
+# count on the meta device): embedding 151,936 x 384 = 58.3M + 12 layers x 1.57M (attention 147K + 49K + 49K + 147K,
+# MLP 3 x 384 x 1,024 = 1.18M) = 77.2M; three quarters of it is the embedding, a cost of borrowing a 152K vocabulary
+# (the spike note weighs a smaller tokenizer).
+#
+# Data (PROJECTED, a workstation count with the Qwen3 tokenizer, tokenizers 0.22.1): 8 records, 13,027 tokens a pass
+# in the chat format, the longest 3,058; the token-weighted mean causal position is 1,004.
+#
+# Arithmetic (PROJECTED).
+# - Compute per token: 6N = 0.46 GFLOP plus attention 3 x 4 x 1,004 x 384 x 12 = 0.06 GFLOP: about 0.52 GFLOP.
+# - A pass: 13,027 x 0.52 GFLOP = 6.8e12 FLOP. 80 passes (640 steps of 1 record) = 5.4e14 FLOP.
+# - Time: a model this small uses a CPU less well; at a sustained 0.2 TFLOP/s (an assumption) 45 minutes, 90 at
+#   0.1 TFLOP/s, 18 at 0.5. checkpoint.json's train_summary records TRL's train_runtime.
+# - Memory: float32 weights, gradients, and AdamW moments 77.2M x 16 bytes = 1.2 GB plus small activations.
+#
+# Serving the result (OQ-076 (3a)): hf_local on alpha01's CPU loads the full weights from the checkpoint, with
+# model.id Qwen/Qwen3-0.6B and model.revision c1899de289a04d12100db370d81485cdf75e47ca naming the snapshot its
+# tokenizer came from, and model.checkpoint and model.checkpoint_sha256 from the run's provenance.json.
+base_model: scratch:qwen3-77m  # assets/train/scratch/qwen3-77m/: config.json and tokenizer-pin.json
+method: sft
+weights: full  # a scratch base trains full weights only
+trainer:
+  kind: trl
+  device: {kind: cpu}  # alpha01's CPU (owner, 2026-10-23); no GPU trains
+  steps: 640  # 80 passes over the 8 records, one record a step
+  seed: 7  # with the config, it fixes the initial weights
+  batch_size: 1
+  learning_rate: 0.0005  # a common rate for a small model trained from scratch; nothing here is tuned
+  max_length: 4096  # the config's max_position_embeddings; above the longest record
+  gradient_checkpointing: false
+  chat_format: true  # the Qwen3 tokenizer's chat template, as hf_local serves with
+data:
+  corpus: tt-train-v0

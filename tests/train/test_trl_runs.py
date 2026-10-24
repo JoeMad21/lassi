@@ -90,10 +90,11 @@ from trl_smoke import (
     METHODS,
     PINS,
     SEED,
+    SMOKE_MODES,
     STEPS,
     SYNTHETIC_DIR,
     TRAINER,
-    WEIGHT_MODES,
+    VIRTUAL_TOKENS,
     base_hashes,
     smoke_recipe,
     trl_trainer,
@@ -115,11 +116,11 @@ PROVENANCE_KEYS = (
     "train_id", "trainer", "recipe_hash", "commit", "dirty", "device_records", "driver", "framework_pins", "data",
 )
 TRAINER_RECORD_KEYS = {
-    "method", "weights", "base_model", "peft", "reward", "training_args", "global_step", "train_summary",
+    "method", "weights", "base_model", "peft", "reward", "training_args", "global_step", "train_summary", "threads",
 }
 FIXTURE_REWARD = {"source": "fixture", "rule": "target_fraction", "function_count": 1}
 LOOPBACK = ("127.0.0.1", "::1", "localhost")
-SMOKE = [(method, weights) for method in METHODS for weights in WEIGHT_MODES]
+SMOKE = [(method, weights) for method in METHODS for weights in SMOKE_MODES[method]]
 
 
 @pytest.fixture(autouse=True)
@@ -218,8 +219,9 @@ def test_each_method_and_weight_mode_writes_a_checkpoint(method: str, weights: s
     assert sorted(item.name for item in train_dir.iterdir()) == ["output", "provenance.json", "recipe.resolved.yaml"]
     checkpoint = train_dir / "output" / CHECKPOINT
     names = {item.name for item in checkpoint.iterdir()}
-    weights_files = {"full": {"model.safetensors", "config.json"}, "lora": {"adapter_model.safetensors",
-                                                                             "adapter_config.json"}}[weights]
+    adapter_files = {"adapter_model.safetensors", "adapter_config.json"}
+    weights_files = {"full": {"model.safetensors", "config.json"}, "lora": adapter_files,
+                     "prompt_tuning": adapter_files}[weights]
     assert weights_files | {"tokenizer.json", "recipe.resolved.yaml", "checkpoint.json", "steps.jsonl"} <= names
     if weights == "lora":
         assert "model.safetensors" not in names, "lora weights save the adapter, not the whole model"
@@ -230,6 +232,10 @@ def test_each_method_and_weight_mode_writes_a_checkpoint(method: str, weights: s
         tensors = importlib.import_module("safetensors.torch").load_file(str(checkpoint / "adapter_model.safetensors"))
         lora_b = [tensor for name, tensor in tensors.items() if "lora_B" in name]
         assert lora_b and all(bool(tensor.any()) for tensor in lora_b), "lora_B starts at 0; training moves it"
+    if weights == "prompt_tuning":
+        assert "model.safetensors" not in names, "prompt tuning saves the soft prompt, not the frozen model"
+        adapter = json.loads((checkpoint / "adapter_config.json").read_bytes())
+        assert (adapter["peft_type"], adapter["num_virtual_tokens"]) == ("PROMPT_TUNING", VIRTUAL_TOKENS)
     assert (checkpoint / "recipe.resolved.yaml").read_bytes() == (train_dir / "recipe.resolved.yaml").read_bytes()
     check_records(read_json(checkpoint / "checkpoint.json"), provenance, method, weights)
     check_steps(read_steps(checkpoint), method)
@@ -255,6 +261,10 @@ def check_records(records: dict[str, Any], provenance: dict[str, Any], method: s
     assert (own["peft"] is None) == (weights == "full")
     if weights == "lora":
         assert own["peft"] == {"r": LORA["r"], "target_modules": "all-linear", "task_type": "CAUSAL_LM"}
+    if weights == "prompt_tuning":
+        assert own["peft"] == {"type": "prompt_tuning", "num_virtual_tokens": VIRTUAL_TOKENS,
+                               "prompt_tuning_init": "RANDOM", "task_type": "CAUSAL_LM"}
+    assert isinstance(own["threads"], int) and own["threads"] >= 1
     assert own["reward"] == (FIXTURE_REWARD if method == "grpo" else None)
     check_training_args(own["training_args"], method)
     assert {"train_loss", "train_runtime"} <= set(own["train_summary"]), own["train_summary"]

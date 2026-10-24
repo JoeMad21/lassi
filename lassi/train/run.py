@@ -49,6 +49,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from lassi.core.devices import DEFAULT_PROBES, DeviceProbe, FrameworkBuild, device_driver
+from lassi.core.digest import tree_sha256
 from lassi.core.interfaces import TrainData, TrainJob, TrainResult
 from lassi.core.recipe import Recipe, load_train_recipe, resolved_yaml, train_data_source
 from lassi.core.record import DeviceRecord, json_text
@@ -95,6 +96,11 @@ class TrainOptions:
       lassi.core.runner.BENCH_DIR.
     - synthetic_dir: where data.synthetic's fixture is; None means
       lassi.train.data.SYNTHETIC_DIR.
+    - corpus_root: where data.corpus's generated records are; None means
+      $LASSI_SCRATCH/train-data (lassi.train.data corpus_root).
+    - corpus_manifests: where data.corpus's tracked manifest directory is;
+      None means lassi.train.data.CORPUS_DIR. The held-out suite a corpus
+      manifest names is read from suites_dir.
     """
 
     runs_root: Path | None = None
@@ -104,6 +110,8 @@ class TrainOptions:
     probes: Mapping[str, DeviceProbe] | None = None
     suites_dir: Path | None = None
     synthetic_dir: Path | None = None
+    corpus_root: Path | None = None
+    corpus_manifests: Path | None = None
 
 
 # The options run_training uses when none are given: every field falls back as TrainOptions says.
@@ -154,10 +162,11 @@ def run_training(path: Path, options: TrainOptions = _DEFAULT_OPTIONS) -> Path:
             out_dir=out_dir,
         )
         steps, checkpoints = _checked_result(training.recipe, training.trainer.train(job), out_dir)
+        pins = _checkpoint_pins(training.recipe, out_dir, checkpoints)
     except BaseException:
         _write(train_dir / PROVENANCE_JSON, json_text(_final(manifest, FAILED)))
         raise
-    final = {**_final(manifest, COMPLETE), "steps": steps, "checkpoints": list(checkpoints)}
+    final = {**_final(manifest, COMPLETE), "steps": steps, "checkpoints": list(checkpoints), "checkpoint_sha256": pins}
     _write(train_dir / PROVENANCE_JSON, json_text(final))
     print(f"train directory: {train_dir}", flush=True)
     return train_dir
@@ -219,10 +228,19 @@ def _check_carried_out(recipe: Recipe) -> None:
 
 def _data(recipe: Recipe, options: TrainOptions) -> tuple[TrainData, dict[str, Any]]:
     """Return the recipe's data and its provenance record: the identity or the fixture's name and record count."""
-    if train_data_source(recipe.data) == "bench":
-        suites_dir = BENCH_DIR if options.suites_dir is None else options.suites_dir
+    source = train_data_source(recipe.data)
+    suites_dir = BENCH_DIR if options.suites_dir is None else options.suites_dir
+    if source == "bench":
         data, identity = train_data.load_bench(recipe, suites_dir)
         return data, {**identity, "split_hash": data.split_hash}
+    if source == "corpus":
+        name = recipe.data["data"]["corpus"]
+        manifests = train_data.CORPUS_DIR if options.corpus_manifests is None else options.corpus_manifests
+        records = train_data.corpus_root(options.corpus_root)
+        data, identity = train_data.load_corpus(name, manifests, records, suites_dir)
+        return data, {"source": "corpus", "name": name, "record_count": len(data.records),
+                      "records_sha256": identity["records_sha256"], "manifest_sha256": identity["manifest_sha256"],
+                      "split_hash": data.split_hash}
     name = recipe.data["data"]["synthetic"]
     root = train_data.SYNTHETIC_DIR if options.synthetic_dir is None else options.synthetic_dir
     data = train_data.load_synthetic(name, root)
@@ -327,6 +345,17 @@ def _checked_result(recipe: Recipe, result: Any, out_dir: Path) -> tuple[int, tu
     return steps, tuple(result.checkpoints)
 
 
+def _checkpoint_pins(recipe: Recipe, out_dir: Path, checkpoints: Sequence[str]) -> dict[str, str]:
+    """Return {checkpoint: content digest} (lassi.core.digest tree_sha256); RunError for one that cannot be pinned."""
+    pins: dict[str, str] = {}
+    for checkpoint in checkpoints:
+        try:
+            pins[checkpoint] = tree_sha256(out_dir / checkpoint)
+        except ValueError as error:
+            raise RunError(f"{recipe.path}: the checkpoint {checkpoint!r} cannot be pinned: {error}") from None
+    return pins
+
+
 def _is_plain_relative(checkpoint: Any) -> bool:
     """Return True for a normalized relative POSIX path with no backslash, drive, "..", or "." part."""
     if not isinstance(checkpoint, str) or not checkpoint or "\\" in checkpoint or PureWindowsPath(checkpoint).drive:
@@ -339,9 +368,11 @@ def _is_plain_relative(checkpoint: Any) -> bool:
 def _provenance(training: _Training) -> dict[str, Any]:
     """Return provenance.json as first written: the recipe, the commit, the host, the device, the pins, and the data.
 
-    Its status is "running", and finished_utc, steps, and checkpoints are
-    null until _final closes it. device_records holds the one DeviceRecord of
-    trainer.device and driver its driver (lassi.core.devices device_driver).
+    Its status is "running", and finished_utc, steps, checkpoints, and
+    checkpoint_sha256 (each checkpoint's content digest, lassi.core.digest
+    tree_sha256) are null until a complete run closes it. device_records
+    holds the one DeviceRecord of trainer.device and driver its driver
+    (lassi.core.devices device_driver).
     framework_pins holds the FrameworkBuild and each declared package's
     version (null when not installed); data holds the split hash.
     """
@@ -367,6 +398,7 @@ def _provenance(training: _Training) -> dict[str, Any]:
         "finished_utc": None,
         "steps": None,
         "checkpoints": None,
+        "checkpoint_sha256": None,
     }
 
 

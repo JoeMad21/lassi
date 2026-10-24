@@ -16,7 +16,9 @@ The contract these tests fix:
 
 - Importing lassi.llm registers hf_local without torch or transformers and
   imports neither. Its capabilities are chat, model_check, and takes_device,
-  and its config_keys revision and seed.
+  and its config_keys revision and seed, plus checkpoint and
+  checkpoint_sha256, which serve a trained checkpoint (2026-10-23;
+  tests/llm/test_hf_local_checkpoint.py).
 - Building hf_local without the framework raises FrameworkMissing, an
   ImportError whose message names the extra (`--extra cpu`) and the module
   that is missing; framework() raises it too, and a run is refused before any
@@ -178,7 +180,7 @@ def test_lassi_llm_registers_hf_local_without_the_extra() -> None:
     assert "hf_local" in found["names"], found
     assert found["factory"] == "HFLocalBackend"
     assert found["capabilities"] == ["chat", "model_check", "takes_device"]
-    assert found["config_keys"] == ["revision", "seed"]
+    assert found["config_keys"] == ["checkpoint", "checkpoint_sha256", "revision", "seed"]
     assert found["exported"] is True, "lassi.llm re-exports HFLocalBackend and the module"
 
 
@@ -196,7 +198,7 @@ def test_hf_local_has_the_llm_backend_shape() -> None:
     assert cls is hf_local().HFLocalBackend
     assert cls.name == "hf_local" and "name" in vars(cls) and "capabilities" in vars(cls)
     assert cls.capabilities == frozenset({"chat", "model_check", "takes_device"})
-    assert cls.config_keys == frozenset({"revision", "seed"})
+    assert cls.config_keys == frozenset({"revision", "seed", "checkpoint", "checkpoint_sha256"})
     assert list(inspect.signature(cls.complete).parameters) == [*inspect.signature(LLMBackend.complete).parameters]
     for method in ("check", "serving", "framework"):
         assert callable(getattr(cls, method, None)), method

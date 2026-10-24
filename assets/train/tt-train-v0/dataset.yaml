@@ -1,0 +1,174 @@
+# The spec of tt-train-v0, the first SFT data set for the TT target (OQ-076 (1a), the owner's approval of 2026-10-23):
+# tt-metal's programming examples at the pinned commit, without the Tier A items and every example that duplicates
+# one. tools/build_tt_train.py builds it from the pinned tree (an install at $LASSI_TOOLCHAINS/<PREFIX_NAME>, or a
+# directory `build_tt_train.py fetch` filled from GitHub, each file checked against its git blob sha1) and writes
+# manifest.json beside this file. Only this spec and the manifest are tracked: the records hold tt-metal's text and
+# are generated under $LASSI_SCRATCH/train-data, never in git, as no tt-metal text is tracked (tt-pairs-v0.yaml).
+#
+# One record per included example, in example order: the prompt states the example's task (written here, in this
+# project's words, from the example's README or comments, named under described_from) and the files to write; the
+# completion is the example's host program and kernels as FILE blocks (lassi.core.files render_file_blocks), every
+# code file under its directory, as upstream wrote it. No included example has a C++ twin (a host-only program that
+# computes the same outputs, as each Tier A item has), so no prompt holds a source program.
+#
+# Agent Rule 5 (tools/build_tt_train.py and tests/tools/test_build_tt_train.py enforce it):
+# 1. Every eval and unassigned item of the suite is excluded, with its example directory.
+# 2. An example that solves a Tier A item's task (the same computation on the same layout, whatever its structure or
+#    route) is excluded as a duplicate, with its reason; an included example that resembles a Tier A task records under
+#    judgment why it is not one.
+# 3. No record may hold a run of run_lines consecutive non-blank lines (each stripped, inner whitespace collapsed) of
+#    a tracked Tier A reference (each tracked program of the suite, both languages). The rule is literal: a run of
+#    closing braces or of `} return 0; }` counts, so an example whose only overlap is such a run is excluded too.
+# 4. No completion file may be byte-identical to a file of a Tier A example directory, or share at least near_copy
+#    of its runs with those files (a near copy).
+# The build refuses a spec whose included examples break 3 or 4, or that leaves a code file under root unlisted.
+dataset: tt-train-v0
+pin: tt-metal
+root: tt_metal/programming_examples
+suite: assets/bench/tt-pairs-v0.yaml
+run_lines: 3
+near_copy: 0.5
+# $version is the pin's VERSION, $task the entry's task, $files the completion's paths in FILE-block order.
+prompt: |
+  Write a tt-metal program for tt-metal commit $version: a host program in C++20 and the device kernels it launches.
+
+  Task: $task
+
+  Write the program as these files: $files.
+  Answer with one fenced code block per file. The first line inside each block must be
+  // FILE: <path>
+  with the file's relative path, and the rest of the block is the whole file.
+include:
+  add_2_integers_in_riscv:
+    described_from: add_2_integers_in_riscv/add_2_integers_in_riscv.md and the host program's comments
+    judgment: >-
+      kept beside Tier A eltwise_binary, which it resembles only in adding: it adds one uint32 value to another on a
+      data-movement RISC-V core with plain loads and stores through three L1 scratch buffers, with no tile, no
+      circular buffer, no compute kernel, and no bfloat16, so it teaches the buffer and kernel-launch calls every
+      program uses, not eltwise_binary's tile pipeline (reader, add_tiles compute kernel, writer over circular
+      buffers), whose one-tile form add_2_integers_in_compute is excluded above as a duplicate
+    task: >-
+      Add two integers on a data-movement RISC-V core of one Tensix core. The host writes the uint32 values 14 and 7
+      to two one-element DRAM buffers, creates three DRAM buffers and three L1 scratch buffers, and launches one
+      data-movement kernel on core {0, 0} whose runtime arguments are the six buffer addresses. The kernel reads both
+      values from DRAM into L1, adds them, and writes the sum back to the output DRAM buffer. The host reads the sum
+      back and checks that it is 21.
+  distributed/1_distributed_program_dispatch:
+    described_from: the host program's comments
+    task: >-
+      Dispatch one program across a 2x4 mesh of devices. Create the mesh device and its command queue, build a
+      program with a void compute kernel on the 2x2 core range {0, 0} to {1, 1} that prints a greeting through DPRINT,
+      add the program to a mesh workload that covers every device in the mesh, enqueue the workload, and wait for it
+      to finish.
+  distributed/2_distributed_buffer_rw:
+    described_from: the host program's comments
+    judgment: >-
+      kept beside Tier A loopback, which it resembles only in writing data to the device and reading it back: it has
+      no kernel and creates no program, so nothing on the device moves data; the host writes a sharded L1 mesh buffer
+      and reads the same buffer back through the command queue, where loopback's kernel copies one DRAM buffer to
+      another through an L1 buffer
+    task: >-
+      Write and read back a buffer sharded across a 2x4 mesh of devices, with no kernel. Allocate an L1 mesh buffer
+      of UInt32 tiles whose global shape is 32 rows per mesh row by 32 columns per mesh column, sharded in 32x32
+      shards across the devices, write random data to it through the mesh command queue, read it back into a host
+      vector, and assert that the data read back equals the data written.
+  hello_world_compute_kernel:
+    described_from: hello_world_compute_kernel/hello_world_compute.md
+    task: >-
+      Set up and run a compute kernel that computes nothing. Create a unit mesh device, its command queue, a mesh
+      workload, and a program; create a compute kernel on core {0, 0} that prints a message from each of its three
+      RISC-V processors (unpack, math, and pack) through DPRINT; enqueue the workload, wait for it to finish, and close the device. The host warns
+      when TT_METAL_DPRINT_CORES is unset, since the kernel's output is then not shown.
+  hello_world_datamovement_kernel:
+    described_from: hello_world_datamovement_kernel/hello_world_data_movement.md
+    task: >-
+      Set up and run two data-movement kernels that move no data. Create a unit mesh device, its command queue, a
+      mesh workload, and a program; create the same data-movement kernel on core {0, 0} twice, once on RISC-V
+      processor 0 with NoC 0 and once on processor 1 with NoC 1, each printing a message through DPRINT; enqueue the
+      workload, wait for it to finish, and close the device, printing a line before and after.
+  hello_world_datatypes_kernel:
+    described_from: the host program's comments
+    task: >-
+      Show that a data-movement RISC-V core can work on floating-point data in software. The host writes the float
+      value 1.23 to a DRAM buffer and creates an L1 circular buffer of one page on core {0, 0}; a data-movement kernel
+      reads the value from DRAM into the circular buffer and prints it through DPRINT. The host prints a line before
+      and after the run, waits for it to finish, and closes the device.
+  profiler/test_device_api_debugger:
+    described_from: the host program and its kernel
+    judgment: >-
+      kept beside Tier A loopback, whose kernel its loop resembles (an async read into L1, a barrier, an async write
+      from L1, a barrier): it moves 64 bytes at a time to and from one remote core's L1 address on the experimental
+      NoC API, a round trip to the same address, with no DRAM buffer and no copy from one buffer to another, and runs
+      as a device profiler trace whose result is the profiler's record, where loopback copies a DRAM buffer to a
+      second DRAM buffer through L1 and checks the copy
+    task: >-
+      Exercise the device profiler's NoC event tracing. The host requires fast dispatch, creates a unit mesh device
+      and an L1 buffer of four 4096-byte pages, and on core {0, 0} creates the same data-movement kernel twice, on
+      RISC-V processors 0 and 1, with defines naming the L1 buffer's address, the virtual coordinates of the last
+      core of the worker grid, and a start delay (0 for the first kernel, 1000 for the second). Each kernel waits for
+      its delay and then, 10000 times, reads 64 bytes from the other core into its L1 buffer and writes them back
+      through the experimental NoC API, waiting on a barrier after each read. The host enqueues the workload and reads
+      the device profiler results.
+  shard_data_rm:
+    described_from: the host program's comments
+    task: >-
+      Shard a row-major bfloat16 tensor across four cores. The host writes a 16 by 1 tensor holding 2, 4, ..., 32 to
+      a DRAM buffer whose pages are sticks of two bfloat16 values, creates on cores {0, 0} to {0, 3} a circular buffer
+      that holds one shard, and creates a reader kernel on those cores. Each core gets as runtime arguments the DRAM
+      buffer's address, the shard size, the padded stick offset, and the index of its first stick, and its kernel
+      reads its two sticks from DRAM into the circular buffer and prints the four values it holds through DPRINT.
+      The host prints the original values, runs the program, and closes the device.
+# Every other directory under root, each excluded with its reason. The five Tier A items come first (rule 1), then the
+# duplicates of a Tier A task (rule 2), then the examples rule 3 or 4 excludes, then what is not an example.
+exclude:
+  eltwise_binary: Tier A item eltwise_binary (unassigned; Agent Rule 5)
+  eltwise_sfpu: Tier A item eltwise_sfpu (unassigned; Agent Rule 5)
+  loopback: Tier A item loopback (unassigned; Agent Rule 5)
+  matmul/matmul_multi_core: Tier A item matmul_multi_core (unassigned; Agent Rule 5)
+  matmul/matmul_single_core: Tier A item matmul_single_core (unassigned; Agent Rule 5)
+  matmul/matmul_common: >-
+    duplicate of the Tier A matmul items: the shared kernels and bmm_op.hpp of the matmul examples
+  matmul/matmul_multicore_reuse: duplicate of Tier A matmul_multi_core (the same matmul with data reuse)
+  matmul/matmul_multicore_reuse_mcast: duplicate of Tier A matmul_multi_core (the same matmul with reuse and multicast)
+  add_2_integers_in_compute: >-
+    duplicate of Tier A eltwise_binary: an elementwise add of two tiles with a reader, an add_tiles compute kernel,
+    and a writer, eltwise_binary's structure on one tile
+  contributed/vecadd: duplicate of Tier A eltwise_binary (an elementwise add of two bfloat16 vectors in tiles)
+  vecadd_multi_core: duplicate of Tier A eltwise_binary (the same elementwise add split across cores)
+  vecadd_sharding: duplicate of Tier A eltwise_binary (the same elementwise add on sharded buffers)
+  distributed/3_distributed_eltwise_add: >-
+    duplicate of Tier A eltwise_binary: the same elementwise add on a mesh, with the kernels of contributed/vecadd
+  distributed/4_distributed_trace_and_events: >-
+    duplicate of Tier A eltwise_binary: its programs are elementwise add, multiply, and subtract of tiles with the
+    library's eltwise_binary compute kernel, captured in a trace
+  custom_sfpi_add: >-
+    duplicate of Tier A eltwise_binary: an elementwise add of two tile vectors in a custom SFPI kernel, whose reader
+    and writer kernels are byte-identical to eltwise_binary's (rule 4 too)
+  profiler/test_noc_event_profiler: duplicate of Tier A loopback (its kernel is a DRAM-to-DRAM loopback copy)
+  NoC_tile_transfer: >-
+    duplicate of Tier A loopback: it moves one 2048-byte tile of 16-bit data from a DRAM buffer through L1 back to a
+    second DRAM buffer and checks the copy, loopback's DRAM-to-DRAM copy through L1, by way of a second core's L1 over
+    the NoC (as profiler/test_noc_event_profiler, a loopback copy, is excluded); found by the audit of 2026-10-24
+  custom_sfpi_smoothstep: >-
+    rule 4: its writer kernel is byte-identical to the Tier A eltwise_binary example's write_tile.cpp, and its reader
+    kernel and host program are built on eltwise_binary's; and rule 3: it holds the run `} | return 0; | }` of
+    assets/bench/tt-pairs-v0/matmul_multi_core/cpp/matmul_multi_core.cpp
+  sfpu_eltwise_chain: >-
+    rule 3: its host program holds an include run of assets/bench/tt-pairs-v0/matmul_multi_core/tt/matmul_multi_core.cpp
+    (it also applies exp, the Tier A eltwise_sfpu function, as the first step of softplus)
+  contributed/multicast: >-
+    rule 3: its host program holds the runs `using namespace tt; | using namespace tt::tt_metal; | using namespace
+    tt::constants;` of the matmul_multi_core tt reference and `} | } | }` of its cpp reference
+  pad_multi_core: rule 3, the run `} | } | }` of assets/bench/tt-pairs-v0/matmul_multi_core/cpp/matmul_multi_core.cpp
+  profiler/test_custom_cycle_count: rule 3, the runs `} | } | }` and `} | return 0; | }` of the matmul_multi_core cpp reference
+  profiler/test_custom_cycle_count_slow_dispatch: rule 3, the same runs as profiler/test_custom_cycle_count
+  profiler/test_dispatch_cores: >-
+    rule 3, the run `} | return 0; | }` of the matmul_multi_core cpp reference (and its kernels are
+    test_custom_cycle_count's)
+  profiler/test_full_buffer: rule 3, the runs `} | } | }` and `} | return 0; | }` of the matmul_multi_core cpp reference
+  profiler/test_multi_op: rule 3, the runs `} | } | }` and `} | return 0; | }` of the matmul_multi_core cpp reference
+  profiler/test_multi_op_buffer_overflow: >-
+    rule 3, the run `} | return 0; | }` of the matmul_multi_core cpp reference (and its kernels are test_multi_op's)
+  profiler/test_timestamped_events: rule 3, the runs `} | } | }` and `} | return 0; | }` of the matmul_multi_core cpp reference
+  tests: >-
+    not an example: the package's build and integration tests

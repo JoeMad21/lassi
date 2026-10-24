@@ -23,8 +23,10 @@ The contract these tests fix (lassi.core.recipe):
   data.synthetic (a JSON Lines fixture name). TRAIN_REQUIRED is base_model,
   method, weights, and trainer.kind; the loader picks none of them.
 - METHODS, WEIGHT_MODES, and EPISODES are the bible block's names (its
-  comments), and DATA_SOURCES is synthetic and bench.
-- A train recipe names exactly one data source, bench or data.synthetic.
+  comments; prompt_tuning joins the weight modes with the frozen-weights
+  mode of 2026-10-23), and DATA_SOURCES is synthetic, bench, and corpus.
+- A train recipe names exactly one data source, bench, data.synthetic, or
+  data.corpus (a corpus name, one plain name).
   bench.split must be train: eval and unassigned are refused at load,
   naming bench.split and Agent Rule 5.
 - The Trainer must declare takes_device, and its device section is checked
@@ -250,7 +252,7 @@ def test_the_loader_names_are_the_bible_blocks_names() -> None:
     assert tuple(named("METHODS")) == bible_choices("method")
     assert tuple(named("WEIGHT_MODES")) == bible_choices("weights")
     assert tuple(named("EPISODES")) == bible_choices("episode")
-    assert tuple(named("DATA_SOURCES")) == ("synthetic", "bench")
+    assert tuple(named("DATA_SOURCES")) == ("synthetic", "bench", "corpus")
 
 
 def test_the_train_schema_holds_the_bible_block_keys_plus_its_own() -> None:
@@ -524,6 +526,43 @@ def test_a_train_recipe_names_exactly_one_data_source(data: dict[str, Any], tmp_
 def test_data_synthetic_names_one_jsonl_file(name: str, tmp_path: Path) -> None:
     message = load_error(tmp_path, train(data={"synthetic": name}))
     assert "data.synthetic" in message, message
+
+
+CORPUS_TRAINER = ("corpus", trainer_class("corpus", data_sources=frozenset({"synthetic", "corpus"})))
+
+
+def test_a_corpus_loads_with_a_trainer_that_declares_it(tmp_path: Path) -> None:
+    data = train(data={"corpus": "tt-train-v0"}, trainer={"kind": "corpus", "device": {"kind": "cpu"}})
+    loaded = load(tmp_path, data, found=registry(CORPUS_TRAINER))
+    assert loaded.data["data"] == {"corpus": "tt-train-v0"}
+    assert named("train_data_source")(loaded.data) == "corpus"
+
+
+def test_a_corpus_is_refused_for_a_trainer_that_does_not_declare_it(tmp_path: Path) -> None:
+    message = load_error(tmp_path, train(data={"corpus": "tt-train-v0"}))
+    assert "data.corpus" in message and "corpus" in message and "fake" in message, message
+
+
+def test_a_recipe_names_one_of_synthetic_and_corpus(tmp_path: Path) -> None:
+    both = train(data={"synthetic": "sft-tiny.jsonl", "corpus": "tt-train-v0"},
+                 trainer={"kind": "corpus", "device": {"kind": "cpu"}})
+    message = load_error(tmp_path, both, found=registry(CORPUS_TRAINER))
+    assert "data.synthetic" in message and "data.corpus" in message, message
+
+
+@pytest.mark.parametrize("name", ["../escape", "sub/name", "sub\\name", ".hidden", "name ", "", "C:name", 7])
+def test_data_corpus_names_one_plain_name(name: Any, tmp_path: Path) -> None:
+    message = load_error(tmp_path, train(data={"corpus": name}), found=registry(CORPUS_TRAINER))
+    assert "data.corpus" in message, message
+
+
+def test_prompt_tuning_is_a_weight_mode_the_loader_takes(tmp_path: Path) -> None:
+    assert "prompt_tuning" in named("WEIGHT_MODES")
+    tuned = ("tuned", trainer_class("tuned", weight_modes=frozenset({"full", "prompt_tuning"})))
+    data = train(weights="prompt_tuning", trainer={"kind": "tuned", "device": {"kind": "cpu"}})
+    assert load(tmp_path, data, found=registry(tuned)).data["weights"] == "prompt_tuning"
+    message = load_error(tmp_path, train(weights="prompt_tuning"), name="untuned")
+    assert "weights" in message and "prompt_tuning" in message, message
 
 
 @pytest.mark.parametrize("name", ["sft-tiny.jsonl", "a.b_c-1.jsonl", "DPO2.jsonl"])

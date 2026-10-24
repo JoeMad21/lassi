@@ -620,8 +620,9 @@ class Stage(Component, Protocol):
 class TrainData:
     """The data a Trainer trains on, with its data split hash (task P17.8; lassi.train.data).
 
-    `source` is "synthetic" or "bench". `split_hash` is the sha256 the train
-    layer took over the data's identity. `records` holds the synthetic
+    `source` is "synthetic", "bench", or "corpus" (a built corpus,
+    data.corpus; 2026-10-23). `split_hash` is the sha256 the train layer
+    took over the data's identity. `records` holds the synthetic or corpus
     records in file order (() for bench). `suite` is the bench suite's
     train-only view (lassi.bench.registry TrainView, from Suite.train_view();
     task P17.9), which holds no eval or unassigned item (Agent Rule 5), and

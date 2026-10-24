@@ -142,11 +142,12 @@ PROVENANCE_KEYS = frozenset(
     {
         "train_id", "status", "recipe", "recipe_path", "recipe_chain", "recipe_hash", "commit", "dirty", "host",
         "platform", "python", "trainer", "device_records", "driver", "framework_pins", "data", "started_utc",
-        "finished_utc", "steps", "checkpoints",
+        "finished_utc", "steps", "checkpoints", "checkpoint_sha256",
     }
 )
-# The keys the final write changes; every other key keeps its first value.
-FINAL_KEYS = ("status", "finished_utc", "steps", "checkpoints")
+# The keys the final write changes; every other key keeps its first value. checkpoint_sha256 maps each checkpoint
+# to its content digest (2026-10-23).
+FINAL_KEYS = ("status", "finished_utc", "steps", "checkpoints", "checkpoint_sha256")
 UTC_ID = re.compile(r"\d{8}-\d{6}")
 
 
@@ -176,7 +177,10 @@ def test_train_options_default_every_field_to_none() -> None:
     options = train_run().TrainOptions
     assert dataclasses.is_dataclass(options) and options.__dataclass_params__.frozen
     names = [item.name for item in dataclasses.fields(options)]
-    assert names == ["runs_root", "train_id", "registry", "roots", "probes", "suites_dir", "synthetic_dir"]
+    assert names == [
+        "runs_root", "train_id", "registry", "roots", "probes", "suites_dir", "synthetic_dir", "corpus_root",
+        "corpus_manifests",
+    ]
     assert all(value is None for value in dataclasses.astuple(options()))
 
 

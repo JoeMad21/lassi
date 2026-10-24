@@ -1,0 +1,50 @@
+# LoRA on Qwen3-1.7B on tt-train-v0 (OQ-076: data (1a); the owner's direction of 2026-10-23: train on alpha01's CPU
+# in the owner's window only, as a niced background job, through the trl trainer's CPU path).
+# Every number below is PROJECTED: arithmetic, or a workstation reading from a dirty tree (2026-10-23 and 2026-10-24,
+# logged with its command and output in plans/spikes/own-model.md, Readings), never a measurement of a run.
+#
+# Before the run, once, in the window: uv run --extra cpu tools/prepare_train.py projects/train/tt-lora-qwen3-1.7b.yaml
+# downloads the base into $HF_HOME/hub, about 4.08 GB at this revision (PROJECTED: the Hub's X-Linked-Size headers
+# read on the workstation, shards of 3,441,185,608 and 622,329,984 bytes, and tokenizer.json). lassi train never
+# downloads.
+#
+# Data (PROJECTED, a workstation count with the Qwen3 tokenizer, tokenizers 0.22.1): 8 records, 13,027 tokens a pass
+# in the chat format, the longest 3,058; the token-weighted mean causal position is 1,004.
+#
+# Arithmetic (PROJECTED). Parameters N = 1,720.6M (a workstation count on the meta device): embedding 151,936 x 2,048
+# = 311.2M (tied) + 28 layers x 50.33M (attention 4.19M + 2.10M + 2.10M + 4.19M, MLP 3 x 2,048 x 6,144 = 37.75M).
+# LoRA r 16 on every linear layer but the output layer: r x (in + out) summed over q, k, v, o, gate, up, and down is
+# 16 x 38,912 = 622.6K a layer, 17.4M in all (1.0 percent of N).
+# - Compute per token: the frozen base costs forward 2N and backward 2N (gradients for the activations only, none
+#   for the frozen weights) = 6.88 GFLOP, the adapters about 0.1 GFLOP, and attention 3 x 4 x 1,004 x 2,048 x 28 =
+#   0.69 GFLOP: about 7.7 GFLOP a token.
+# - A pass: 13,027 x 7.7 GFLOP = 1.0e14 FLOP. 6 passes (48 steps of 1 record) = 6.0e14 FLOP.
+# - Time: at a sustained 0.5 TFLOP/s for one process on alpha01's EPYC 9534 under bf16 autocast (an assumption),
+#   20 minutes; 40 minutes at 0.25 TFLOP/s, 10 at 1.0. checkpoint.json's train_summary records TRL's train_runtime.
+# - Memory: the float32 base 6.9 GB (no gradients or moments for it), the adapters' weights, gradients, and AdamW
+#   moments 17.4M x 16 bytes = 0.28 GB, and activations without checkpointing, about 34 bytes x 3,058 x 2,048 x 28 =
+#   6.0 GB: about 13 GB, a small share of the 2,945 GB alpha01 had available (the gate's host record, mem_gb
+#   3169.6 and mem_avail_gb 2945.3, in results/rngd-sweep5-20261024/provenance.json, rx
+#   20261023-201813-rngd-sweep5-226a, 2026-10-23), so gradient checkpointing stays off; run.sh logs `free -g` first.
+#
+# Serving the result (OQ-076 (3a)): hf_local on alpha01's CPU loads the base at model.revision below from
+# $HF_HOME/hub and applies the adapter (model.checkpoint, model.checkpoint_sha256 from the run's provenance.json).
+# furiosa-llm's documentation names no adapter input (plans/spikes/own-model.md, Readings, item 6, read 2026-10-24),
+# so serving it on RNGD means merging the adapter into the base weights and building the artifact from that local
+# model with ArtifactBuilder (Qwen3ForCausalLM is supported), a later spike.
+base_model: Qwen/Qwen3-1.7B@70d244cc86ccca08cf5af4e1e306ecf908b1ad5e  # a HEAD request read X-Repo-Commit equal to it
+method: sft
+weights: lora
+lora: {r: 16, targets: all-linear}  # every linear layer but the output layer
+trainer:
+  kind: trl
+  device: {kind: cpu}  # alpha01's CPU (owner, 2026-10-23); no GPU trains
+  steps: 48  # 6 passes over the 8 records, one record a step
+  seed: 7
+  batch_size: 1
+  learning_rate: 0.0002  # LoRA wants a rate well above full fine-tuning's (bible Weight Modes, Basis)
+  max_length: 4096  # above the longest record; a longer record is refused, never cut
+  gradient_checkpointing: false
+  chat_format: true
+data:
+  corpus: tt-train-v0
