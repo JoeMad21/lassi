@@ -24,8 +24,5 @@ score: eval_metrics
 agents:                     # written generator first; bindings follow sorted keys
   generator: {model: fixture-model}
   fixer: {model: same_as_generator}
-judges:
-  equivalence: {model: judge-model, rubric: equivalence-v1, use: screen}
-  efficiency: {model: judge-model, rubric: efficiency-v1, mode: predict, use: metric}
 arms: [fixture-arm]
 metrics: [correct, first_try]

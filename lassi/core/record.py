@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, NamedTuple, NoReturn
 
-from lassi.core.interfaces import Sampling
+from lassi.core.interfaces import Sampling, is_plain_ascii
 from lassi.harness.contract import CONTRACT_REASONS
 
 STAGES = ("S0", "S1", "S2", "S3", "S4", "S5")
@@ -737,6 +737,50 @@ class AdversaryRecord:
 
 
 @dataclass(frozen=True, kw_only=True)
+class JudgeRecord:
+    """One judge's verdict on a trial (task P15.1; bible Result Record): always [JUDGED], never a measurement.
+
+    `kind` is the Judge's registry name (judges.<kind>); `rubric` and
+    `rubric_sha256` the rubric it judged with and that rubric's sha256 as
+    the recipe loader took it (lassi.judges.rubric); `model` the judge's
+    model id and `family` its family in the model family table
+    (lassi.judges.families); the generator's family enters provenance with
+    task P15.3;
+    `mode` the judge's mode (judges.<kind>.mode), None for a judge that
+    declares no modes; `verdict`, `score`, `values`, and `rationale` the
+    judge's Verdict (lassi.core.interfaces): a verdict token, a score in
+    [0, 1], named finite judged values, and a plain ASCII rationale. Every
+    field is required. A judged value never overrides an oracle outcome or
+    a profiler measurement (Agent Rule 14).
+    """
+
+    kind: str
+    rubric: str
+    rubric_sha256: str
+    model: str
+    family: str
+    mode: str | None
+    verdict: str
+    score: float
+    values: dict[str, float]
+    rationale: str
+
+    def __post_init__(self) -> None:
+        """Check the field types, the names, the rubric's sha256, the score, the value names, and the rationale."""
+        _check_fields(self)
+        for name in ("kind", "rubric", "model", "family", "verdict"):
+            _check_non_empty("JudgeRecord", name, getattr(self, name))
+        _check_sha256("JudgeRecord", "rubric_sha256", self.rubric_sha256)
+        if self.mode is not None:
+            _check_non_empty("JudgeRecord", "mode", self.mode)
+        _check_unit("JudgeRecord", "score", self.score)
+        for name in self.values:
+            _check_non_empty("JudgeRecord", "values", name)
+        if not is_plain_ascii(self.rationale):
+            _fail("JudgeRecord", "rationale", self.rationale, "must be plain ASCII (printable, line feeds, and tabs)")
+
+
+@dataclass(frozen=True, kw_only=True)
 class Provenance:
     """A trial's copy of its run manifest, so a trial read outside its run tree still says where it came from.
 
@@ -889,6 +933,9 @@ class Trial:
     (AdversaryRecord); None means the stage did not take the trial, or the
     record predates the field, so a trial.json written before it loads with
     it None.
+    `judgements` (task P15.1) holds the judges' records of the trial
+    (JudgeRecord), each [JUDGED] and never a measurement; None means not
+    recorded, so a trial.json written before the field loads with it None.
     """
 
     trial_id: str
@@ -905,6 +952,7 @@ class Trial:
     attempts: list[Attempt] = field(default_factory=list)
     final: Final = field(default_factory=Final)
     adversary: AdversaryRecord | None = None
+    judgements: list[JudgeRecord] | None = None
 
     def __post_init__(self) -> None:
         """Check the field types, the id, the recipe hash, the id against the bench item, and the list orders.

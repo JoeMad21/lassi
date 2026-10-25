@@ -20,6 +20,13 @@ module is a measurement.
 Since P1.10 every resolved recipe holds `project` (the explicit key, else the
 loaded file's recipe name), so the expected mappings, the golden file, and
 CHILD_HASH carry it.
+
+Since P15.1 the child fixture binds no judge: a judges section needs a
+backend, sampling, a rubric on disk, and models the family table lists, so
+tests/core/test_judge_bindings.py tests it, and the golden file and
+CHILD_HASH were recomputed from EXPECTED_CHILD without it. The bible's
+bindings block still loads here, its rubrics written as SYNTHETIC stand-ins
+under the test's directory.
 """
 
 from __future__ import annotations
@@ -50,7 +57,7 @@ NEW_MODULES = ("lassi.core.recipe", "lassi.core.registry")
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 # sha256 of canonical(EXPECTED_CHILD); computed once from the data below, never from a loader run.
-CHILD_HASH = "5f6b570b8c15eb771fe27dbd4f525f061cd7665e69318bee8512f44ae1f006c0"
+CHILD_HASH = "1224920bcd0dd76ba4219362c92a4a663ad257f81ac0720be6c01d78c7f760a2"
 CHILD_CHAIN = ("fixture-base", "parent", "child")
 
 FENCE_TAG_DESCRIPTION = (
@@ -131,6 +138,8 @@ REQUIRED = (
 
 # Kind sections and the interface each binds.
 KIND_SECTIONS = {"executor": "Executor", "oracle": "Oracle", "profiler": "Profiler", "adversary": "Agent"}
+# A judge section's own keys (task P15.1); its other keys are its backend's settings (lassi.core.recipe _JUDGE_OWN).
+JUDGE_OWN = frozenset({"backend", "model", "sampling", "rubric", "rubric_sha256", "use", "mode", "recording_sha256"})
 # The capability the adversary section's Agent must declare (task P16.2; lassi.core.capabilities PROPOSES_INPUTS),
 # written out so this module imports before that name exists; tests/core/test_adversary_binding.py tests the rule.
 ADVERSARY_CAPABILITY = "proposes_inputs"
@@ -152,10 +161,6 @@ EXPECTED_CHILD: dict[str, Any] = {
     "executor": {"kind": "native"},
     "faithful": False,
     "fixes": all_fixes(True),
-    "judges": {
-        "equivalence": {"model": "judge-model", "rubric": "equivalence-v1", "use": "screen"},
-        "efficiency": {"model": "judge-model", "rubric": "efficiency-v1", "mode": "predict", "use": "metric"},
-    },
     "llm": {"sampling": {"temperature": 0.2, "top_p": 0.95, "max_tokens": 2048}},
     "loop": {"max_corrections": 3},
     "metrics": ["correct", "first_try"],
@@ -188,8 +193,6 @@ EXPECTED_CHILD_BINDINGS: list[tuple[str, str, str, dict[str, Any]]] = [
     ("ScoreProfile", "eval_metrics", "score", {}),
     ("Agent", "fixer", "agents.fixer", {}),
     ("Agent", "generator", "agents.generator", {}),
-    ("Judge", "efficiency", "judges.efficiency", {}),
-    ("Judge", "equivalence", "judges.equivalence", {}),
 ]
 
 # A complete recipe that extends nothing; the required-key tests delete one key at a time.
@@ -229,14 +232,19 @@ def fake(
     *,
     requires: Mapping[str, Iterable[str]] | None = None,
     config_keys: Iterable[str] = (),
+    modes: Iterable[str] = (),
 ) -> type:
-    """Return a fake component class with the class attributes the registry reads."""
+    """Return a fake component class with the class attributes the registry and the loader read.
+
+    `modes` is a Judge's declared modes (task P15.1); a fake without them declares none.
+    """
     namespace: dict[str, Any] = {
         "__doc__": f"Fake component {name} for the recipe tests; never constructed.",
         "name": name,
         "capabilities": frozenset(capabilities),
         "requires": {interface: frozenset(caps) for interface, caps in (requires or {}).items()},
         "config_keys": frozenset(config_keys),
+        "modes": tuple(modes),
     }
     return type(f"Fake_{name}", (NeverBuilt,), namespace)
 
@@ -494,8 +502,9 @@ def bound_components(data: Mapping[str, Any]) -> dict[tuple[str, str], set[str]]
         bind("ScoreProfile", data["score"])
     for role in data.get("agents", {}):
         bind("Agent", role)
-    for judge in data.get("judges", {}):
+    for judge, section in data.get("judges", {}).items():
         bind("Judge", judge)
+        bind("LLMBackend", section["backend"], set(section) - JUDGE_OWN)
     return found
 
 
@@ -505,10 +514,15 @@ def permissive_registry(registry_module: ModuleType, *datas: Mapping[str, Any]) 
     A fake whose section holds a device section declares takes_device and
     leaves `device` out of its config keys, as the registry requires (task P17.2).
     The Agent an adversary section binds declares proposes_inputs, which that
-    section requires (task P16.2).
+    section requires (task P16.2). A Judge whose section sets a mode declares
+    that mode, and a judge's backend whose section sets a reasoning effort
+    declares the capability reasoning_effort (task P15.1).
     """
     found: dict[tuple[str, str], set[str]] = {}
     adversaries = {data["adversary"]["kind"] for data in datas if "adversary" in data}
+    judges = [(kind, section) for data in datas for kind, section in data.get("judges", {}).items()]
+    modes = {kind: (section["mode"],) for kind, section in judges if "mode" in section}
+    thinkers = {section["backend"] for _, section in judges if "reasoning_effort" in section.get("sampling", {})}
     for data in datas:
         for key, keys in bound_components(data).items():
             found.setdefault(key, set()).update(keys)
@@ -517,7 +531,10 @@ def permissive_registry(registry_module: ModuleType, *datas: Mapping[str, Any]) 
         capabilities = {"takes_device"} if "device" in keys else set()
         if interface == "Agent" and name in adversaries:
             capabilities.add(ADVERSARY_CAPABILITY)
-        registry.register(interface, name, fake(name, capabilities, config_keys=keys - {"device"}))
+        if interface == "LLMBackend" and name in thinkers:
+            capabilities.add("reasoning_effort")
+        declared = modes.get(name, ()) if interface == "Judge" else ()
+        registry.register(interface, name, fake(name, capabilities, config_keys=keys - {"device"}, modes=declared))
     return registry
 
 
@@ -2037,19 +2054,42 @@ def test_bible_project_recipes_fit_the_schema(
     assert CONSTRUCTED == []
 
 
+def write_synthetic_rubrics(root: Path, names: Iterable[str]) -> None:
+    """Write a SYNTHETIC rubric root/<name>/ for each name: a schema of two verdicts and one prompt (task P15.1)."""
+    for name in names:
+        directory = root / name
+        directory.mkdir(parents=True)
+        schema = f"rubric: {name}\nprompts: [prompt.txt]\nverdicts: [VALID, INVALID]\nvalues: []\n"
+        (directory / "schema.yaml").write_bytes(schema.encode("ascii"))
+        (directory / "prompt.txt").write_bytes(b"SYNTHETIC rubric prompt for the bible block test.\n")
+
+
 def test_bible_binding_block_fits_the_schema(
-    recipe_module: ModuleType, registry_module: ModuleType, tmp_path: Path
+    recipe_module: ModuleType, registry_module: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_bible_recipes(tmp_path)
     block = bible_recipe_blocks()[BINDINGS_BLOCK]
     path = write(tmp_path, "bindings.yaml", "extends: lassi-df\n" + block)
     own = bible_block_data(BINDINGS_BLOCK)
+    # The block's rubrics are tasks P15.2 and P15.5; SYNTHETIC stand-ins of their names load here (task P15.1).
+    rubric_module = importlib.import_module("lassi.judges.rubric")
+    write_synthetic_rubrics(tmp_path / "rubrics", {section["rubric"] for section in own["judges"].values()})
+    monkeypatch.setattr(rubric_module, "RUBRIC_ROOT", tmp_path / "rubrics")
     registry = permissive_registry(registry_module, bible_block_data("projects/lassi-df/recipe.yaml"), own)
     recipe = recipe_module.load_recipe(path, roots=[tmp_path], registry=registry)
     for key, value in own.items():
-        assert recipe.data[key] == value, key
+        if key != "judges":
+            assert recipe.data[key] == value, key
+    for kind, section in own["judges"].items():
+        loaded = dict(recipe.data["judges"][kind])
+        assert loaded.pop("rubric_sha256") == rubric_module.load_rubric(section["rubric"]).sha256, kind
+        assert loaded == section, kind
     adversary = [b for b in recipe.bindings if b.where == "adversary.kind"]
     assert binding_tuples(adversary) == [("Agent", "fuzzer", "adversary.kind", {"budget": {"inputs": 64}, "seed": 1})]
+    judges = [(b.interface, b.where) for b in recipe.bindings if b.where.startswith("judges.")]
+    kinds = sorted(own["judges"])
+    expected = [(("Judge", f"judges.{kind}"), ("LLMBackend", f"judges.{kind}.backend")) for kind in kinds]
+    assert judges == [item for pair in expected for item in pair]
 
 
 def test_bible_train_recipe_is_not_a_run_recipe(load_error: Callable[..., str], tmp_path: Path) -> None:

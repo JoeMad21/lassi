@@ -39,7 +39,7 @@ from lassi.core.registry import Registry
 REPO = Path(__file__).resolve().parents[2]
 FIXTURES = REPO / "tests" / "fixtures" / "recipes"
 GOLDEN = FIXTURES / "expected" / "child.resolved.yaml"
-CHILD_HASH = "5f6b570b8c15eb771fe27dbd4f525f061cd7665e69318bee8512f44ae1f006c0"
+CHILD_HASH = "1224920bcd0dd76ba4219362c92a4a663ad257f81ac0720be6c01d78c7f760a2"
 
 # Committed recipes that use the single form, by path from the repository root, with their recipe hashes.
 COMMITTED_HASHES = {

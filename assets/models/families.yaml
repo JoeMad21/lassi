@@ -1,0 +1,38 @@
+# Model families (task P15.1; bible Agents And Judges: a judge uses a different model family from the generator in
+# the same trial, and both are recorded). lassi.judges.families reads this table; a recipe that binds a judge is
+# refused at load when a model id it names (a judge's model, model.id, or an arm) is not listed here.
+#
+# families: every family name. reasoning_effort: the families whose models take a reasoning effort (OQ-080); a judge
+# on one of them must set judges.<kind>.sampling.reasoning_effort, and a judge on any other may not. models: each
+# model id this repository's run recipes under projects/ and the bible's recipe blocks and the tables
+# plans/runs/rngd-sweep/models*.tsv name, exactly as written there, mapped to its family.
+#
+# Each family is read from the model id itself, its leading name (Llama, Qwen, gpt-oss, EXAONE, gemma, Mistral,
+# WizardCoder). Known cases, not complete: a fine-tune named for itself is its own family here, so WizardCoder is not
+# counted with the model it was tuned from; an id that a scripted backend (mock, replay) answers names no model and
+# is not listed; and a train recipe's base_model (pinned with @<revision>) is listed by its plain Hub id.
+families: [exaone, gemma, gpt-oss, llama, mistral, qwen, wizardcoder]
+reasoning_effort: [gpt-oss]
+models:
+  furiosa-ai/EXAONE-4.0-32B-FP8: exaone
+  furiosa-ai/gemma-4-31B-it-FP8-block: gemma
+  furiosa-ai/gpt-oss-120b: gpt-oss
+  furiosa-ai/gpt-oss-20b: gpt-oss
+  furiosa-ai/Llama-3.1-8B-Instruct: llama
+  furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic: llama
+  furiosa-ai/Meta-Llama-3.1-8B-Instruct-FP8-dynamic: llama
+  furiosa-ai/Mistral-Nemo-Instruct-2407-FP8: mistral
+  furiosa-ai/Qwen3-30B-A3B-Instruct-2507-FP8: qwen
+  furiosa-ai/Qwen3-32B-FP8: qwen
+  furiosa-ai/Qwen3-8B-FP8: qwen
+  furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8: qwen
+  gpt-oss-120b: gpt-oss
+  llama-3.3-70b: llama
+  Qwen/Qwen2.5-Coder-0.5B-Instruct: qwen
+  Qwen/Qwen3-0.6B: qwen
+  Qwen/Qwen3-1.7B: qwen
+  Qwen/Qwen3-Coder-30B-A3B-Instruct: qwen
+  qwen3-coder-30b-a3b-fp8: qwen
+  registry:qwen3-coder-30b-gspo-lora-r8: qwen
+  wizardcoder-33b-fxb: wizardcoder
+  wizardcoder-33b-ollama: wizardcoder

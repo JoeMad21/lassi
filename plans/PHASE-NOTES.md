@@ -185,6 +185,14 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - xDSL's pin and P12.14, the hub's interchange check with xDSL, come to P13's planning (owner, 2026-10-18; OQ-066, which answers OQ-059): P12.1's Response on OQ-059 found that xDSL 0.73.0 and 0.23.0 each refuse part of what Polygeist's LLVM, 26eb4285, prints, so the pin is read against the hub's syntax first (plans/spikes/p12-frontend-pins.md, section 6), and P12.14 runs there.
 - CSL's route is chosen at that planning too (bible Target Rules: the hub through xDSL's stencil pipeline where it applies, or model output at the csl level), which adds a csl row to the IR Strategy table. With the df dialect deferred (OQ-066), no df lowering serves CSL.
 
+## P15 Judges
+
+- Branch route (P15's planning, 2026-10-25): p15-judges branched from p16-adversarial at e43a1e0 and follows All Phases, Stacked phase branches; P9 is planned beside it on p9-ee and consumes P15.2's equivalence judge.
+- Hand-offs from P15.1's audit (2026-10-25), for the tasks named:
+  - P15.2: JudgeRecord's verdict and score are required, so the "no verdict, recorded" case (a malformed reply after one retry, or ContextExceeded) needs a nullable form or a separate count, with its own Result Record edit.
+  - P15.3: JudgeRecord.values must be a dict, but Verdict.values is a read-only mapping; build a record with dict(verdict.values). Write both families into provenance (the record holds only the judge's). The efficiency judge on gpt-oss-120b shares the generator's family under OQ-089 (OQ-095).
+  - P15.3 or later: the loader's family check reads model.id, the arms, and the judges' models, not agents.<role>.model; check it when the runner accepts agents. registry._config_path maps any binding path ending in .backend, so an agent role or judge kind named backend would get a backend's message path.
+
 ## P16 Adversarial
 
 - The split (owner, 2026-10-15; OQ-055, decision 12 (b); bible Build Roadmap, the P16 row; AGENTS.md, Work Order): part (a), the adversary agent (an LLM agent or a fuzzer), the input-contract checks, and the gate as written ("Adversary finds oracle-confirmed divergences on seeded faulty candidates"), runs locally; part (b), the `adversarial` training method, stays BLOCKED on P8. P4, the phase's other blocker, is DONE (PR 4 merged). Part (a) follows P12 in the work order (tools/status.py WORK_ORDER), and the phase opens only once its Note in plans/STATUS.md records the P4 blocker cleared (AGENTS.md, Work Order); its plan starts part (b)'s tasks BLOCKED with P8 named.

@@ -1206,3 +1206,16 @@ Options:
 - (b) All of it in the next window the owner books.
 Recommendation: (a), so P9's energy backend is chosen from a measured answer before the next window.
 Answer:
+
+## OQ-095 The Efficiency Judge's Model Shares The Generator's Family
+State: OPEN
+Kind: decision
+Blocks: P15.3 (binding the efficiency judge in a run that gpt-oss-120b generates), P15.7 (which candidates the efficiency set keeps)
+Evidence: plans/OWNER-QUEUE.md OQ-089 (models, option (a)); docs/BIBLE.md, Agents And Judges (a judge uses a different model family from the generator in the same trial) and Model families; plans/p15-judges.md, Decisions taken at planning, Model families (a judge whose family equals the generator's is refused in a run; in calibration such a trial leaves that judge's set); P15.1's audit, 2026-10-25.
+Question: OQ-089 (a) puts the efficiency judge on gpt-oss-120b while gpt-oss-120b also generates LASSI-EE's refactors. The family rule refuses a judge of the generator's family, so the efficiency judge could never be bound in those runs, and every gpt-oss-generated candidate would leave its calibration set. The question that led to OQ-089 did not point this out. Which model should the efficiency judge use?
+Options:
+- (a) llama-3.3-70b for both judges: no conflict with gpt-oss generation; Llama-generated candidates (tonight's sweep among them) leave both judges' calibration sets.
+- (b) Keep gpt-oss-120b for the efficiency judge, used in calibration and in runs another family generates; LASSI-EE's CPU port binds only the equivalence judge, which is all the paper's pipeline uses.
+- (c) A third family for the efficiency judge later (one of the models OQ-087 kept for later testing), at the cost of a download and window time.
+Recommendation: (b): LASSI-EE needs only the equivalence judge, which is on Llama; the efficiency judge serves calibration and prediction studies, where the rule already drops same-family trials; OQ-089 stands as answered.
+Answer:

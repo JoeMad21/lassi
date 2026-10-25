@@ -44,6 +44,18 @@ without it keeps its resolved recipe and hash, and in step 7 every key required 
 EXAMPLES_MAX_CHARS, prompts [generate] or [generate, correct]) and the section refused under faithful: true, set or
 inherited (_check_examples).
 
+The optional `judges` section (JUDGES; task P15.1; bible Project Recipes, the bindings block) binds, per key <kind>,
+the registered Judge <kind> at judges.<kind> and its own LLMBackend at judges.<kind>.backend, whose config is the
+section's backend settings (every key but _JUDGE_OWN: base_url, timeout_s, api_key_env, and recording, in the model
+section's forms), checked against that backend's config_keys in step 8. model, rubric, use,
+backend, and sampling (temperature, top_p, max_tokens) are required with no default. In step 8, after the faithful
+check, _check_judges refuses a use other than JUDGE_USES (REWARD_USE until a reward admission threshold is recorded,
+OQ-091), a mode the Judge's declared modes (MODES) do not call for, a model.id, arm, or judge model the model family
+table (lassi.judges.families) does not list, a reasoning effort the judge model's family does not call for or a missing
+one it does, and a rubric lassi.judges.rubric refuses; the rubric's sha256 enters the section at RUBRIC_SHA256_KEY, so
+the recipe hash follows the rubric's bytes. In step 9 judges.<kind>.recording is checked as model.recording is. A
+recipe without the section reads no rubric and no family table, and keeps its resolved recipe and hash.
+
 `executor` has two forms (task P4.5). The single form is a kind section, `{kind: <name>, <config>...}`,
 binding one Executor at executor.kind for every language. The per-language form is a non-empty mapping
 without `kind`, from a language to an Executor name (`cuda: native`) or to a kind section with that
@@ -90,7 +102,9 @@ from lassi.core.capabilities import (
     TAKES_DEVICE,
 )
 from lassi.core.devices import DeviceSectionError, parse_device
-from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry, RegistryError, check_bindings, device_path
+from lassi.core.registry import DEFAULT_REGISTRY, Binding, Entry, Registry, RegistryError, check_bindings, device_path
+from lassi.judges.families import FamilyError, FamilyTable, load_families
+from lassi.judges.rubric import RubricError, load_rubric
 
 # The value of loop.max_corrections that means no cap (upstream LASSI's loop; bible LASSI quirk table).
 UNCAPPED = "uncapped"
@@ -226,6 +240,20 @@ EXAMPLES_MAX_CHARS = (1000, 64000)
 # absent, and never materialized, so a recipe without it keeps its resolved recipe and hash. Upstream sends no such
 # field, so it is refused under faithful: true, set or inherited (_check_sampling).
 REASONING_EFFORT_KEY = f"llm.sampling.{REASONING_EFFORT}"
+
+# The judges section (task P15.1; bible Project Recipes, the bindings block; Agents And Judges): judges.<kind> binds
+# the registered Judge <kind> and its own LLMBackend. Every choice is required with no default (Agent Rule 10): model,
+# rubric, use, backend, and sampling (temperature, top_p, max_tokens), and mode exactly when the Judge declares modes
+# (MODES, a class attribute). use is one of JUDGE_USES; REWARD_USE is refused until task P15.11 records a reward
+# admission threshold (OQ-091, open). The rubric's sha256 enters the section as RUBRIC_SHA256_KEY (lassi.judges.rubric),
+# so the recipe hash follows the rubric's bytes. The section's own keys are _JUDGE_OWN; its other keys (base_url,
+# timeout_s, api_key_env, recording) are its backend's settings, checked against the backend's config_keys.
+JUDGES = "judges"
+JUDGE_USES = ("screen", "metric")
+REWARD_USE = "reward"
+RUBRIC_SHA256_KEY = "rubric_sha256"
+MODES = "modes"
+_JUDGE_OWN = ("backend", "model", "sampling", "rubric", RUBRIC_SHA256_KEY, "use", "mode", RECORDING_SHA256_KEY)
 
 
 # Toolchain capabilities of a proxy build that is not upstream's: `openmp_multicore` builds OpenMP target regions
@@ -691,12 +719,43 @@ _EXAMPLES = _Fields(
     },
     required=frozenset({"pack", "max_chars", "prompts"}),
 )
+# A judge's section (task P15.1; JUDGES): its own keys, then its backend's settings (in the model section's forms)
+# and the loader's record of a recording's bytes. Keys are listed in the order a missing one is reported: model,
+# rubric, and use first.
+_JUDGE = _Fields(
+    {
+        "model": _STR,
+        "rubric": _STR,  # a versioned rubric name, checked by lassi.judges.rubric (_check_judges)
+        "use": _STR,  # one of JUDGE_USES (_check_judges)
+        "mode": _STR,  # required exactly when the Judge declares modes (_check_judges)
+        "backend": _STR,
+        "sampling": _Fields(
+            {
+                "temperature": _Leaf("a finite number of at least 0", lambda value: _is_number(value) and value >= 0),
+                "top_p": _Leaf(
+                    "a finite number above 0 and at most 1", lambda value: _is_number(value) and 0 < value <= 1
+                ),
+                "max_tokens": _AT_LEAST_ONE,
+                REASONING_EFFORT: _REASONING_EFFORT,
+            },
+            required=frozenset({"temperature", "top_p", "max_tokens"}),
+        ),
+        RUBRIC_SHA256_KEY: _SHA256,
+        "base_url": _STR,
+        "timeout_s": _POSITIVE,
+        "api_key_env": _ENV_NAME,
+        RECORDING_KEY: _STR,
+        RECORDING_SHA256_KEY: _SHA256,
+    },
+    required=frozenset({"model", "rubric", "use", "backend", "sampling"}),
+)
 
 # Every key a run recipe may hold and its type. Inside a fixed mapping every key is optional unless REQUIRED
 # names it, and any other key is unknown. A train-only key (TRAIN_SCHEMA's base_model, method, trainer, data, and
 # the rest) is unknown here; bench, adversary, runs_root, and extends are in both schemas.
 # Entries of lists and open maps state every key they need: a direction both ends, an agent its model, and a judge
-# its model, rubric, and use (an agent's enabled and a judge's mode are optional).
+# its model, rubric, use, backend, and sampling (an agent's enabled is optional; a judge's mode is required exactly
+# when its Judge declares modes, which _check_judges reads).
 SCHEMA = _Fields(
     {
         "extends": _STR,  # recipe files only; never kept in the resolved mapping
@@ -759,12 +818,7 @@ SCHEMA = _Fields(
         "refine": _Fields({"counter_start": _NUMBER, "counter_step": _NUMBER, "max_iters": _INT}),
         "score": _STR,
         "agents": _OpenMap(_Fields({"model": _STR, "enabled": _BOOL}, required=frozenset({"model"}))),
-        "judges": _OpenMap(
-            _Fields(
-                {"model": _STR, "rubric": _STR, "mode": _STR, "use": _STR},
-                required=frozenset({"model", "rubric", "use"}),
-            )
-        ),
+        JUDGES: _OpenMap(_JUDGE),
     }
 )
 
@@ -904,6 +958,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     except RegistryError as exc:
         raise RecipeError(f"{path}: {exc}") from exc
     _check_faithful_bindings(path, data, bindings, registry)
+    _check_judges(path, data, registry)
     _check_devices(path, bindings, registry)
     bindings = _bind_recording(path, data, bindings)
     canonical = yaml.safe_dump(data, sort_keys=True, default_flow_style=False, allow_unicode=False, width=4096)
@@ -1630,6 +1685,147 @@ def _check_devices(path: Path, bindings: Sequence[Binding], registry: Registry) 
             raise RecipeError(f"{path}: {error}") from None
 
 
+def _check_judges(path: Path, data: dict[str, Any], registry: Registry) -> None:
+    """Check every judge section against its Judge, its backend, its rubric, and the family table (task P15.1).
+
+    Runs after check_bindings, so each Judge and backend is registered and
+    each backend setting is one its backend accepts. A recipe without
+    judges reads no table. With judges, the family table
+    (lassi.judges.families, read at the call) must list the generator's
+    model.id and every arm (_check_generator_families). Then, judge by judge
+    in sorted order: the use (_check_judge_use), the mode against the
+    Judge's declared modes (_check_judge_mode), the judge's model in the
+    table and the reasoning effort its family calls for
+    (_check_judge_effort), and the rubric, whose sha256 enters the section
+    at RUBRIC_SHA256_KEY (_enter_rubric). Every refusal is a RecipeError
+    naming the dotted key.
+    """
+    judges = data.get(JUDGES)
+    if not judges:
+        return
+    try:
+        table = load_families()
+    except FamilyError as exc:
+        raise RecipeError(f"{path}: {JUDGES} is set, so the model family table must load: {exc}") from None
+    _check_generator_families(path, data, table)
+    for kind in sorted(judges):
+        section, where = judges[kind], f"{JUDGES}.{kind}"
+        _check_judge_use(path, where, section["use"])
+        _check_judge_mode(path, where, section, registry.get("Judge", kind))
+        _check_judge_effort(path, where, section, table, registry.get("LLMBackend", section["backend"]))
+        _enter_rubric(path, where, section)
+
+
+def _check_generator_families(path: Path, data: Mapping[str, Any], table: FamilyTable) -> None:
+    """Refuse a model.id or arm the family table does not list, so a judge's family can be told from the generator's."""
+    named = [("model.id", data["model"]["id"])] if "id" in data.get("model", {}) else []
+    named += [(f"arms[{index}]", arm) for index, arm in enumerate(data.get("arms", []))]
+    for key, model_id in named:
+        if table.family(model_id) is None:
+            raise RecipeError(
+                f"{path}: {key} is {model_id!r}, which the model family table {table.path} does not list; a recipe "
+                f"that binds a judge names only models whose family the table gives, so each judge's family can be "
+                f"told from the generator's (bible Agents And Judges); add the id to the table or remove {JUDGES}"
+            )
+
+
+def _check_judge_use(path: Path, where: str, use: str) -> None:
+    """Refuse a use other than JUDGE_USES; REWARD_USE with the reason it waits (OQ-091), naming <where>.use."""
+    key = f"{where}.use"
+    if use == REWARD_USE:
+        raise RecipeError(
+            f"{path}: {key} is {REWARD_USE}, but no reward admission threshold is recorded yet (OQ-091, open; task "
+            "P15.11): a judge enters a reward only after its calibration passes a recorded threshold on held-out "
+            f"measured trials, and only with a bounded weight (bible Judge rules); set {key} to "
+            f"{' or '.join(JUDGE_USES)}"
+        )
+    if use not in JUDGE_USES:
+        raise RecipeError(f"{path}: {key} is {use!r}; it must be one of {', '.join(JUDGE_USES)}")
+
+
+def _check_judge_mode(path: Path, where: str, section: Mapping[str, Any], entry: Entry) -> None:
+    """Require <where>.mode, one of the Judge's declared modes, when it declares any; refuse it when it has none."""
+    declared = getattr(entry.factory, MODES, ())
+    if not isinstance(declared, (tuple, list)) or not all(isinstance(item, str) and item for item in declared):
+        raise RecipeError(
+            f"{path}: Judge {entry.name!r} ({where}) declares {MODES} as {declared!r}; it must be a tuple or list of "
+            "mode names (non-empty strings), or empty for a judge without modes"
+        )
+    key, who = f"{where}.mode", f"Judge {entry.name!r}"
+    if not declared:
+        if "mode" in section:
+            raise RecipeError(f"{path}: {key} is {section['mode']!r}, but {who} declares no modes; remove {key}")
+        return
+    modes = ", ".join(declared)
+    if "mode" not in section:
+        raise RecipeError(f"{path}: {_required_message(key)}: {who} declares the modes {modes}, and none is picked")
+    if section["mode"] not in declared:
+        raise RecipeError(f"{path}: {key} is {section['mode']!r}; {who} declares the modes {modes}")
+
+
+def _check_judge_effort(
+    path: Path, where: str, section: Mapping[str, Any], table: FamilyTable, backend: Entry
+) -> None:
+    """Refuse a judge model the table does not list, and a reasoning effort its family or backend does not call for.
+
+    A family the table lists under reasoning_effort needs
+    <where>.sampling.reasoning_effort (OQ-080), any other family refuses it,
+    and a set effort needs a backend that declares REASONING_EFFORT. A
+    backend that declares takes_device is refused: a judge's section takes
+    no device section yet, so only served and replayed backends serve a
+    judge.
+    """
+    model = section["model"]
+    family = table.family(model)
+    if family is None:
+        raise RecipeError(
+            f"{path}: {where}.model is {model!r}, which the model family table {table.path} does not list; a judge's "
+            "family must be known to keep it apart from the generator's (bible Agents And Judges); add the id"
+        )
+    if TAKES_DEVICE in backend.capabilities:
+        raise RecipeError(
+            f"{path}: {where}.backend is LLMBackend {backend.name!r}, which takes a device section; a judge's "
+            "section takes none yet, so bind a served or replayed backend"
+        )
+    key, effort = f"{where}.sampling.{REASONING_EFFORT}", section["sampling"].get(REASONING_EFFORT)
+    takes = family in table.reasoning_effort
+    if takes and effort is None:
+        raise RecipeError(
+            f"{path}: {_required_message(key)}: {where}.model {model!r} is of the family {family!r}, whose models take "
+            "a reasoning effort (the family table's reasoning_effort; OQ-080), and the loader never picks one"
+        )
+    if effort is not None and not takes:
+        raise RecipeError(
+            f"{path}: {key} is {effort}, but {where}.model {model!r} is of the family {family!r}, whose models take no "
+            f"reasoning effort (the family table's reasoning_effort); remove {key}"
+        )
+    if effort is not None and REASONING_EFFORT not in backend.capabilities:
+        raise RecipeError(
+            f"{path}: {key} is {effort}, but LLMBackend {backend.name!r} ({where}.backend) does not declare the "
+            f"capability {REASONING_EFFORT!r}, so it could not send it; bind a backend that declares it"
+        )
+
+
+def _enter_rubric(path: Path, where: str, section: dict[str, Any]) -> None:
+    """Load <where>.rubric (lassi.judges.rubric) and enter its sha256 at <where>.rubric_sha256; a stated one must match.
+
+    A refusal of the rubric names <where>.rubric, and a stated sha256 that
+    differs from the rubric's names <where>.rubric_sha256.
+    """
+    try:
+        rubric = load_rubric(section["rubric"])
+    except RubricError as exc:
+        raise RecipeError(f"{path}: {where}.rubric: {exc}") from None
+    key, stated = f"{where}.{RUBRIC_SHA256_KEY}", section.get(RUBRIC_SHA256_KEY)
+    if stated is not None and stated != rubric.sha256:
+        raise RecipeError(
+            f"{path}: {key} is {stated}, but rubric {rubric.name!r} has the sha256 {rubric.sha256}; the rubric changed "
+            "since the recipe stated it, and a changed rubric invalidates its calibration (bible Judge rules), so "
+            "restore its files or state the new sha256"
+        )
+    section[RUBRIC_SHA256_KEY] = rubric.sha256
+
+
 def _bind_recording(path: Path, data: dict[str, Any], bindings: Sequence[Binding]) -> list[Binding]:
     """Check each section's recording, enter its sha256 there, and give the section's binding what it needs (step 9).
 
@@ -1654,13 +1850,24 @@ def _bind_recording(path: Path, data: dict[str, Any], bindings: Sequence[Binding
     into every trial's AdversaryRecord, so no host path enters a record. The
     Agent resolves the path with recording_file itself and compares the
     sha256 of the bytes its backend read (lassi.agents.llm).
+
+    judges.<kind>.recording (task P15.1), a judge's own replay backend's: as
+    model.recording, its sha256 enters the section at
+    judges.<kind>.recording_sha256 and the judge's LLMBackend binding
+    (judges.<kind>.backend) carries the checked file. Each backend binding
+    gets only its own section's recording.
     """
     model = _section_recording(path, "model", data.get("model", {}))
     adversary = _section_recording(path, _ADVERSARY, data.get(_ADVERSARY, {}))
+    files = {} if model is None else {"model.backend": model[0]}
+    for kind, section in sorted(data.get(JUDGES, {}).items()):
+        judge = _section_recording(path, f"{JUDGES}.{kind}", section)
+        if judge is not None:
+            files[f"{JUDGES}.{kind}.backend"] = judge[0]
     found = []
     for binding in bindings:
-        if model is not None and binding.interface == "LLMBackend":
-            binding = replace(binding, config=_fresh({**binding.config, RECORDING_KEY: str(model[0])}))
+        if binding.interface == "LLMBackend" and binding.where in files:
+            binding = replace(binding, config=_fresh({**binding.config, RECORDING_KEY: str(files[binding.where])}))
         elif adversary is not None and binding.where == f"{_ADVERSARY}.kind":
             binding = replace(binding, config=_fresh({**binding.config, RECORDING_SHA256_KEY: adversary[1]}))
         found.append(binding)
@@ -1833,7 +2040,10 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
     (base_url, timeout_s, api_key_env; task P17.3), any in-process model
     setting (revision, seed; task P17.4), and the replay backend's recording
     as written (task P16.13), which _bind_recording then replaces with the
-    checked file.
+    checked file. Each judge, in sorted order, binds its Judge at
+    judges.<kind> (config {}) and then its own LLMBackend at
+    judges.<kind>.backend, whose config holds the section's backend
+    settings (every key but _JUDGE_OWN; task P15.1).
     """
     found: list[Binding] = []
 
@@ -1871,6 +2081,9 @@ def _bindings(data: Mapping[str, Any]) -> list[Binding]:
         bind("ScoreProfile", data["score"], "score")
     for role in sorted(data.get("agents", {})):
         bind("Agent", role, f"agents.{role}")
-    for judge in sorted(data.get("judges", {})):
-        bind("Judge", judge, f"judges.{judge}")
+    for judge in sorted(data.get(JUDGES, {})):
+        section = data[JUDGES][judge]
+        bind("Judge", judge, f"{JUDGES}.{judge}")
+        settings = {key: value for key, value in section.items() if key not in _JUDGE_OWN}
+        bind("LLMBackend", section["backend"], f"{JUDGES}.{judge}.backend", settings)
     return found

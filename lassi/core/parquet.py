@@ -1,8 +1,8 @@
 """The Parquet mirror of a run's Trial records.
 
 Parquet mirrors the JSON records and never replaces them (bible Design
-Principle 7). A run's trials flatten into six tables, trials, attempts,
-diagnostics, requests, output_stats, and adversary, each written as Hive-partitioned Parquet under
+Principle 7). A run's trials flatten into seven tables, trials, attempts,
+diagnostics, requests, output_stats, adversary, and judgements, each written as Hive-partitioned Parquet under
 `<out_dir>/<table>/project=.../arm=.../bench=.../direction=.../part-0.parquet`.
 Partition values come from the parsed trial_id and are URI-encoded in
 directory names as pyarrow does by default, so a '+' is written as `%2B` and
@@ -46,6 +46,16 @@ text with sorted keys, and so is agent_log (the AgentLog's dict; task
 P16.4), null for an adversary that keeps no log. A trial with no record
 has no row.
 
+The judgements table (task P15.1) has one row per JudgeRecord of a trial
+whose judgements are recorded (Trial.judgements): the key columns, ordinal
+(the record's position in Trial.judgements), kind, rubric, rubric_sha256,
+model, family, mode (null for a judge that declares no modes), verdict,
+score (a double), values (the named judged values as JSON text with sorted
+keys), rationale, and tag, which holds JUDGED_TAG, "[JUDGED]", on every
+row, so a judged value read from the mirror still says it is judged and
+never a measurement (Agent Rule 14). Rows sort by trial_id, then ordinal. A
+trial whose judgements are not recorded, or are [], has no row.
+
 The requests table has one row per recorded model request (Trial.requests),
 in index order: the stage that sent it, the attempt its reply became
 (attempt_index, null for a context request), the role and the sha256 of each
@@ -75,6 +85,7 @@ from lassi.core.record import (
     Attempt,
     DeviceRecord,
     Diagnostic,
+    JudgeRecord,
     OutputStats,
     Request,
     RunInfo,
@@ -84,8 +95,10 @@ from lassi.core.record import (
 )
 from lassi.core.store import sha256_text
 
-TABLES = ("trials", "attempts", "diagnostics", "requests", "output_stats", "adversary")
+TABLES = ("trials", "attempts", "diagnostics", "requests", "output_stats", "adversary", "judgements")
 PARTITION_COLUMNS = ("project", "arm", "bench", "direction")
+# The tag column's value on every judgements row (task P15.1): a judged value is never a measurement.
+JUDGED_TAG = "[JUDGED]"
 
 _STRING = pa.string()
 _INT = pa.int64()
@@ -237,6 +250,23 @@ SCHEMAS = {
             ("agent_log", _STRING),
         ]
     ),
+    "judgements": pa.schema(
+        [
+            *_KEY_FIELDS,
+            ("ordinal", _INT),
+            ("kind", _STRING),
+            ("rubric", _STRING),
+            ("rubric_sha256", _STRING),
+            ("model", _STRING),
+            ("family", _STRING),
+            ("mode", _STRING),
+            ("verdict", _STRING),
+            ("score", _DOUBLE),
+            ("values", _STRING),
+            ("rationale", _STRING),
+            ("tag", _STRING),
+        ]
+    ),
 }
 
 _SORT_KEYS = {
@@ -246,6 +276,7 @@ _SORT_KEYS = {
     "requests": ("trial_id", "index"),
     "output_stats": ("trial_id", "attempt_index", "ordinal"),
     "adversary": ("trial_id",),
+    "judgements": ("trial_id", "ordinal"),
 }
 
 
@@ -454,6 +485,15 @@ def _adversary_row(record: AdversaryRecord, key: dict[str, str]) -> dict[str, An
     }
 
 
+def _judgement_row(entry: JudgeRecord, key: dict[str, str], ordinal: int) -> dict[str, Any]:
+    """Return the judgements row of one JudgeRecord: its fields, values as sorted-key JSON text, and the tag."""
+    fields = ("kind", "rubric", "rubric_sha256", "model", "family", "mode", "verdict", "score", "rationale")
+    row: dict[str, Any] = {**key, "ordinal": ordinal, **{name: getattr(entry, name) for name in fields}}
+    row["values"] = _json_cell(entry.values)
+    row["tag"] = JUDGED_TAG
+    return row
+
+
 def trial_rows(trials: Sequence[Trial]) -> dict[str, list[dict[str, Any]]]:
     """Flatten trials into rows for each table, in column order and sorted by trial_id, index, and ordinal.
 
@@ -482,6 +522,8 @@ def trial_rows(trials: Sequence[Trial]) -> dict[str, list[dict[str, Any]]]:
             rows["requests"].append(_request_row(request, key))
         if trial.adversary is not None:
             rows["adversary"].append(_adversary_row(trial.adversary, key))
+        for ordinal, entry in enumerate(trial.judgements or []):
+            rows["judgements"].append(_judgement_row(entry, key, ordinal))
     return {table: _sorted_rows(table, [_typed_row(table, row) for row in rows[table]]) for table in TABLES}
 
 

@@ -1,0 +1,1 @@
+SYNTHETIC rubric prompt for the loader's tests (task P15.1): no judge sends this text to a model.

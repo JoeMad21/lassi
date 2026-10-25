@@ -244,8 +244,9 @@ def _capability_phrase(interface: str, needed: frozenset[str]) -> str:
 
 
 _KIND_SUFFIX = ".kind"
-# The binding path of the model's backend, whose config keys sit in the model section beside it.
-_MODEL_BACKEND = "model.backend"
+# The last part of a backend's binding path (model.backend, judges.<kind>.backend), whose config keys sit in that
+# section beside `backend`.
+_BACKEND_SUFFIX = ".backend"
 
 
 def _config_path(where: str, key: str) -> str:
@@ -253,12 +254,13 @@ def _config_path(where: str, key: str) -> str:
 
     In a kind section the key sits beside `kind`, so where `executor.kind` and
     key `hots` give `executor.hots`. Any other where is kept whole, so
-    `agents.generator` and `x` give `agents.generator.x`. The backend's keys
-    sit in the model section beside `backend`, so `model.backend` and key
-    `device` give `model.device`.
+    `agents.generator` and `x` give `agents.generator.x`. A backend's keys
+    sit in its section beside `backend`, so `model.backend` and key `device`
+    give `model.device`, and a judge's backend, `judges.<kind>.backend`, and
+    key `base_url` give `judges.<kind>.base_url` (task P15.1).
     """
-    if where == _MODEL_BACKEND:
-        return f"model.{key}"
+    if where.endswith(_BACKEND_SUFFIX):
+        return f"{where[: -len(_BACKEND_SUFFIX)]}.{key}"
     section = where[: -len(_KIND_SUFFIX)] if where.endswith(_KIND_SUFFIX) else where
     return f"{section}.{key}"
 

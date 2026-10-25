@@ -74,6 +74,17 @@ proposals, and stop ("none" when it never stopped itself); one that keeps
 none adds nothing there. A trial without a record adds nothing, so its
 page renders as before.
 
+Judgements (task P15.1): a trial whose judgements are recorded
+(Trial.judgements not None) ends with a "## Judgements" section, after the
+Adversary section, whose opening line (JUDGED_LEAD) says each value there
+is [JUDGED], a model's judgement and never a measurement. Each JudgeRecord
+gets a "### <kind> [JUDGED]" part: a table of its rubric, rubric_sha256,
+model, family, mode (NO_MODE for a judge that declares none), verdict, and
+score, the verdict and score cells tagged [JUDGED]; a table of its judged
+values, each tagged [JUDGED], when it has any; and its rationale, fenced,
+under "#### Rationale [JUDGED]". An empty list shows "None."; a trial whose
+judgements are not recorded adds nothing, so its page renders as before.
+
 Guard reasons (task P17.14): an attempt's Guards table has one row per guard
 outcome (GUARD_OUTCOMES) and then, only when the attempt records why
 host_compute is null, a host_compute_not_checked row with the code. A code
@@ -100,6 +111,7 @@ from lassi.core.record import (
     Diagnostic,
     EndReason,
     Guards,
+    JudgeRecord,
     OutputStats,
     Provenance,
     Request,
@@ -118,6 +130,14 @@ SIMULATOR_WALL_S = "wall_s (simulator wall time, not performance)"
 # The candidate_failure cell of a divergence whose candidate run was clean (task P16.5): a known value, never a
 # PLACEHOLDER, which marks a value not yet measured.
 CLEAN_CANDIDATE_RUN = "none (the run was clean)"
+# The tag every judged cell carries (task P15.1; bible Judge rules: a judged value carries [JUDGED] and is never
+# presented as a measurement), the Judgements section's opening line, and the mode cell of a judge with no modes.
+JUDGED = "[JUDGED]"
+JUDGED_LEAD = (
+    f"Each value in this section is {JUDGED}: a model's judgement, never a measurement, and it changes no stage, "
+    "alignment, or score (Agent Rule 14)."
+)
+NO_MODE = "none (the judge declares no modes)"
 
 
 # ---------------------------------------------------------------------------
@@ -496,6 +516,31 @@ def _agent_log_rows(log: AgentLog) -> list[tuple[str, str]]:
     ]
 
 
+def _judgement_blocks(records: Sequence[JudgeRecord] | None) -> list[str]:
+    """Return the Judgements section (task P15.1), every judged cell tagged [JUDGED]; nothing when not recorded."""
+    if records is None:
+        return []
+    blocks = ["## Judgements\n", f"{JUDGED_LEAD}\n"]
+    if not records:
+        blocks.append("None.\n")
+    for entry in records:
+        rows = [
+            ("rubric", entry.rubric),
+            ("rubric_sha256", f"`{entry.rubric_sha256}`"),
+            ("model", entry.model),
+            ("family", entry.family),
+            ("mode", NO_MODE if entry.mode is None else entry.mode),
+            ("verdict", f"{entry.verdict} {JUDGED}"),
+            ("score", f"{fmt(entry.score)} {JUDGED}"),
+        ]
+        blocks += [f"### {entry.kind} {JUDGED}\n", _table(("Field", "Value"), rows)]
+        if entry.values:
+            values = [(name, f"{fmt(entry.values[name])} {JUDGED}") for name in sorted(entry.values)]
+            blocks.append(_table(("Judged value", "Value"), values))
+        blocks += [f"#### Rationale {JUDGED}\n", fenced(entry.rationale, "text")]
+    return blocks
+
+
 def render_trial_md(trial: Trial, store: TextStore, *, simulator: bool = False) -> str:
     """Return trial.md for `trial`, resolving prompt and request message texts through `store`.
 
@@ -512,5 +557,6 @@ def render_trial_md(trial: Trial, store: TextStore, *, simulator: bool = False) 
     for attempt in trial.attempts:
         blocks += _attempt_blocks(attempt, store, simulator)
     blocks += _adversary_blocks(trial.adversary)
+    blocks += _judgement_blocks(trial.judgements)
     page = "\n".join(blocks)
     return page.encode("ascii", "backslashreplace").decode("ascii")

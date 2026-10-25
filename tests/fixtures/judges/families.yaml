@@ -1,0 +1,9 @@
+# SYNTHETIC model family table for the tests of the judges section (task P15.1): no id here names a model, and no
+# family here is one. synthetic-reasoner's family takes a reasoning effort, as the real table's reasoning_effort
+# list declares for its families.
+families: [synthetic-a, synthetic-b, synthetic-reasoning]
+reasoning_effort: [synthetic-reasoning]
+models:
+  SYNTHETIC-generator: synthetic-a
+  SYNTHETIC-judge: synthetic-b
+  SYNTHETIC-reasoner: synthetic-reasoning

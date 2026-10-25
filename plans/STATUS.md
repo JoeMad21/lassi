@@ -183,7 +183,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.31 | READY | The development split for tt-pairs-v0 (OQ-083 (b)) | - |  |
 | P17.32 | READY | The night window of 2026-10-25: the sweep with the new features on 70B-class models | P17.29,P17.30 |  |
 | P15.0 | DONE | Plan phase P15 into plans/p15-judges.md and add its tasks here | - | plan plans/p15-judges.md; base e43a1e0 on p16-adversarial; OQ-CAL, OQ-THR, OQ-WIN drafted (numbers at filing) |
-| P15.1 | READY | The Judge interface, rubrics, and judge records | - |  |
+| P15.1 | DONE | The Judge interface, rubrics, and judge records | - | JudgeInput and Verdict, rubric loader (versioned, sha256 in the recipe hash), family table, judges section with every choice required (use reward refused, OQ-091), JudgeRecord in trial.json, trial.md, and Parquet; P15 row split per OQ-088; bible rev 409; OQ-095 filed |
 | P15.2 | READY | The equivalence judge | P15.1 | P9 consumes the interface and this judge |
 | P15.3 | READY | Judges in runs | P15.1,P15.2 |  |
 | P15.4 | READY | Calibration records, the calibration tool, and its metrics | P15.1 |  |

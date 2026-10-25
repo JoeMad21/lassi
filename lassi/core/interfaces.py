@@ -34,22 +34,33 @@ registry name. Contract rules (bible, Component Interfaces):
   arrays), never code, and is checked against the contract before any run.
   An outcome's code is a short token, never free text. The three types
   check their fields' exact types and take no subclass.
+- A Judge judges one candidate from a JudgeInput, defined here (the
+  candidate's and the source's files, artifacts as text by name, and
+  measurements as finite numbers by name, with no field for an oracle
+  outcome, an alignment, or a statistic), with a rubric (lassi.judges.rubric
+  Rubric), and returns a Verdict, defined here (a verdict token, a score in
+  [0, 1], named finite judged values, and a plain ASCII rationale), always
+  reported as [JUDGED]; checked_verdict holds it to the rubric's declared
+  verdicts and value names (task P15.1). Both types check their fields'
+  exact types and take no subclass.
 - Every component declares its capabilities (see `capabilities.Component`).
 
 Trial, Attempt, Diagnostic, DeviceRecord, and Profile are Result Record types in
 `lassi.core.record`, FrameworkBuild is in `lassi.core.devices`, and
-SuiteItem and TrainView are in `lassi.bench.registry`; they are referenced
-here by name only. InputContract, ContractInput, and LassiArray are
-lassi.harness types, which the adversary's records check against.
+SuiteItem and TrainView are in `lassi.bench.registry`, and Rubric is in
+`lassi.judges.rubric`; they are referenced here by name only.
+InputContract, ContractInput, and LassiArray are lassi.harness types, which
+the adversary's records check against.
 """
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Mapping, Protocol, Sequence, final
+from typing import TYPE_CHECKING, Any, Collection, Mapping, Protocol, Sequence, final
 
 from lassi.core.capabilities import Component
 from lassi.harness.contract import ContractInput, InputContract
@@ -59,6 +70,7 @@ if TYPE_CHECKING:
     from lassi.bench.registry import SuiteItem, TrainView
     from lassi.core.devices import FrameworkBuild
     from lassi.core.record import Attempt, DeviceRecord, Diagnostic, Profile, Trial
+    from lassi.judges.rubric import Rubric
 
 
 @dataclass(frozen=True)
@@ -148,15 +160,6 @@ class RunResult:
     sim_ub: bool | None = None
     sim_gap: str | None = None
     diagnostics: list[Diagnostic] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class Verdict:
-    """A judge's verdict, score, and rationale; always reported as [JUDGED]."""
-
-    verdict: str
-    score: float
-    rationale: str
 
 
 @dataclass(frozen=True)
@@ -366,6 +369,172 @@ def _text_files(files: object, where: str) -> Mapping[str, str]:
         if type(text) is not str:
             raise TypeError(f"{where}[{path!r}] is a {type(text).__name__}; each file is given as its text (str)")
     return MappingProxyType(dict(files))
+
+
+# A verdict is a short token [DESIGN] (task P15.1): a letter, then letters, digits, '_' or '-', at most 64 characters,
+# such as VALID or INVALID. A rubric's output schema declares its verdicts and value names as such tokens
+# (lassi.judges.rubric), and checked_verdict holds a Verdict to them.
+VERDICT_TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}")
+
+
+def is_plain_ascii(text: str) -> bool:
+    """Return True when every character of `text` is printable ASCII, a line feed, or a tab (plain ASCII text).
+
+    A carriage return is not one, so text with CRLF line breaks is not plain
+    ASCII here. A Verdict's rationale, a JudgeRecord's, and a rubric's files
+    are held to it.
+    """
+    return all(" " <= char <= "~" or char in "\n\t" for char in text)
+
+
+@final
+@dataclass(frozen=True)
+class JudgeInput:
+    """All a judge sees of one candidate (task P15.1): its files, the source's, artifacts, and measurements.
+
+    `candidate` and `source` map each file's relative path to its text,
+    both exactly str, for the candidate (its comments stripped before
+    judging, bible Judge rules, by the stage that builds the input) and for
+    the source program; `artifacts` maps an artifact's name, a non-empty
+    str, to its text, exactly a str (such as a run's stdout);
+    `measurements` maps a measurement's name, a non-empty str, to a finite
+    number, an int or a float and never a bool, kept as a float. Each is
+    kept as a read-only copy. An oracle outcome, an alignment, and a
+    statistic have no field here, so a judge never receives one (Agent Rule
+    14). A field given anything else is refused with a TypeError (a wrong
+    type) or a ValueError (an empty name, a NaN or an infinity), the
+    message naming the field as JudgeInput.<field>. The class takes no
+    subclass, which could add a field.
+
+    Known cases, not complete: the checks bound what each field can hold,
+    not what a text or a name says, so an artifact or a file could quote an
+    outcome or a statistic and a measurement's name could name one; which
+    artifacts and measurements a judge gets, none of the latter in predict
+    mode, is the rule of the stage that builds the input (tasks P15.2,
+    P15.3, and P15.5).
+    """
+
+    candidate: Mapping[str, str]
+    source: Mapping[str, str]
+    artifacts: Mapping[str, str]
+    measurements: Mapping[str, float]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Refuse every subclass (see the class docstring)."""
+        _refuse_subclass("JudgeInput", cls)
+
+    def __post_init__(self) -> None:
+        """Check every field (see the class docstring) and keep read-only copies."""
+        for name in ("candidate", "source"):
+            object.__setattr__(self, name, _text_files(getattr(self, name), f"JudgeInput.{name}"))
+        artifacts = _text_files(self.artifacts, "JudgeInput.artifacts")
+        if "" in artifacts:
+            raise ValueError("JudgeInput.artifacts has an empty name; each artifact is named")
+        object.__setattr__(self, "artifacts", artifacts)
+        object.__setattr__(self, "measurements", _finite_numbers(self.measurements, "JudgeInput.measurements"))
+
+
+@final
+@dataclass(frozen=True)
+class Verdict:
+    """A judge's verdict on one candidate (task P15.1): always reported as [JUDGED], never as a measurement.
+
+    `verdict` is exactly a str, a short token (VERDICT_TOKEN), and must be
+    one of the rubric's declared verdicts, which checked_verdict checks,
+    since only the rubric knows them; `score` is a finite number in [0, 1],
+    an int or a float and never a bool, kept as a float; `values` maps the
+    name of each judged value, a non-empty str and one the rubric declares
+    (checked_verdict), to a finite number, kept as a float in a read-only
+    copy; `rationale` is plain ASCII (is_plain_ascii). A field given
+    anything else is refused with a TypeError (a wrong type) or a ValueError
+    (a wrong value), the message naming the field as Verdict.<field>. The
+    class takes no subclass, which could add a field. A judge never
+    overrides an oracle outcome or a profiler measurement with it (Agent
+    Rule 14).
+    """
+
+    verdict: str
+    score: float
+    values: Mapping[str, float]
+    rationale: str
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Refuse every subclass (see the class docstring)."""
+        _refuse_subclass("Verdict", cls)
+
+    def __post_init__(self) -> None:
+        """Check every field (see the class docstring); keep the score as a float and a read-only copy of values."""
+        if type(self.verdict) is not str:
+            raise TypeError(f"Verdict.verdict must be a str, not {type(self.verdict).__name__}")
+        if VERDICT_TOKEN.fullmatch(self.verdict) is None:
+            raise ValueError(
+                "Verdict.verdict must be a short token (a letter, then letters, digits, '_' or '-', at most 64 "
+                f"characters), not {self.verdict[:80]!r}"
+            )
+        score = _finite_number(self.score, "Verdict.score")
+        if not 0.0 <= score <= 1.0:
+            raise ValueError(f"Verdict.score must lie in [0, 1], not {score!r}")
+        object.__setattr__(self, "score", score)
+        object.__setattr__(self, "values", _finite_numbers(self.values, "Verdict.values"))
+        if type(self.rationale) is not str:
+            raise TypeError(f"Verdict.rationale must be a str, not {type(self.rationale).__name__}")
+        if not is_plain_ascii(self.rationale):
+            raise ValueError(
+                "Verdict.rationale must be plain ASCII (printable characters, line feeds, and tabs); escape or drop "
+                "any other character before building the verdict"
+            )
+
+
+def checked_verdict(verdict: object, verdicts: Collection[str], values: Collection[str]) -> Verdict:
+    """Return `verdict` when it is a Verdict the rubric allows: its verdict among `verdicts`, its values in `values`.
+
+    `verdicts` and `values` are the rubric's declared verdicts and value
+    names (lassi.judges.rubric Rubric.check passes its own). Anything that
+    is not a Verdict is a TypeError; an undeclared verdict is a ValueError
+    naming Verdict.verdict and listing the declared ones, and an undeclared
+    value name one naming Verdict.values and the names. A declared value a
+    verdict leaves out is allowed.
+    """
+    if type(verdict) is not Verdict:
+        raise TypeError(f"a judge returns a Verdict, not {type(verdict).__name__}")
+    if verdict.verdict not in verdicts:
+        declared = ", ".join(verdicts) or "none"
+        raise ValueError(f"Verdict.verdict {verdict.verdict!r} is not one the rubric declares; it declares: {declared}")
+    undeclared = sorted(name for name in verdict.values if name not in values)
+    if undeclared:
+        declared = ", ".join(values) or "none"
+        raise ValueError(
+            f"Verdict.values names {', '.join(undeclared)}, which the rubric does not declare; it declares: {declared}"
+        )
+    return verdict
+
+
+def _finite_number(value: object, where: str) -> float:
+    """Return `value` as a float when it is exactly an int or a float and finite; TypeError or ValueError otherwise."""
+    if type(value) not in (int, float):
+        kind = type(value).__name__
+        raise TypeError(f"{where} must be a finite number (an int or a float, never a bool), not {kind}")
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except OverflowError:
+        number = math.inf
+    if not math.isfinite(number):
+        raise ValueError(f"{where} must be a finite number, not {value!r}")
+    return number
+
+
+def _finite_numbers(values: object, where: str) -> Mapping[str, float]:
+    """Return a read-only copy of `values` when it maps non-empty str names to finite numbers, kept as floats."""
+    if not isinstance(values, Mapping):
+        raise TypeError(f"{where} must map each name (str) to a finite number, not {type(values).__name__}")
+    found: dict[str, float] = {}
+    for name, value in values.items():
+        if type(name) is not str:
+            raise TypeError(f"{where} has a name of type {type(name).__name__}; each name is a str")
+        if not name:
+            raise ValueError(f"{where} has an empty name; each value is named")
+        found[name] = _finite_number(value, f"{where}[{name!r}]")
+    return MappingProxyType(found)
 
 
 class ContextExceeded(Exception):
@@ -583,10 +752,25 @@ class Agent(Component, Protocol):
 
 
 class Judge(Component, Protocol):
-    """Scores a candidate against evidence with a rubric."""
+    """Judges one candidate from a JudgeInput with a rubric and returns a Verdict, always [JUDGED] (task P15.1).
 
-    def judge(self, candidate: Attempt, evidence: Mapping[str, str], rubric: str) -> Verdict:
-        """Return the verdict, score, and rationale for `candidate`."""
+    The rubric (lassi.judges.rubric Rubric) is a versioned prompt plus an
+    output schema under assets/rubrics/<name>/. A Judge may declare `modes`,
+    a class attribute holding the names of its modes (a non-empty tuple or
+    list of str, such as an efficiency judge's explain and predict); a
+    recipe's judges.<kind>.mode is then required and must be one of them,
+    and it is refused for a Judge that declares none (lassi.core.recipe).
+    A judge never sees an oracle outcome, an alignment, or a statistic
+    (JudgeInput has no field for one), and its Verdict never overrides an
+    oracle outcome or a profiler measurement (Agent Rule 14).
+    """
+
+    def judge(self, view: JudgeInput, rubric: Rubric) -> Verdict:
+        """Return the Verdict for the candidate in `view`, judged with `rubric`.
+
+        The Verdict's verdict and value names are among those the rubric
+        declares (Rubric.check, lassi.core.interfaces checked_verdict).
+        """
         ...
 
 

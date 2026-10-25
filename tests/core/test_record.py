@@ -58,6 +58,12 @@ mapping, and the block defines AdversaryRecord, Divergence, and
 ContractFinding after DeviceRecord; their mappings keyed by data
 (AdversaryRecord's config and refusals, each entry's inputs) are not record
 fields (tests/core/test_adversary_record.py tests the classes).
+
+Trial.judgements (P15.1) lists the judges' records, the Trial's last field
+after adversary, null when not recorded. The bible's Trial block names it
+as `judgements: [JudgeRecord]`, and the block's last block defines
+JudgeRecord, whose values mapping is keyed by data, not record fields
+(tests/core/test_judge_record.py tests the class).
 """
 
 from __future__ import annotations
@@ -111,6 +117,7 @@ DICT_VALUED = frozenset(
         "AdversaryRecord.refusals",
         "Divergence.inputs",
         "ContractFinding.inputs",
+        "JudgeRecord.values",
     }
 )
 
@@ -146,10 +153,11 @@ NESTED_RECORDS = {
     "Divergence": ["Divergence"],
     "ContractFinding": ["ContractFinding"],
     "AgentLog": ["AgentLog"],
+    "JudgeRecord": ["JudgeRecord"],
 }
 # The top-level blocks of the bible's Result Record yaml block, in order, and the record class of each. The
 # adversary stage's three blocks (task P16.5) follow DeviceRecord; Trial names its record as AdversaryRecord, whose
-# agent_log names the last block, AgentLog (task P16.4).
+# agent_log names AgentLog (task P16.4); the last block, JudgeRecord (task P15.1), is what Trial.judgements lists.
 BIBLE_BLOCKS = (
     "Trial",
     "Request",
@@ -162,6 +170,7 @@ BIBLE_BLOCKS = (
     "Divergence",
     "ContractFinding",
     "AgentLog",
+    "JudgeRecord",
 )
 
 CORE_MODULES = ("lassi.core.record", "lassi.core.store", "lassi.core.trial_md", "lassi.core.parquet")
@@ -600,6 +609,25 @@ def test_json_keys_match_bible() -> None:
             assert visited == NESTED_RECORDS["RequestMessage"]
     (diagnostic,) = data["requests"][0]["diagnostics"]
     check_dict_keys(diagnostic, fields["Diagnostic"], "Diagnostic")
+
+
+def test_judge_record_json_keys_match_bible() -> None:
+    entry = record.JudgeRecord(
+        kind="equivalence",
+        rubric="synthetic-v1",
+        rubric_sha256=VALID_SHA,
+        model="SYNTHETIC-judge",
+        family="synthetic-b",
+        mode=None,
+        verdict="AGREE",
+        score=0.5,
+        values={"delta": 1.0},
+        rationale="SYNTHETIC.",
+    )
+    fields = bible_record_fields()
+    assert fields["Trial"]["judgements"] == "[JudgeRecord]"
+    visited = check_dict_keys(record.to_dict(entry), fields["JudgeRecord"], "JudgeRecord")
+    assert visited == NESTED_RECORDS["JudgeRecord"]
 
 
 def test_stage_constants_match_bible() -> None:

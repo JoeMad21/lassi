@@ -1,0 +1,6 @@
+# SYNTHETIC rubric for the tests of the rubric loader and the judges section (task P15.1). No judge uses it and it
+# judges nothing; its verdicts and value name are tokens chosen for the tests, not a rubric's.
+rubric: synthetic-v1
+prompts: [prompt.txt]
+verdicts: [AGREE, DISAGREE]
+values: [delta]

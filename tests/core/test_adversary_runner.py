@@ -136,15 +136,36 @@ def test_the_runner_carries_out_adversary_and_still_refuses_the_rest() -> None:
     assert runner_module._NOT_CARRIED_OUT == STILL_REFUSED
 
 
+# A judges section the loader accepts since task P15.1: every required choice set, the SYNTHETIC fixture rubric, and a
+# model of a family the test's table gives, so the refusal under test is the runner's.
+JUDGE_SECTION = {
+    "backend": "scripted",
+    "model": "SYNTHETIC-model",
+    "sampling": {"temperature": 0.0, "top_p": 1.0, "max_tokens": 64},
+    "rubric": "synthetic-v1",
+    "use": "screen",
+}
+JUDGE_RUBRICS = Path(__file__).resolve().parents[1] / "fixtures" / "judges" / "rubrics"
+
+
 @pytest.mark.parametrize(
     ("key", "section"),
     [
         ("refine", {"counter_start": 1, "counter_step": 1, "max_iters": 3}),
         ("agents", {"summarizer": {"model": "SYNTHETIC-model"}}),
-        ("judges", {"equivalence": {"model": "SYNTHETIC-model", "rubric": "SYNTHETIC-rubric", "use": "screen"}}),
+        ("judges", {"equivalence": JUDGE_SECTION}),
     ],
 )
-def test_refine_agents_and_judges_stay_refused(tmp_path: Path, bench: Path, key: str, section: Any) -> None:
+def test_refine_agents_and_judges_stay_refused(
+    tmp_path: Path, bench: Path, key: str, section: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    families = tmp_path / "families.yaml"
+    families.write_bytes(
+        f"families: [synthetic-a, synthetic-b]\nreasoning_effort: []\n"
+        f"models: {{{MODEL_ID}: synthetic-a, SYNTHETIC-model: synthetic-b}}\n".encode("ascii")
+    )
+    monkeypatch.setattr(importlib.import_module("lassi.judges.families"), "FAMILIES_FILE", families)
+    monkeypatch.setattr(importlib.import_module("lassi.judges.rubric"), "RUBRIC_ROOT", JUDGE_RUBRICS)
     data = recipe_data(stages=NO_ADVERSARY_STAGES, adversary=None, **{key: section})
     message = refused(tmp_path, bench, World(), data)
     assert key in message and "does not carry out" in message, message

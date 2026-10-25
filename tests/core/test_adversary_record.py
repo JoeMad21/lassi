@@ -23,8 +23,8 @@ The contract these tests fix:
   wall time that is not finite, a refusal reason outside CONTRACT_REASONS,
   an input digest that is not 64 lowercase hex, and an empty
   candidate_failure are refused with a ValueError naming the field.
-- Trial.adversary is its last field, an AdversaryRecord or null, null by
-  default: null means the stage did not take the trial (or the record
+- Trial.adversary is its last field but judgements (task P15.1), an
+  AdversaryRecord or null, null by default: null means the stage did not take the trial (or the record
   predates the field), so a trial.json written before the field loads with
   it null. The bible's Result Record block names it last in Trial, as
   AdversaryRecord, and defines the AdversaryRecord, Divergence, and
@@ -182,9 +182,9 @@ def test_the_record_classes_are_frozen_keyword_only_with_their_fields(name: str,
     assert all(spec.kw_only for spec in specs), f"{name} has positional fields"
 
 
-def test_trial_adversary_is_the_last_field_and_null_by_default() -> None:
+def test_trial_adversary_is_the_last_field_but_judgements_and_null_by_default() -> None:
     names = [spec.name for spec in dataclasses.fields(Trial)]
-    assert names[-1] == "adversary", "Trial has no last field adversary (task P16.5)"
+    assert names[-2:] == ["adversary", "judgements"], "Trial.adversary (task P16.5) precedes judgements (task P15.1)"
     assert base_trial().adversary is None
     assert taken_trial().adversary == example_record()
 
