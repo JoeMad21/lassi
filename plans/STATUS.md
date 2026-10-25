@@ -175,5 +175,5 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.23 | ACTIVE | The feature matrix for the owner's window of 2026-10-23, 20:00 to 24:00 EDT | P17.21,P17.22 | the feature matrix (sweep6, matrix.sh, start-matrix.sh) is ready for the next window; the fifth pass ran (170e9cc) |
 | P17.24 | READY | Classify the cpp -> tt build errors across the sweep records | - | the tool is committed (audited); its report on the night's records runs on the host in a window |
 | P17.25 | DONE | Restarts: a fresh generation after N failed corrections (opt-in) | - | loop.restart_after, opt-in; audited; bible master rev 350 |
-| P17.26 | READY | Declaration lookup: the API pack's declarations for the identifiers a build error names (opt-in) | - |  |
+| P17.26 | DONE | Declaration lookup: the API pack's declarations for the identifiers a build error names (opt-in) | - | declaration lookup (lookup section); bible master rev 357 |
 | P17.27 | READY | bf16 rounding in tt -> cpp outputs: check the generated code, then a generic prompt fix | P17.24 |  |

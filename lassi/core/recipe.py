@@ -10,15 +10,16 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
    switches between its two forms replaces the inherited one, and a `device` mapping replaces the
    inherited one whole, since a device is one choice);
 5. materializes the defaults (`project`: the loaded file's recipe name; `faithful: false`; every fix on; no
-   `extract` leniency, no LOOP_OPT_INS key, and no `retrieval` section, each off when absent, so a recipe without
-   one keeps its resolved recipe and hash);
+   `extract` leniency, no LOOP_OPT_INS key, no `retrieval` section, and no `lookup` section, each off when absent, so
+   a recipe without one keeps its resolved recipe and hash);
 6. applies the faithful overrides (bible, Project Recipes Notes; Design Principle 4);
 7. checks types and required choices, never picking a value for a choice left open, and refuses an EXTRACT
    leniency set true under faithful: true or with fixes.fence_tag off (_check_extract), a LOOP_OPT_INS key
    set true (restart_after: set at all) under faithful: true, and a loop.restart_after past loop.max_corrections
    (_check_loop; task P17.25), naming its key, and a `retrieval` section (task P17.22: every
    key required, k and max_chars within RETRIEVAL_K and RETRIEVAL_MAX_CHARS, prompts distinct RETRIEVAL_PROMPTS)
-   under faithful: true (_check_retrieval);
+   under faithful: true (_check_retrieval), and a `lookup` section (task P17.26: both keys required, max_chars
+   within LOOKUP_MAX_CHARS, prompts distinct LOOKUP_PROMPTS) under faithful: true (_check_lookup);
 8. binds components and checks their capabilities without constructing any (Component Interfaces), the
    adversary section's Agent among them, which must declare proposes_inputs (task P16.2); refuses a faithful
    recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES), a toolchain upstream
@@ -172,6 +173,17 @@ RETRIEVAL_PROMPTS = (RETRIEVAL_GENERATE, RETRIEVAL_CORRECT)
 RETRIEVAL_K = (1, 16)
 RETRIEVAL_MAX_CHARS = (500, 32000)
 _INDEX_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+# The optional lookup section (task P17.26): the target language's context pack's declarations of the identifiers a
+# compile correction's listed errors name, before the prompts it lists (lassi.core.stages). Off when absent, and never
+# materialized, so a recipe without it keeps its resolved recipe and hash. Upstream's prompts carry no declarations,
+# so it is refused under faithful: true (_check_lookup). Its keys are both required: max_chars (the declarations'
+# total text per prompt) within the bounds below, and prompts (distinct LOOKUP_PROMPTS; a generation prompt shows no
+# error to read, so only a correction may carry them).
+LOOKUP = "lookup"
+LOOKUP_CORRECT = "correct"
+LOOKUP_PROMPTS = (LOOKUP_CORRECT,)
+LOOKUP_MAX_CHARS = (500, 32000)
 
 
 # Toolchain capabilities of a proxy build that is not upstream's: `openmp_multicore` builds OpenMP target regions
@@ -520,6 +532,15 @@ def _is_retrieval_prompts(value: Any) -> bool:
     return len(set(value)) == len(value)
 
 
+def _is_lookup_prompts(value: Any) -> bool:
+    """Return True for a non-empty list of distinct names among LOOKUP_PROMPTS."""
+    if not isinstance(value, list) or not value:
+        return False
+    if not all(isinstance(item, str) and item in LOOKUP_PROMPTS for item in value):
+        return False
+    return len(set(value)) == len(value)
+
+
 _STR = _Leaf("a string", lambda value: isinstance(value, str))
 _BOOL = _Leaf("true or false", lambda value: isinstance(value, bool))
 _INT = _Leaf("an integer", _is_int)
@@ -567,6 +588,17 @@ _RETRIEVAL = _Fields(
     },
     required=frozenset({"index", "k", "max_chars", "prompts"}),
 )
+# The lookup section (task P17.26; LOOKUP): a mapping with both keys required.
+_LOOKUP = _Fields(
+    {
+        "max_chars": _Leaf(
+            f"an integer from {LOOKUP_MAX_CHARS[0]} to {LOOKUP_MAX_CHARS[1]}",
+            lambda value: _is_between(value, LOOKUP_MAX_CHARS),
+        ),
+        "prompts": _Leaf(f"a non-empty list of distinct names among {', '.join(LOOKUP_PROMPTS)}", _is_lookup_prompts),
+    },
+    required=frozenset({"max_chars", "prompts"}),
+)
 
 # Every key a run recipe may hold and its type. Inside a fixed mapping every key is optional unless REQUIRED
 # names it, and any other key is unknown. A train-only key (TRAIN_SCHEMA's base_model, method, trainer, data, and
@@ -596,6 +628,7 @@ SCHEMA = _Fields(
         "prompts": _STR,
         "context": _STRINGS,
         RETRIEVAL: _RETRIEVAL,  # opt-in documentation passages (task P17.22); absent means off
+        LOOKUP: _LOOKUP,  # opt-in declarations from the context pack (task P17.26); absent means off
         "toolchain": _OpenMap(_STR),
         "stages": _ListOf(_STR, non_empty=True),
         "executor": _EXECUTOR,
@@ -761,6 +794,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     _check_extract(path, data)
     _check_loop(path, data)
     _check_retrieval(path, data)
+    _check_lookup(path, data)
     bindings = _bindings(data)
     registry = DEFAULT_REGISTRY if registry is None else registry
     try:
@@ -1328,6 +1362,20 @@ def _check_retrieval(path: Path, data: Mapping[str, Any]) -> None:
         raise RecipeError(
             f"{path}: {RETRIEVAL} is set, but faithful: true reproduces upstream, whose prompts carry no "
             f"documentation passages; a recipe with faithful: true may not set it, so remove {RETRIEVAL} or set "
+            "faithful: false"
+        )
+
+
+def _check_lookup(path: Path, data: Mapping[str, Any]) -> None:
+    """Refuse a `lookup` section under faithful: true, inherited or not: upstream's prompts carry no declarations.
+
+    Runs after the type check, so a section that is present is a mapping
+    of its two keys (Design Principle 4, Agent Rule 4).
+    """
+    if LOOKUP in data and data["faithful"] is True:
+        raise RecipeError(
+            f"{path}: {LOOKUP} is set, but faithful: true reproduces upstream, whose prompts carry no declarations "
+            f"from a context pack; a recipe with faithful: true may not set it, so remove {LOOKUP} or set "
             "faithful: false"
         )
 

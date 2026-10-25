@@ -229,12 +229,25 @@ generate's is the item's kernels and then its source files
 (generate_query); a compile correction's is query_from_diagnostic of each
 error its prompt lists, and a run-error correction's is its run error
 text (correction_query). An oracle mismatch's correction gets no passages,
-since its report names no API, and an empty query gives none. Each block
-goes before the prompt without its trailing line feeds, one blank line
-apart (with_blocks), and a request that carried passages gets one
-RETRIEVED_CODE note on its Request (retrieved_note), never on an attempt,
-so it never enters a prompt. With neither feature a prompt is byte for
-byte what it was before.
+since its report names no API, and an empty query gives none. With the
+recipe's lookup section (task P17.26; lassi.core.recipe, an opt-in the
+loader refuses under faithful: true and the runner refuses with a fragment
+set or without a context pack for each target language), a compile
+correction (lookup.prompts lists correct) gets the looked-up block after
+those: for each identifier its listed errors name (error_identifiers, read
+as query_from_diagnostic reads them), the target language's pack's
+declarations of it (pack_declarations, from the pack's header parts;
+names_declaration), each skipped whole when it would take their text past
+lookup.max_chars (looked_up_declarations), rendered with
+DECLARATION_PROMPT and joined into LOOKED_UP_PROMPT. The generation
+prompt, a run-error correction, and an oracle mismatch's correction get
+none, and with no declaration carried there is no block. Each block goes
+before the prompt without its trailing line feeds, one blank line apart
+(with_blocks), and a request that carried passages gets one
+RETRIEVED_CODE note on its Request (retrieved_note), one that carried
+declarations one LOOKED_UP_CODE note (looked_up_note), never on an
+attempt, so neither enters a prompt. With none of these features a prompt
+is byte for byte what it was before.
 
 A context stage names the Trial.context field it fills in `fills_context`,
 and generate names the fields its fragment prompt joins, when a pack serves
@@ -354,6 +367,7 @@ from __future__ import annotations
 
 import dataclasses
 import errno
+import functools
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -388,7 +402,15 @@ from lassi.core.interfaces import (
     Toolchain,
 )
 from lassi.core.progress import ATTEMPT, REQUEST_SENT, Observer, notify
-from lassi.core.recipe import RESTART_AFTER, RETRIEVAL, RETRIEVAL_CORRECT, RETRIEVAL_GENERATE, Recipe
+from lassi.core.recipe import (
+    LOOKUP,
+    LOOKUP_CORRECT,
+    RESTART_AFTER,
+    RETRIEVAL,
+    RETRIEVAL_CORRECT,
+    RETRIEVAL_GENERATE,
+    Recipe,
+)
 from lassi.core.record import (
     GUARD_NOT_CHECKED,
     NO_GUARD,
@@ -414,6 +436,7 @@ from lassi.core.tolerance import STAT_FIELDS, within
 from lassi.executors.workdir import build_dir, fresh_build_dir
 from lassi.prompts import render
 from lassi.prompts.retrieval import SCORE_DIGITS, Index, Passage, query_from_diagnostic
+from lassi.prompts.retrieval import _identifiers as message_identifiers
 
 # The purpose every bench read here serves: these stages evaluate, they never train (Agent Rule 5).
 PURPOSE = "eval"
@@ -573,6 +596,29 @@ RETRIEVAL_PROMPTS = {RETRIEVED_PROMPT: RETRIEVED_FIELDS, PASSAGE_PROMPT: PASSAGE
 # The code of the note on a request that carried passages, and what joins one block (or passage) to the next.
 RETRIEVED_CODE = "retrieved"
 BLOCK_JOINER = "\n\n"
+# The templates of the looked-up block (task P17.26), with their fields: the block, whose `declarations` are the
+# entries one blank line apart, and one declaration. The runner renders both when the recipe sets lookup.
+# LOOKED_UP_CODE is the code of the note on a request that carried declarations.
+LOOKED_UP_PROMPT = "looked_up"
+LOOKED_UP_FIELDS = ("declarations",)
+DECLARATION_PROMPT = "declaration"
+DECLARATION_FIELDS = ("name", "header", "scope", "text")
+LOOKUP_TEMPLATES = {LOOKED_UP_PROMPT: LOOKED_UP_FIELDS, DECLARATION_PROMPT: DECLARATION_FIELDS}
+LOOKED_UP_CODE = "looked-up"
+# The line that heads each header part of a context pack's API reference: tools/build_tt_context.py writes it before
+# the declarations of header H (the include line of assets/context/tt-metalium-5280a9cf.head.txt).
+_INCLUDE_LINE = re.compile(r"^// ==== #include <([^<>\n]+)> ====$", re.MULTILINE)
+# What a declaration scan reads at namespace scope (pack_declarations): a namespace's head before its `{`; a class,
+# struct, or enum head, whose name is the first after the keywords; and a function's head before its first `(`
+# outside brackets: a return type, then the name.
+_NAMESPACE_HEAD = re.compile(r"(?:inline\s+)?namespace(?:\s+([A-Za-z_][A-Za-z0-9_:]*))?")
+_TYPE_HEAD = re.compile(r"(?:class|struct|enum(?:\s+(?:class|struct))?)\s+([A-Za-z_][A-Za-z0-9_]*)")
+_FUNCTION_HEAD = re.compile(r"\S.*[\s*&>]([A-Za-z_][A-Za-z0-9_]*)\s*", re.DOTALL)
+_TEMPLATE_HEAD = re.compile(r"template\s*<")
+_FIRST_WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# A unit that opens with one of these words declares no function, and a function head that ends in one names none.
+_NOT_FUNCTION_WORDS = frozenset({"using", "typedef", "static_assert", "friend"})
+_NOT_FUNCTION_NAMES = frozenset({"operator"})
 # The words of that report (OQ-077, option (a)): exact statistics give reference values away, so each output shows
 # its verdict, its pcc to PCC_PLACES decimals, and one of these fixed phrases, never a value, a threshold, or a note.
 PCC_PLACES = 3
@@ -1155,27 +1201,38 @@ def with_blocks(blocks: Sequence[str], prompt: str) -> str:
 
 
 def with_context_blocks(
-    context: RunContext, trial: Trial, prompt: str, passages: Sequence[Passage] = ()
+    context: RunContext,
+    trial: Trial,
+    prompt: str,
+    passages: Sequence[Passage] = (),
+    looked_up: Sequence[tuple[str, Declaration]] = (),
 ) -> tuple[str, list[Diagnostic]]:
     """Return a template set's `prompt` with its context blocks before it, and the notes its request gets.
 
     The blocks (with_blocks) are KNOWLEDGE_PROMPT with
     Trial.context.knowledge_summary when that is not empty, then, when
     `passages` holds any, the retrieved block (retrieved_block), for which
-    the request gets one note (retrieved_note). With neither, the prompt
-    comes back unchanged with no note. A fragment set's prompt is never
-    changed: its own generation prompt joins the summary.
+    the request gets one note (retrieved_note), then, when `looked_up`
+    (identifier, declaration pairs; looked_up_declarations) holds any, the
+    looked-up block (looked_up_block), for which it gets one note
+    (looked_up_note). With none, the prompt comes back unchanged with no
+    note. A fragment set's prompt is never changed: its own generation
+    prompt joins the summary.
     """
     if context.fragments:
         return prompt, []
     blocks: list[str] = []
+    notes: list[Diagnostic] = []
     summary = trial.context.knowledge_summary
     if summary:
         blocks.append(render(context.prompts, KNOWLEDGE_PROMPT, {"knowledge_summary": summary}))
-    if not passages:
-        return with_blocks(blocks, prompt), []
-    blocks.append(retrieved_block(context.prompts, passages))
-    return with_blocks(blocks, prompt), [retrieved_note(passages)]
+    if passages:
+        blocks.append(retrieved_block(context.prompts, passages))
+        notes.append(retrieved_note(passages))
+    if looked_up:
+        blocks.append(looked_up_block(context.prompts, [declaration for _, declaration in looked_up]))
+        notes.append(looked_up_note(looked_up))
+    return with_blocks(blocks, prompt), notes
 
 
 def retrieved_block(prompts: str, passages: Sequence[Passage]) -> str:
@@ -1220,6 +1277,298 @@ def passages_described(context: RunContext, kind: str) -> str:
     section = context.recipe.data[RETRIEVAL]
     where = "the prompt" if kind == RETRIEVAL_GENERATE else "each compile or run correction prompt"
     return f", with up to {section['k']} {section['index']} documentation passages before {where}"
+
+
+@dataclass(frozen=True)
+class Declaration:
+    """One declaration of a context pack's API reference: its name, header part, namespace scope, and exact text.
+
+    `scope` is its enclosing namespaces joined by `::` ("" at global
+    scope), and `text` the pack's text from its first character through its
+    closing `;` (pack_declarations).
+    """
+
+    name: str
+    header: str
+    scope: str
+    text: str
+
+
+def lookup_on(context: RunContext, kind: str) -> bool:
+    """Return True when the recipe's lookup section lists the prompt kind `kind` (correct; task P17.26).
+
+    The section is off when absent (lassi.core.recipe LOOKUP); the loader
+    refuses it under faithful: true, and the runner with a fragment set or
+    without a context pack for the target language.
+    """
+    section = context.recipe.data.get(LOOKUP)
+    return isinstance(section, Mapping) and kind in section["prompts"]
+
+
+@functools.lru_cache(maxsize=4)
+def pack_declarations(pack: str) -> tuple[Declaration, ...]:
+    """Return the declarations of a context pack's text (its entries joined as the loader joins them), in pack order.
+
+    The pack's header parts each run from a line `// ==== #include <H> ====`
+    (_INCLUDE_LINE) to the next such line or the pack's end, H being the
+    part's header; text outside them (a guide, a preamble) holds none. A
+    declaration is a namespace-scope function declaration or class, struct,
+    or enum definition of a part (_declared_name), its text verbatim, a
+    class's members and inner blank lines included; a member is part of its
+    class's declaration, never one of its own. The text is the cache key, so
+    a run parses its pack once.
+    """
+    heads = list(_INCLUDE_LINE.finditer(pack))
+    found: list[Declaration] = []
+    for number, head in enumerate(heads):
+        end = heads[number + 1].start() if number + 1 < len(heads) else len(pack)
+        scopes: list[str] = []
+        for kind, value in _namespace_units(pack[head.end():end]):
+            if kind == "open":
+                scopes.append(value)
+            elif kind == "close":
+                scopes = scopes[:-1]
+            elif (name := _declared_name(value)) is not None:
+                found.append(Declaration(name, head.group(1), "::".join(part for part in scopes if part), value))
+    return tuple(found)
+
+
+def _namespace_units(text: str) -> list[tuple[str, str]]:
+    """Split header text into its units at namespace scope, in order: ("open", name), ("close", ""), ("unit", text).
+
+    A unit starts at its first character that is no blank, comment, or
+    preprocessor line, and runs through its `;` outside every bracket, or,
+    when its first such `{` follows no class, struct, or enum head (a
+    function body, say), through that brace's `}`, and is then dropped. A
+    `{` outside every bracket after a namespace head opens the namespace
+    instead ("" for an anonymous one), and a `}` before any unit starts
+    closes it. Comments and string and character literals hold no bracket.
+    """
+    units: list[tuple[str, str]] = []
+    start: int | None = None
+    depth, body, index = 0, False, 0
+    while index < len(text):
+        skipped = _skipped(text, index)
+        if skipped != index:
+            index = skipped
+            continue
+        char = text[index]
+        if start is None:
+            if char == "}":
+                units.append(("close", ""))
+            if char.isspace() or char in "#}":
+                index = _line_end(text, index) if char == "#" else index + 1
+                continue
+            start = index
+        if char == "{" and depth == 0:
+            head = text[start:index].strip()
+            namespace = _NAMESPACE_HEAD.fullmatch(head)
+            if namespace is not None:
+                units.append(("open", namespace.group(1) or ""))
+                start, index = None, index + 1
+                continue
+            body = _TYPE_HEAD.match(_without_template_head(head)) is None
+        depth = _bracket_depth(depth, char)
+        if depth == 0 and (char == ";" or (char == "}" and body)):
+            if char == ";":
+                units.append(("unit", text[start:index + 1]))
+            start, body = None, False
+        index += 1
+    return units
+
+
+def _bracket_depth(depth: int, char: str) -> int:
+    """Return the depth after `char`: one more after an opening bracket, one less (never below 0) after a closing."""
+    if char in ("(", "[", "{"):
+        return depth + 1
+    if char in (")", "]", "}"):
+        return max(depth - 1, 0)
+    return depth
+
+
+def _skipped(text: str, index: int) -> int:
+    """Return the index after the comment, string, or character literal at `index`; `index` when none starts there.
+
+    A `'` right after a letter or digit is a digit separator, not a literal.
+    """
+    if text.startswith("//", index):
+        return _line_end(text, index)
+    if text.startswith("/*", index):
+        end = text.find("*/", index + 2)
+        return len(text) if end < 0 else end + 2
+    quote = text[index]
+    if quote == '"' or (quote == "'" and not (index and text[index - 1].isalnum())):
+        position = index + 1
+        while position < len(text) and text[position] != quote:
+            position += 2 if text[position] == "\\" else 1
+        return min(position + 1, len(text))
+    return index
+
+
+def _line_end(text: str, index: int) -> int:
+    """Return the index of the line feed that ends the line holding `index`, or the text's end."""
+    end = text.find("\n", index)
+    return len(text) if end < 0 else end
+
+
+def _without_template_head(text: str) -> str:
+    """Return a unit's text without its leading `template <...>` parameter list, when it has one."""
+    match = _TEMPLATE_HEAD.match(text)
+    if match is None:
+        return text
+    depth = 0
+    for index in range(match.end() - 1, len(text)):
+        depth += {"<": 1, ">": -1}.get(text[index], 0)
+        if depth == 0:
+            return text[index + 1:].lstrip()
+    return text
+
+
+def _declared_name(unit: str) -> str | None:
+    """Return the name a namespace-scope unit declares, or None when it is no function or type definition.
+
+    A class, struct, or enum definition's name is the first after its
+    keywords, when its first `{` outside brackets comes before any `(`
+    (a forward declaration has none). Otherwise a function's name is the
+    one right before its first `(` outside brackets, after a return type
+    (_FUNCTION_HEAD), with no `=` before it (a variable's initializer); a
+    unit that opens with a _NOT_FUNCTION_WORDS word, or whose name is an
+    operator, declares none. A template's parameter list is skipped first.
+    """
+    head = _without_template_head(unit)
+    brace, paren = _outside_brackets(head, "{"), _outside_brackets(head, "(")
+    type_head = _TYPE_HEAD.match(head)
+    if type_head is not None and brace is not None and (paren is None or brace < paren):
+        return type_head.group(1)
+    first = _FIRST_WORD.match(head)
+    if paren is None or (first is not None and first.group() in _NOT_FUNCTION_WORDS):
+        return None
+    if _outside_brackets(head[:paren], "=") is not None:
+        return None
+    function = _FUNCTION_HEAD.fullmatch(head[:paren])
+    if function is None or function.group(1) in _NOT_FUNCTION_NAMES:
+        return None
+    return function.group(1)
+
+
+def _outside_brackets(text: str, wanted: str) -> int | None:
+    """Return the index of the first `wanted` character of `text` outside brackets, comments, and literals, or None."""
+    depth, index = 0, 0
+    while index < len(text):
+        skipped = _skipped(text, index)
+        if skipped != index:
+            index = skipped
+            continue
+        char = text[index]
+        if char == wanted and depth == 0:
+            return index
+        depth = _bracket_depth(depth, char)
+        index += 1
+    return None
+
+
+def error_identifiers(previous: Attempt) -> list[str]:
+    """Return the identifiers a compile correction's listed errors name, each once, in order of first mention.
+
+    They are, for each error-severity diagnostic of `previous` that its
+    prompt lists (listed_diagnostics of prompt_diagnostics), the names its
+    message gives as query_from_diagnostic (lassi.prompts.retrieval) reads
+    them: the quoted names, then the other names holding an underscore, a
+    scope (::), or an inner capital. Warnings and notes give none.
+    """
+    listed = listed_diagnostics(prompt_diagnostics(previous.diagnostics))
+    names = [name for item in listed if item.severity == "error" for name in message_identifiers(item.message)]
+    return list(dict.fromkeys(names))
+
+
+def names_declaration(identifier: str, declaration: Declaration) -> bool:
+    """Return True when `identifier` names `declaration`: its name, or its name qualified by the end of its scope.
+
+    `Make`, `inner::Make`, and `outer::inner::Make` each name a Make
+    declared in outer::inner; `other::Make` and `outer::Make` do not.
+    """
+    *qualifier, name = identifier.split("::")
+    if name != declaration.name:
+        return False
+    scope = declaration.scope.split("::") if declaration.scope else []
+    return len(qualifier) <= len(scope) and scope[len(scope) - len(qualifier):] == qualifier
+
+
+def looked_up_declarations(context: RunContext, previous: Attempt) -> list[tuple[str, Declaration]]:
+    """Return the declarations a compile correction of `previous` carries, each with the identifier that named it.
+
+    For each identifier (error_identifiers) in order, every declaration of
+    the target language's pack (pack_declarations of RunContext.packs) it
+    names (names_declaration), in pack order, overloads included, each
+    declaration once. One whose text would take the carried declarations'
+    total text past lookup.max_chars is skipped whole, never cut, and a
+    later smaller one may still fit. An identifier the pack declares no
+    function or type of gives none. Raises ValueError when the prompt set
+    is a fragment set or no pack serves the target; the runner refuses
+    both first.
+    """
+    pack = context.packs.get(context.direction.target)
+    if pack is None or context.fragments:
+        raise ValueError(
+            f"{context.recipe.path}: {LOOKUP} needs a template prompt set and a context pack for the target language "
+            f"{context.direction.target!r}, which the runner refuses the recipe without; run it with lassi run"
+        )
+    declarations = pack_declarations(pack)
+    budget = context.recipe.data[LOOKUP]["max_chars"]
+    carried: list[tuple[str, Declaration]] = []
+    total = 0
+    for identifier in error_identifiers(previous):
+        for declaration in declarations:
+            named = names_declaration(identifier, declaration)
+            if not named or any(item is declaration for _, item in carried):
+                continue
+            if total + len(declaration.text) > budget:
+                continue
+            carried.append((identifier, declaration))
+            total += len(declaration.text)
+    return carried
+
+
+def looked_up_block(prompts: str, declarations: Sequence[Declaration]) -> str:
+    """Return LOOKED_UP_PROMPT of set `prompts` with `declarations`, each DECLARATION_PROMPT rendered.
+
+    The entries go one blank line apart, as the retrieved block's passages do.
+    """
+    texts = [render(prompts, DECLARATION_PROMPT, dataclasses.asdict(item)).rstrip("\n") for item in declarations]
+    return render(prompts, LOOKED_UP_PROMPT, {"declarations": BLOCK_JOINER.join(texts)})
+
+
+def looked_up_note(carried: Sequence[tuple[str, Declaration]]) -> Diagnostic:
+    """Return the note of a request that carried declarations: code LOOKED_UP_CODE, severity note.
+
+    Its message gives the count and total text, then each carried
+    identifier in order with the header part of each declaration it carried
+    and how many came from that part. Its stage is parse, as for the
+    retrieved note, and it rides on the Request, never on an attempt, so it
+    never enters a prompt.
+    """
+    parts: dict[str, dict[str, int]] = {}
+    for identifier, declaration in carried:
+        counts = parts.setdefault(identifier, {})
+        counts[declaration.header] = counts.get(declaration.header, 0) + 1
+    listing = "; ".join(
+        f"{identifier} in " + ", ".join(f"{header} ({count})" for header, count in counts.items())
+        for identifier, counts in parts.items()
+    )
+    total = sum(len(declaration.text) for _, declaration in carried)
+    message = (
+        f"the prompt carried {len(carried)} declaration(s) from the context pack, {total} characters, for the "
+        f"identifiers its errors name, in order: {listing}"
+    )
+    return Diagnostic(stage="parse", severity="note", code=LOOKED_UP_CODE, message=message)
+
+
+def declarations_described(context: RunContext) -> str:
+    """Return what compile_loop's describe() adds when lookup lists correct (task P17.26), else ""."""
+    if not lookup_on(context, LOOKUP_CORRECT):
+        return ""
+    budget = context.recipe.data[LOOKUP]["max_chars"]
+    return f", with the context pack's declarations of the names its errors give (up to {budget} characters)"
 
 
 def _harness_build(
@@ -1857,7 +2206,7 @@ class CompileLoopStage:
         return (
             f"compile_loop: build {context.direction.target} with {builder}, then correct from {source} with "
             f"{errors} while an error remains ({limit}{restarts_described(context)})"
-            f"{passages_described(context, RETRIEVAL_CORRECT)}"
+            f"{passages_described(context, RETRIEVAL_CORRECT)}{declarations_described(context)}"
         )
 
     @staticmethod
@@ -2409,7 +2758,9 @@ def _corrected(
     _correction_messages (`mismatch`: an oracle mismatch's, with `errors`
     its mismatch_text), after the context blocks of a template set
     (with_context_blocks: the knowledge block, then, when retrieval lists
-    correct and this is no mismatch, the passages for correction_query).
+    correct and this is no mismatch, the passages for correction_query,
+    then, when lookup lists correct and this is a compile correction, no
+    run error or mismatch, the declarations of looked_up_declarations).
     With fixes.prompt_newlines off every line feed is removed from it
     before it is stored and sent. The reply is read as generate reads
     attempt 0 (_reply_attempt), and the attempt keeps its diff from the last
@@ -2426,7 +2777,10 @@ def _corrected(
     passages: list[Passage] = []
     if not mismatch and retrieval_on(context, RETRIEVAL_CORRECT):
         passages = retrieved_passages(context, correction_query(previous, errors, run_error=run_error))
-    prompt, notes = with_context_blocks(context, trial, prompt, passages)
+    looked_up: list[tuple[str, Declaration]] = []
+    if not (mismatch or run_error) and lookup_on(context, LOOKUP_CORRECT):
+        looked_up = looked_up_declarations(context, previous)
+    prompt, notes = with_context_blocks(context, trial, prompt, passages, looked_up)
     if not fix_on(context, "prompt_newlines"):
         prompt = prompt.replace("\n", "")
     try:

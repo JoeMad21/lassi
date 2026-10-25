@@ -38,7 +38,11 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    passage.txt (RETRIEVAL_PROMPTS) is missing or does not render, or with
    a corpus whose manifest is missing or whose index file is missing or
    fails the manifest's sha256 (_retrieval_index, which loads the index
-   once per run); loop.restart_after (task P17.25) with a fragment set
+   once per run); the lookup section (task P17.26) with a fragment set,
+   then without a context pack serving a direction's target language,
+   then with a template set whose looked_up.txt or declaration.txt
+   (LOOKUP_TEMPLATES) is missing or does not render (_check_lookup);
+   loop.restart_after (task P17.25) with a fragment set
    (_check_restart); a project (the recipe's `project`, the first
    trial id segment) that is not one plain segment or that names an entry
    of the run tree; trial ids that repeat; missing bench sources; an
@@ -340,6 +344,7 @@ from lassi.core.interfaces import Executor, Profiler, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
 from lassi.core.progress import STAGE_START, TRIAL_END, TRIAL_START, GuardedObserver, Observer, ProgressEvent, notify
 from lassi.core.recipe import (
+    LOOKUP,
     RECORDING_KEY,
     RECORDING_SHA256_KEY,
     RESTART_AFTER,
@@ -370,6 +375,7 @@ from lassi.core.stages import (
     BASELINE_X10,
     CONTEXT_PROMPTS,
     CORRECT_ON_MISMATCH,
+    LOOKUP_TEMPLATES,
     PURPOSE,
     RETRIEVAL_PROMPTS,
     RUNS_CODE,
@@ -1613,7 +1619,8 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     (_asks_model) comes before it. The prompts are checked by _check_prompts,
     loop.correct_on_mismatch by _check_mismatch, a template set's context by
     _check_template_context, the retrieval section's prompts by
-    _check_retrieval_prompts, and loop.restart_after by _check_restart.
+    _check_retrieval_prompts, the lookup section by _check_lookup, and
+    loop.restart_after by _check_restart.
     """
     entries = [registry.get("Stage", name) for name in recipe.data["stages"]]
     _check_fixes(recipe, entries)
@@ -1647,6 +1654,7 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     _check_mismatch(recipe, registry, entries, settings)
     _check_template_context(recipe, entries, settings)
     _check_retrieval_prompts(recipe, settings)
+    _check_lookup(recipe, settings)
     _check_restart(recipe, settings)
 
 
@@ -1702,6 +1710,34 @@ def _check_retrieval_prompts(recipe: Recipe, settings: _Settings) -> None:
             f"prompts, which carry no documentation passages; use a template set or remove {RETRIEVAL}"
         )
     _check_templates(recipe, settings, f"{RETRIEVAL} is set", RETRIEVAL_PROMPTS)
+
+
+def _check_lookup(recipe: Recipe, settings: _Settings) -> None:
+    """Refuse the lookup section when the run could not carry it out (task P17.26; lassi.core.stages).
+
+    In this order: a fragment set, whose prompts (upstream's) carry no
+    declarations; a direction whose target language no context pack of the
+    recipe serves, since the declarations come from that pack; and a
+    template set in which a template of LOOKUP_TEMPLATES (the looked-up
+    block and one declaration) does not render with its fields. A recipe
+    without the section is never checked.
+    """
+    if LOOKUP not in recipe.data:
+        return
+    if settings.fragments:
+        raise RunError(
+            f"{recipe.path}: {LOOKUP} is set, but {settings.prompts!r} is a fragment prompt set, upstream's "
+            f"prompts, which carry no declarations; use a template set or remove {LOOKUP}"
+        )
+    for direction in settings.directions:
+        if direction.target not in settings.packs:
+            served = ", ".join(sorted(settings.packs)) or "none"
+            raise RunError(
+                f"{recipe.path}: {LOOKUP} is set, but no context pack serves the target language "
+                f"{direction.target!r}, whose declarations it would carry; the recipe's context serves: {served}; "
+                f"name a pack for {direction.target!r} in context or remove {LOOKUP}"
+            )
+    _check_templates(recipe, settings, f"{LOOKUP} is set", LOOKUP_TEMPLATES)
 
 
 def _check_templates(

@@ -475,8 +475,10 @@ class Request:
     each by text-store reference; `reply_ref` is the reply as kept, each lone
     surrogate replaced by U+FFFD. `diagnostics` holds what was noted about a
     reply that no attempt carries, such as a context reply's `invalid-text`
-    warning. Every field but `diagnostics` is required, so a missing value is
-    never read as a context request or an empty call.
+    warning, or the note of a request whose prompt carried documentation
+    passages (`retrieved`, task P17.22) or a context pack's declarations
+    (`looked-up`, task P17.26). Every field but `diagnostics` is required, so
+    a missing value is never read as a context request or an empty call.
     """
 
     index: int
