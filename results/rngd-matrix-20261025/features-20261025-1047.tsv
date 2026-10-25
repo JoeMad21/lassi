@@ -1,0 +1,4 @@
+run_tree	direction	item	run	stage	alignment	corrections	end	generate	compile_loop	run_loop	restart	looked-up_notes	retrieved_notes
+sweep-20261025-1047-gpt-oss-20b-low--base-pcc	cpp-tt	matmul_multi_core	run01	S1	None	15	correction-cap	1	15	0	0	0	0
+sweep-20261025-1047-gpt-oss-20b-low--mmapi-pcc	cpp-tt	matmul_multi_core	run01	S1	None	15	correction-cap	1	15	0	0	0	0
+sweep-20261025-1047-gpt-oss-20b-low--mmrag-maxabs	cpp-tt	eltwise_binary	run01	S1	None	15	correction-cap	1	15	0	0	0	16
