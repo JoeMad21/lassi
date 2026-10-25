@@ -1143,3 +1143,16 @@ Options:
 - (c) Llama-3.3-70B-Instruct-FP8-dynamic only.
 Recommendation: (a). The backup and deletion scripts are on the workstation, outside the repository, in C:/Users/Joseph/alpha01-backup-20261025 (backup.sh, then delete-on-alpha01.sh, which asks before each section and offers the models only with MODELS=yes); the agent deletes nothing there.
 Answer: Owner's choice (in the working session, 2026-10-25, about 16:40 EDT; recorded by the agent), after removing the models of 8B to 60B and the home directory's non-project files themselves (a listing at 13:33 on alpha01's clock, rx 20261025-133317-exec-489c, read 346 GB free and a 94G home): "Let's do Llama 70B and GPT-OSS, save the other large models for later testing suggestions." Tonight: furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic and furiosa-ai/gpt-oss-120b at v2026.4 (272.4 GB). For later testing: K-EXAONE-236B-A23B-NVFP4A16 (150.7 GB), Solar-Open-100B-NVFP4A16 (68.6 GB), and EXAONE-4.5-33B-FP8 (43.9 GB), each at v2026.4 on 4 RNGD cards; Qwen3.6-27B-FP8 and Qwen3.6-35B-A3B-FP8 need the v2026.5 SDK, a pin change (Agent Rule 10).
+
+## OQ-088 Opening P9 LASSI-EE And P15 Judges Without Their Hardware
+State: ANSWERED
+Kind: decision
+Blocks: P9 and P15 (their phase rows: P9 on MI300X access, P15 on P9's measurements)
+Evidence: docs/BIBLE.md, Build Roadmap (the P9 row: EE stages, the LASSI-EE power protocol on P17's rocm_smi profiler, the equivalence judge on MI300X; the P15 row: judge interface, equivalence and efficiency judges, rubrics, calibration reports, gated on MI300X measurements) and Project Baselines, LASSI-EE (CUDA on A100, HIP on MI100, power telemetry); OQ-040 (no GPU host).
+Question: The owner, in the working session on 2026-10-25 at about 17:35 EDT: "Get going on Phase 15 without the DF dialect. Work on other phases if possible. I want LASSI-EE up and running too." LASSI-EE refactors CUDA and HIP for energy on GPUs with power telemetry, and no GPU host exists; P15's gate calibrates the efficiency judge on MI300X measurements. What should each mean until GPUs exist?
+Options:
+- (a) LASSI-EE: build the EE stages, the energy protocol, and the equivalence judge now and run them as a labeled CPU port on alpha01's EPYC (energy from RAPL if this account can read it, else wall time labeled not energy), with RNGD models as generators; GPU runs follow when a GPU host exists. P15: judges served on RNGD, calibrated on measured outcomes available now (oracle outcomes for equivalence, host-CPU measurements for efficiency); the MI300X calibration stays a later gate part.
+- (b) Build with stand-ins only and run nothing until a GPU host exists; P15's gate stays on MI300X.
+- (c) A compile-only GPU tier for LASSI-EE; P15 equivalence only.
+Recommendation: (a).
+Answer: Owner's choice (in the working session, 2026-10-25, about 17:40 EDT; recorded by the agent): for LASSI-EE, "Go with recommended, but try and build an energy profile for Tenstorrent, Cerebras, and AMD. At the very least, keep it agnostic."; for P15's gate, "Calibrate on CPU measurements (Recommended)". So: (a), with the energy profiler device-agnostic, behind one interface with backends for the host CPU, AMD GPUs, Tenstorrent, and Cerebras (each measuring where its device and access allow, and declaring when it cannot), and P15 opened without the DF dialect.

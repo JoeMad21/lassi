@@ -17,7 +17,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P6 DF Zero-Shot | p6-zeroshot | BLOCKED | P3 |
 | P7 Offline Training | p7-offline | BLOCKED | P3; training GPUs: AMD deferred by the owner (OQ-002, 2026-09-23) |
 | P8 Online Training | p8-online | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
-| P9 LASSI-EE | p9-ee | BLOCKED | MI300X access deferred by the owner (OQ-002, 2026-09-23); no MI300X access for now (OQ-040, 2026-10-06; may come later, owner 2026-10-07) |
+| P9 LASSI-EE | p9-ee | ACTIVE | base: p16-adversarial at e43a1e0; opened by the owner 2026-10-25 without a GPU host (OQ-088 (a)): part (a) a labeled CPU port on alpha01's EPYC, energy profiler device-agnostic; part (b) GPU runs wait on a GPU host (OQ-002, OQ-040) |
 | P10 Full LASSI | p10-full | BLOCKED | no NVIDIA host (OQ-003, 2026-09-23); compile-only tier and -mp=multicore proxy meanwhile |
 | P11 Dataflow Dialect | p11-df | BLOCKED | separate project, deferred by the owner on 2026-10-18 for later incorporation (OQ-066); its plan stays on branch p11-df, frozen |
 | P12 Language Frontends | p12-frontends | ACTIVE | base: p5-ir at 7772e13 (P5 stalled on OQ-056's install, not merged); plan plans/p12-frontends.md; OQ-057 (xlang-v0 items, sources, splits, Fortran; bible question 10), OQ-058 (which phase builds cgeist's CUDA path), and OQ-059 (xDSL as a pinned dependency) filed 2026-10-17 |
@@ -176,9 +176,24 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.24 | DONE | Classify the cpp -> tt build errors across the sweep records | - | report on the records so far: results/build-errors-20261025 (rx 20261025-050114-classify-3e3d) |
 | P17.25 | DONE | Restarts: a fresh generation after N failed corrections (opt-in) | - | loop.restart_after, opt-in; audited; bible master rev 350 |
 | P17.26 | DONE | Declaration lookup: the API pack's declarations for the identifiers a build error names (opt-in) | - | declaration lookup (lookup section); bible master rev 357 |
-| P17.27 | OWNER | bf16 rounding in tt -> cpp outputs: check the generated code, then a generic prompt fix | P17.24 | OQ-083: is steering prompt text from Tier A (unassigned) outcomes prompt tuning under Agent Rule 5? |
+| P17.27 | READY | bf16 rounding in tt -> cpp outputs: check the generated code, then a generic prompt fix | P17.24 | OQ-083 answered (b): tt-pairs-v0 a development set |
 | P17.28 | DONE | Reasoning effort as a recipe key, and a reply cut at max_tokens as the empty answer | - | llm.sampling.reasoning_effort opt-in (OQ-080 (a), unanswered); length-cut null content as the empty answer; bible master rev 368 |
 | P17.29 | DONE | Worked examples: complete host programs at the pin in the prompt (opt-in) | P17.26 | examples section, tt-examples-v0 (shard_data_rm, add_2_integers_in_riscv); bible master rev 372 |
 | P17.30 | DONE | Exact declarations at generation, nearest names, and the full API pack (opt-in) | P17.26 | lookup at generation (core, core_api.txt), nearest names, tt-metalium-5280a9cf-full; bible master rev 372 |
 | P17.31 | READY | The development split for tt-pairs-v0 (OQ-083 (b)) | - |  |
 | P17.32 | READY | The night window of 2026-10-25: the sweep with the new features on 70B-class models | P17.29,P17.30 |  |
+| P9.1 | READY | The energy seam and the CPU backends (rapl, wall) | - |  |
+| P9.2 | READY | Spike: CPU energy telemetry on alpha01, and the excess-files inventory | - | local source reading first; one read-only rx exec waits for the owner's yes (Agent Rule 17) |
+| P9.3 | READY | Spike: Tenstorrent power telemetry at the pins | - | source reading only; no probe of the cards |
+| P9.4 | READY | AMD and NVIDIA backends on the seam | P9.1 |  |
+| P9.5 | READY | Tenstorrent and Cerebras backends | P9.1,P9.3 |  |
+| P9.6 | READY | The LASSI-EE power protocol | P9.1 |  |
+| P9.7 | READY | The lassi-ee-22 manifest and its CPU-port references | - | manifest on Windows; reference runs on alpha01 in a window |
+| P9.8 | READY | Spike: the paper's protocol details | - |  |
+| P9.9 | READY | EE stages 0 to 2 and the lassi-ee-2026 prompts | P9.6,P9.8 |  |
+| P9.10 | READY | Stages 3 and 4: refine_loop, select, compare_report | P9.9,P15.2 | P15.2 is provisional: the P15 task that delivers the Judge interface (p15-judges) |
+| P9.11 | READY | The equivalence judge in the pipeline | P9.9,P15.2 | P15.2 is provisional: the P15 task that delivers the Judge interface (p15-judges) |
+| P9.12 | READY | The ee score profile, metrics, recipes, and a mock dry run | P9.6,P9.7,P9.10,P9.11 | dry run on alpha01 in a window |
+| P9.13 | OWNER | The CPU-port run on alpha01 with RNGD generators | P9.2,P9.12 | waits on the owner's models and scale items (plan drafts B and C) and an owner window |
+| P9.14 | BLOCKED | GPU and device energy runs | P9.4,P9.5,P9.12 | BLOCKED: MI300X access (OQ-002, OQ-040), an NVIDIA host (OQ-003), TT silicon human-started only with OQ-078, Cerebras hardware (OQ-004) |
+| P9.G | READY | Phase gate, part (a): the CPU port runs end to end on alpha01 with energy or labeled wall time per Evaluation Protocol | P9.13 | part (b), the GPU acceptance criteria, stays with P9.14 |
