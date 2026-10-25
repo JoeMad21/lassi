@@ -1,0 +1,2419 @@
+cpp -> tt compile-stage errors by bucket, counted from trial.json records (tools/classify_build_errors.py)
+rule: symbols -> <S>, then quoted tokens -> <Q>, then paths -> <P>, then numbers -> <N>, then other tokens but plain lowercase words -> <X>, then whitespace collapsed
+
+runs (records read, cpp -> tt trials kept, errors bucketed, kept trials with a recurring bucket)
+  20260924-051324: read 1, kept 0, errors 0, recurring 0
+    provenance: commit 37aeadfff6eda07a3563502e72dcffff95e145fc, dirty false, device none (compile only), sdk none, date 2026-09-24T05:13:24+00:00
+      toolchain pins: cuda 12.6.3
+  20260924-051344: read 1, kept 0, errors 0, recurring 0
+    provenance: commit bdcf5d2b3dfd6aad60239d949dc9b73f3c4b02cd, dirty false, device none (compile only), sdk none, date 2026-09-24T05:13:44+00:00
+      toolchain pins: cuda 12.6.3
+  20261020-tiera1-maxabs: read 6, kept 3, errors 72, recurring 3
+    provenance: commit fa3a97911b88c2eac93a28189580396ffc57ae8a, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-20T16:12:48+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit fa3a97911b88c2eac93a28189580396ffc57ae8a, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-20T16:12:48+00:00
+      toolchain pins: gcc 12.3.0
+  20261020-tiera1-pcc: read 4, kept 2, errors 28, recurring 2
+    provenance: commit fa3a97911b88c2eac93a28189580396ffc57ae8a, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-20T16:12:52+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit fa3a97911b88c2eac93a28189580396ffc57ae8a, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-20T16:12:52+00:00
+      toolchain pins: gcc 12.3.0
+  20261020-tiera30-maxabs: read 3, kept 3, errors 18, recurring 3
+    provenance: commit 60b20d97bc0476b2ce35de470543fd4933a6248f, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-20T17:18:47+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  20261020-tiera30-pcc: read 2, kept 2, errors 12, recurring 2
+    provenance: commit 60b20d97bc0476b2ce35de470543fd4933a6248f, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-20T17:18:51+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  demo-live-1: read 1, kept 0, errors 0, recurring 0
+    provenance: commit 5d5fd0c49f496a4d430ffb8c82bb8c8d72b3d7e8, dirty false, device none (compile only), sdk none, date 2026-09-24T18:32:38+00:00
+      toolchain pins: cuda 12.6.3
+  demo-live-114228: read 2, kept 0, errors 0, recurring 0
+    provenance: commit 5d5fd0c49f496a4d430ffb8c82bb8c8d72b3d7e8, dirty false, device none (compile only), sdk none, date 2026-09-24T18:42:28+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+    provenance: commit 5d5fd0c49f496a4d430ffb8c82bb8c8d72b3d7e8, dirty false, device none (compile only), sdk none, date 2026-09-24T18:42:28+00:00
+      toolchain pins: cuda 12.6.3
+  demo-live-114552: read 1, kept 0, errors 0, recurring 0
+    provenance: commit 5d5fd0c49f496a4d430ffb8c82bb8c8d72b3d7e8, dirty false, device none (compile only), sdk none, date 2026-09-24T18:45:52+00:00
+      toolchain pins: cuda 12.6.3
+  demo-live-114855: read 2, kept 0, errors 0, recurring 0
+    provenance: commit 5d5fd0c49f496a4d430ffb8c82bb8c8d72b3d7e8, dirty false, device none (compile only), sdk none, date 2026-09-24T18:48:56+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+    provenance: commit 5d5fd0c49f496a4d430ffb8c82bb8c8d72b3d7e8, dirty false, device none (compile only), sdk none, date 2026-09-24T18:48:56+00:00
+      toolchain pins: cuda 12.6.3
+  demo-live-120312: read 0, kept 0, errors 0, recurring 0
+  demo-live-120531: read 2, kept 0, errors 0, recurring 0
+    provenance: commit 5d5fd0c49f496a4d430ffb8c82bb8c8d72b3d7e8, dirty false, device none (compile only), sdk none, date 2026-09-24T19:05:32+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+    provenance: commit 5d5fd0c49f496a4d430ffb8c82bb8c8d72b3d7e8, dirty false, device none (compile only), sdk none, date 2026-09-24T19:05:32+00:00
+      toolchain pins: cuda 12.6.3
+  demo-live-124539: read 0, kept 0, errors 0, recurring 0
+  demo-live-124546: read 0, kept 0, errors 0, recurring 0
+  demo-live-20260927-223738: read 0, kept 0, errors 0, recurring 0
+  demo-live-20260930-082459: read 2, kept 0, errors 0, recurring 0
+    provenance: commit 8da7beb399292eb6951925c7be4ae59d7ac9e804, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-09-30T15:25:38+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+  demo-live-check-2: read 1, kept 0, errors 0, recurring 0
+    provenance: commit 87f7295d6db68440936cea517eed1ba7355497d2, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-09-28T04:44:00+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+  demo-live-check-3: read 1, kept 0, errors 0, recurring 0
+    provenance: commit 8744a6669342c8d337034d170cf58cfe4ba7fa18, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-09-28T05:22:38+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+  demo-live-test: read 2, kept 0, errors 0, recurring 0
+    provenance: commit 5d5fd0c49f496a4d430ffb8c82bb8c8d72b3d7e8, dirty false, device none (compile only), sdk none, date 2026-09-24T18:17:15+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+    provenance: commit 5d5fd0c49f496a4d430ffb8c82bb8c8d72b3d7e8, dirty false, device none (compile only), sdk none, date 2026-09-24T18:17:15+00:00
+      toolchain pins: cuda 12.6.3
+  demo-mock-rehearsal-20261007-cpu: read 1, kept 0, errors 0, recurring 0
+    provenance: commit a1a338a4d6c5b93cf833d8f3fc3ef170ce5e0a34, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-07T23:15:17+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+  demo-mock-rehearsal-20261007-tt: read 2, kept 1, errors 0, recurring 0
+    provenance: commit a1a338a4d6c5b93cf833d8f3fc3ef170ce5e0a34, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-07T23:15:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit a1a338a4d6c5b93cf833d8f3fc3ef170ce5e0a34, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-07T23:15:22+00:00
+      toolchain pins: gcc 12.3.0
+  demo-rngd-1: read 20, kept 0, errors 0, recurring 0
+    provenance: commit 7c5cad7ce5befed69a7d579ac20affac7ac53449, dirty false, device none (compile only), sdk none, date 2026-09-24T15:30:55+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+    provenance: commit 7c5cad7ce5befed69a7d579ac20affac7ac53449, dirty false, device none (compile only), sdk none, date 2026-09-24T15:30:55+00:00
+      toolchain pins: cuda 12.6.3
+  demo-rngd-cpu-1: read 10, kept 0, errors 0, recurring 0
+    provenance: commit 2f052e6a20436e53f01d18e0fcf42fc33e0e1508, dirty false, device none, sdk none, date 2026-09-24T16:31:28+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+  demo-smoke-2: read 2, kept 0, errors 0, recurring 0
+    provenance: commit 7c5cad7ce5befed69a7d579ac20affac7ac53449, dirty false, device none (compile only), sdk none, date 2026-09-24T15:27:54+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+    provenance: commit 7c5cad7ce5befed69a7d579ac20affac7ac53449, dirty false, device none (compile only), sdk none, date 2026-09-24T15:27:54+00:00
+      toolchain pins: cuda 12.6.3
+  p1-gate-dry-run: read 20, kept 0, errors 0, recurring 0
+    provenance: commit fe01ab1ad12172608df7a5f12d9bdb2566e86250, dirty false, device none (compile only), sdk none, date 2026-09-24T17:41:06+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+    provenance: commit fe01ab1ad12172608df7a5f12d9bdb2566e86250, dirty false, device none (compile only), sdk none, date 2026-09-24T17:41:06+00:00
+      toolchain pins: cuda 12.6.3
+  p16-10-control-fuzzer-20261023: read 6, kept 0, errors 0, recurring 0
+    provenance: commit b1a2b6b6897ed75cacc234fb1615d6e8983890fb, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T04:59:30+00:00
+      toolchain pins: gcc 12.3.0
+  p16-10-seeded-fuzzer-20261023: read 12, kept 0, errors 0, recurring 0
+    provenance: commit b1a2b6b6897ed75cacc234fb1615d6e8983890fb, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T04:53:52+00:00
+      toolchain pins: gcc 12.3.0
+  p16-10-seeded-llm-20261023: read 12, kept 0, errors 0, recurring 0
+    provenance: commit b1a2b6b6897ed75cacc234fb1615d6e8983890fb, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T05:02:17+00:00
+      toolchain pins: gcc 12.3.0
+  p17-gate-a-20261010-235501-p17-gate-a-8980: read 2, kept 0, errors 0, recurring 0
+    provenance: commit 7f920d71f7558b3b849dc78f1e90b58eceda0afe, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-11T06:55:56+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+    provenance: commit 7f920d71f7558b3b849dc78f1e90b58eceda0afe, dirty false, device none (compile only), sdk none, date 2026-10-11T06:55:56+00:00
+      toolchain pins: cuda 12.6.3
+  p2-proxy-stability: read 30, kept 0, errors 0, recurring 0
+    provenance: commit 207e4ddb91486f08d420606255aaa0a1f8f09179, dirty false, device none, sdk none, date 2026-09-24T20:30:19+00:00
+      toolchain pins: cuda 12.6.3, nvhpc 24.11
+  p4-gate-tier-a: read 10, kept 5, errors 0, recurring 0
+    provenance: commit ec1c9a2b4708fdb2240ac15707e3c613bb0ecaa4, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-05T19:30:23+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit ec1c9a2b4708fdb2240ac15707e3c613bb0ecaa4, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-05T19:30:23+00:00
+      toolchain pins: gcc 12.3.0
+  p413-dry-check: read 10, kept 5, errors 0, recurring 0
+    provenance: commit 968050363b952ca4b6b7e11e73f677a565300183, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-05T18:30:03+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 968050363b952ca4b6b7e11e73f677a565300183, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-05T18:30:03+00:00
+      toolchain pins: gcc 12.3.0
+  p413-fw-20261004-224906: read 2, kept 1, errors 0, recurring 0
+    provenance: commit e32b7ed18cbb6c01169c4ec6ea8f0bb7de5e6736, dirty true, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-05T05:49:07+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit e32b7ed18cbb6c01169c4ec6ea8f0bb7de5e6736, dirty true, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-05T05:49:07+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2100-qwen3-30b-instruct-maxabs: read 6, kept 3, errors 249, recurring 3
+    provenance: commit 2813419f07163a98b21bccf06b6cf15ff456088a, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T04:23:58+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 2813419f07163a98b21bccf06b6cf15ff456088a, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T04:23:58+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2100-qwen3-30b-instruct-pcc: read 4, kept 2, errors 225, recurring 2
+    provenance: commit 2813419f07163a98b21bccf06b6cf15ff456088a, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T04:23:58+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 2813419f07163a98b21bccf06b6cf15ff456088a, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T04:23:58+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2100-qwen3-32b-maxabs: read 0, kept 0, errors 0, recurring 0
+  sweep-20261022-2100-qwen3-32b-pcc: read 0, kept 0, errors 0, recurring 0
+  sweep-20261022-2100-qwen3-coder-30b-maxabs: read 6, kept 3, errors 18, recurring 3
+    provenance: commit 2813419f07163a98b21bccf06b6cf15ff456088a, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T04:01:33+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 2813419f07163a98b21bccf06b6cf15ff456088a, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T04:01:33+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2100-qwen3-coder-30b-pcc: read 4, kept 2, errors 12, recurring 2
+    provenance: commit 2813419f07163a98b21bccf06b6cf15ff456088a, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T04:01:33+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 2813419f07163a98b21bccf06b6cf15ff456088a, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T04:01:33+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2149-qwen3-coder-30b-maxabs: read 6, kept 3, errors 107, recurring 3
+    provenance: commit 450a373afcbba18b41b25f17b02683866fd1ae0e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T04:49:38+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 450a373afcbba18b41b25f17b02683866fd1ae0e, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T04:49:38+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2149-qwen3-coder-30b-pcc: read 4, kept 2, errors 202, recurring 2
+    provenance: commit 450a373afcbba18b41b25f17b02683866fd1ae0e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T04:49:38+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 450a373afcbba18b41b25f17b02683866fd1ae0e, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T04:49:38+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2202-qwen3-coder-30b-maxabs: read 6, kept 3, errors 345, recurring 3
+    provenance: commit 969c69e930e72caec9ff78ba4e197095b3c70ebc, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T05:02:58+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 969c69e930e72caec9ff78ba4e197095b3c70ebc, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T05:02:58+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2202-qwen3-coder-30b-pcc: read 3, kept 2, errors 424, recurring 2
+    provenance: commit 969c69e930e72caec9ff78ba4e197095b3c70ebc, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T05:02:58+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 969c69e930e72caec9ff78ba4e197095b3c70ebc, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T05:02:58+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2234-exaone4-32b-maxabs: read 2, kept 2, errors 473, recurring 2
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T06:31:48+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261022-2234-exaone4-32b-pcc: read 2, kept 2, errors 304, recurring 1
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T06:31:48+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261022-2234-gemma4-31b-maxabs: read 2, kept 2, errors 155, recurring 2
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T07:00:49+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261022-2234-gemma4-31b-pcc: read 1, kept 1, errors 47, recurring 1
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T07:00:49+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261022-2234-llama31-8b-fp8-maxabs: read 2, kept 2, errors 99, recurring 2
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T07:55:32+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261022-2234-llama31-8b-fp8-pcc: read 1, kept 1, errors 39, recurring 1
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T07:55:32+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261022-2234-llama31-8b-maxabs: read 1, kept 1, errors 28, recurring 1
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T08:49:36+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261022-2234-llama31-8b-pcc: read 1, kept 1, errors 44, recurring 1
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T08:49:36+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261022-2234-mistral-nemo-maxabs: read 5, kept 3, errors 148, recurring 3
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T08:23:21+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T08:23:21+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2234-mistral-nemo-pcc: read 2, kept 2, errors 388, recurring 2
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T08:23:21+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261022-2234-qwen3-30b-instruct-maxabs: read 4, kept 3, errors 622, recurring 3
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T06:02:11+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T06:02:11+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2234-qwen3-30b-instruct-pcc: read 2, kept 2, errors 319, recurring 2
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T06:02:11+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261022-2234-qwen3-32b-maxabs: read 1, kept 1, errors 26, recurring 1
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T05:34:23+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261022-2234-qwen3-32b-pcc: read 0, kept 0, errors 0, recurring 0
+  sweep-20261022-2234-qwen3-8b-maxabs: read 0, kept 0, errors 0, recurring 0
+  sweep-20261022-2234-qwen3-8b-pcc: read 0, kept 0, errors 0, recurring 0
+  sweep-20261022-2234-qwen3-coder-30b-maxabs: read 6, kept 3, errors 249, recurring 3
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T09:15:20+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-23T09:15:20+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261022-2234-qwen3-coder-30b-pcc: read 2, kept 2, errors 398, recurring 2
+    provenance: commit fcea813b8f2dc167fc56c1d17e229885dc33cc5c, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-23T09:15:20+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261023-2018-exaone4-32b--fz-maxabs: read 6, kept 3, errors 450, recurring 3
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T03:18:34+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T03:18:34+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261023-2018-exaone4-32b--fz-pcc: read 4, kept 2, errors 355, recurring 2
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T03:18:34+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T03:18:34+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261023-2018-exaone4-32b--mmfz-maxabs: read 6, kept 3, errors 536, recurring 3
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T03:18:34+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T03:18:34+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261023-2018-exaone4-32b--mmfz-pcc: read 4, kept 2, errors 288, recurring 1
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T03:18:34+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T03:18:34+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261023-2018-llama31-8b--fz-maxabs: read 3, kept 3, errors 381, recurring 3
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T05:05:57+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261023-2018-llama31-8b--fz-pcc: read 2, kept 2, errors 64, recurring 2
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T05:05:57+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261023-2018-llama31-8b--mmfz-maxabs: read 3, kept 3, errors 194, recurring 3
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T05:05:57+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261023-2018-llama31-8b--mmfz-pcc: read 2, kept 2, errors 65, recurring 2
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T05:05:57+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261023-2018-qwen3-coder-30b--fz-maxabs: read 6, kept 3, errors 209, recurring 3
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T04:33:34+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T04:33:34+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261023-2018-qwen3-coder-30b--fz-pcc: read 4, kept 2, errors 428, recurring 2
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T04:33:34+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T04:33:34+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261023-2018-qwen3-coder-30b--mmfz-maxabs: read 6, kept 3, errors 304, recurring 3
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T04:33:34+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T04:33:34+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261023-2018-qwen3-coder-30b--mmfz-pcc: read 4, kept 2, errors 470, recurring 2
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T04:33:34+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit 9099a15b5541c3650c111f7bbf62666c1c071e92, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T04:33:34+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261023-2334-qwen3-coder-30b--fz-maxabs: read 6, kept 3, errors 121, recurring 3
+    provenance: commit e48299778553e7b30beb658afec8eb4a23d6b909, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T06:35:25+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit e48299778553e7b30beb658afec8eb4a23d6b909, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T06:35:25+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261023-2334-qwen3-coder-30b--fz-pcc: read 4, kept 2, errors 285, recurring 2
+    provenance: commit e48299778553e7b30beb658afec8eb4a23d6b909, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T06:35:25+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit e48299778553e7b30beb658afec8eb4a23d6b909, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T06:35:25+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261023-2334-qwen3-coder-30b--mmfz-maxabs: read 6, kept 3, errors 117, recurring 3
+    provenance: commit e48299778553e7b30beb658afec8eb4a23d6b909, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T06:35:25+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit e48299778553e7b30beb658afec8eb4a23d6b909, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T06:35:25+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261023-2334-qwen3-coder-30b--mmfz-pcc: read 4, kept 2, errors 430, recurring 2
+    provenance: commit e48299778553e7b30beb658afec8eb4a23d6b909, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T06:35:25+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+    provenance: commit e48299778553e7b30beb658afec8eb4a23d6b909, dirty false, device host CPU (native): AMD EPYC 9534 64-Core Processor, sdk none, date 2026-10-24T06:35:25+00:00
+      toolchain pins: gcc 12.3.0
+  sweep-20261024-0017-qwen3-coder-30b--api-maxabs: read 2, kept 2, errors 145, recurring 2
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--api-pcc: read 2, kept 2, errors 101, recurring 2
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--apirag-maxabs: read 2, kept 2, errors 162, recurring 2
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--apirag-pcc: read 1, kept 1, errors 298, recurring 1
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--base-maxabs: read 2, kept 2, errors 356, recurring 2
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--base-pcc: read 1, kept 1, errors 183, recurring 1
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--mmapi-maxabs: read 2, kept 2, errors 243, recurring 2
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--mmapi-pcc: read 1, kept 1, errors 196, recurring 1
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--mmapirag-maxabs: read 2, kept 2, errors 206, recurring 2
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--mmapirag-pcc: read 1, kept 1, errors 224, recurring 1
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--mmbase-maxabs: read 2, kept 2, errors 102, recurring 2
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--mmbase-pcc: read 1, kept 1, errors 132, recurring 1
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--mmrag-maxabs: read 2, kept 2, errors 308, recurring 2
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--mmrag-pcc: read 1, kept 1, errors 176, recurring 1
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--rag-maxabs: read 2, kept 2, errors 268, recurring 2
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+  sweep-20261024-0017-qwen3-coder-30b--rag-pcc: read 1, kept 1, errors 249, recurring 1
+    provenance: commit d6d27c8b8bd1da4dc14b123bcdff0abb171b620e, dirty false, device ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf: a simulator, not silicon, sdk none, date 2026-10-24T07:18:22+00:00
+      toolchain pins: tt_metal 5280a9cf, ttsim v1.3.4
+
+overall (count, bucket; 13097 errors)
+     2113  field designator <Q> does not refer to any field in type <Q>
+     1429  no matching function for call to <Q>
+     1081  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+     1059  use of undeclared identifier <Q>; did you mean <Q>?
+     1048  variable type <Q> is an abstract class
+     1039  no member named <Q> in namespace <Q>
+      934  initialization of non-aggregate type <Q> with a designated initializer list
+      837  use of undeclared identifier <Q>
+      557  no member named <Q> in <Q>
+      358  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+      306  unknown type name <Q>
+      216  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+      202  expected expression
+      194  <Q> file not found
+      182  expected <Q>
+      175  expected <Q> for function-style cast or type construction
+      167  no member named <Q> in namespace <Q>; did you mean <Q>?
+      144  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+      138  no matching constructor for initialization of <Q>
+      127  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+      116  expected <Q> at end of declaration
+      105  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+       75  no viable conversion from <Q> to <Q>
+       72  no member named <Q> in <Q>; did you mean <Q>?
+       53  member reference type <Q> is not a pointer; did you mean to use <Q>?
+       51  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+       45  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+       42  too many arguments to function call, expected <N>, have <N>
+       26  arithmetic on a pointer to void
+       24  expression is not assignable
+       17  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+       17  redefinition of <Q>
+       16  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+       15  expected unqualified-id
+       13  no type named <Q> in namespace <Q>
+       13  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+       12  no type named <Q> in namespace <Q>; did you mean <Q>?
+       11  no matching member function for call to <Q>
+        9  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        9  reference to non-static member function must be called; did you mean to call it with no arguments?
+        7  the unfenced <X> line at line <N> repeats the file <Q> from line <N>; it was dropped and the first is kept. <X> each file in exactly one block
+        6  field has incomplete type <Q>
+        6  no viable conversion from <Q> to <Q> (aka <Q>)
+        5  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+        4  non-const lvalue reference to type <Q> cannot bind to a value of unrelated type <Q> (aka <Q>)
+        3  invalid operands to binary expression (<Q> and <Q>)
+        3  unknown type name <Q>; did you mean <Q>?
+        3  variable <Q> with type <Q> has incompatible initializer of type <Q>
+        2  called object type <Q> is not a function or function pointer
+        2  cannot initialize an array element of type <Q> with an lvalue of type <Q> (aka <Q>)
+        2  cannot initialize an array element of type <Q> with an rvalue of type <Q>
+        2  conflicting types for <Q>
+        1  cannot initialize a variable of type <Q> with an rvalue of type <Q>
+        1  expected <Q> or another designator
+        1  indirection requires pointer operand (<Q> invalid)
+        1  invalid operands to binary expression (<Q> (aka <Q>) and <Q>)
+        1  void function <Q> should not return a value
+
+per run
+  20261020-tiera1-maxabs
+       19  use of undeclared identifier <Q>
+       15  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        6  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        6  no member named <Q> in <Q>
+        6  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+        3  no matching function for call to <Q>
+        3  no matching member function for call to <Q>
+        3  variable type <Q> is an abstract class
+        2  expected <Q> at end of declaration
+        2  no member named <Q> in namespace <Q>
+        1  conflicting types for <Q>
+  20261020-tiera1-pcc
+       10  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       10  use of undeclared identifier <Q>
+        4  unknown type name <Q>
+        3  <Q> file not found
+        1  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+  20261020-tiera30-maxabs
+       18  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+  20261020-tiera30-pcc
+       12  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+  sweep-20261022-2100-qwen3-30b-instruct-maxabs
+       66  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       49  no member named <Q> in namespace <Q>
+       38  use of undeclared identifier <Q>
+       18  expected <Q> for function-style cast or type construction
+       18  variable type <Q> is an abstract class
+       17  expected expression
+       11  no matching function for call to <Q>
+       11  use of undeclared identifier <Q>; did you mean <Q>?
+        9  initialization of non-aggregate type <Q> with a designated initializer list
+        6  unknown type name <Q>
+        5  expected <Q> at end of declaration
+        1  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+  sweep-20261022-2100-qwen3-30b-instruct-pcc
+       62  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       30  unknown type name <Q>
+       30  use of undeclared identifier <Q>
+       22  no member named <Q> in namespace <Q>
+       21  use of undeclared identifier <Q>; did you mean <Q>?
+       14  expected <Q> at end of declaration
+       12  variable type <Q> is an abstract class
+       10  initialization of non-aggregate type <Q> with a designated initializer list
+        9  no member named <Q> in namespace <Q>; did you mean <Q>?
+        6  no matching function for call to <Q>
+        3  field designator <Q> does not refer to any field in type <Q>
+        2  no member named <Q> in <Q>
+        1  expected <Q> for function-style cast or type construction
+        1  expected expression
+        1  no type named <Q> in namespace <Q>
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+  sweep-20261022-2100-qwen3-coder-30b-maxabs
+       18  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+  sweep-20261022-2100-qwen3-coder-30b-pcc
+       12  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+  sweep-20261022-2149-qwen3-coder-30b-maxabs
+       43  field designator <Q> does not refer to any field in type <Q>
+       17  no matching function for call to <Q>
+       15  no member named <Q> in <Q>
+       12  variable type <Q> is an abstract class
+       10  use of undeclared identifier <Q>; did you mean <Q>?
+        5  <Q> file not found
+        2  initialization of non-aggregate type <Q> with a designated initializer list
+        2  no matching constructor for initialization of <Q>
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  sweep-20261022-2149-qwen3-coder-30b-pcc
+       71  field designator <Q> does not refer to any field in type <Q>
+       40  no matching function for call to <Q>
+       21  use of undeclared identifier <Q>; did you mean <Q>?
+       18  initialization of non-aggregate type <Q> with a designated initializer list
+       18  no member named <Q> in namespace <Q>
+       15  use of undeclared identifier <Q>
+       12  variable type <Q> is an abstract class
+        6  no type named <Q> in namespace <Q>
+        1  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+  sweep-20261022-2202-qwen3-coder-30b-maxabs
+      242  field designator <Q> does not refer to any field in type <Q>
+       32  initialization of non-aggregate type <Q> with a designated initializer list
+       32  variable type <Q> is an abstract class
+       16  <Q> file not found
+       12  use of undeclared identifier <Q>
+        6  no matching function for call to <Q>
+        4  use of undeclared identifier <Q>; did you mean <Q>?
+        1  no member named <Q> in <Q>; did you mean <Q>?
+  sweep-20261022-2202-qwen3-coder-30b-pcc
+      196  field designator <Q> does not refer to any field in type <Q>
+       77  no matching function for call to <Q>
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       34  no member named <Q> in namespace <Q>
+       32  variable type <Q> is an abstract class
+       27  use of undeclared identifier <Q>
+        9  use of undeclared identifier <Q>; did you mean <Q>?
+        1  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+  sweep-20261022-2234-exaone4-32b-maxabs
+      134  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       74  no member named <Q> in <Q>
+       72  use of undeclared identifier <Q>; did you mean <Q>?
+       40  use of undeclared identifier <Q>
+       34  unknown type name <Q>
+       32  no member named <Q> in namespace <Q>
+       32  variable type <Q> is an abstract class
+       24  no matching constructor for initialization of <Q>
+       24  no matching function for call to <Q>
+        7  no member named <Q> in <Q>; did you mean <Q>?
+  sweep-20261022-2234-exaone4-32b-pcc
+       48  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+       48  no member named <Q> in namespace <Q>; did you mean <Q>?
+       48  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       48  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       48  unknown type name <Q>
+       32  no member named <Q> in <Q>; did you mean <Q>?
+       16  use of undeclared identifier <Q>
+       16  variable type <Q> is an abstract class
+  sweep-20261022-2234-gemma4-31b-maxabs
+       50  no matching function for call to <Q>
+       40  no member named <Q> in <Q>
+       26  no member named <Q> in namespace <Q>
+       12  use of undeclared identifier <Q>
+        5  no matching member function for call to <Q>
+        5  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+        4  unknown type name <Q>
+        4  variable type <Q> is an abstract class
+        3  variable <Q> with type <Q> has incompatible initializer of type <Q>
+        2  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        2  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  indirection requires pointer operand (<Q> invalid)
+        1  no matching constructor for initialization of <Q>
+  sweep-20261022-2234-gemma4-31b-pcc
+       23  no matching function for call to <Q>
+        6  no member named <Q> in <Q>
+        4  no matching constructor for initialization of <Q>
+        3  no matching member function for call to <Q>
+        3  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+        3  variable type <Q> is an abstract class
+        2  use of undeclared identifier <Q>; did you mean <Q>?
+        1  no member named <Q> in namespace <Q>
+        1  no viable conversion from <Q> to <Q>
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  sweep-20261022-2234-llama31-8b-fp8-maxabs
+       72  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        7  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        6  no matching function for call to <Q>
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+        3  use of undeclared identifier <Q>
+        2  called object type <Q> is not a function or function pointer
+        1  conflicting types for <Q>
+        1  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        1  variable type <Q> is an abstract class
+  sweep-20261022-2234-llama31-8b-fp8-pcc
+       35  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        4  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  sweep-20261022-2234-llama31-8b-maxabs
+        9  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        3  expected <Q> for function-style cast or type construction
+        3  expected expression
+        3  use of undeclared identifier <Q>
+        2  cannot initialize an array element of type <Q> with an lvalue of type <Q> (aka <Q>)
+        2  cannot initialize an array element of type <Q> with an rvalue of type <Q>
+        2  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  expected <Q> at end of declaration
+        1  no member named <Q> in namespace <Q>
+        1  redefinition of <Q>
+        1  variable type <Q> is an abstract class
+  sweep-20261022-2234-llama31-8b-pcc
+       29  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        4  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        4  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        4  the unfenced <X> line at line <N> repeats the file <Q> from line <N>; it was dropped and the first is kept. <X> each file in exactly one block
+        3  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+  sweep-20261022-2234-mistral-nemo-maxabs
+       40  no matching function for call to <Q>
+       26  use of undeclared identifier <Q>; did you mean <Q>?
+       16  initialization of non-aggregate type <Q> with a designated initializer list
+       16  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       14  <Q> file not found
+        9  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        9  variable type <Q> is an abstract class
+        7  no member named <Q> in <Q>
+        6  no member named <Q> in namespace <Q>; did you mean <Q>?
+        2  no member named <Q> in namespace <Q>
+        1  expected expression
+        1  no matching constructor for initialization of <Q>
+        1  no type named <Q> in namespace <Q>
+  sweep-20261022-2234-mistral-nemo-pcc
+       88  no member named <Q> in namespace <Q>; did you mean <Q>?
+       66  use of undeclared identifier <Q>; did you mean <Q>?
+       55  no member named <Q> in <Q>
+       45  initialization of non-aggregate type <Q> with a designated initializer list
+       45  no matching function for call to <Q>
+       33  no member named <Q> in namespace <Q>
+       26  variable type <Q> is an abstract class
+       11  no type named <Q> in namespace <Q>; did you mean <Q>?
+       11  no viable conversion from <Q> to <Q>
+        4  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        2  <Q> file not found
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+  sweep-20261022-2234-qwen3-30b-instruct-maxabs
+      118  expected <Q> for function-style cast or type construction
+      115  no member named <Q> in namespace <Q>
+      104  expected expression
+       93  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       63  initialization of non-aggregate type <Q> with a designated initializer list
+       48  variable type <Q> is an abstract class
+       39  use of undeclared identifier <Q>
+       16  unknown type name <Q>
+       14  use of undeclared identifier <Q>; did you mean <Q>?
+        6  no member named <Q> in namespace <Q>; did you mean <Q>?
+        3  expected <Q> at end of declaration
+        2  no matching function for call to <Q>
+        1  no type named <Q> in namespace <Q>
+  sweep-20261022-2234-qwen3-30b-instruct-pcc
+      120  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       48  no member named <Q> in namespace <Q>
+       45  expected <Q> at end of declaration
+       36  use of undeclared identifier <Q>
+       32  unknown type name <Q>
+       16  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+       16  variable type <Q> is an abstract class
+        3  initialization of non-aggregate type <Q> with a designated initializer list
+        3  use of undeclared identifier <Q>; did you mean <Q>?
+  sweep-20261022-2234-qwen3-32b-maxabs
+       11  <Q> file not found
+        6  use of undeclared identifier <Q>
+        3  no type named <Q> in namespace <Q>
+        3  unknown type name <Q>
+        2  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  sweep-20261022-2234-qwen3-coder-30b-maxabs
+       68  field designator <Q> does not refer to any field in type <Q>
+       64  no matching function for call to <Q>
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       32  variable type <Q> is an abstract class
+       16  <Q> file not found
+       16  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+        5  use of undeclared identifier <Q>; did you mean <Q>?
+  sweep-20261022-2234-qwen3-coder-30b-pcc
+      244  field designator <Q> does not refer to any field in type <Q>
+       67  no matching function for call to <Q>
+       36  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       32  variable type <Q> is an abstract class
+       12  use of undeclared identifier <Q>; did you mean <Q>?
+        6  use of undeclared identifier <Q>
+        1  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+  sweep-20261023-2018-exaone4-32b--fz-maxabs
+      103  no member named <Q> in namespace <Q>
+       45  expected <Q>
+       44  variable type <Q> is an abstract class
+       42  expected expression
+       39  no member named <Q> in <Q>
+       37  use of undeclared identifier <Q>; did you mean <Q>?
+       29  no matching function for call to <Q>
+       26  no matching constructor for initialization of <Q>
+       24  expression is not assignable
+       12  unknown type name <Q>
+       12  use of undeclared identifier <Q>
+       11  no member named <Q> in <Q>; did you mean <Q>?
+       10  no member named <Q> in namespace <Q>; did you mean <Q>?
+        9  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  no viable conversion from <Q> to <Q> (aka <Q>)
+        1  no type named <Q> in namespace <Q>
+  sweep-20261023-2018-exaone4-32b--fz-pcc
+      102  use of undeclared identifier <Q>; did you mean <Q>?
+       90  expected <Q>
+       48  unknown type name <Q>
+       32  no member named <Q> in namespace <Q>
+       32  use of undeclared identifier <Q>
+       32  variable type <Q> is an abstract class
+       16  no member named <Q> in <Q>
+        1  cannot initialize a variable of type <Q> with an rvalue of type <Q>
+        1  invalid operands to binary expression (<Q> and <Q>)
+        1  void function <Q> should not return a value
+  sweep-20261023-2018-exaone4-32b--mmfz-maxabs
+      139  use of undeclared identifier <Q>
+      120  no member named <Q> in namespace <Q>
+       64  no member named <Q> in <Q>
+       61  unknown type name <Q>
+       46  variable type <Q> is an abstract class
+       45  expected <Q>
+       35  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       14  expected unqualified-id
+       10  use of undeclared identifier <Q>; did you mean <Q>?
+        2  <Q> file not found
+  sweep-20261023-2018-exaone4-32b--mmfz-pcc
+       96  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+       96  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       61  no member named <Q> in namespace <Q>
+       16  no member named <Q> in <Q>
+       16  variable type <Q> is an abstract class
+        2  invalid operands to binary expression (<Q> and <Q>)
+        1  invalid operands to binary expression (<Q> (aka <Q>) and <Q>)
+  sweep-20261023-2018-llama31-8b--fz-maxabs
+       63  use of undeclared identifier <Q>
+       59  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       41  use of undeclared identifier <Q>; did you mean <Q>?
+       33  expected <Q> for function-style cast or type construction
+       33  expected expression
+       27  member reference type <Q> is not a pointer; did you mean to use <Q>?
+       27  no member named <Q> in <Q>
+       16  <Q> file not found
+       16  redefinition of <Q>
+        9  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        9  reference to non-static member function must be called; did you mean to call it with no arguments?
+        9  variable type <Q> is an abstract class
+        8  no matching function for call to <Q>
+        8  no member named <Q> in <Q>; did you mean <Q>?
+        8  unknown type name <Q>
+        6  field has incomplete type <Q>
+        3  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        3  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+  sweep-20261023-2018-llama31-8b--fz-pcc
+       35  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       13  <Q> file not found
+        6  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        5  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        3  the unfenced <X> line at line <N> repeats the file <Q> from line <N>; it was dropped and the first is kept. <X> each file in exactly one block
+        2  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+  sweep-20261023-2018-llama31-8b--mmfz-maxabs
+       60  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       18  member reference type <Q> is not a pointer; did you mean to use <Q>?
+       18  no matching function for call to <Q>
+       18  no member named <Q> in namespace <Q>
+       18  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       13  no member named <Q> in <Q>
+       13  use of undeclared identifier <Q>
+        9  use of undeclared identifier <Q>; did you mean <Q>?
+        7  variable type <Q> is an abstract class
+        6  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        5  no member named <Q> in <Q>; did you mean <Q>?
+        3  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        2  expected <Q> for function-style cast or type construction
+        2  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        1  expected expression
+        1  expected unqualified-id
+  sweep-20261023-2018-llama31-8b--mmfz-pcc
+       39  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       10  <Q> file not found
+        7  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        5  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        4  use of undeclared identifier <Q>
+  sweep-20261023-2018-qwen3-coder-30b--fz-maxabs
+      109  field designator <Q> does not refer to any field in type <Q>
+       31  variable type <Q> is an abstract class
+       28  no matching function for call to <Q>
+       16  <Q> file not found
+        9  no member named <Q> in <Q>
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+        4  initialization of non-aggregate type <Q> with a designated initializer list
+        4  no matching constructor for initialization of <Q>
+        1  no member named <Q> in <Q>; did you mean <Q>?
+        1  use of undeclared identifier <Q>
+  sweep-20261023-2018-qwen3-coder-30b--fz-pcc
+      245  field designator <Q> does not refer to any field in type <Q>
+       70  no matching function for call to <Q>
+       54  use of undeclared identifier <Q>; did you mean <Q>?
+       32  variable type <Q> is an abstract class
+       26  use of undeclared identifier <Q>
+        1  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+  sweep-20261023-2018-qwen3-coder-30b--mmfz-maxabs
+       73  use of undeclared identifier <Q>
+       62  no matching function for call to <Q>
+       54  no member named <Q> in <Q>
+       52  field designator <Q> does not refer to any field in type <Q>
+       47  variable type <Q> is an abstract class
+       12  use of undeclared identifier <Q>; did you mean <Q>?
+        3  no matching constructor for initialization of <Q>
+        1  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+  sweep-20261023-2018-qwen3-coder-30b--mmfz-pcc
+      172  field designator <Q> does not refer to any field in type <Q>
+       87  no matching function for call to <Q>
+       55  use of undeclared identifier <Q>; did you mean <Q>?
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       48  no matching constructor for initialization of <Q>
+       32  variable type <Q> is an abstract class
+       26  no viable conversion from <Q> to <Q>
+        2  no member named <Q> in <Q>
+  sweep-20261023-2334-qwen3-coder-30b--fz-maxabs
+       28  variable type <Q> is an abstract class
+       22  initialization of non-aggregate type <Q> with a designated initializer list
+       16  field designator <Q> does not refer to any field in type <Q>
+       15  <Q> file not found
+       12  no member named <Q> in <Q>
+       10  use of undeclared identifier <Q>; did you mean <Q>?
+        8  no matching constructor for initialization of <Q>
+        7  no matching function for call to <Q>
+        1  no member named <Q> in <Q>; did you mean <Q>?
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  use of undeclared identifier <Q>
+  sweep-20261023-2334-qwen3-coder-30b--fz-pcc
+       98  field designator <Q> does not refer to any field in type <Q>
+       57  use of undeclared identifier <Q>
+       53  no matching function for call to <Q>
+       43  no member named <Q> in namespace <Q>
+       16  variable type <Q> is an abstract class
+        6  <Q> file not found
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+        2  expected <Q>
+        1  expected <Q> at end of declaration
+        1  expected <Q> or another designator
+        1  no member named <Q> in <Q>
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  sweep-20261023-2334-qwen3-coder-30b--mmfz-maxabs
+       42  no matching function for call to <Q>
+       21  variable type <Q> is an abstract class
+       16  <Q> file not found
+       15  field designator <Q> does not refer to any field in type <Q>
+       13  no member named <Q> in namespace <Q>
+        5  use of undeclared identifier <Q>; did you mean <Q>?
+        4  no matching constructor for initialization of <Q>
+        1  no member named <Q> in <Q>; did you mean <Q>?
+  sweep-20261023-2334-qwen3-coder-30b--mmfz-pcc
+      203  field designator <Q> does not refer to any field in type <Q>
+       67  no matching function for call to <Q>
+       51  initialization of non-aggregate type <Q> with a designated initializer list
+       33  no member named <Q> in namespace <Q>
+       24  no viable conversion from <Q> to <Q>
+       18  use of undeclared identifier <Q>; did you mean <Q>?
+       13  variable type <Q> is an abstract class
+        8  use of undeclared identifier <Q>
+        5  no member named <Q> in <Q>; did you mean <Q>?
+        4  non-const lvalue reference to type <Q> cannot bind to a value of unrelated type <Q> (aka <Q>)
+        3  no member named <Q> in <Q>
+        1  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+  sweep-20261024-0017-qwen3-coder-30b--api-maxabs
+       34  no member named <Q> in <Q>
+       32  initialization of non-aggregate type <Q> with a designated initializer list
+       32  no matching function for call to <Q>
+       17  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+       17  variable type <Q> is an abstract class
+       10  field designator <Q> does not refer to any field in type <Q>
+        2  use of undeclared identifier <Q>; did you mean <Q>?
+        1  <Q> file not found
+  sweep-20261024-0017-qwen3-coder-30b--api-pcc
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       16  <Q> file not found
+       16  use of undeclared identifier <Q>
+       16  variable type <Q> is an abstract class
+        3  use of undeclared identifier <Q>; did you mean <Q>?
+        2  no matching function for call to <Q>
+  sweep-20261024-0017-qwen3-coder-30b--apirag-maxabs
+       48  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       35  initialization of non-aggregate type <Q> with a designated initializer list
+       33  no matching function for call to <Q>
+       32  variable type <Q> is an abstract class
+        8  use of undeclared identifier <Q>; did you mean <Q>?
+        6  no matching constructor for initialization of <Q>
+  sweep-20261024-0017-qwen3-coder-30b--apirag-pcc
+      131  no member named <Q> in namespace <Q>
+       90  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       45  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+       16  variable type <Q> is an abstract class
+        6  no matching function for call to <Q>
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+        3  initialization of non-aggregate type <Q> with a designated initializer list
+        1  use of undeclared identifier <Q>
+  sweep-20261024-0017-qwen3-coder-30b--base-maxabs
+      126  no matching function for call to <Q>
+       95  field designator <Q> does not refer to any field in type <Q>
+       73  use of undeclared identifier <Q>; did you mean <Q>?
+       32  variable type <Q> is an abstract class
+       30  no member named <Q> in <Q>
+  sweep-20261024-0017-qwen3-coder-30b--base-pcc
+       68  field designator <Q> does not refer to any field in type <Q>
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       36  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       16  variable type <Q> is an abstract class
+        6  use of undeclared identifier <Q>
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+        3  no matching function for call to <Q>
+  sweep-20261024-0017-qwen3-coder-30b--mmapi-maxabs
+       80  initialization of non-aggregate type <Q> with a designated initializer list
+       48  field designator <Q> does not refer to any field in type <Q>
+       48  no matching function for call to <Q>
+       35  use of undeclared identifier <Q>; did you mean <Q>?
+       32  variable type <Q> is an abstract class
+  sweep-20261024-0017-qwen3-coder-30b--mmapi-pcc
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       45  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+       42  use of undeclared identifier <Q>
+       34  field designator <Q> does not refer to any field in type <Q>
+       15  use of undeclared identifier <Q>; did you mean <Q>?
+        9  no matching function for call to <Q>
+        2  no member named <Q> in <Q>
+        1  variable type <Q> is an abstract class
+  sweep-20261024-0017-qwen3-coder-30b--mmapirag-maxabs
+       72  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       32  use of undeclared identifier <Q>; did you mean <Q>?
+       27  variable type <Q> is an abstract class
+       18  initialization of non-aggregate type <Q> with a designated initializer list
+       15  no member named <Q> in namespace <Q>
+       14  no matching function for call to <Q>
+       13  no viable conversion from <Q> to <Q>
+       11  field designator <Q> does not refer to any field in type <Q>
+        4  no matching constructor for initialization of <Q>
+  sweep-20261024-0017-qwen3-coder-30b--mmapirag-pcc
+       45  expected <Q> at end of declaration
+       45  no member named <Q> in namespace <Q>
+       45  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+       42  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       16  use of undeclared identifier <Q>
+       16  variable type <Q> is an abstract class
+        9  use of undeclared identifier <Q>; did you mean <Q>?
+        3  initialization of non-aggregate type <Q> with a designated initializer list
+        3  no matching function for call to <Q>
+  sweep-20261024-0017-qwen3-coder-30b--mmbase-maxabs
+       34  use of undeclared identifier <Q>; did you mean <Q>?
+       32  no matching function for call to <Q>
+       16  <Q> file not found
+       16  variable type <Q> is an abstract class
+        4  field designator <Q> does not refer to any field in type <Q>
+  sweep-20261024-0017-qwen3-coder-30b--mmbase-pcc
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       48  no matching function for call to <Q>
+       16  variable type <Q> is an abstract class
+       14  field designator <Q> does not refer to any field in type <Q>
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+  sweep-20261024-0017-qwen3-coder-30b--mmrag-maxabs
+       88  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       80  initialization of non-aggregate type <Q> with a designated initializer list
+       76  no matching function for call to <Q>
+       32  variable type <Q> is an abstract class
+       20  field designator <Q> does not refer to any field in type <Q>
+       10  use of undeclared identifier <Q>; did you mean <Q>?
+        2  unknown type name <Q>; did you mean <Q>?
+  sweep-20261024-0017-qwen3-coder-30b--mmrag-pcc
+       49  use of undeclared identifier <Q>; did you mean <Q>?
+       42  no member named <Q> in namespace <Q>
+       42  too many arguments to function call, expected <N>, have <N>
+       16  variable type <Q> is an abstract class
+       14  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+       12  no matching function for call to <Q>
+        1  unknown type name <Q>; did you mean <Q>?
+  sweep-20261024-0017-qwen3-coder-30b--rag-maxabs
+       90  use of undeclared identifier <Q>; did you mean <Q>?
+       32  variable type <Q> is an abstract class
+       30  no member named <Q> in <Q>
+       27  no matching function for call to <Q>
+       26  arithmetic on a pointer to void
+       24  initialization of non-aggregate type <Q> with a designated initializer list
+       20  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       16  field designator <Q> does not refer to any field in type <Q>
+        3  no matching constructor for initialization of <Q>
+  sweep-20261024-0017-qwen3-coder-30b--rag-pcc
+      120  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       28  use of undeclared identifier <Q>; did you mean <Q>?
+       16  field designator <Q> does not refer to any field in type <Q>
+       16  variable type <Q> is an abstract class
+       15  use of undeclared identifier <Q>
+        6  no matching function for call to <Q>
+
+per project (the trial_id's first segment)
+  api-maxabs
+       34  no member named <Q> in <Q>
+       32  initialization of non-aggregate type <Q> with a designated initializer list
+       32  no matching function for call to <Q>
+       17  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+       17  variable type <Q> is an abstract class
+       10  field designator <Q> does not refer to any field in type <Q>
+        2  use of undeclared identifier <Q>; did you mean <Q>?
+        1  <Q> file not found
+  api-pcc
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       16  <Q> file not found
+       16  use of undeclared identifier <Q>
+       16  variable type <Q> is an abstract class
+        3  use of undeclared identifier <Q>; did you mean <Q>?
+        2  no matching function for call to <Q>
+  apirag-maxabs
+       48  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       35  initialization of non-aggregate type <Q> with a designated initializer list
+       33  no matching function for call to <Q>
+       32  variable type <Q> is an abstract class
+        8  use of undeclared identifier <Q>; did you mean <Q>?
+        6  no matching constructor for initialization of <Q>
+  apirag-pcc
+      131  no member named <Q> in namespace <Q>
+       90  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       45  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+       16  variable type <Q> is an abstract class
+        6  no matching function for call to <Q>
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+        3  initialization of non-aggregate type <Q> with a designated initializer list
+        1  use of undeclared identifier <Q>
+  base-maxabs
+      126  no matching function for call to <Q>
+       95  field designator <Q> does not refer to any field in type <Q>
+       73  use of undeclared identifier <Q>; did you mean <Q>?
+       32  variable type <Q> is an abstract class
+       30  no member named <Q> in <Q>
+  base-pcc
+       68  field designator <Q> does not refer to any field in type <Q>
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       36  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       16  variable type <Q> is an abstract class
+        6  use of undeclared identifier <Q>
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+        3  no matching function for call to <Q>
+  exaone4-32b-maxabs
+      134  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       74  no member named <Q> in <Q>
+       72  use of undeclared identifier <Q>; did you mean <Q>?
+       40  use of undeclared identifier <Q>
+       34  unknown type name <Q>
+       32  no member named <Q> in namespace <Q>
+       32  variable type <Q> is an abstract class
+       24  no matching constructor for initialization of <Q>
+       24  no matching function for call to <Q>
+        7  no member named <Q> in <Q>; did you mean <Q>?
+  exaone4-32b-pcc
+       48  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+       48  no member named <Q> in namespace <Q>; did you mean <Q>?
+       48  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       48  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       48  unknown type name <Q>
+       32  no member named <Q> in <Q>; did you mean <Q>?
+       16  use of undeclared identifier <Q>
+       16  variable type <Q> is an abstract class
+  fz-maxabs
+      125  field designator <Q> does not refer to any field in type <Q>
+      112  variable type <Q> is an abstract class
+      103  no member named <Q> in namespace <Q>
+       94  use of undeclared identifier <Q>; did you mean <Q>?
+       87  no member named <Q> in <Q>
+       77  use of undeclared identifier <Q>
+       75  expected expression
+       72  no matching function for call to <Q>
+       59  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       47  <Q> file not found
+       45  expected <Q>
+       38  no matching constructor for initialization of <Q>
+       33  expected <Q> for function-style cast or type construction
+       27  member reference type <Q> is not a pointer; did you mean to use <Q>?
+       26  initialization of non-aggregate type <Q> with a designated initializer list
+       24  expression is not assignable
+       21  no member named <Q> in <Q>; did you mean <Q>?
+       20  unknown type name <Q>
+       16  redefinition of <Q>
+       10  no member named <Q> in namespace <Q>; did you mean <Q>?
+        9  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        9  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+        9  reference to non-static member function must be called; did you mean to call it with no arguments?
+        6  field has incomplete type <Q>
+        6  no viable conversion from <Q> to <Q> (aka <Q>)
+        4  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        3  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        1  no type named <Q> in namespace <Q>
+  fz-pcc
+      343  field designator <Q> does not refer to any field in type <Q>
+      162  use of undeclared identifier <Q>; did you mean <Q>?
+      123  no matching function for call to <Q>
+      115  use of undeclared identifier <Q>
+       92  expected <Q>
+       80  variable type <Q> is an abstract class
+       75  no member named <Q> in namespace <Q>
+       48  unknown type name <Q>
+       35  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       19  <Q> file not found
+       17  no member named <Q> in <Q>
+        7  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        5  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        3  the unfenced <X> line at line <N> repeats the file <Q> from line <N>; it was dropped and the first is kept. <X> each file in exactly one block
+        2  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        1  cannot initialize a variable of type <Q> with an rvalue of type <Q>
+        1  expected <Q> at end of declaration
+        1  expected <Q> or another designator
+        1  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+        1  invalid operands to binary expression (<Q> and <Q>)
+        1  void function <Q> should not return a value
+  gemma4-31b-maxabs
+       50  no matching function for call to <Q>
+       40  no member named <Q> in <Q>
+       26  no member named <Q> in namespace <Q>
+       12  use of undeclared identifier <Q>
+        5  no matching member function for call to <Q>
+        5  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+        4  unknown type name <Q>
+        4  variable type <Q> is an abstract class
+        3  variable <Q> with type <Q> has incompatible initializer of type <Q>
+        2  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        2  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  indirection requires pointer operand (<Q> invalid)
+        1  no matching constructor for initialization of <Q>
+  gemma4-31b-pcc
+       23  no matching function for call to <Q>
+        6  no member named <Q> in <Q>
+        4  no matching constructor for initialization of <Q>
+        3  no matching member function for call to <Q>
+        3  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+        3  variable type <Q> is an abstract class
+        2  use of undeclared identifier <Q>; did you mean <Q>?
+        1  no member named <Q> in namespace <Q>
+        1  no viable conversion from <Q> to <Q>
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  llama31-8b-fp8-maxabs
+       72  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        7  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        6  no matching function for call to <Q>
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+        3  use of undeclared identifier <Q>
+        2  called object type <Q> is not a function or function pointer
+        1  conflicting types for <Q>
+        1  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        1  variable type <Q> is an abstract class
+  llama31-8b-fp8-pcc
+       35  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        4  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  llama31-8b-maxabs
+        9  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        3  expected <Q> for function-style cast or type construction
+        3  expected expression
+        3  use of undeclared identifier <Q>
+        2  cannot initialize an array element of type <Q> with an lvalue of type <Q> (aka <Q>)
+        2  cannot initialize an array element of type <Q> with an rvalue of type <Q>
+        2  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  expected <Q> at end of declaration
+        1  no member named <Q> in namespace <Q>
+        1  redefinition of <Q>
+        1  variable type <Q> is an abstract class
+  llama31-8b-pcc
+       29  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        4  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        4  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        4  the unfenced <X> line at line <N> repeats the file <Q> from line <N>; it was dropped and the first is kept. <X> each file in exactly one block
+        3  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+  mistral-nemo-maxabs
+       40  no matching function for call to <Q>
+       26  use of undeclared identifier <Q>; did you mean <Q>?
+       16  initialization of non-aggregate type <Q> with a designated initializer list
+       16  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       14  <Q> file not found
+        9  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        9  variable type <Q> is an abstract class
+        7  no member named <Q> in <Q>
+        6  no member named <Q> in namespace <Q>; did you mean <Q>?
+        2  no member named <Q> in namespace <Q>
+        1  expected expression
+        1  no matching constructor for initialization of <Q>
+        1  no type named <Q> in namespace <Q>
+  mistral-nemo-pcc
+       88  no member named <Q> in namespace <Q>; did you mean <Q>?
+       66  use of undeclared identifier <Q>; did you mean <Q>?
+       55  no member named <Q> in <Q>
+       45  initialization of non-aggregate type <Q> with a designated initializer list
+       45  no matching function for call to <Q>
+       33  no member named <Q> in namespace <Q>
+       26  variable type <Q> is an abstract class
+       11  no type named <Q> in namespace <Q>; did you mean <Q>?
+       11  no viable conversion from <Q> to <Q>
+        4  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        2  <Q> file not found
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+  mmapi-maxabs
+       80  initialization of non-aggregate type <Q> with a designated initializer list
+       48  field designator <Q> does not refer to any field in type <Q>
+       48  no matching function for call to <Q>
+       35  use of undeclared identifier <Q>; did you mean <Q>?
+       32  variable type <Q> is an abstract class
+  mmapi-pcc
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       45  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+       42  use of undeclared identifier <Q>
+       34  field designator <Q> does not refer to any field in type <Q>
+       15  use of undeclared identifier <Q>; did you mean <Q>?
+        9  no matching function for call to <Q>
+        2  no member named <Q> in <Q>
+        1  variable type <Q> is an abstract class
+  mmapirag-maxabs
+       72  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       32  use of undeclared identifier <Q>; did you mean <Q>?
+       27  variable type <Q> is an abstract class
+       18  initialization of non-aggregate type <Q> with a designated initializer list
+       15  no member named <Q> in namespace <Q>
+       14  no matching function for call to <Q>
+       13  no viable conversion from <Q> to <Q>
+       11  field designator <Q> does not refer to any field in type <Q>
+        4  no matching constructor for initialization of <Q>
+  mmapirag-pcc
+       45  expected <Q> at end of declaration
+       45  no member named <Q> in namespace <Q>
+       45  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+       42  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       16  use of undeclared identifier <Q>
+       16  variable type <Q> is an abstract class
+        9  use of undeclared identifier <Q>; did you mean <Q>?
+        3  initialization of non-aggregate type <Q> with a designated initializer list
+        3  no matching function for call to <Q>
+  mmbase-maxabs
+       34  use of undeclared identifier <Q>; did you mean <Q>?
+       32  no matching function for call to <Q>
+       16  <Q> file not found
+       16  variable type <Q> is an abstract class
+        4  field designator <Q> does not refer to any field in type <Q>
+  mmbase-pcc
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       48  no matching function for call to <Q>
+       16  variable type <Q> is an abstract class
+       14  field designator <Q> does not refer to any field in type <Q>
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+  mmfz-maxabs
+      225  use of undeclared identifier <Q>
+      151  no member named <Q> in namespace <Q>
+      131  no member named <Q> in <Q>
+      122  no matching function for call to <Q>
+      121  variable type <Q> is an abstract class
+       67  field designator <Q> does not refer to any field in type <Q>
+       61  unknown type name <Q>
+       60  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       53  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       45  expected <Q>
+       36  use of undeclared identifier <Q>; did you mean <Q>?
+       18  <Q> file not found
+       18  member reference type <Q> is not a pointer; did you mean to use <Q>?
+       15  expected unqualified-id
+        7  no matching constructor for initialization of <Q>
+        6  no member named <Q> in <Q>; did you mean <Q>?
+        6  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        3  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        2  expected <Q> for function-style cast or type construction
+        1  expected expression
+  mmfz-pcc
+      375  field designator <Q> does not refer to any field in type <Q>
+      154  no matching function for call to <Q>
+       99  initialization of non-aggregate type <Q> with a designated initializer list
+       96  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+       96  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       94  no member named <Q> in namespace <Q>
+       73  use of undeclared identifier <Q>; did you mean <Q>?
+       61  variable type <Q> is an abstract class
+       50  no viable conversion from <Q> to <Q>
+       48  no matching constructor for initialization of <Q>
+       39  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       21  no member named <Q> in <Q>
+       12  use of undeclared identifier <Q>
+       10  <Q> file not found
+        7  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        5  no member named <Q> in <Q>; did you mean <Q>?
+        5  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        4  non-const lvalue reference to type <Q> cannot bind to a value of unrelated type <Q> (aka <Q>)
+        2  invalid operands to binary expression (<Q> and <Q>)
+        1  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+        1  invalid operands to binary expression (<Q> (aka <Q>) and <Q>)
+  mmrag-maxabs
+       88  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       80  initialization of non-aggregate type <Q> with a designated initializer list
+       76  no matching function for call to <Q>
+       32  variable type <Q> is an abstract class
+       20  field designator <Q> does not refer to any field in type <Q>
+       10  use of undeclared identifier <Q>; did you mean <Q>?
+        2  unknown type name <Q>; did you mean <Q>?
+  mmrag-pcc
+       49  use of undeclared identifier <Q>; did you mean <Q>?
+       42  no member named <Q> in namespace <Q>
+       42  too many arguments to function call, expected <N>, have <N>
+       16  variable type <Q> is an abstract class
+       14  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+       12  no matching function for call to <Q>
+        1  unknown type name <Q>; did you mean <Q>?
+  qwen3-30b-instruct-maxabs
+      164  no member named <Q> in namespace <Q>
+      159  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+      136  expected <Q> for function-style cast or type construction
+      121  expected expression
+       77  use of undeclared identifier <Q>
+       72  initialization of non-aggregate type <Q> with a designated initializer list
+       66  variable type <Q> is an abstract class
+       25  use of undeclared identifier <Q>; did you mean <Q>?
+       22  unknown type name <Q>
+       13  no matching function for call to <Q>
+        8  expected <Q> at end of declaration
+        6  no member named <Q> in namespace <Q>; did you mean <Q>?
+        1  no type named <Q> in namespace <Q>
+        1  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+  qwen3-30b-instruct-pcc
+      182  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       70  no member named <Q> in namespace <Q>
+       66  use of undeclared identifier <Q>
+       62  unknown type name <Q>
+       59  expected <Q> at end of declaration
+       28  variable type <Q> is an abstract class
+       24  use of undeclared identifier <Q>; did you mean <Q>?
+       16  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+       13  initialization of non-aggregate type <Q> with a designated initializer list
+        9  no member named <Q> in namespace <Q>; did you mean <Q>?
+        6  no matching function for call to <Q>
+        3  field designator <Q> does not refer to any field in type <Q>
+        2  no member named <Q> in <Q>
+        1  expected <Q> for function-style cast or type construction
+        1  expected expression
+        1  no type named <Q> in namespace <Q>
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+  qwen3-32b-maxabs
+       11  <Q> file not found
+        6  use of undeclared identifier <Q>
+        3  no type named <Q> in namespace <Q>
+        3  unknown type name <Q>
+        2  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  qwen3-coder-30b-maxabs
+      353  field designator <Q> does not refer to any field in type <Q>
+       87  no matching function for call to <Q>
+       82  initialization of non-aggregate type <Q> with a designated initializer list
+       76  variable type <Q> is an abstract class
+       37  <Q> file not found
+       19  use of undeclared identifier <Q>; did you mean <Q>?
+       18  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       16  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+       15  no member named <Q> in <Q>
+       12  use of undeclared identifier <Q>
+        2  no matching constructor for initialization of <Q>
+        1  no member named <Q> in <Q>; did you mean <Q>?
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  qwen3-coder-30b-pcc
+      511  field designator <Q> does not refer to any field in type <Q>
+      184  no matching function for call to <Q>
+       76  variable type <Q> is an abstract class
+       66  initialization of non-aggregate type <Q> with a designated initializer list
+       52  no member named <Q> in namespace <Q>
+       48  use of undeclared identifier <Q>
+       42  use of undeclared identifier <Q>; did you mean <Q>?
+       36  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       12  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        6  no type named <Q> in namespace <Q>
+        3  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+  rag-maxabs
+       90  use of undeclared identifier <Q>; did you mean <Q>?
+       32  variable type <Q> is an abstract class
+       30  no member named <Q> in <Q>
+       27  no matching function for call to <Q>
+       26  arithmetic on a pointer to void
+       24  initialization of non-aggregate type <Q> with a designated initializer list
+       20  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       16  field designator <Q> does not refer to any field in type <Q>
+        3  no matching constructor for initialization of <Q>
+  rag-pcc
+      120  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       48  initialization of non-aggregate type <Q> with a designated initializer list
+       28  use of undeclared identifier <Q>; did you mean <Q>?
+       16  field designator <Q> does not refer to any field in type <Q>
+       16  variable type <Q> is an abstract class
+       15  use of undeclared identifier <Q>
+        6  no matching function for call to <Q>
+  tier-a-rngd-1trial-maxabs
+       19  use of undeclared identifier <Q>
+       15  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        6  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        6  no member named <Q> in <Q>
+        6  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+        3  no matching function for call to <Q>
+        3  no matching member function for call to <Q>
+        3  variable type <Q> is an abstract class
+        2  expected <Q> at end of declaration
+        2  no member named <Q> in namespace <Q>
+        1  conflicting types for <Q>
+  tier-a-rngd-1trial-pcc
+       10  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       10  use of undeclared identifier <Q>
+        4  unknown type name <Q>
+        3  <Q> file not found
+        1  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+  tier-a-rngd-30b-cpp2tt-maxabs
+       18  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+  tier-a-rngd-30b-cpp2tt-pcc
+       12  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+
+per arm (the trial_id's second segment, the model)
+  furiosa-ai--EXAONE-4.0-32B-FP8
+      348  no member named <Q> in namespace <Q>
+      239  use of undeclared identifier <Q>
+      226  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+      221  use of undeclared identifier <Q>; did you mean <Q>?
+      209  no member named <Q> in <Q>
+      203  unknown type name <Q>
+      186  variable type <Q> is an abstract class
+      180  expected <Q>
+      144  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+      144  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       58  no member named <Q> in namespace <Q>; did you mean <Q>?
+       53  no matching function for call to <Q>
+       50  no matching constructor for initialization of <Q>
+       50  no member named <Q> in <Q>; did you mean <Q>?
+       42  expected expression
+       24  expression is not assignable
+       14  expected unqualified-id
+        6  no viable conversion from <Q> to <Q> (aka <Q>)
+        3  invalid operands to binary expression (<Q> and <Q>)
+        2  <Q> file not found
+        1  cannot initialize a variable of type <Q> with an rvalue of type <Q>
+        1  invalid operands to binary expression (<Q> (aka <Q>) and <Q>)
+        1  no type named <Q> in namespace <Q>
+        1  void function <Q> should not return a value
+  furiosa-ai--Llama-3.1-8B-Instruct
+      231  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+      112  use of undeclared identifier <Q>
+       56  use of undeclared identifier <Q>; did you mean <Q>?
+       51  member reference type <Q> is not a pointer; did you mean to use <Q>?
+       48  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       46  no member named <Q> in <Q>
+       42  <Q> file not found
+       38  expected <Q> for function-style cast or type construction
+       37  expected expression
+       29  no matching function for call to <Q>
+       26  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       23  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+       21  no member named <Q> in namespace <Q>
+       20  variable type <Q> is an abstract class
+       17  redefinition of <Q>
+       13  no member named <Q> in <Q>; did you mean <Q>?
+       12  unknown type name <Q>
+       11  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        9  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        9  reference to non-static member function must be called; did you mean to call it with no arguments?
+        7  the unfenced <X> line at line <N> repeats the file <Q> from line <N>; it was dropped and the first is kept. <X> each file in exactly one block
+        6  field has incomplete type <Q>
+        3  expected <Q> at end of declaration
+        3  no matching member function for call to <Q>
+        2  cannot initialize an array element of type <Q> with an lvalue of type <Q> (aka <Q>)
+        2  cannot initialize an array element of type <Q> with an rvalue of type <Q>
+        1  conflicting types for <Q>
+        1  expected unqualified-id
+  furiosa-ai--Meta-Llama-3.1-8B-Instruct-FP8-dynamic
+      107  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        7  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        6  no matching function for call to <Q>
+        6  use of undeclared identifier <Q>; did you mean <Q>?
+        4  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  use of undeclared identifier <Q>
+        2  called object type <Q> is not a function or function pointer
+        1  conflicting types for <Q>
+        1  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        1  variable type <Q> is an abstract class
+  furiosa-ai--Mistral-Nemo-Instruct-2407-FP8
+       94  no member named <Q> in namespace <Q>; did you mean <Q>?
+       92  use of undeclared identifier <Q>; did you mean <Q>?
+       85  no matching function for call to <Q>
+       62  no member named <Q> in <Q>
+       61  initialization of non-aggregate type <Q> with a designated initializer list
+       35  no member named <Q> in namespace <Q>
+       35  variable type <Q> is an abstract class
+       20  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       16  <Q> file not found
+       11  no type named <Q> in namespace <Q>; did you mean <Q>?
+       11  no viable conversion from <Q> to <Q>
+       10  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        1  expected expression
+        1  no matching constructor for initialization of <Q>
+        1  no type named <Q> in namespace <Q>
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  furiosa-ai--Qwen3-30B-A3B-Instruct-2507-FP8
+      341  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+      234  no member named <Q> in namespace <Q>
+      143  use of undeclared identifier <Q>
+      137  expected <Q> for function-style cast or type construction
+      122  expected expression
+       94  variable type <Q> is an abstract class
+       85  initialization of non-aggregate type <Q> with a designated initializer list
+       84  unknown type name <Q>
+       67  expected <Q> at end of declaration
+       49  use of undeclared identifier <Q>; did you mean <Q>?
+       19  no matching function for call to <Q>
+       16  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+       15  no member named <Q> in namespace <Q>; did you mean <Q>?
+        3  field designator <Q> does not refer to any field in type <Q>
+        2  no member named <Q> in <Q>
+        2  no type named <Q> in namespace <Q>
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+  furiosa-ai--Qwen3-32B-FP8
+       11  <Q> file not found
+        6  use of undeclared identifier <Q>
+        3  no type named <Q> in namespace <Q>
+        3  unknown type name <Q>
+        2  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8
+     2110  field designator <Q> does not refer to any field in type <Q>
+     1164  no matching function for call to <Q>
+      788  initialization of non-aggregate type <Q> with a designated initializer list
+      705  variable type <Q> is an abstract class
+      633  use of undeclared identifier <Q>; did you mean <Q>?
+      480  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+      374  no member named <Q> in namespace <Q>
+      322  use of undeclared identifier <Q>
+      192  no member named <Q> in <Q>
+      123  <Q> file not found
+      104  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+       82  no matching constructor for initialization of <Q>
+       72  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       63  no viable conversion from <Q> to <Q>
+       60  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       46  expected <Q> at end of declaration
+       45  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+       42  too many arguments to function call, expected <N>, have <N>
+       26  arithmetic on a pointer to void
+       17  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+       16  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+        9  no member named <Q> in <Q>; did you mean <Q>?
+        6  no type named <Q> in namespace <Q>
+        5  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+        4  non-const lvalue reference to type <Q> cannot bind to a value of unrelated type <Q> (aka <Q>)
+        3  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  unknown type name <Q>; did you mean <Q>?
+        2  expected <Q>
+        1  expected <Q> or another designator
+        1  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+  furiosa-ai--gemma-4-31B-it-FP8-block
+       73  no matching function for call to <Q>
+       46  no member named <Q> in <Q>
+       27  no member named <Q> in namespace <Q>
+       12  use of undeclared identifier <Q>
+        8  no matching member function for call to <Q>
+        8  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+        7  variable type <Q> is an abstract class
+        5  no matching constructor for initialization of <Q>
+        4  unknown type name <Q>
+        3  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  variable <Q> with type <Q> has incompatible initializer of type <Q>
+        2  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        2  use of undeclared identifier <Q>; did you mean <Q>?
+        1  indirection requires pointer operand (<Q> invalid)
+        1  no viable conversion from <Q> to <Q>
+
+per item
+  eltwise_binary
+      455  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+      308  no matching function for call to <Q>
+      287  no member named <Q> in namespace <Q>
+      259  use of undeclared identifier <Q>; did you mean <Q>?
+      231  no member named <Q> in <Q>
+      226  use of undeclared identifier <Q>
+      199  variable type <Q> is an abstract class
+      195  expected expression
+      189  field designator <Q> does not refer to any field in type <Q>
+      187  initialization of non-aggregate type <Q> with a designated initializer list
+      168  expected <Q> for function-style cast or type construction
+      142  <Q> file not found
+       98  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       90  unknown type name <Q>
+       47  member reference type <Q> is not a pointer; did you mean to use <Q>?
+       26  arithmetic on a pointer to void
+       24  expression is not assignable
+       24  no member named <Q> in <Q>; did you mean <Q>?
+       20  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       16  no member named <Q> in namespace <Q>; did you mean <Q>?
+       14  no matching constructor for initialization of <Q>
+       13  no viable conversion from <Q> to <Q>
+        9  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        9  reference to non-static member function must be called; did you mean to call it with no arguments?
+        6  expected <Q> at end of declaration
+        6  field has incomplete type <Q>
+        6  no matching member function for call to <Q>
+        5  no type named <Q> in namespace <Q>
+        5  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        2  called object type <Q> is not a function or function pointer
+        2  cannot initialize an array element of type <Q> with an lvalue of type <Q> (aka <Q>)
+        2  cannot initialize an array element of type <Q> with an rvalue of type <Q>
+        2  conflicting types for <Q>
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  redefinition of <Q>
+        1  unknown type name <Q>; did you mean <Q>?
+  eltwise_sfpu
+      471  field designator <Q> does not refer to any field in type <Q>
+      432  no matching function for call to <Q>
+      305  variable type <Q> is an abstract class
+      252  use of undeclared identifier <Q>; did you mean <Q>?
+      233  initialization of non-aggregate type <Q> with a designated initializer list
+      186  no member named <Q> in <Q>
+      165  no member named <Q> in namespace <Q>
+      146  use of undeclared identifier <Q>
+      141  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       76  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       68  no matching constructor for initialization of <Q>
+       54  unknown type name <Q>
+       41  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       16  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+       14  expected unqualified-id
+        7  no member named <Q> in <Q>; did you mean <Q>?
+        6  no viable conversion from <Q> to <Q> (aka <Q>)
+        5  expected <Q> at end of declaration
+        5  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        3  variable <Q> with type <Q> has incompatible initializer of type <Q>
+        2  <Q> file not found
+        2  no matching member function for call to <Q>
+        1  indirection requires pointer operand (<Q> invalid)
+        1  unknown type name <Q>; did you mean <Q>?
+  loopback
+      141  variable type <Q> is an abstract class
+      102  use of undeclared identifier <Q>
+       90  expected <Q>
+       89  field designator <Q> does not refer to any field in type <Q>
+       65  no matching function for call to <Q>
+       57  use of undeclared identifier <Q>; did you mean <Q>?
+       45  initialization of non-aggregate type <Q> with a designated initializer list
+       44  no member named <Q> in namespace <Q>
+       42  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       37  no member named <Q> in <Q>
+       17  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       16  redefinition of <Q>
+       16  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+        6  expected <Q> for function-style cast or type construction
+        6  expected expression
+        6  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        6  no member named <Q> in namespace <Q>; did you mean <Q>?
+        4  no matching constructor for initialization of <Q>
+        4  no member named <Q> in <Q>; did you mean <Q>?
+        4  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        1  expected unqualified-id
+        1  no type named <Q> in namespace <Q>
+        1  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+  matmul_multi_core
+     1209  field designator <Q> does not refer to any field in type <Q>
+      473  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+      469  no member named <Q> in namespace <Q>
+      350  no matching function for call to <Q>
+      324  use of undeclared identifier <Q>; did you mean <Q>?
+      300  use of undeclared identifier <Q>
+      298  initialization of non-aggregate type <Q> with a designated initializer list
+      295  variable type <Q> is an abstract class
+      180  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+      146  unknown type name <Q>
+      144  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+      111  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+      104  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+       95  expected <Q> at end of declaration
+       52  no matching constructor for initialization of <Q>
+       48  no member named <Q> in namespace <Q>; did you mean <Q>?
+       45  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+       42  too many arguments to function call, expected <N>, have <N>
+       37  no member named <Q> in <Q>; did you mean <Q>?
+       32  no member named <Q> in <Q>
+       27  no viable conversion from <Q> to <Q>
+       26  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       20  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        7  the unfenced <X> line at line <N> repeats the file <Q> from line <N>; it was dropped and the first is kept. <X> each file in exactly one block
+        6  <Q> file not found
+        4  non-const lvalue reference to type <Q> cannot bind to a value of unrelated type <Q> (aka <Q>)
+        4  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        3  invalid operands to binary expression (<Q> and <Q>)
+        3  no matching member function for call to <Q>
+        1  cannot initialize a variable of type <Q> with an rvalue of type <Q>
+        1  expected <Q> for function-style cast or type construction
+        1  expected expression
+        1  invalid operands to binary expression (<Q> (aka <Q>) and <Q>)
+        1  unknown type name <Q>; did you mean <Q>?
+        1  void function <Q> should not return a value
+  matmul_single_core
+      274  no matching function for call to <Q>
+      171  initialization of non-aggregate type <Q> with a designated initializer list
+      167  use of undeclared identifier <Q>; did you mean <Q>?
+      155  field designator <Q> does not refer to any field in type <Q>
+      108  variable type <Q> is an abstract class
+       97  no member named <Q> in namespace <Q>; did you mean <Q>?
+       92  expected <Q>
+       74  no member named <Q> in namespace <Q>
+       71  no member named <Q> in <Q>
+       63  use of undeclared identifier <Q>
+       44  <Q> file not found
+       36  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       35  no viable conversion from <Q> to <Q>
+       31  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       23  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       20  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+       16  unknown type name <Q>
+       12  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       12  no type named <Q> in namespace <Q>; did you mean <Q>?
+       10  expected <Q> at end of declaration
+        7  no type named <Q> in namespace <Q>
+        5  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+        2  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        1  expected <Q> or another designator
+
+per attempt index (0 is the first generation, then one per correction)
+  0
+      274  use of undeclared identifier <Q>; did you mean <Q>?
+      190  field designator <Q> does not refer to any field in type <Q>
+      189  no matching function for call to <Q>
+      100  use of undeclared identifier <Q>
+       94  initialization of non-aggregate type <Q> with a designated initializer list
+       85  variable type <Q> is an abstract class
+       44  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       34  unknown type name <Q>
+       30  no member named <Q> in namespace <Q>
+       29  no member named <Q> in <Q>
+       16  expected <Q> for function-style cast or type construction
+       15  expected expression
+       13  <Q> file not found
+       13  no matching constructor for initialization of <Q>
+       13  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       11  no member named <Q> in namespace <Q>; did you mean <Q>?
+       11  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        9  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        9  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+        8  no matching member function for call to <Q>
+        6  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        4  expected <Q> at end of declaration
+        3  invalid operands to binary expression (<Q> and <Q>)
+        3  unknown type name <Q>; did you mean <Q>?
+        2  called object type <Q> is not a function or function pointer
+        2  cannot initialize an array element of type <Q> with an lvalue of type <Q> (aka <Q>)
+        2  cannot initialize an array element of type <Q> with an rvalue of type <Q>
+        2  conflicting types for <Q>
+        2  expected <Q>
+        2  no member named <Q> in <Q>; did you mean <Q>?
+        2  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        2  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        1  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        1  cannot initialize a variable of type <Q> with an rvalue of type <Q>
+        1  expected <Q> or another designator
+        1  expected unqualified-id
+        1  invalid operands to binary expression (<Q> (aka <Q>) and <Q>)
+        1  no type named <Q> in namespace <Q>
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  no viable conversion from <Q> to <Q>
+        1  redefinition of <Q>
+        1  reference to non-static member function must be called; did you mean to call it with no arguments?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+        1  void function <Q> should not return a value
+  1
+      157  no matching function for call to <Q>
+      129  field designator <Q> does not refer to any field in type <Q>
+      108  use of undeclared identifier <Q>; did you mean <Q>?
+       81  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       75  no member named <Q> in namespace <Q>
+       73  variable type <Q> is an abstract class
+       63  initialization of non-aggregate type <Q> with a designated initializer list
+       45  use of undeclared identifier <Q>
+       36  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       32  no member named <Q> in <Q>
+       32  no member named <Q> in namespace <Q>; did you mean <Q>?
+       21  unknown type name <Q>
+       15  no matching constructor for initialization of <Q>
+       15  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       14  <Q> file not found
+       14  expected <Q> at end of declaration
+       12  expected <Q>
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        9  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        4  expected expression
+        3  expected <Q> for function-style cast or type construction
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+        3  no matching member function for call to <Q>
+        3  no type named <Q> in namespace <Q>
+        2  no member named <Q> in <Q>; did you mean <Q>?
+        2  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  no viable conversion from <Q> to <Q>
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+        1  variable <Q> with type <Q> has incompatible initializer of type <Q>
+  2
+      140  field designator <Q> does not refer to any field in type <Q>
+      120  no matching function for call to <Q>
+       82  use of undeclared identifier <Q>; did you mean <Q>?
+       73  variable type <Q> is an abstract class
+       69  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       66  no member named <Q> in namespace <Q>
+       64  initialization of non-aggregate type <Q> with a designated initializer list
+       62  use of undeclared identifier <Q>
+       41  no member named <Q> in <Q>
+       27  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       24  unknown type name <Q>
+       18  no member named <Q> in namespace <Q>; did you mean <Q>?
+       16  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       15  no matching constructor for initialization of <Q>
+       13  expected expression
+       12  <Q> file not found
+       12  expected <Q>
+       11  expected <Q> for function-style cast or type construction
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        9  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+        8  expected <Q> at end of declaration
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  no member named <Q> in <Q>; did you mean <Q>?
+        3  too many arguments to function call, expected <N>, have <N>
+        2  no type named <Q> in namespace <Q>
+        2  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  expected unqualified-id
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  no viable conversion from <Q> to <Q>
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+  3
+      132  field designator <Q> does not refer to any field in type <Q>
+       95  no matching function for call to <Q>
+       87  use of undeclared identifier <Q>; did you mean <Q>?
+       74  no member named <Q> in namespace <Q>
+       72  variable type <Q> is an abstract class
+       69  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       65  use of undeclared identifier <Q>
+       62  initialization of non-aggregate type <Q> with a designated initializer list
+       37  no member named <Q> in <Q>
+       27  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       24  unknown type name <Q>
+       17  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       13  expected expression
+       12  expected <Q>
+       12  no matching constructor for initialization of <Q>
+       11  expected <Q> at end of declaration
+       11  expected <Q> for function-style cast or type construction
+       11  no member named <Q> in namespace <Q>; did you mean <Q>?
+       10  <Q> file not found
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        9  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        4  no viable conversion from <Q> to <Q>
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  no member named <Q> in <Q>; did you mean <Q>?
+        1  expected unqualified-id
+        1  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  no type named <Q> in namespace <Q>
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+        1  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        1  variable <Q> with type <Q> has incompatible initializer of type <Q>
+  4
+      152  field designator <Q> does not refer to any field in type <Q>
+       89  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       86  no matching function for call to <Q>
+       74  no member named <Q> in namespace <Q>
+       71  variable type <Q> is an abstract class
+       67  use of undeclared identifier <Q>
+       62  initialization of non-aggregate type <Q> with a designated initializer list
+       56  use of undeclared identifier <Q>; did you mean <Q>?
+       30  no member named <Q> in <Q>
+       24  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       21  unknown type name <Q>
+       17  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       13  expected expression
+       12  expected <Q>
+       11  <Q> file not found
+       11  expected <Q> at end of declaration
+       11  expected <Q> for function-style cast or type construction
+       11  no member named <Q> in namespace <Q>; did you mean <Q>?
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        7  no matching constructor for initialization of <Q>
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  no viable conversion from <Q> to <Q>
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  no member named <Q> in <Q>; did you mean <Q>?
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        2  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  expected unqualified-id
+        1  field designator <Q> does not refer to any field in type <Q>; did you mean <Q>?
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  no type named <Q> in namespace <Q>
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+  5
+      153  field designator <Q> does not refer to any field in type <Q>
+       95  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       85  no matching function for call to <Q>
+       75  use of undeclared identifier <Q>
+       74  no member named <Q> in namespace <Q>
+       71  variable type <Q> is an abstract class
+       65  initialization of non-aggregate type <Q> with a designated initializer list
+       48  use of undeclared identifier <Q>; did you mean <Q>?
+       37  no member named <Q> in <Q>
+       21  unknown type name <Q>
+       20  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       18  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+       16  expected expression
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       14  expected <Q> for function-style cast or type construction
+       14  no member named <Q> in namespace <Q>; did you mean <Q>?
+       12  expected <Q>
+       11  <Q> file not found
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        8  expected <Q> at end of declaration
+        8  no matching constructor for initialization of <Q>
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  no viable conversion from <Q> to <Q>
+        6  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        4  no member named <Q> in <Q>; did you mean <Q>?
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        3  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        2  no type named <Q> in namespace <Q>
+        1  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        1  expected unqualified-id
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  reference to non-static member function must be called; did you mean to call it with no arguments?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+        1  variable <Q> with type <Q> has incompatible initializer of type <Q>
+  6
+      133  field designator <Q> does not refer to any field in type <Q>
+       72  no matching function for call to <Q>
+       63  variable type <Q> is an abstract class
+       61  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       59  no member named <Q> in namespace <Q>
+       58  initialization of non-aggregate type <Q> with a designated initializer list
+       53  use of undeclared identifier <Q>; did you mean <Q>?
+       39  use of undeclared identifier <Q>
+       37  no member named <Q> in <Q>
+       21  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       15  unknown type name <Q>
+       14  expected expression
+       13  expected <Q> for function-style cast or type construction
+       12  <Q> file not found
+       12  expected <Q>
+       11  no member named <Q> in namespace <Q>; did you mean <Q>?
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        8  no matching constructor for initialization of <Q>
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  expected <Q> at end of declaration
+        6  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        6  no viable conversion from <Q> to <Q>
+        4  no member named <Q> in <Q>; did you mean <Q>?
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        3  the unfenced <X> line at line <N> repeats the file <Q> from line <N>; it was dropped and the first is kept. <X> each file in exactly one block
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        2  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        1  expected unqualified-id
+        1  indirection requires pointer operand (<Q> invalid)
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  reference to non-static member function must be called; did you mean to call it with no arguments?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+  7
+      132  field designator <Q> does not refer to any field in type <Q>
+       74  no matching function for call to <Q>
+       62  variable type <Q> is an abstract class
+       61  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       59  no member named <Q> in namespace <Q>
+       58  initialization of non-aggregate type <Q> with a designated initializer list
+       44  use of undeclared identifier <Q>; did you mean <Q>?
+       41  use of undeclared identifier <Q>
+       35  no member named <Q> in <Q>
+       19  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       15  unknown type name <Q>
+       13  expected expression
+       12  <Q> file not found
+       12  expected <Q>
+       11  expected <Q> for function-style cast or type construction
+       11  no member named <Q> in namespace <Q>; did you mean <Q>?
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        7  no matching constructor for initialization of <Q>
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  expected <Q> at end of declaration
+        6  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        6  no member named <Q> in <Q>; did you mean <Q>?
+        6  no viable conversion from <Q> to <Q>
+        5  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        2  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+        2  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        1  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        1  expected unqualified-id
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  non-const lvalue reference to type <Q> cannot bind to a value of unrelated type <Q> (aka <Q>)
+        1  reference to non-static member function must be called; did you mean to call it with no arguments?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+  8
+      119  field designator <Q> does not refer to any field in type <Q>
+       72  no matching function for call to <Q>
+       65  no member named <Q> in namespace <Q>
+       62  variable type <Q> is an abstract class
+       61  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       51  initialization of non-aggregate type <Q> with a designated initializer list
+       49  use of undeclared identifier <Q>
+       40  no member named <Q> in <Q>
+       39  use of undeclared identifier <Q>; did you mean <Q>?
+       17  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       15  <Q> file not found
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       15  unknown type name <Q>
+       13  expected expression
+       13  no matching constructor for initialization of <Q>
+       12  expected <Q>
+       11  expected <Q> for function-style cast or type construction
+       11  no member named <Q> in namespace <Q>; did you mean <Q>?
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        7  no member named <Q> in <Q>; did you mean <Q>?
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  expected <Q> at end of declaration
+        6  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        6  no viable conversion from <Q> to <Q>
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        1  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        1  expected unqualified-id
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  non-const lvalue reference to type <Q> cannot bind to a value of unrelated type <Q> (aka <Q>)
+        1  reference to non-static member function must be called; did you mean to call it with no arguments?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+        1  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  the unfenced <X> line at line <N> repeats the file <Q> from line <N>; it was dropped and the first is kept. <X> each file in exactly one block
+  9
+      119  field designator <Q> does not refer to any field in type <Q>
+       71  no member named <Q> in namespace <Q>
+       67  no matching function for call to <Q>
+       67  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       62  variable type <Q> is an abstract class
+       51  initialization of non-aggregate type <Q> with a designated initializer list
+       40  no member named <Q> in <Q>
+       39  use of undeclared identifier <Q>; did you mean <Q>?
+       38  use of undeclared identifier <Q>
+       21  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       18  unknown type name <Q>
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       13  <Q> file not found
+       13  expected expression
+       12  expected <Q>
+       11  expected <Q> for function-style cast or type construction
+       11  no member named <Q> in namespace <Q>; did you mean <Q>?
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        9  no matching constructor for initialization of <Q>
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  expected <Q> at end of declaration
+        6  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        6  no member named <Q> in <Q>; did you mean <Q>?
+        6  no viable conversion from <Q> to <Q>
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  no type named <Q> in namespace <Q>
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        2  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        2  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        1  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        1  expected unqualified-id
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  non-const lvalue reference to type <Q> cannot bind to a value of unrelated type <Q> (aka <Q>)
+        1  reference to non-static member function must be called; did you mean to call it with no arguments?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+        1  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+  10
+      119  field designator <Q> does not refer to any field in type <Q>
+       71  no member named <Q> in namespace <Q>
+       67  no matching function for call to <Q>
+       67  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       62  variable type <Q> is an abstract class
+       51  initialization of non-aggregate type <Q> with a designated initializer list
+       40  no member named <Q> in <Q>
+       39  use of undeclared identifier <Q>; did you mean <Q>?
+       35  use of undeclared identifier <Q>
+       17  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       15  unknown type name <Q>
+       14  <Q> file not found
+       13  expected expression
+       12  expected <Q>
+       11  expected <Q> for function-style cast or type construction
+       11  no member named <Q> in namespace <Q>; did you mean <Q>?
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        9  no matching constructor for initialization of <Q>
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  expected <Q> at end of declaration
+        6  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        6  no member named <Q> in <Q>; did you mean <Q>?
+        6  no viable conversion from <Q> to <Q>
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        3  the unfenced <X> line at line <N> repeats the file <Q> from line <N>; it was dropped and the first is kept. <X> each file in exactly one block
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        2  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        1  expected unqualified-id
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  no type named <Q> in namespace <Q>; did you mean <Q>?
+        1  non-const lvalue reference to type <Q> cannot bind to a value of unrelated type <Q> (aka <Q>)
+        1  reference to non-static member function must be called; did you mean to call it with no arguments?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+  11
+      119  field designator <Q> does not refer to any field in type <Q>
+       67  no member named <Q> in namespace <Q>
+       67  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       65  no matching function for call to <Q>
+       60  variable type <Q> is an abstract class
+       51  initialization of non-aggregate type <Q> with a designated initializer list
+       51  use of undeclared identifier <Q>
+       46  use of undeclared identifier <Q>; did you mean <Q>?
+       36  no member named <Q> in <Q>
+       27  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       19  unknown type name <Q>
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       13  expected expression
+       12  expected <Q>
+       11  <Q> file not found
+       11  expected <Q> for function-style cast or type construction
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        7  no matching constructor for initialization of <Q>
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  expected <Q> at end of declaration
+        6  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        6  no member named <Q> in <Q>; did you mean <Q>?
+        5  no viable conversion from <Q> to <Q>
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  field has incomplete type <Q>
+        3  no member named <Q> in namespace <Q>; did you mean <Q>?
+        3  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        2  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        1  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        1  expected unqualified-id
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  reference to non-static member function must be called; did you mean to call it with no arguments?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+  12
+      119  field designator <Q> does not refer to any field in type <Q>
+       74  no matching function for call to <Q>
+       61  no member named <Q> in namespace <Q>
+       61  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       59  variable type <Q> is an abstract class
+       51  initialization of non-aggregate type <Q> with a designated initializer list
+       48  use of undeclared identifier <Q>
+       46  use of undeclared identifier <Q>; did you mean <Q>?
+       37  no member named <Q> in <Q>
+       20  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       19  unknown type name <Q>
+       15  expected expression
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       13  expected <Q> for function-style cast or type construction
+       12  expected <Q>
+       11  <Q> file not found
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  expected <Q> at end of declaration
+        6  no matching constructor for initialization of <Q>
+        5  member reference type <Q> is not a pointer; did you mean to use <Q>?
+        5  no viable conversion from <Q> to <Q>
+        4  no member named <Q> in <Q>; did you mean <Q>?
+        4  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        4  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  field has incomplete type <Q>
+        3  no member named <Q> in namespace <Q>; did you mean <Q>?
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        1  <X> from <Q> to <Q> (aka <Q>) is not allowed
+        1  expected unqualified-id
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  reference to non-static member function must be called; did you mean to call it with no arguments?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+  13
+      119  field designator <Q> does not refer to any field in type <Q>
+       67  no matching function for call to <Q>
+       64  no member named <Q> in namespace <Q>
+       63  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       58  variable type <Q> is an abstract class
+       51  initialization of non-aggregate type <Q> with a designated initializer list
+       40  use of undeclared identifier <Q>
+       33  use of undeclared identifier <Q>; did you mean <Q>?
+       28  no member named <Q> in <Q>
+       19  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       15  unknown type name <Q>
+       12  expected <Q>
+       11  <Q> file not found
+       10  expected expression
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        8  expected <Q> for function-style cast or type construction
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  expected <Q> at end of declaration
+        6  no member named <Q> in <Q>; did you mean <Q>?
+        6  no viable conversion from <Q> to <Q>
+        5  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  no matching constructor for initialization of <Q>
+        3  no member named <Q> in namespace <Q>; did you mean <Q>?
+        3  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        2  no viable conversion from <Q> to <Q> (aka <Q>)
+        1  expected unqualified-id
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+        1  the <X> block at line <N> repeats the file <Q> from line <N>; it was dropped and the first block is kept. <X> each file in exactly one block
+  14
+      119  field designator <Q> does not refer to any field in type <Q>
+       70  no matching function for call to <Q>
+       64  no member named <Q> in namespace <Q>
+       63  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       58  variable type <Q> is an abstract class
+       51  initialization of non-aggregate type <Q> with a designated initializer list
+       42  use of undeclared identifier <Q>
+       33  use of undeclared identifier <Q>; did you mean <Q>?
+       29  no member named <Q> in <Q>
+       28  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       15  unknown type name <Q>
+       12  expected <Q>
+       12  expected expression
+       10  expected <Q> for function-style cast or type construction
+        9  <Q> file not found
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        8  redefinition of <Q>
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  expected <Q> at end of declaration
+        5  no member named <Q> in <Q>; did you mean <Q>?
+        5  no viable conversion from <Q> to <Q>
+        4  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  no matching constructor for initialization of <Q>
+        3  no member named <Q> in namespace <Q>; did you mean <Q>?
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        2  no viable conversion from <Q> to <Q> (aka <Q>)
+        2  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  expected unqualified-id
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+  15
+      119  field designator <Q> does not refer to any field in type <Q>
+       69  no matching function for call to <Q>
+       65  no member named <Q> in namespace <Q>
+       63  no member named <Q> in namespace <Q>; did you mean simply <Q>?
+       57  variable type <Q> is an abstract class
+       51  initialization of non-aggregate type <Q> with a designated initializer list
+       40  use of undeclared identifier <Q>
+       32  use of undeclared identifier <Q>; did you mean <Q>?
+       29  no member named <Q> in <Q>
+       24  the file <Q> cannot be written: the harness provides that file for the build. <X> it and return the files again
+       15  <Q> file not found
+       15  too few arguments to function call, expected at least <N>, have <N>; did you mean <Q>?
+       15  unknown type name <Q>
+       12  expected <Q>
+       12  expected expression
+       10  expected <Q> for function-style cast or type construction
+        9  initialization of non-aggregate type <Q> (aka <Q>) with a designated initializer list
+        8  redefinition of <Q>
+        7  no type named <Q> in namespace <Q>; did you mean simply <Q>?
+        6  expected <Q> at end of declaration
+        6  no member named <Q> in <Q>; did you mean <Q>?
+        5  no viable conversion from <Q> to <Q>
+        3  field designator <Q> does not refer to any field in type <Q> (aka <Q>)
+        3  no matching constructor for initialization of <Q>
+        3  no member named <Q> in namespace <Q>; did you mean <Q>?
+        3  the expected file <Q> is missing: return it in a fenced block whose first line is `<P> <X>: <P>`
+        3  too many arguments to function call, expected <N>, have <N>
+        2  arithmetic on a pointer to void
+        2  expression is not assignable
+        2  no viable conversion from <Q> to <Q> (aka <Q>)
+        2  the <X> block at line <N> (<Q>) is never closed, so the file was dropped because it may be cut short. <X> the block with a line of ```
+        1  expected unqualified-id
+        1  no namespace named <Q> in namespace <Q>; did you mean simply <Q>?
+        1  reference to type <Q> (aka <Q>) could not bind to an lvalue of type <Q>
+
+kept trials (run id, trial id, whether a bucket recurs across corrections)
+  20261020-tiera1-maxabs  tier-a-rngd-1trial-maxabs/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  20261020-tiera1-maxabs  tier-a-rngd-1trial-maxabs/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  20261020-tiera1-maxabs  tier-a-rngd-1trial-maxabs/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  20261020-tiera1-pcc  tier-a-rngd-1trial-pcc/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  20261020-tiera1-pcc  tier-a-rngd-1trial-pcc/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  20261020-tiera30-maxabs  tier-a-rngd-30b-cpp2tt-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  20261020-tiera30-maxabs  tier-a-rngd-30b-cpp2tt-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  20261020-tiera30-maxabs  tier-a-rngd-30b-cpp2tt-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  20261020-tiera30-pcc  tier-a-rngd-30b-cpp2tt-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  20261020-tiera30-pcc  tier-a-rngd-30b-cpp2tt-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  demo-mock-rehearsal-20261007-tt  demo-mock-rehearsal-20261007-tt/mock-reference/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs no
+  p4-gate-tier-a  p4-tier-a-dry-run/mock-reference/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs no
+  p4-gate-tier-a  p4-tier-a-dry-run/mock-reference/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs no
+  p4-gate-tier-a  p4-tier-a-dry-run/mock-reference/tt-pairs-v0/cpp-tt/loopback/run01  recurs no
+  p4-gate-tier-a  p4-tier-a-dry-run/mock-reference/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs no
+  p4-gate-tier-a  p4-tier-a-dry-run/mock-reference/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs no
+  p413-dry-check  p4-tier-a-dry-run/mock-reference/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs no
+  p413-dry-check  p4-tier-a-dry-run/mock-reference/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs no
+  p413-dry-check  p4-tier-a-dry-run/mock-reference/tt-pairs-v0/cpp-tt/loopback/run01  recurs no
+  p413-dry-check  p4-tier-a-dry-run/mock-reference/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs no
+  p413-dry-check  p4-tier-a-dry-run/mock-reference/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs no
+  p413-fw-20261004-224906  p413-fw-loopback/mock-reference/tt-pairs-v0/cpp-tt/loopback/run01  recurs no
+  sweep-20261022-2100-qwen3-30b-instruct-maxabs  qwen3-30b-instruct-maxabs/furiosa-ai--Qwen3-30B-A3B-Instruct-2507-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2100-qwen3-30b-instruct-maxabs  qwen3-30b-instruct-maxabs/furiosa-ai--Qwen3-30B-A3B-Instruct-2507-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261022-2100-qwen3-30b-instruct-maxabs  qwen3-30b-instruct-maxabs/furiosa-ai--Qwen3-30B-A3B-Instruct-2507-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261022-2100-qwen3-30b-instruct-pcc  qwen3-30b-instruct-pcc/furiosa-ai--Qwen3-30B-A3B-Instruct-2507-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261022-2100-qwen3-30b-instruct-pcc  qwen3-30b-instruct-pcc/furiosa-ai--Qwen3-30B-A3B-Instruct-2507-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261022-2100-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2100-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261022-2100-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261022-2100-qwen3-coder-30b-pcc  qwen3-coder-30b-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261022-2100-qwen3-coder-30b-pcc  qwen3-coder-30b-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261022-2149-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2149-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261022-2149-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261022-2149-qwen3-coder-30b-pcc  qwen3-coder-30b-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261022-2149-qwen3-coder-30b-pcc  qwen3-coder-30b-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261022-2202-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2202-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261022-2202-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261022-2202-qwen3-coder-30b-pcc  qwen3-coder-30b-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261022-2202-qwen3-coder-30b-pcc  qwen3-coder-30b-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261022-2234-exaone4-32b-maxabs  exaone4-32b-maxabs/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2234-exaone4-32b-maxabs  exaone4-32b-maxabs/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261022-2234-exaone4-32b-pcc  exaone4-32b-pcc/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261022-2234-exaone4-32b-pcc  exaone4-32b-pcc/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs no
+  sweep-20261022-2234-gemma4-31b-maxabs  gemma4-31b-maxabs/furiosa-ai--gemma-4-31B-it-FP8-block/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2234-gemma4-31b-maxabs  gemma4-31b-maxabs/furiosa-ai--gemma-4-31B-it-FP8-block/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261022-2234-gemma4-31b-pcc  gemma4-31b-pcc/furiosa-ai--gemma-4-31B-it-FP8-block/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261022-2234-llama31-8b-fp8-maxabs  llama31-8b-fp8-maxabs/furiosa-ai--Meta-Llama-3.1-8B-Instruct-FP8-dynamic/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2234-llama31-8b-fp8-maxabs  llama31-8b-fp8-maxabs/furiosa-ai--Meta-Llama-3.1-8B-Instruct-FP8-dynamic/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261022-2234-llama31-8b-fp8-pcc  llama31-8b-fp8-pcc/furiosa-ai--Meta-Llama-3.1-8B-Instruct-FP8-dynamic/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261022-2234-llama31-8b-maxabs  llama31-8b-maxabs/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2234-llama31-8b-pcc  llama31-8b-pcc/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261022-2234-mistral-nemo-maxabs  mistral-nemo-maxabs/furiosa-ai--Mistral-Nemo-Instruct-2407-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2234-mistral-nemo-maxabs  mistral-nemo-maxabs/furiosa-ai--Mistral-Nemo-Instruct-2407-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261022-2234-mistral-nemo-maxabs  mistral-nemo-maxabs/furiosa-ai--Mistral-Nemo-Instruct-2407-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261022-2234-mistral-nemo-pcc  mistral-nemo-pcc/furiosa-ai--Mistral-Nemo-Instruct-2407-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261022-2234-mistral-nemo-pcc  mistral-nemo-pcc/furiosa-ai--Mistral-Nemo-Instruct-2407-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261022-2234-qwen3-30b-instruct-maxabs  qwen3-30b-instruct-maxabs/furiosa-ai--Qwen3-30B-A3B-Instruct-2507-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2234-qwen3-30b-instruct-maxabs  qwen3-30b-instruct-maxabs/furiosa-ai--Qwen3-30B-A3B-Instruct-2507-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261022-2234-qwen3-30b-instruct-maxabs  qwen3-30b-instruct-maxabs/furiosa-ai--Qwen3-30B-A3B-Instruct-2507-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261022-2234-qwen3-30b-instruct-pcc  qwen3-30b-instruct-pcc/furiosa-ai--Qwen3-30B-A3B-Instruct-2507-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261022-2234-qwen3-30b-instruct-pcc  qwen3-30b-instruct-pcc/furiosa-ai--Qwen3-30B-A3B-Instruct-2507-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261022-2234-qwen3-32b-maxabs  qwen3-32b-maxabs/furiosa-ai--Qwen3-32B-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2234-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261022-2234-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261022-2234-qwen3-coder-30b-maxabs  qwen3-coder-30b-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261022-2234-qwen3-coder-30b-pcc  qwen3-coder-30b-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261022-2234-qwen3-coder-30b-pcc  qwen3-coder-30b-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261023-2018-exaone4-32b--fz-maxabs  fz-maxabs/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261023-2018-exaone4-32b--fz-maxabs  fz-maxabs/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261023-2018-exaone4-32b--fz-maxabs  fz-maxabs/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261023-2018-exaone4-32b--fz-pcc  fz-pcc/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261023-2018-exaone4-32b--fz-pcc  fz-pcc/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261023-2018-exaone4-32b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261023-2018-exaone4-32b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261023-2018-exaone4-32b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261023-2018-exaone4-32b--mmfz-pcc  mmfz-pcc/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261023-2018-exaone4-32b--mmfz-pcc  mmfz-pcc/furiosa-ai--EXAONE-4.0-32B-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs no
+  sweep-20261023-2018-llama31-8b--fz-maxabs  fz-maxabs/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261023-2018-llama31-8b--fz-maxabs  fz-maxabs/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261023-2018-llama31-8b--fz-maxabs  fz-maxabs/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261023-2018-llama31-8b--fz-pcc  fz-pcc/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261023-2018-llama31-8b--fz-pcc  fz-pcc/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261023-2018-llama31-8b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261023-2018-llama31-8b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261023-2018-llama31-8b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261023-2018-llama31-8b--mmfz-pcc  mmfz-pcc/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261023-2018-llama31-8b--mmfz-pcc  mmfz-pcc/furiosa-ai--Llama-3.1-8B-Instruct/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261023-2018-qwen3-coder-30b--fz-maxabs  fz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261023-2018-qwen3-coder-30b--fz-maxabs  fz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261023-2018-qwen3-coder-30b--fz-maxabs  fz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261023-2018-qwen3-coder-30b--fz-pcc  fz-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261023-2018-qwen3-coder-30b--fz-pcc  fz-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261023-2018-qwen3-coder-30b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261023-2018-qwen3-coder-30b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261023-2018-qwen3-coder-30b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261023-2018-qwen3-coder-30b--mmfz-pcc  mmfz-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261023-2018-qwen3-coder-30b--mmfz-pcc  mmfz-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261023-2334-qwen3-coder-30b--fz-maxabs  fz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261023-2334-qwen3-coder-30b--fz-maxabs  fz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261023-2334-qwen3-coder-30b--fz-maxabs  fz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261023-2334-qwen3-coder-30b--fz-pcc  fz-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261023-2334-qwen3-coder-30b--fz-pcc  fz-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261023-2334-qwen3-coder-30b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261023-2334-qwen3-coder-30b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261023-2334-qwen3-coder-30b--mmfz-maxabs  mmfz-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/loopback/run01  recurs yes
+  sweep-20261023-2334-qwen3-coder-30b--mmfz-pcc  mmfz-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261023-2334-qwen3-coder-30b--mmfz-pcc  mmfz-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--api-maxabs  api-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--api-maxabs  api-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--api-pcc  api-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--api-pcc  api-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_single_core/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--apirag-maxabs  apirag-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--apirag-maxabs  apirag-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--apirag-pcc  apirag-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--base-maxabs  base-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--base-maxabs  base-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--base-pcc  base-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmapi-maxabs  mmapi-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmapi-maxabs  mmapi-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmapi-pcc  mmapi-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmapirag-maxabs  mmapirag-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmapirag-maxabs  mmapirag-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmapirag-pcc  mmapirag-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmbase-maxabs  mmbase-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmbase-maxabs  mmbase-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmbase-pcc  mmbase-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmrag-maxabs  mmrag-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmrag-maxabs  mmrag-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--mmrag-pcc  mmrag-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--rag-maxabs  rag-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_binary/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--rag-maxabs  rag-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/eltwise_sfpu/run01  recurs yes
+  sweep-20261024-0017-qwen3-coder-30b--rag-pcc  rag-pcc/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/matmul_multi_core/run01  recurs yes
