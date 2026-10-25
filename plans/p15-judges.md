@@ -25,7 +25,7 @@ Decisions taken at planning (the named task records each in the bible with a Dec
 - Calibration statistics (P15.4). Equivalence: the four counts against the oracle outcome, agreement, false-VALID rate (VALID among oracle failures), and false-INVALID rate, each with its Wilson 95% interval. Efficiency: sign accuracy with its Wilson interval, and Spearman's rank correlation per target with a Fisher z interval, since a correlation has no Wilson interval (the row's wording is edited).
 - Measurement noise (P15.8). Each program of a pair runs n = 10 times, interleaved (PROJECTED cost); a measured change has a sign only when the two interquartile ranges do not overlap, else it is "no measurable change", counted and left out of sign accuracy but kept in Spearman.
 
-Owner queue (drafted with this plan; numbers assigned at filing under step 6): OQ-CAL, the calibration sets, their splits, and the measuring host, blocks P15.7; OQ-THR, the reward admission threshold (Risks And Questions, open question 14), blocks P15.11 only; OQ-WIN, the alpha01 batch (one RAPL probe, the efficiency measurements, two RNGD judge runs), which the owner may answer in a working session instead.
+Owner queue (filed 2026-10-25): OQ-090, the calibration sets (answered: (a), development and synthetic items only, measured on alpha01's EPYC), blocked P15.7; OQ-091, the reward admission threshold (Risks And Questions, open question 14), blocks P15.11 only; OQ-092, the alpha01 batch (one RAPL probe, the efficiency measurements, two RNGD judge runs). OQ-089 binds the equivalence judge to llama-3.3-70b and the efficiency judge to gpt-oss-120b, with gpt-oss-120b generating.
 
 ## Tasks
 
@@ -62,18 +62,18 @@ Owner queue (drafted with this plan; numbers assigned at filing under step 6): O
 ### P15.6 Spike: RAPL energy on the host CPUs
 - Bible: Host Facts, Agent Rules 1, 7, 17; OQ-088.
 - Accept: plans/spikes/p15-rapl.md records, with commands and outputs, whether this account can read RAPL energy (powercap domains, energy_uj permissions, counter range, update interval) in the LASSI WSL distro and on alpha01's EPYC; the result enters Host Facts tagged [MEASURED] with a Decision Log entry. If P9's plan holds the same probe, one probe serves both.
-- Host: the LASSI distro (read-only, local); alpha01, one read-only `rx exec` in an owner window (OQ-WIN). Depends: none.
+- Host: the LASSI distro (read-only, local); alpha01, one read-only `rx exec` in an owner window (OQ-092). Depends: none.
 
 ### P15.7 The calibration sets and their freeze
 - Bible: Benchmark Suites (split rules), Agents And Judges (calibration on held-out measured trials), Agent Rule 5.
-- Accept: under OQ-CAL's answer, manifests name each equivalence entry (run id, trial id, trial.json sha256, oracle outcome, generator family) and each efficiency pair (both programs, inputs, build), disjoint from every trial a rubric was checked on (test); a freeze record holds the sets', rubrics', and judge recipes' sha256, and a fast test fails on any difference. Judge recipes under projects/judges/.
+- Accept: under OQ-090's answer, manifests name each equivalence entry (run id, trial id, trial.json sha256, oracle outcome, generator family) and each efficiency pair (both programs, inputs, build), disjoint from every trial a rubric was checked on (test); a freeze record holds the sets', rubrics', and judge recipes' sha256, and a fast test fails on any difference. Judge recipes under projects/judges/.
 - Files: assets/calibration/ (proposed), projects/judges/, tests/judges/, docs/BIBLE.md.
-- Host: Windows; reading run trees on alpha01 needs the owner's window. Depends: P15.2, P15.5. State: OWNER (OQ-CAL).
+- Host: Windows; reading run trees on alpha01 needs the owner's window. Depends: P15.2, P15.5. State: OWNER (OQ-090).
 
 ### P15.8 Host-CPU measurements of the efficiency pairs
 - Bible: Component Interfaces (Profiler), Sandbox, Execution Backends (native), Reporting Rules, Agent Rules 1, 2, 6.
-- Accept: each pair runs through the sandboxed native executor with the timing profiler, and with the host-CPU energy source of P9 where P15.6 finds RAPL readable, under the planning decision's noise rule; load average and CPU frequency governor are recorded; results/p15-cpu-measure/ holds provenance.json (rx pull, or the local writer if OQ-CAL picks the workstation) and summary.md, each value [MEASURED] on the named host CPU.
-- Host: alpha01 in an owner window: `rx doctor`, then a big job (`rx job start --big`, `rx job wait`), `rx pull`. Depends: P15.6, P15.7. State: BLOCKED (owner window on alpha01; OQ-WIN).
+- Accept: each pair runs through the sandboxed native executor with the timing profiler, and with the host-CPU energy source of P9 where P15.6 finds RAPL readable, under the planning decision's noise rule; load average and CPU frequency governor are recorded; results/p15-cpu-measure/ holds provenance.json (rx pull, or the local writer if OQ-090 picks the workstation) and summary.md, each value [MEASURED] on the named host CPU.
+- Host: alpha01 in an owner window: `rx doctor`, then a big job (`rx job start --big`, `rx job wait`), `rx pull`. Depends: P15.6, P15.7. State: BLOCKED (owner window on alpha01; OQ-092).
 
 ### P15.9 Equivalence calibration on oracle outcomes
 - Bible: Model Serving (Serving Rules), Agents And Judges, Evaluation Protocol (the Judges and adversaries row), Agent Rules 8, 13, 14.
@@ -87,8 +87,8 @@ Owner queue (drafted with this plan; numbers assigned at filing under step 6): O
 
 ### P15.11 The reward admission threshold
 - Bible: Agents And Judges (Judge rules), Training Module (Reward Function), Risks And Questions (open question 14).
-- Accept: the owner's answer to OQ-THR is recorded in the bible with a Decision Log entry; `use: reward` is accepted only for a judge whose calibration record passes it (tests), with a bounded weight.
-- Host: Windows. Depends: P15.4. State: OWNER (OQ-THR).
+- Accept: the owner's answer to OQ-091 is recorded in the bible with a Decision Log entry; `use: reward` is accepted only for a judge whose calibration record passes it (tests), with a bounded weight.
+- Host: Windows. Depends: P15.4. State: OWNER (OQ-091).
 
 ### P15.12 Gate part (b): efficiency calibration on MI300X measurements
 - Bible: Build Roadmap (the P15 and P9 rows), Agents And Judges, Evaluation Protocol.

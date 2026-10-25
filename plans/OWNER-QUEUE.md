@@ -1143,3 +1143,66 @@ Options:
 - (c) Llama-3.3-70B-Instruct-FP8-dynamic only.
 Recommendation: (a). The backup and deletion scripts are on the workstation, outside the repository, in C:/Users/Joseph/alpha01-backup-20261025 (backup.sh, then delete-on-alpha01.sh, which asks before each section and offers the models only with MODELS=yes); the agent deletes nothing there.
 Answer: Owner's choice (in the working session, 2026-10-25, about 16:40 EDT; recorded by the agent), after removing the models of 8B to 60B and the home directory's non-project files themselves (a listing at 13:33 on alpha01's clock, rx 20261025-133317-exec-489c, read 346 GB free and a 94G home): "Let's do Llama 70B and GPT-OSS, save the other large models for later testing suggestions." Tonight: furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic and furiosa-ai/gpt-oss-120b at v2026.4 (272.4 GB). For later testing: K-EXAONE-236B-A23B-NVFP4A16 (150.7 GB), Solar-Open-100B-NVFP4A16 (68.6 GB), and EXAONE-4.5-33B-FP8 (43.9 GB), each at v2026.4 on 4 RNGD cards; Qwen3.6-27B-FP8 and Qwen3.6-35B-A3B-FP8 need the v2026.5 SDK, a pin change (Agent Rule 10).
+
+## OQ-088 Opening P9 LASSI-EE And P15 Judges Without Their Hardware
+State: ANSWERED
+Kind: decision
+Blocks: P9 and P15 (their phase rows: P9 on MI300X access, P15 on P9's measurements)
+Evidence: docs/BIBLE.md, Build Roadmap (the P9 row: EE stages, the LASSI-EE power protocol on P17's rocm_smi profiler, the equivalence judge on MI300X; the P15 row: judge interface, equivalence and efficiency judges, rubrics, calibration reports, gated on MI300X measurements) and Project Baselines, LASSI-EE (CUDA on A100, HIP on MI100, power telemetry); OQ-040 (no GPU host).
+Question: The owner, in the working session on 2026-10-25 at about 17:35 EDT: "Get going on Phase 15 without the DF dialect. Work on other phases if possible. I want LASSI-EE up and running too." LASSI-EE refactors CUDA and HIP for energy on GPUs with power telemetry, and no GPU host exists; P15's gate calibrates the efficiency judge on MI300X measurements. What should each mean until GPUs exist?
+Options:
+- (a) LASSI-EE: build the EE stages, the energy protocol, and the equivalence judge now and run them as a labeled CPU port on alpha01's EPYC (energy from RAPL if this account can read it, else wall time labeled not energy), with RNGD models as generators; GPU runs follow when a GPU host exists. P15: judges served on RNGD, calibrated on measured outcomes available now (oracle outcomes for equivalence, host-CPU measurements for efficiency); the MI300X calibration stays a later gate part.
+- (b) Build with stand-ins only and run nothing until a GPU host exists; P15's gate stays on MI300X.
+- (c) A compile-only GPU tier for LASSI-EE; P15 equivalence only.
+Recommendation: (a).
+Answer: Owner's choice (in the working session, 2026-10-25, about 17:40 EDT; recorded by the agent): for LASSI-EE, "Go with recommended, but try and build an energy profile for Tenstorrent, Cerebras, and AMD. At the very least, keep it agnostic."; for P15's gate, "Calibrate on CPU measurements (Recommended)". So: (a), with the energy profiler device-agnostic, behind one interface with backends for the host CPU, AMD GPUs, Tenstorrent, and Cerebras (each measuring where its device and access allow, and declaring when it cannot), and P15 opened without the DF dialect.
+
+## OQ-089 LASSI-EE's CPU Port: The Apps, The Models, And The Scale
+State: ANSWERED
+Kind: decision
+Blocks: P9.7, P9.12, P9.13; the judge bindings of P15.1 and P15.3
+Evidence: plans/p9-ee.md (Owner queue drafts A, B, C); plans/p15-judges.md (Decisions taken at planning, Model families); docs/BIBLE.md, Benchmark Suites (lassi-ee-22), Agents And Judges (Judge rules: a judge from another family than the generator), Evaluation Protocol (the LASSI-EE row: n = 30); OQ-087 (the RNGD models).
+Question: Under OQ-088 (a) the first LASSI-EE run is a labeled CPU port on alpha01's EPYC. Of lassi-ee-22's apps, 18 have an OpenMP version in HeCBench at the bench pin 692cba3; marchingCubes, segment-reduce, and jaccard have only CUDA, HIP, and SYCL versions, and miniMDock is not in HeCBench. Which apps does the port run, which RNGD model generates and which judges, and at what scale (the paper's n = 30 on 18 apps is 540 trials)?
+Options:
+- Apps: (a) the 18 with an OpenMP version at 692cba3, the four named as not ported in every result; (b) the 18 plus OpenMP ports of the four written here, labeled as not upstream.
+- Models: (a) gpt-oss-120b generates and llama-3.3-70b judges equivalence (another family, as Judge rules require), P15's efficiency judge on gpt-oss-120b; (b) the reverse.
+- Scale: (a) a pilot of 1 app x 1 trial projects the run, then n = 30 on a subset the owner picks after the pilot, labeled a subset, run only while the host is otherwise quiet, with load logged; (b) all 18 at n = 30 over several windows; (c) all 18 at n = 5, labeled.
+Recommendation: apps (a), models (a), scale (a).
+Answer: Owner's choice (in the working session, 2026-10-25, about 17:53 EDT; recorded by the agent): apps "The 18 with OpenMP (Recommended)"; models "gpt-oss-120b gen, Llama judge (Recommended)"; scale "Pilot, then a subset at n=30 (Recommended)". So apps (a), models (a), scale (a).
+
+## OQ-090 The Judges' Calibration Sets
+State: ANSWERED
+Kind: decision
+Blocks: P15.7
+Evidence: plans/p15-judges.md (P15.7, P15.8; Decisions taken at planning); docs/BIBLE.md, Agent Rules 5 and 14, Evaluation Splits; OQ-083 (b) (tt-pairs-v0 a development set); OQ-088 (calibrate on CPU measurements).
+Question: P15's gate part (a) calibrates the equivalence judge against oracle outcomes and the efficiency judge against host-CPU measurements. Which items may the calibration sets read?
+Options:
+- (a) Development and synthetic items only: equivalence on tt-pairs-v0 trials (a development set) and P16's seeded and control candidates; efficiency on a new synthetic C++ pair set plus passing tt -> cpp candidates; no HeCBench eval item is read (Agent Rule 5). Measured on alpha01's EPYC.
+- (b) Also the earlier HeCBench trials (eval split), read for measurement only under a freeze: closer to the paper, but eval items would decide a judge's admission, which Agent Rule 5 may reach.
+- (c) Efficiency from P9's CPU-port trials only, so efficiency calibration waits for P9.13.
+Recommendation: (a).
+Answer: Owner's choice (in the working session, 2026-10-25, about 17:53 EDT; recorded by the agent): "Dev and synthetic only (Recommended)". So (a).
+
+## OQ-091 The Judges' Reward Admission Threshold
+State: OPEN
+Kind: decision
+Blocks: P15.11
+Evidence: plans/p15-judges.md (P15.11); docs/BIBLE.md, Risks And Questions (open question 14), Agents And Judges (Judge rules), Agent Rule 14.
+Question: A judge may be bound with `use: reward` only once its calibration record passes a threshold (P15.1 refuses `use: reward` until one is recorded). What threshold admits a judge to reward use, and with what bounded weight?
+Options:
+- (a) Set one now, for example agreement at least 0.90 with the Wilson 95% lower bound at least 0.80 and a false-VALID rate at most 0.05, weight at most 0.2 of the reward: fixed before any calibration number exists.
+- (b) Defer until P15.G's calibration report exists, then choose with the numbers in hand; reward use stays refused meanwhile and nothing else waits on it.
+Recommendation: (b): no training is planned before then, and a threshold chosen after seeing the numbers is still chosen before any reward run.
+Answer:
+
+## OQ-092 An alpha01 Batch For P9 And P15
+State: OPEN
+Kind: access
+Blocks: P9.2, P9.7 (remote test), P9.12 (dry run), P15.6, P15.8, P15.9, P15.10
+Evidence: plans/p9-ee.md (Order of work); plans/p15-judges.md (Hosts, P15.6, P15.8 to P15.10); AGENTS.md Agent Rules 8, 13, and 17.
+Question: P9 and P15 need one owner window after tonight's sweep, in this order: one read-only `rx exec` that reads /sys/class/powercap and the CPU frequency governor (seconds; touches nothing); the remote tests of P9.7 and P9.12 (a mock-LLM dry run on 2 apps x 1 trial, minutes, CPU only); the efficiency measurements of P15.8 (a big job, PROJECTED at under 2 hours, CPU only, the package otherwise quiet); and two RNGD judge runs (P15.9, P15.10: llama-3.3-70b, then gpt-oss-120b, each served on port 8123 on a card that reads 0.00 GiB, about 1 hour each, PROJECTED). When may it run?
+Options:
+- (a) The read-only probe tonight, as one `rx exec` beside the sweep's big job (it reads files only), the rest in the next window the owner books.
+- (b) All of it in the next window the owner books.
+Recommendation: (a), so P9's energy backend is chosen from a measured answer before the next window.
+Answer:

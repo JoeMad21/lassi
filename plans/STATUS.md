@@ -188,11 +188,11 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P15.3 | READY | Judges in runs | P15.1,P15.2 |  |
 | P15.4 | READY | Calibration records, the calibration tool, and its metrics | P15.1 |  |
 | P15.5 | READY | The efficiency judge, explain and predict modes | P15.1,P15.2 |  |
-| P15.6 | READY | Spike: RAPL energy on the host CPUs | - | local half in the LASSI distro; alpha01 half is one read-only rx exec in an owner window (OQ-WIN) |
-| P15.7 | OWNER | The calibration sets and their freeze | P15.2,P15.5 | OQ-CAL: the calibration sets, their splits, and the measuring host |
-| P15.8 | BLOCKED | Host-CPU measurements of the efficiency pairs | P15.6,P15.7 | an owner window on alpha01 (Agent Rule 17; OQ-WIN); a big job |
-| P15.9 | BLOCKED | Equivalence calibration on oracle outcomes | P15.4,P15.7 | an owner window on alpha01 with RNGD (Agent Rules 8 and 17; OQ-WIN), not during the sweep of 2026-10-25, 20:00 to 02:00 |
-| P15.10 | BLOCKED | Efficiency calibration on host-CPU measurements | P15.4,P15.7,P15.8 | an owner window on alpha01 with RNGD (Agent Rules 8 and 17; OQ-WIN) |
-| P15.11 | OWNER | The reward admission threshold | P15.4 | OQ-THR (bible Risks And Questions, open question 14) |
+| P15.6 | READY | Spike: RAPL energy on the host CPUs | - | local half in the LASSI distro; alpha01 half is one read-only rx exec in an owner window (OQ-092) |
+| P15.7 | READY | The calibration sets and their freeze | P15.2,P15.5 | OQ-090 (a): dev and synthetic items only; measured on alpha01's EPYC |
+| P15.8 | BLOCKED | Host-CPU measurements of the efficiency pairs | P15.6,P15.7 | an owner window on alpha01 (Agent Rule 17; OQ-092); a big job |
+| P15.9 | BLOCKED | Equivalence calibration on oracle outcomes | P15.4,P15.7 | an owner window on alpha01 with RNGD (Agent Rules 8 and 17; OQ-092), not during the sweep of 2026-10-25, 20:00 to 02:00 |
+| P15.10 | BLOCKED | Efficiency calibration on host-CPU measurements | P15.4,P15.7,P15.8 | an owner window on alpha01 with RNGD (Agent Rules 8 and 17; OQ-092) |
+| P15.11 | OWNER | The reward admission threshold | P15.4 | OQ-091 (bible Risks And Questions, open question 14) |
 | P15.12 | BLOCKED | Gate part (b): efficiency calibration on MI300X measurements | P15.10 | MI300X access (OQ-040) and P9's MI300X measurements |
 | P15.G | READY | Phase gate, part (a): equivalence on oracle outcomes, efficiency on host-CPU measurements | P15.9,P15.10 |  |
