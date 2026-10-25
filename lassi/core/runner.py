@@ -9,7 +9,23 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    lassi.core.adversary_stage (task P16.5), and lassi.scoring, which
    registers every ScoreProfile);
 2. refuses what it cannot run, before any directory is created or any model
-   is asked: arms without a model (the model registry that maps arms to
+   is asked: first, right after the recipe loads, a bound executor (the
+   single one, or one bound for any language) that declares `silicon`
+   (lassi.core.capabilities SILICON, the tt_silicon executor's; task
+   P17.16) when a listed stage declares `computes_reward`, even with the
+   human start; when a listed stage runs model-generated code
+   (`runs_model_code`, as run_loop declares) or an adversary's proposals
+   (`runs_proposals`), even with the human start, naming OQ-078 (the
+   sandbox does not keep a program from host memory under the cards'
+   identity IOMMU domain, so until the owner answers, silicon runs only
+   tracked references a human starts; plans/spikes/tt-card-dma.md); and
+   otherwise unless RunOptions.silicon is True, which only
+   `lassi run <recipe> --silicon` sets: silicon runs are evaluation runs a
+   human starts, and RL rewards never execute on silicon (Agent Rule 9;
+   OQ-075 (6a)). A recipe cannot set it, no environment variable stands in
+   for it, and every refusal comes before any executor is built, so nothing
+   reads the cards' files in a run a human did not start (_check_silicon).
+   Then: arms without a model (the model registry that maps arms to
    backends comes later) and arms beside a model; a recipe with no
    llm.sampling.max_tokens or no prompt set, since it never picks a value;
    a fix toggle turned off (faithful: true turns them all off) when no
@@ -321,8 +337,10 @@ from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and
 from lassi.core.adversary_stage import ADVERSARY_KIND, RUNS_PROPOSALS, adversary_binding, budget_inputs
 from lassi.core.capabilities import (
     ALIGNS_OUTPUT_FILES,
+    COMPUTES_REWARD,
     DEVICE_KEY,
     MODEL_CHECK,
+    SILICON,
     SIMULATOR,
     SUPPORTS_POWER,
     TAKES_DEVICE,
@@ -477,6 +495,11 @@ class RunOptions:
     - probes: the device probes by kind (lassi.core.devices, task P17.2);
       None means lassi.core.devices.DEFAULT_PROBES, the host probes that
       lassi.executors registers.
+    - silicon: the human start of a silicon run (task P17.16; Agent Rule 9;
+      OQ-075 (6a)); only `lassi run --silicon` sets it, never a recipe or
+      an environment variable. False refuses every executor that declares
+      `silicon`, and True still refuses one beside a reward or beside model
+      output (OQ-078; _check_silicon).
     """
 
     runs_root: Path | None = None
@@ -487,6 +510,7 @@ class RunOptions:
     roots: Sequence[Path] | None = None
     observer: Observer | None = None
     probes: Mapping[str, DeviceProbe] | None = None
+    silicon: bool = False
 
 
 # The options run_recipe uses when none are given: every field falls back as RunOptions says.
@@ -666,6 +690,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     """Load and check the recipe, build its components, and create the run directory; RunError before any mkdir."""
     registry = DEFAULT_REGISTRY if options.registry is None else options.registry
     recipe = _load(path, options, registry)
+    _check_silicon(recipe, registry, options.silicon)
     settings = _settings(recipe)
     runs_root = resolve_runs_root(options.runs_root, recipe)
     run_dir = runs_root / RUNS_DIR / run_id_for(options.run_id, started)
@@ -1435,6 +1460,65 @@ def _check_sandbox(recipe: Recipe) -> None:
             f"{recipe.path}: sandbox.mem_gb is {memory!r}, but an executor that runs programs needs a number of GB "
             "above 0; set it in the recipe"
         )
+
+
+def _check_silicon(recipe: Recipe, registry: Registry, silicon: bool) -> None:
+    """Refuse a silicon executor in a run a human did not start, in a run with a reward, or beside model output.
+
+    Each bound executor that declares SILICON, in the single form or for
+    any language, is refused when a listed stage declares COMPUTES_REWARD,
+    or runs model-generated code or an adversary's proposals
+    (_model_output_stage), whatever `silicon` says, and otherwise unless
+    `silicon` (RunOptions, set only by `lassi run --silicon`) is True: RL
+    rewards never execute on silicon, and silicon runs are evaluation runs a
+    human starts (Agent Rule 9; OQ-075 (6a)). Model output waits on OQ-078:
+    under the cards' identity IOMMU domain a program holding a card can
+    reach host memory through the card's DMA, which the sandbox cannot stop
+    (plans/spikes/tt-card-dma.md), so until the owner answers, silicon runs
+    only tracked references a human starts (its recommendation (c)). The
+    runner reads the capabilities and the attribute, never a name (Agent
+    Rule 3), and builds nothing here.
+    """
+    for binding in recipe.bindings:
+        if binding.interface != "Executor" or SILICON not in registry.get("Executor", binding.name).capabilities:
+            continue
+        named = f"Executor {binding.name!r} ({binding.where})"
+        for stage in recipe.data["stages"]:
+            if COMPUTES_REWARD in registry.get("Stage", stage).capabilities:
+                raise RunError(
+                    f"{recipe.path}: stage {stage!r} computes a reward, and {named} runs programs on silicon; RL "
+                    "rewards never execute on silicon, with or without --silicon (Agent Rule 9)"
+                )
+        found = _model_output_stage(recipe, registry)
+        if found is not None:
+            stage, what = found
+            raise RunError(
+                f"{recipe.path}: stage {stage!r} runs {what}, and {named} runs programs on silicon, where the sandbox "
+                "does not keep a program from host memory (a card's DMA under the cards' identity IOMMU domain; "
+                "plans/spikes/tt-card-dma.md); until OQ-078 is answered, silicon runs only tracked references a "
+                "human starts, with or without --silicon"
+            )
+        if not silicon:
+            raise RunError(
+                f"{recipe.path}: {named} runs programs on silicon, and silicon runs are evaluation runs a human starts "
+                "(Agent Rule 9): start this run with `lassi run <recipe> --silicon`, which no recipe can set and no "
+                "unattended session passes"
+            )
+
+
+def _model_output_stage(recipe: Recipe, registry: Registry) -> tuple[str, str] | None:
+    """Return the first listed stage that runs model output, with what it runs, or None when none does.
+
+    A stage runs model output when its factory declares `runs_model_code`
+    (run_loop) or its entry declares RUNS_PROPOSALS (the adversary stage).
+    """
+    for stage in recipe.data["stages"]:
+        entry = registry.get("Stage", stage)
+        if getattr(entry.factory, "runs_model_code", False):
+            return stage, "model-generated code"
+        if RUNS_PROPOSALS in entry.capabilities:
+            return stage, "an adversary's proposals"
+    return None
 
 
 def _check_sandboxed(recipe: Recipe, registry: Registry, binding: Binding, capabilities: frozenset[str]) -> None:

@@ -1090,3 +1090,16 @@ Options:
 - (c) Count all of it as prompt tuning: stop proposing corrections from these outcomes, and run new features only on items assigned to train in P7. Consequence: P17.27 stops, and the corrections' results in the matrix of 2026-10-25 are exploratory only.
 Recommendation: (b), since it states what the corrections have been doing in practice: the five items' outcomes proposed P17.24 to P17.27, so naming them a development set says so plainly, and a fresh held-out set keeps a clean evaluation possible. Until you answer, P17.27 waits (OWNER), and results on these items say the corrections were proposed from them.
 Answer:
+
+## OQ-084 A Kernel JIT Failure On Silicon Quarantines Every Card
+State: OPEN
+Kind: decision
+Blocks: Tier A with the cards in the loop (P17.17's third part), which also waits on OQ-078; nothing before that
+Evidence: lassi/executors/tt_silicon.py (task P17.16; the module docstring, item on the quarantine marker); OQ-075 (3a), your approved choice: after a hang, kill, or crash, quarantine every card the run held until a human clears a marker; docs/BIBLE.md, Result Record, Trial.requests (compile_loop corrects a kernel JIT failure as a compile error, so candidates that fail to JIT are an expected part of a sweep; how often they did on ttsim is not counted here).
+Question: tt-metal reports a kernel that fails to JIT-compile by aborting the host program, exit status 134 (SIGABRT) on ttsim (plans/spikes/p4-ttsim-runtime.md, the jit-error case; assumed, unmeasured, on silicon), which the executor cannot tell from a crash, so under (3a) it quarantines every Wormhole card until a human removes the marker. Silicon runs of references only (all that OQ-078 allows now) do not hit this, since the references compile. Once model output runs on silicon, the first candidate kernel that fails to compile would stop every later silicon run until someone clears the marker. Should a kernel JIT failure count as a crash?
+Options:
+- (a) Keep it as built: every status outside 0 to 127 quarantines, a JIT abort included. Consequence: the safest reading of (3a); a Tier A run on silicon stops at its first kernel compile error and needs a human after each one.
+- (b) Treat an abort whose stderr shows tt-metal's kernel JIT failure before the device ran any kernel as a failed build, with no quarantine, and quarantine every other ending as now. Consequence: model-output sweeps on silicon become practical; the executor must recognize that failure from text the program can also print, so a hostile candidate could imitate it to dodge the quarantine; a design and tests, then a bible entry.
+- (c) Compile every candidate's kernels on ttsim first (the ttsim executor's JIT), and send to silicon only candidates whose kernels built there, keeping (a) on silicon. Consequence: no JIT failure reaches the cards in practice; a candidate is built twice; a runner change.
+Recommendation: (c) when model output first runs on silicon, since it keeps (3a) as you chose and costs only a second build; (a) until then, which is what is built.
+Answer:

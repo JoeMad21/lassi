@@ -49,6 +49,16 @@ SIMULATOR = "simulator"
 # note into the run's error text after the hang diagnostic) share one name without importing each other.
 WATCHER_CODE = "watcher"
 
+# The capability of an Executor that runs programs on accelerator silicon (task P17.16; the tt_silicon executor), which
+# only a human starts (Agent Rule 9). The runner reads it, never the executor's name: it refuses such an executor
+# unless RunOptions.silicon is True, which only `lassi run --silicon` sets, and the train layer refuses a reward that
+# names one. It is not SIMULATOR, so no stage or page labels its runs as simulator runs.
+SILICON = "silicon"
+# The capability of a Stage that computes a training reward (a name for the reward stages of later phases). A run that
+# lists such a stage refuses every Executor that declares SILICON, with the human start too: RL rewards never execute
+# on silicon (Agent Rule 9).
+COMPUTES_REWARD = "computes_reward"
+
 # The capability of an Oracle that compares a run's output files (RunResult.output_files, one lassi_io array per
 # file) instead of its stdout; it provides the OutputFileOracle methods below. For such an Oracle the oracle stage
 # aligns output files, and baseline and run_loop keep each run's output files in the binary store

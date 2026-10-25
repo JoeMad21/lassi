@@ -165,7 +165,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P16.G | READY | Phase gate: adversary finds oracle-confirmed divergences on seeded faulty candidates | P16.4,P16.6,P16.7,P16.9,P16.10 | the phase's state after a pass follows OQ-069 |
 | P16.13 | DONE | The replay backend bound from a recipe | - | model.recording under tests/fixtures/, its sha256 in the resolved recipe, checked again when the runner builds replay; bible Project Recipes Notes and Decision Log 2026-10-20 (master rev 311) |
 | P17.15 | DONE | The sandbox's Tenstorrent exposure: every card in the cluster | - | exposure built and audited; its remote tests have not run on Linux yet (a window); bible master rev 339 |
-| P17.16 | READY | The tt_silicon executor | P17.15 |  |
+| P17.16 | DONE | The tt_silicon executor | P17.15 | tt_silicon executor, fakes only; model output refused until OQ-078; bible master rev 367 |
 | P17.17 | BLOCKED | Silicon qualification and Tier A with the cards in the loop | P17.16 | the owner's window of 2026-10-23, 20:00 to 24:00 EDT; OQ-075 |
 | P17.18 | DONE | tt-train-v0: training records from tt-metal's non-test examples | - | tt-train-v0 (8 records) and data.corpus; audited; bible master rev 345 |
 | P17.19 | DONE | Trainer modes: pinned Hub bases, cuda:0, full, LoRA, prompt tuning, from scratch | P17.18 | CPU only (the title's cuda:0 is superseded by the owner's direction of 2026-10-23): Hub and scratch bases, prompt_tuning, four recipes, hf_local checkpoints; no run yet |

@@ -297,6 +297,14 @@ def sample_spec(sandbox: ModuleType, **overrides: object) -> object:
     return sandbox.SandboxSpec(**values)
 
 
+def copy_back_error(sandbox: ModuleType) -> type:
+    """Return sandbox.SandboxCopyBackError, failing the test clearly while task P17.16 has not added it."""
+    found = getattr(sandbox, "SandboxCopyBackError", None)
+    if not isinstance(found, type):
+        pytest.fail("lassi.executors.sandbox has no SandboxCopyBackError yet (task P17.16)")
+    return found
+
+
 def script_of(command: list[str]) -> str:
     """Return the script element of a sandbox command: the element after "sh", "-c"."""
     start = command.index("sh")
@@ -706,6 +714,9 @@ def test_sandbox_result_fields_and_error_type(sandbox: ModuleType) -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
         result.hang = True  # type: ignore[misc]
     assert issubclass(sandbox.SandboxUnavailableError, RuntimeError)
+    # The one SandboxUnavailableError raised after the program ran (task P17.16), so every catch of the base class
+    # keeps working while the tt_silicon executor keeps its quarantine for it (OQ-075 (3a)).
+    assert issubclass(copy_back_error(sandbox), sandbox.SandboxUnavailableError)
 
 
 def test_module_docstring_states_the_mechanism_and_cites_the_spike(sandbox: ModuleType) -> None:
@@ -2332,6 +2343,7 @@ def test_run_raises_sandbox_unavailable_when_setup_never_reached_the_program(
     runner = FakeRunner(returncode=returncode, stdout="", stderr=stderr, ready=False)
     with pytest.raises(sandbox.SandboxUnavailableError, match="did not run") as caught:
         sandbox.Sandbox(runner=runner).run(sample_spec(sandbox), PROGRAM, ONE_SECOND)
+    assert not isinstance(caught.value, copy_back_error(sandbox)), "the program never started"
     assert f"exit status {returncode}" in str(caught.value)
     assert stderr.strip() in str(caught.value)
     assert len(runner.calls) == 1
@@ -2403,6 +2415,7 @@ def test_run_raises_when_the_setup_ended_without_finishing_the_copy_back(
     runner = FakeRunner(returncode=returncode, stderr=program_stderr, done=False)
     with pytest.raises(sandbox.SandboxUnavailableError, match="copy-back") as caught:
         sandbox.Sandbox(runner=runner).run(sample_spec(sandbox), PROGRAM, ONE_SECOND)
+    assert isinstance(caught.value, copy_back_error(sandbox)), "the one case raised after the program ran"
     assert f"exit status {returncode}" in str(caught.value)
 
 
@@ -2592,6 +2605,7 @@ def test_run_turns_any_os_error_starting_the_command_into_sandbox_unavailable(
     runner = FakeRunner(error=error)
     with pytest.raises(sandbox.SandboxUnavailableError, match="cannot start") as caught:
         sandbox.Sandbox(runner=runner).run(sample_spec(sandbox), PROGRAM, ONE_SECOND)
+    assert not isinstance(caught.value, copy_back_error(sandbox)), "the program never started"
     assert caught.value.__cause__ is error
     assert error.strerror in str(caught.value) and "nothing ran" in str(caught.value)
     if error.filename:

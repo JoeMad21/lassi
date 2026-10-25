@@ -1,6 +1,6 @@
 """The `lassi` command line: run a recipe, score a finished run, change settings, train, and read corpus tables.
 
-    lassi [--graphics on|off] run <recipe> [--runs-root P] [--run-id ID] [--bench-root P]
+    lassi [--graphics on|off] run <recipe> [--runs-root P] [--run-id ID] [--bench-root P] [--silicon]
     lassi [--graphics on|off] score <run dir> --profile NAME [--profile NAME ...] [--score-id ID]
           [--bench-root P] [--runs-root P]
     lassi [--graphics on|off] settings graphics [on|off]
@@ -31,7 +31,15 @@ suite's fetched sources under $LASSI_SCRATCH. The command prints one line per
 trial and the run directory. It exits 0 on success, and 2 with the message
 on stderr when the recipe does not load (RecipeError), the run cannot start
 (RunError), or the sandbox is not available (SandboxUnavailableError).
-With graphics on it also shows the live inference table on stderr
+Its flag --silicon is the human start of a silicon run (task P17.16;
+OQ-075 (6a)): it sets RunOptions.silicon, without which the runner
+refuses any executor that declares `silicon` (the tt_silicon executor),
+since silicon runs are evaluation runs a human starts (Agent Rule 9); with
+it the runner still refuses one beside a reward stage, and, until OQ-078
+is answered, beside a stage that runs model-generated code or an
+adversary's proposals. Only this command takes it: no recipe key and no
+environment variable stands in for it, and an unattended session never
+passes it. With graphics on it also shows the live inference table on stderr
 (lassi.present.live): the runner gets a LiveTable as its progress observer
 (RunOptions.observer), as wide as stderr's terminal and one line less than
 its height (COLUMNS and LINES when they are set to whole numbers above 0;
@@ -140,6 +148,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--runs-root", type=Path, help="the runs root (default: $LASSI_RUNS_ROOT, then the recipe's)")
     run.add_argument("--run-id", help="the run directory's name (default: the UTC start time, YYYYMMDD-HHMMSS)")
     run.add_argument("--bench-root", type=Path, help="the suite's fetched sources (default: under $LASSI_SCRATCH)")
+    run.add_argument(
+        "--silicon", action="store_true",
+        help="start a run on silicon: a human's start, which no recipe can set (Agent Rule 9; default: off)",
+    )
     score = commands.add_parser("score", help="score a finished run and write its review packet")
     score.add_argument("run_dir", type=Path, help="the run directory, <runs root>/runs/<run id>")
     score.add_argument(
@@ -252,7 +264,10 @@ def _run(args: argparse.Namespace, *, graphics: bool) -> int:
     observer, ticked while the run goes on; with it off, no observer.
     """
     table = _live_table() if graphics else None
-    options = RunOptions(runs_root=args.runs_root, run_id=args.run_id, bench_root=args.bench_root, observer=table)
+    options = RunOptions(
+        runs_root=args.runs_root, run_id=args.run_id, bench_root=args.bench_root, observer=table,
+        silicon=args.silicon,
+    )
     try:
         with nullcontext() if table is None else ticking(table):
             run_recipe(args.recipe, options)

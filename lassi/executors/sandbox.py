@@ -184,9 +184,13 @@ setup that exited normally after the program without its done line (the
 copy-back did not finish): the EXIT trap puts a line of the setup's own
 after anything the program printed, so a done line the program printed
 itself never ends stderr then, and a done line counts only after a normal
-exit, since a signal death means the setup died before its own. After a
-signal death (the backstop, a memory kill of the setup, or the runner's own
-timeout) the result is returned as classified, with workdir_incomplete set.
+exit, since a signal death means the setup died before its own. That one is
+SandboxCopyBackError, the only subclass of SandboxUnavailableError, and the
+only one raised after the program ran (task P17.16: the tt_silicon executor
+keeps its cards quarantined for it, OQ-075 (3a)); every catch of the base
+class still catches it. After a signal death (the backstop, a memory kill of
+the setup, or the runner's own timeout) the result is returned as
+classified, with workdir_incomplete set.
 Only timeout's own failure (status 125), a failed exec of timeout right
 after the marker (a "lassi-sandbox confine:" line and status 1), and, when
 the spec sets the program's environment, env's own failure (125) or its
@@ -1168,8 +1172,19 @@ class SandboxUnavailableError(RuntimeError):
 
     A tool or the workdir is missing, setup failed or found a writable host
     mount, no root is hidden, or the setup ran the program but did not finish
-    the copy-back. The program did not run, or its result is not reported,
+    the copy-back (SandboxCopyBackError, the one case raised after the
+    program ran). The program did not run, or its result is not reported,
     and nothing is ever run unsandboxed instead.
+    """
+
+
+class SandboxCopyBackError(SandboxUnavailableError):
+    """The setup ran the program, then exited normally without finishing the copy-back of its workdir.
+
+    It is the only SandboxUnavailableError raised after the program ran, so
+    a caller that must know whether a program ran (the tt_silicon executor's
+    quarantine, task P17.16; OQ-075 (3a)) catches it first; every other one
+    means the program never started.
     """
 
 
@@ -1881,7 +1896,8 @@ class Sandbox:
         lacks the ready line (the setup or the confinement failed before it,
         so the program never ran), and when the ready line is there but the
         done line is not while the runner saw a normal exit (the copy-back
-        did not finish); the message quotes the stderr. After a signal death
+        did not finish, after the program ran: SandboxCopyBackError, its
+        subclass); the message quotes the stderr. After a signal death
         or the runner's own timeout, the whole sandbox was killed, and the
         result is returned as classified.
         """
@@ -1900,7 +1916,7 @@ class Sandbox:
         exited = result.returncode >= 0
         steps, incomplete, stderr = _split_done(stderr) if exited else (None, False, stderr)
         if exited and steps is None:
-            raise SandboxUnavailableError(_copy_back_failure(result))
+            raise SandboxCopyBackError(_copy_back_failure(result))
         returncode = _shell_status(result.returncode, elapsed, timeout_s)
         measured = elapsed if steps is None else (steps + 1) / UPTIME_STEPS_PER_S
         hang, killed = classify(returncode, measured, wall)

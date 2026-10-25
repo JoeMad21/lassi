@@ -3,6 +3,12 @@
 run_training(path, options) loads a train recipe (lassi.core.recipe
 load_train_recipe) and, before any directory exists, refuses:
 
+- a reward whose reward.executor names an Executor that declares `silicon`
+  (lassi.core.capabilities SILICON, the tt_silicon executor's; task P17.16),
+  naming it and Agent Rule 9, first, so the refusal stands once the reward
+  is carried out: RL rewards never execute on silicon (Agent Rule 9;
+  Training Module, Safeguards). The registry entry is read, never the name,
+  and nothing is built; `lassi train` takes no human start (--silicon);
 - a key this layer does not carry out yet (NOT_CARRIED_OUT), naming every
   one the recipe sets, in that order;
 - a runs root or train directory outside the run tree's location rules
@@ -48,6 +54,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
+from lassi.core.capabilities import SILICON
 from lassi.core.devices import DEFAULT_PROBES, DeviceProbe, FrameworkBuild, device_driver
 from lassi.core.digest import tree_sha256
 from lassi.core.interfaces import TrainData, TrainJob, TrainResult
@@ -180,6 +187,7 @@ def _prepare(path: Path, options: TrainOptions, started: datetime) -> _Training:
     """
     registry = DEFAULT_REGISTRY if options.registry is None else options.registry
     recipe = load_train_recipe(path, roots=options.roots, registry=registry)
+    _check_reward_executor(recipe, registry)
     _check_carried_out(recipe)
     runs_root = resolve_runs_root(options.runs_root, recipe)
     train_dir = runs_root / TRAIN_DIR / run_id_for(options.train_id, started)
@@ -214,6 +222,22 @@ def _make_train_dir(train_dir: Path) -> None:
         train_dir.mkdir(parents=True)
     except FileExistsError:
         raise RunError(f"the train directory {train_dir} already exists; choose another train id") from None
+
+
+def _check_reward_executor(recipe: Recipe, registry: Registry) -> None:
+    """Refuse a reward on an Executor that declares SILICON, naming it and Agent Rule 9; nothing is built.
+
+    An executor the registry does not hold is left to the other refusals.
+    """
+    reward = recipe.data.get("reward")
+    name = reward.get("executor") if isinstance(reward, Mapping) else None
+    if not isinstance(name, str) or name not in registry.names("Executor"):
+        return
+    if SILICON in registry.get("Executor", name).capabilities:
+        raise RunError(
+            f"{recipe.path}: reward.executor names Executor {name!r}, which runs programs on silicon; RL rewards "
+            "never execute on silicon (Agent Rule 9; Training Module, Safeguards), so name ttsim or native"
+        )
 
 
 def _check_carried_out(recipe: Recipe) -> None:

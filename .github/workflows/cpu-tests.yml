@@ -67,3 +67,5 @@ jobs:
           tests/core/test_recipe.py
           tests/core/test_interfaces.py
           tests/train
+          tests/executors/test_tt_silicon.py
+          tests/core/test_runner_silicon.py

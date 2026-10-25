@@ -10,13 +10,19 @@ lassi.core.registry.DEFAULT_REGISTRY:
 - "gpu" (gpu.GpuExecutor): runs a built GPU artifact on the GPUs its
   device section names, with only their nodes exposed in the sandbox
   (task P17.5).
+- "tt_silicon" (tt_silicon.TtSiliconExecutor): runs a TT host program on
+  every Wormhole card of the host, with every card exposed in the
+  sandbox; only a run a human starts with `lassi run --silicon` builds
+  it (task P17.16; Agent Rule 9).
 
 Each executor names the device its programs run on with device(), one
 non-empty line of printable ASCII with no leading or trailing blank, which
 starts no process (task P4.5): "none (compile only)" for none; the host
 CPU with its model for native; ttsim with its pin and the pinned
 tt-metal, as a simulator, for ttsim; and the kind, each GPU's index and
-name, and the driver, read at construction, for gpu.
+name, and the driver, read at construction, for gpu; and the cards, each
+card's serial and firmware, the driver, and the pinned tt-metal, read at
+construction, as silicon, for tt_silicon.
 
 Importing it also registers the host device probes (devices.CpuProbe,
 RocmProbe, and CudaProbe; task P17.2) in lassi.core.devices.DEFAULT_PROBES
@@ -30,7 +36,7 @@ sandbox_command, and classify. lassi.executors.workdir gives each attempt
 its build directory under the runs root.
 """
 
-from lassi.executors import devices, gpu, native, none, sandbox, ttsim
+from lassi.executors import devices, gpu, native, none, sandbox, tt_silicon, ttsim
 from lassi.executors.gpu import GpuExecutor
 from lassi.executors.native import NativeExecutor
 from lassi.executors.none import NoneExecutor
@@ -42,6 +48,7 @@ from lassi.executors.sandbox import (
     classify,
     sandbox_command,
 )
+from lassi.executors.tt_silicon import TtSiliconExecutor
 from lassi.executors.ttsim import TtsimExecutor
 
 __all__ = [
@@ -52,6 +59,7 @@ __all__ = [
     "SandboxResult",
     "SandboxSpec",
     "SandboxUnavailableError",
+    "TtSiliconExecutor",
     "TtsimExecutor",
     "classify",
     "devices",
@@ -60,5 +68,6 @@ __all__ = [
     "none",
     "sandbox",
     "sandbox_command",
+    "tt_silicon",
     "ttsim",
 ]
