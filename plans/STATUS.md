@@ -23,7 +23,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P12 Language Frontends | p12-frontends | ACTIVE | base: p5-ir at 7772e13 (P5 stalled on OQ-056's install, not merged); plan plans/p12-frontends.md; OQ-057 (xlang-v0 items, sources, splits, Fortran; bible question 10), OQ-058 (which phase builds cgeist's CUDA path), and OQ-059 (xDSL as a pinned dependency) filed 2026-10-17 |
 | P13 Cerebras Target | p13-cerebras | BLOCKED | Cerebras SDK access incoming on the owner's side (OQ-004, 2026-09-23) |
 | P14 Furiosa Target | p14-furiosa | BLOCKED | RNGD host answered (OQ-001); TCL authoring; the owner records here when the phase may start |
-| P15 Judges | p15-judges | BLOCKED | P9 for measurements |
+| P15 Judges | p15-judges | ACTIVE | base e43a1e0 on p16-adversarial; the owner opened it 2026-10-25 without the DF dialect, OQ-088 |
 | P16 Adversarial | p16-adversarial | ACTIVE | base: p12-frontends at cdc0e73 (P12 stalled behind P5's builds, not merged); plan plans/p16-adversarial.md; branch route PHASE-NOTES P16; OQ-067 (Tier A's C++ side in the gate; adv-seeded-v0's splits), OQ-068 (the LLM adversary's model), and OQ-069 (P16's state after its gate) filed 2026-10-18; P4 blocker cleared (owner, 2026-10-15, OQ-055 decision 12 (b); recorded by the agent): P4 DONE, PR 4 merged; part (b) BLOCKED on P8 |
 | P17 Portable Stack | p17-portable | ACTIVE | base: main at 0dcc261 (P4 DONE, PR 4 merged); plan plans/p17-portable.md; owner review OQ-043 answered 2026-10-05; gate part (a) passed in P17.11 (results/p17-gate-a on branch p17-portable, 5b0cf72; approvals on OQ-047), and PR 5 'P17 Portable Stack, part (a)' is open; stalled: P17.12, P17.13, and P17.G BLOCKED with no GPU host (OQ-040); the workstation's RTX 3080 serves only P17.12's spike, with no model inference or training, once the cuda extra and cuda@12.6.3 are installed under a local root (OQ-055 decision 8 (b)); P5 started 2026-10-07 from p17-portable at 7f920d7 |
 | P18 TurboQuant Tier B | p18-turboquant | BLOCKED | separate project (TurboQuant), deferred by the owner on 2026-10-11 and 2026-10-18 for later incorporation (OQ-048, OQ-066); P5.13 and P5.14 go with it |
@@ -182,3 +182,17 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.30 | DONE | Exact declarations at generation, nearest names, and the full API pack (opt-in) | P17.26 | lookup at generation (core, core_api.txt), nearest names, tt-metalium-5280a9cf-full; bible master rev 372 |
 | P17.31 | READY | The development split for tt-pairs-v0 (OQ-083 (b)) | - |  |
 | P17.32 | READY | The night window of 2026-10-25: the sweep with the new features on 70B-class models | P17.29,P17.30 |  |
+| P15.0 | DONE | Plan phase P15 into plans/p15-judges.md and add its tasks here | - | plan plans/p15-judges.md; base e43a1e0 on p16-adversarial; OQ-CAL, OQ-THR, OQ-WIN drafted (numbers at filing) |
+| P15.1 | READY | The Judge interface, rubrics, and judge records | - |  |
+| P15.2 | READY | The equivalence judge | P15.1 | P9 consumes the interface and this judge |
+| P15.3 | READY | Judges in runs | P15.1,P15.2 |  |
+| P15.4 | READY | Calibration records, the calibration tool, and its metrics | P15.1 |  |
+| P15.5 | READY | The efficiency judge, explain and predict modes | P15.1,P15.2 |  |
+| P15.6 | READY | Spike: RAPL energy on the host CPUs | - | local half in the LASSI distro; alpha01 half is one read-only rx exec in an owner window (OQ-WIN) |
+| P15.7 | OWNER | The calibration sets and their freeze | P15.2,P15.5 | OQ-CAL: the calibration sets, their splits, and the measuring host |
+| P15.8 | BLOCKED | Host-CPU measurements of the efficiency pairs | P15.6,P15.7 | an owner window on alpha01 (Agent Rule 17; OQ-WIN); a big job |
+| P15.9 | BLOCKED | Equivalence calibration on oracle outcomes | P15.4,P15.7 | an owner window on alpha01 with RNGD (Agent Rules 8 and 17; OQ-WIN), not during the sweep of 2026-10-25, 20:00 to 02:00 |
+| P15.10 | BLOCKED | Efficiency calibration on host-CPU measurements | P15.4,P15.7,P15.8 | an owner window on alpha01 with RNGD (Agent Rules 8 and 17; OQ-WIN) |
+| P15.11 | OWNER | The reward admission threshold | P15.4 | OQ-THR (bible Risks And Questions, open question 14) |
+| P15.12 | BLOCKED | Gate part (b): efficiency calibration on MI300X measurements | P15.10 | MI300X access (OQ-040) and P9's MI300X measurements |
+| P15.G | READY | Phase gate, part (a): equivalence on oracle outcomes, efficiency on host-CPU measurements | P15.9,P15.10 |  |
