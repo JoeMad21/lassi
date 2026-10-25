@@ -1206,3 +1206,16 @@ Options:
 - (b) All of it in the next window the owner books.
 Recommendation: (a), so P9's energy backend is chosen from a measured answer before the next window.
 Answer:
+
+## OQ-093 What Tenstorrent Power LASSI-EE Reports
+State: OPEN
+Kind: decision
+Blocks: P9.6 (the Tenstorrent half of the power protocol); P9.5 builds option (a) behind a config value with no default
+Evidence: plans/spikes/p9-tt-power.md
+Question: At the pins, the only Tenstorrent power that a sampler can read without opening a card's /dev/tenstorrent node is the driver's hwmon power1_input: the core power (TDP word) of each n300's PCIe-attached chip, in whole watts, refreshed at an interval no source at the pins states for Wormhole. It omits the n300's second chip and the board's input power. Those (firmware tag 54, and the remote chip's telemetry) are reachable only by opening the node, messaging the ARC, and reading over the NOC, as tt-smi and luwen do where the firmware publishes them (tt-smi 6.8.0 shows tag 54 as N/A on Wormhole). Which Tenstorrent power should LASSI-EE report?
+Options:
+- (a) The sysfs core power of each placed card's PCIe chip, labeled exactly so ("PCIe-chip core power, 1 W resolution"), summed over the cards a run places on. Consequence: no node open, no ARC message, and Agent Rule 9 holds; but the figure under-reports n300 board energy (second chip, board overhead), so it compares only Tenstorrent runs with each other, never Tenstorrent against GPU board power.
+- (b) Board input power and both chips, read through UMD in a separate process that opens the node once per run and reads telemetry over the NOC every interval. Consequence: a second open of the node during the placement, NOC traffic beside the run, an ARC message at start, and a sampler in a loop on an open device. That needs an owner ruling under Agent Rule 9, and it is unverified whether bundle 19.5.0.0 publishes tag 54 on Wormhole.
+- (c) No Tenstorrent energy in LASSI-EE: backend tt declares it cannot measure, like cerebras. Consequence: no Tenstorrent energy results until a board-level meter exists.
+Recommendation: (a). It is the only source that keeps Agent Rule 9 by construction. Its scope is stated, so no figure is mislabeled, and the read-only sysfs probe (spike, Finding 7) can confirm it in the next owner window.
+Answer:

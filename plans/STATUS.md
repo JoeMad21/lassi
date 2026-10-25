@@ -184,7 +184,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.32 | READY | The night window of 2026-10-25: the sweep with the new features on 70B-class models | P17.29,P17.30 |  |
 | P9.1 | READY | The energy seam and the CPU backends (rapl, wall) | - |  |
 | P9.2 | READY | Spike: CPU energy telemetry on alpha01, and the excess-files inventory | - | local source reading first; one read-only rx exec waits for the owner's yes (Agent Rule 17; OQ-092) |
-| P9.3 | READY | Spike: Tenstorrent power telemetry at the pins | - | source reading only; no probe of the cards |
+| P9.3 | DONE | Spike: Tenstorrent power telemetry at the pins | - | plans/spikes/p9-tt-power.md: hwmon power1_input via sysfs, no device open (Agent Rule 9 holds); core power only; OQ-093; bible rev 378 |
 | P9.4 | READY | AMD and NVIDIA backends on the seam | P9.1 |  |
 | P9.5 | READY | Tenstorrent and Cerebras backends | P9.1,P9.3 |  |
 | P9.6 | READY | The LASSI-EE power protocol | P9.1 |  |
