@@ -18,9 +18,9 @@ The events, in the order a trial sends them (EVENT_KINDS):
 - request-sent (REQUEST_SENT): a stage, before each model call, once its
   messages are in the text store and before the reply is recorded, with
   `stage`, the stage the Request is recorded under;
-- attempt (ATTEMPT): a stage, after generate or a correction appends an
-  attempt and after compile_loop builds or run_loop runs the last attempt,
-  with `stage`;
+- attempt (ATTEMPT): a stage, after generate, a correction, or a restart
+  appends an attempt and after compile_loop builds or run_loop runs the
+  last attempt, with `stage`;
 - trial-end (TRIAL_END): the runner, once per trial, after the trial is
   scored and written, carrying the trial as written.
 
@@ -61,7 +61,9 @@ class ProgressEvent:
     """One progress event: its kind (one of EVENT_KINDS) and the trial as it stands.
 
     `stage` is the registered stage name on stage-start, request-sent, and
-    attempt events. The runner sets the other four on each trial-start
+    attempt events, or "restart" for a restart's request-sent and attempt
+    events, the name its Request is recorded under (lassi.core.stages
+    RESTART; task P17.25). The runner sets the other four on each trial-start
     event: `run_id`, the run directory's name; `number`, the trial's 1-based
     place in the run; `count`, the run's trial count; and `source`, the
     item's files in the direction's source language (file name -> text, as

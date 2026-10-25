@@ -160,6 +160,22 @@ The runner checks either kind before any model is asked.
   such correction), and with a template set whose MISMATCH_PROMPT does not
   render.
 
+  Restarts (loop.restart_after; task P17.25). An opt-in departure from
+  upstream, whose loop never asks a fresh generation; the loader refuses
+  it under faithful: true and past loop.max_corrections, the runner with a
+  fragment set, and with it absent nothing here changes. A correction is
+  a request after attempt 0's that is not a restart, and it failed when
+  its attempt did not reach a clean run (S5; failed_corrections, read from
+  the record). When the last loop.restart_after requests since attempt 0
+  or the last restart were corrections that all failed, and compile_loop
+  or run_loop would ask for another, it asks for a restart instead
+  (_restarted): attempt 0's prompt sent again byte for byte, recorded
+  under its own stage name, RESTART, whose reply becomes the next attempt,
+  built, run, and corrected like any other. A restart is not a
+  correction, so the count starts again after it, and after a correction
+  that reached a clean run. Restarts and corrections share the one count
+  and cap, checked before a restart, so none comes past the cap.
+
   Profiles (task P17.7). When the recipe binds a profiler
   (RunContext.profiler), every attempt run is profiled, whatever its
   outcome (profiled_run): start() right after the backend's unload, then
@@ -234,7 +250,7 @@ references, the attempt its reply became (None for a context request), and
 the reply as kept. A correction is recorded under the loop stage that asked
 for it: compile_loop for a compile error (a kernel JIT failure included),
 run_loop for a failed run or, under loop.correct_on_mismatch, an oracle
-mismatch. An
+mismatch; a restart under RESTART, whichever loop asked for it. An
 attempt's own `invalid-text` warning stays on the attempt; Trial.context
 carries no diagnostics, so a context reply that held a lone surrogate gives
 its request one parse-stage `invalid-text` warning.
@@ -242,9 +258,10 @@ its request one parse-stage `invalid-text` warning.
 A request the backend refuses as past the model's context
 (lassi.core.interfaces ContextExceeded, task P17.4) ends the trial with
 `context-exceeded` (_context_end), the message naming the stage: generate,
-summarize_context, describe_source, and the correction of compile_loop and
-run_loop each catch it around their one model call. Every earlier attempt
-and request stays, no attempt or request is added for the refused call, and
+summarize_context, describe_source, the correction of compile_loop and
+run_loop, and a restart (RESTART) each catch it around their one model
+call. Every earlier attempt and request stays, no attempt or request is
+added for the refused call, and
 nothing is built or run again; the runner then runs no later stage and goes
 on to the next trial.
 
@@ -252,7 +269,8 @@ Progress events (lassi.core.progress, task P4.8) go to RunContext.observer
 when there is one, and nothing a stage does depends on them: before each
 model call, once its messages are stored, a request-sent event with the
 trial before the request is recorded (_send); an attempt event after
-generate or a correction appends an attempt (with its request recorded),
+generate, a correction, or a restart appends an attempt (with its request
+recorded; each event names the stage the request is recorded under),
 after compile_loop builds the last attempt (_build_last; the event carries
 the host-compute reading), and after run_loop runs it (_run_last). Later
 changes (run_loop's `stale-output` warning, its oracle-mismatch reading,
@@ -370,7 +388,7 @@ from lassi.core.interfaces import (
     Toolchain,
 )
 from lassi.core.progress import ATTEMPT, REQUEST_SENT, Observer, notify
-from lassi.core.recipe import RETRIEVAL, RETRIEVAL_CORRECT, RETRIEVAL_GENERATE, Recipe
+from lassi.core.recipe import RESTART_AFTER, RETRIEVAL, RETRIEVAL_CORRECT, RETRIEVAL_GENERATE, Recipe
 from lassi.core.record import (
     GUARD_NOT_CHECKED,
     NO_GUARD,
@@ -483,6 +501,9 @@ STALE_OUTPUT = "stale-output"
 ORACLE_MISMATCH = "oracle-mismatch"
 # The opt-in key of the loop section (lassi.core.recipe LOOP_OPT_INS) that feeds an oracle mismatch back.
 CORRECT_ON_MISMATCH = "correct_on_mismatch"
+# The stage name of a restart's Request and progress events (loop.restart_after, task P17.25): its own, never the
+# name of the loop that asked for it.
+RESTART = "restart"
 # Each RunResult flag run_loop records, with the code and the message of the run-stage warning it becomes.
 RUN_FLAGS = {
     "stdout_truncated": (
@@ -690,6 +711,47 @@ def corrects_on_mismatch(context: RunContext) -> bool:
     faithful: true.
     """
     return context.recipe.data.get("loop", {}).get(CORRECT_ON_MISMATCH, False) is True
+
+
+def restart_after(context: RunContext) -> int | None:
+    """Return loop.restart_after (lassi.core.recipe RESTART_AFTER), or None when the recipe does not set it.
+
+    The key is off when absent. The loader refuses it under faithful: true
+    and past loop.max_corrections, and the runner with a fragment set.
+    """
+    value = context.recipe.data.get("loop", {}).get(RESTART_AFTER)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def failed_corrections(trial: Trial) -> int:
+    """Return how many corrections in a row, back from the last request, failed to reach a clean run (task P17.25).
+
+    A correction is a request after attempt 0's that is not a restart; it
+    failed when the attempt its reply became did not reach RAN_CLEAN (S5;
+    a clean run that failed the oracle under loop.correct_on_mismatch did
+    reach it). The count stops at attempt 0's request, a restart, or a
+    correction that reached a clean run. It is read from the record, since
+    each stage object is built anew (run_loop builds its own compile_loop).
+    """
+    count = 0
+    for request in reversed(trial.requests or []):
+        index = request.attempt_index
+        if not index or request.stage == RESTART or trial.attempts[index].stage_reached == RAN_CLEAN:
+            break
+        count += 1
+    return count
+
+
+def restart_due(context: RunContext, trial: Trial) -> bool:
+    """Return True when loop.restart_after is set and that many corrections in a row failed (failed_corrections)."""
+    after = restart_after(context)
+    return after is not None and failed_corrections(trial) >= after
+
+
+def restarts_described(context: RunContext) -> str:
+    """Return what compile_loop's and run_loop's describe() add for loop.restart_after: "" when it is not set."""
+    after = restart_after(context)
+    return "" if after is None else f", a restart from attempt 0's prompt after {after} failed correction(s) in a row"
 
 
 def extract_on(context: RunContext, name: str) -> bool:
@@ -1759,8 +1821,9 @@ class CompileLoopStage:
         carries an error: "no-artifact" when the toolchain reported none,
         and "unwritable" when a file name could not be written. While the
         latest attempt has an error and is not S4, the stage asks for a
-        correction (_correction), appends the reply with its diff from the
-        previous files and records the request, and builds that. When the
+        correction (_correction; a restart when loop.restart_after makes one
+        due, _corrected), appends the reply with its diff from the previous
+        files and records the request, and builds that. When the
         cap (corrections are the attempts after the first) stops the loop
         with an error remaining, final.end_reason is set to
         `correction-cap`. A cap of None never stops the loop.
@@ -1793,7 +1856,8 @@ class CompileLoopStage:
         errors = "parsed diagnostics" if fix_on(context, "parsed_diagnostics") else "the raw compiler stderr"
         return (
             f"compile_loop: build {context.direction.target} with {builder}, then correct from {source} with "
-            f"{errors} while an error remains ({limit}){passages_described(context, RETRIEVAL_CORRECT)}"
+            f"{errors} while an error remains ({limit}{restarts_described(context)})"
+            f"{passages_described(context, RETRIEVAL_CORRECT)}"
         )
 
     @staticmethod
@@ -2072,7 +2136,7 @@ class RunLoopStage:
         passages = passages_described(context, RETRIEVAL_CORRECT)
         return (
             f"run_loop: run {gate} and correct each failed run{mismatch}, sharing compile_loop's correction count"
-            f"{passages}"
+            f"{restarts_described(context)}{passages}"
         )
 
     def _run_last(self, trial: Trial) -> tuple[Trial, RunResult, Limits]:
@@ -2351,8 +2415,12 @@ def _corrected(
     attempt 0 (_reply_attempt), and the attempt keeps its diff from the last
     attempt's files; the request keeps the blocks' note. A request the
     backend refuses as past its context (ContextExceeded) ends the trial at
-    CONTEXT_EXCEEDED instead, with no attempt appended (_context_end).
+    CONTEXT_EXCEEDED instead, with no attempt appended (_context_end). When
+    a restart is due (restart_due, loop.restart_after), the request is a
+    restart in place of the correction (_restarted).
     """
+    if restart_due(context, trial):
+        return _restarted(context, trial, stage, expected)
     previous = trial.attempts[-1]
     system, prompt = _correction_messages(context, previous, expected, errors, run_error=run_error, mismatch=mismatch)
     passages: list[Passage] = []
@@ -2371,6 +2439,40 @@ def _corrected(
         context, trial.with_attempt(attempt), stage, attempt.index, messages, attempt.response_text, notes
     )
     notify(context.observer, ATTEMPT, trial, stage)
+    return trial
+
+
+def _restarted(context: RunContext, trial: Trial, asking: str, expected: Sequence[str]) -> Trial:
+    """Return `trial` with a restart appended: attempt 0's prompt sent again, recorded under RESTART (task P17.25).
+
+    The one user message is attempt 0's prompt byte for byte, read back from
+    the text store: generate.txt as attempt 0 had it, its context blocks
+    included, with no previous files, diagnostics, or run report. The
+    request keeps the notes attempt 0's request kept (its passages' note).
+    The reply is read as generate reads attempt 0 (_reply_attempt), the
+    attempt keeps its diff from the last attempt's files, and the
+    request-sent and attempt events name RESTART. A fragment set raises
+    ValueError naming `asking`, the loop that asked (the runner refuses the
+    key first). A request past the model's context ends the trial at
+    CONTEXT_EXCEEDED (_context_end), with no attempt appended.
+    """
+    first, previous = trial.attempts[0], trial.attempts[-1]
+    if context.fragments or first.prompt_ref is None:
+        raise ValueError(
+            f"{trial.trial_id}: {asking} is due a restart (loop.{RESTART_AFTER}), which sends attempt 0's template "
+            "prompt again, but the prompt set is a fragment set or attempt 0 kept no prompt"
+        )
+    notes = next((request.diagnostics for request in trial.requests or [] if request.attempt_index == 0), [])
+    try:
+        messages, reply = _send(context, trial, RESTART, context.store.get(first.prompt_ref))
+    except ContextExceeded as error:
+        return _context_end(trial, RESTART, error)
+    attempt = _reply_attempt(context, previous.index + 1, messages[-1].ref, reply, expected)
+    attempt = dataclasses.replace(attempt, diff_from_previous=unified_diff(previous.files, attempt.files))
+    trial = _recorded(
+        context, trial.with_attempt(attempt), RESTART, attempt.index, messages, attempt.response_text, notes
+    )
+    notify(context.observer, ATTEMPT, trial, RESTART)
     return trial
 
 

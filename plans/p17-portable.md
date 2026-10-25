@@ -234,7 +234,7 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Host: Windows for the tool and its tests; alpha01 in a window to read the records (one rx run). Depends: none.
 
 ### P17.25 Restarts: a fresh generation after N failed corrections (opt-in)
-- Added on 2026-10-25 from the same evidence: every pass came at correction 0 to 4, and no trial stuck at a build error recovered later.
+- Added on 2026-10-25 from the same evidence: in the sweep passes of 2026-10-23 and 2026-10-24 the three cpp -> tt passes came at corrections 0, 0, and 4 (the 4 in the fourth pass, rx 20261022-222829-rngd-sweep4-chain-cf48), every tt -> cpp pass at 0, and no other cpp -> tt trial reached a clean run before the cap (the fifth pass's tables, which hold the earlier passes' rows).
 - Bible: Component Interfaces (the loop), Project Recipes (Loop opt-ins), Agent Rules 1 and 4.
 - Accept: an opt-in loop key (restart_after, an int from 1 to the cap) under which, after that many corrections without a clean run, the next request is a fresh generation from generate.txt instead of a correction, the count and cap unchanged; refused under faithful: true; off when absent, so every recipe keeps its prompts and hash; each restart recorded as a request of its own kind; tests first.
 - Files: lassi/core/stages.py, lassi/core/recipe.py, lassi/core/runner.py, tests/core/.

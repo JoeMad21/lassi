@@ -15,7 +15,8 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
 6. applies the faithful overrides (bible, Project Recipes Notes; Design Principle 4);
 7. checks types and required choices, never picking a value for a choice left open, and refuses an EXTRACT
    leniency set true under faithful: true or with fixes.fence_tag off (_check_extract), a LOOP_OPT_INS key
-   set true under faithful: true (_check_loop), naming its key, and a `retrieval` section (task P17.22: every
+   set true (restart_after: set at all) under faithful: true, and a loop.restart_after past loop.max_corrections
+   (_check_loop; task P17.25), naming its key, and a `retrieval` section (task P17.22: every
    key required, k and max_chars within RETRIEVAL_K and RETRIEVAL_MAX_CHARS, prompts distinct RETRIEVAL_PROMPTS)
    under faithful: true (_check_retrieval);
 8. binds components and checks their capabilities without constructing any (Component Interfaces), the
@@ -138,17 +139,26 @@ EXTRACT: dict[str, str] = {
     ),
 }
 
-# Every opt-in key of the loop section beside max_corrections, each a bool, and what turning it on changes. Like an
-# extract leniency, each is off when absent and the loader materializes none, so a recipe without one keeps its
-# resolved recipe and hash. None is upstream behavior: upstream's loop corrects only compile errors and failed runs,
-# so one set true is refused under faithful: true (_check_loop), never turned off silently.
+# Every opt-in key of the loop section beside max_corrections, each a bool but RESTART_AFTER, and what turning it on
+# changes. Like an extract leniency, each is off when absent and the loader materializes none, so a recipe without one
+# keeps its resolved recipe and hash. None is upstream behavior: upstream's loop corrects only compile errors and
+# failed runs, and never asks a fresh generation, so a bool set true, or RESTART_AFTER set at all, is refused under
+# faithful: true (_check_loop), never turned off silently.
 LOOP_OPT_INS: dict[str, str] = {
     "correct_on_mismatch": (
         "ask for a correction after a clean run whose output files fail the oracle on the held-out inputs (an output"
         " outside its threshold, or a missing or extra one), from a coarse per-output report (OQ-077), within"
         " loop.max_corrections; off ends the loop at the first clean run, as upstream's loop does"
     ),
+    "restart_after": (
+        "after that many corrections in a row that each failed to reach a clean run, ask for a fresh generation from"
+        " attempt 0's prompt in place of the next correction, within loop.max_corrections; absent, every request"
+        " after attempt 0 is a correction, as in upstream's loop"
+    ),
 }
+# The one LOOP_OPT_INS key that is an int (task P17.25): from 1 to the resolved loop.max_corrections, both included,
+# or any int of at least 1 when the loop is uncapped. The schema checks the type and _check_loop the cap.
+RESTART_AFTER = "restart_after"
 
 # The optional retrieval section (task P17.22): documentation passages from an index before the prompts it lists
 # (lassi.core.stages). Off when absent, and never materialized, so a recipe without it keeps its resolved recipe and
@@ -571,7 +581,10 @@ SCHEMA = _Fields(
         "fixes": _Fields({name: _BOOL for name in FIXES}),
         "extract": _Fields({name: _BOOL for name in EXTRACT}),  # opt-in leniencies; absent means off
         "llm": _Fields({"sampling": _Fields({"temperature": _NUMBER, "top_p": _NUMBER, "max_tokens": _INT})}),
-        "loop": _Fields({"max_corrections": _CORRECTIONS, **{name: _BOOL for name in LOOP_OPT_INS}}),  # opt-ins off
+        # opt-ins off when absent; RESTART_AFTER is the one int among them (task P17.25)
+        "loop": _Fields(
+            {"max_corrections": _CORRECTIONS, **{name: _BOOL for name in LOOP_OPT_INS}, RESTART_AFTER: _AT_LEAST_ONE}
+        ),
         "trials": _Fields({"n": _AT_LEAST_ONE}),
         "runs_root": _STR,
         "sandbox": _Fields({"network": _BOOL, "wall_s": _NUMBER_OR_STR, "mem_gb": _NUMBER}),
@@ -1274,19 +1287,34 @@ def _check_extract(path: Path, data: Mapping[str, Any]) -> None:
 
 
 def _check_loop(path: Path, data: Mapping[str, Any]) -> None:
-    """Refuse a LOOP_OPT_INS key set true under faithful: true, naming it: upstream's loop has no such correction.
+    """Refuse a LOOP_OPT_INS key under faithful: true, naming it, and a RESTART_AFTER past the correction cap.
 
-    Upstream corrects only compile errors and failed runs (Design Principle
-    4, Agent Rule 4). Runs after the type check, so the loop section maps
-    known names to their types. A key set false, or absent, is never refused.
+    Upstream corrects only compile errors and failed runs, and never asks a
+    fresh generation (Design Principle 4, Agent Rule 4), so under faithful:
+    true a bool key set true, or RESTART_AFTER set at all, is refused. Runs
+    after the type check, so the loop section maps known names to their
+    types. A bool set false, or a key absent, is never refused.
+    RESTART_AFTER, an int of at least 1 by then, may not pass the resolved
+    loop.max_corrections; an uncapped loop takes any such int.
     """
+    loop = data["loop"]
     for name in sorted(LOOP_OPT_INS):
-        if data["loop"].get(name) is not True or data["faithful"] is not True:
+        value = loop.get(name)
+        if not (value is True or (name == RESTART_AFTER and value is not None)) or data["faithful"] is not True:
             continue
         key = f"loop.{name}"
         raise RecipeError(
-            f"{path}: {key} is true, but faithful: true reproduces upstream, whose loop corrects only compile errors "
-            f"and failed runs; a recipe with faithful: true may not set it, so remove {key} or set faithful: false"
+            f"{path}: {key} is {'true' if value is True else value}, but faithful: true reproduces upstream, whose "
+            "loop corrects only compile errors and failed runs and never restarts; a recipe with faithful: true may "
+            f"not set it, so remove {key} or set faithful: false"
+        )
+    after, cap = loop.get(RESTART_AFTER), loop["max_corrections"]
+    if after is not None and cap != UNCAPPED and after > cap:
+        key = f"loop.{RESTART_AFTER}"
+        fits = f"set {key} from 1 to {cap}, or remove it" if cap else f"the loop asks no correction, so remove {key}"
+        raise RecipeError(
+            f"{path}: {key} is {after}, past loop.max_corrections, {cap}, so no restart could come within the cap; "
+            f"{fits}"
         )
 
 

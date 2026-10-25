@@ -38,7 +38,8 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    passage.txt (RETRIEVAL_PROMPTS) is missing or does not render, or with
    a corpus whose manifest is missing or whose index file is missing or
    fails the manifest's sha256 (_retrieval_index, which loads the index
-   once per run); a project (the recipe's `project`, the first
+   once per run); loop.restart_after (task P17.25) with a fragment set
+   (_check_restart); a project (the recipe's `project`, the first
    trial id segment) that is not one plain segment or that names an entry
    of the run tree; trial ids that repeat; missing bench sources; an
    item with more than one source file under a fragment set, or more than
@@ -341,6 +342,7 @@ from lassi.core.progress import STAGE_START, TRIAL_END, TRIAL_START, GuardedObse
 from lassi.core.recipe import (
     RECORDING_KEY,
     RECORDING_SHA256_KEY,
+    RESTART_AFTER,
     RETRIEVAL,
     UNCAPPED,
     Recipe,
@@ -1610,8 +1612,8 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     runs before any model call, so no stage that asks the model
     (_asks_model) comes before it. The prompts are checked by _check_prompts,
     loop.correct_on_mismatch by _check_mismatch, a template set's context by
-    _check_template_context, and the retrieval section's prompts by
-    _check_retrieval_prompts.
+    _check_template_context, the retrieval section's prompts by
+    _check_retrieval_prompts, and loop.restart_after by _check_restart.
     """
     entries = [registry.get("Stage", name) for name in recipe.data["stages"]]
     _check_fixes(recipe, entries)
@@ -1645,6 +1647,23 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     _check_mismatch(recipe, registry, entries, settings)
     _check_template_context(recipe, entries, settings)
     _check_retrieval_prompts(recipe, settings)
+    _check_restart(recipe, settings)
+
+
+def _check_restart(recipe: Recipe, settings: _Settings) -> None:
+    """Refuse loop.restart_after with a fragment prompt set (task P17.25; lassi.core.stages, restarts).
+
+    A restart sends attempt 0's prompt again, generate.txt as a template
+    set renders it; a fragment set holds upstream's prompts, whose loop
+    never restarts. A recipe without the key is never checked.
+    """
+    key = f"loop.{RESTART_AFTER}"
+    if RESTART_AFTER in recipe.data["loop"] and settings.fragments:
+        raise RunError(
+            f"{recipe.path}: {key} is set, but {settings.prompts!r} is a fragment prompt set, upstream's prompts, "
+            f"whose loop never restarts; a restart sends generate.txt, which only a template set holds, so use a "
+            f"template set or remove {key}"
+        )
 
 
 def _check_template_context(recipe: Recipe, entries: Sequence[Any], settings: _Settings) -> None:

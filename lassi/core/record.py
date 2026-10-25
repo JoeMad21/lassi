@@ -466,7 +466,10 @@ class Request:
     """One model call of a trial, in Trial.requests at position `index`.
 
     `stage` is the registered name of the stage that sent it (a correction
-    names the loop stage that asked for it). `attempt_index` is the attempt
+    names the loop stage that asked for it), or "restart" for a fresh
+    generation that loop.restart_after asks in place of a correction
+    (lassi.core.stages RESTART; task P17.25), whichever loop asked for it;
+    its attempt's prompt_ref is attempt 0's. `attempt_index` is the attempt
     the reply became, and None for a request whose reply fills Trial.context.
     `messages` holds every message sent, in order, system messages included,
     each by text-store reference; `reply_ref` is the reply as kept, each lone
