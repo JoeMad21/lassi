@@ -134,7 +134,11 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    declares `supports_power` without `takes_device`, and a power profiler
    beside a profiled executor (the single one, or each target language's
    that runs programs) whose device section does not name the profiler's
-   kind and indices, naming profiler.device and that executor's key.
+   kind and indices, naming profiler.device and that executor's key; a
+   power profiler on device kind cpu (task P9.1) is accepted beside a
+   profiled executor that takes no device section only when it declares
+   `runs_on_host_cpu` (the native executor), and a simulator is still
+   refused first.
    A stage it does not implement already fails at load, unregistered;
 3. builds the components: the backend as factory(model.id, **config), whose
    config holds the model section's keys other than backend, id, and
@@ -233,12 +237,18 @@ host), resolve inside it (Agent Rule 7). The tree holds:
   changed, so a trial and its manifest never disagree. For a backend that
   declares `model_check`, `serving` holds its serving record
   (lassi.llm._serving: base_url, the model entry less its volatile fields,
-  version, and version_from), which the trials do not copy;
+  version, and version_from), which the trials do not copy. For a profiler
+  that defines telemetry() (the energy profiler, task P9.1), `telemetry`
+  holds its record (profiler, backend, measures, label, and what the
+  backend read, such as the powercap zones), which the trials do not copy
+  either;
 - run.md: the page a person reads (Readability Standards, Run row). Its
   summary shows the manifest's provenance, with an unknown value (null) as
   "-" as trial.md shows it, since provenance is not a measurement; with
   executors per language, one Device row per language; with `serving`, a
-  Server row after the Driver row (lassi.llm.serving_line). When a direction's
+  Server row after the Driver row (lassi.llm.serving_line); with
+  `telemetry`, a Telemetry row after that, naming what the profiler
+  measures and its label. When a direction's
   target language, or its source language when the baseline runs the
   source reference too, runs on an executor that declares `simulator`
   (lassi.core.capabilities SIMULATOR), its Trials section opens with a
@@ -325,6 +335,7 @@ itself.
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import platform
 import re
@@ -339,7 +350,7 @@ from typing import Any
 
 from lassi import (
     agents,  # noqa: F401  (registers the Agents fuzzer and llm, the adversaries)
-    profilers,  # noqa: F401  (registers the Profilers timing, nvml, and rocm_smi)
+    profilers,  # noqa: F401  (registers the Profilers timing, nvml, rocm_smi, and energy)
 )
 from lassi.analysis.guard_coverage import coverage_markdown, guard_coverage
 from lassi.bench import Direction, Suite, load_suite, sources_dir
@@ -352,6 +363,7 @@ from lassi.core.capabilities import (
     DEVICE_KEY,
     MODEL_CHECK,
     REASONING_EFFORT,
+    RUNS_ON_HOST_CPU,
     SILICON,
     SIMULATOR,
     SUPPORTS_POWER,
@@ -644,8 +656,10 @@ class _Run:
     (probe_devices). `serving` is the backend's serving record when it declares
     model_check, else None (_served_model). `profiler` is the run's one
     Profiler, built before the first trial (_built_profiler), or None when
-    the recipe binds none. `retrieval` is the run's one documentation index
-    (_retrieval_index), or None when the recipe sets no retrieval section.
+    the recipe binds none, and `telemetry` its telemetry() record, or None
+    when it defines none (_profiler_telemetry). `retrieval` is the run's
+    one documentation index (_retrieval_index), or None when the recipe
+    sets no retrieval section.
     `examples` is the run's worked examples pack (_examples_pack), empty
     when the recipe sets no examples section.
     """
@@ -669,6 +683,7 @@ class _Run:
     devices: tuple[DeviceRecord, ...] = ()
     serving: Mapping[str, Any] | None = None
     profiler: Profiler | None = None
+    telemetry: Mapping[str, Any] | None = None
     retrieval: Index | None = None
     examples: tuple[examples_pack.Example, ...] = ()
 
@@ -738,6 +753,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
     executors = _executors(recipe, registry, settings)
     profiler = _built_profiler(recipe, registry)
+    telemetry = _profiler_telemetry(recipe, profiler)
     pins, target_pins = _run_pins(recipe, settings, toolchains, executors)
     commit, dirty = git_state()
     try:
@@ -764,6 +780,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         devices=devices,
         serving=serving,
         profiler=profiler,
+        telemetry=telemetry,
         retrieval=retrieval,
         examples=examples,
     )
@@ -847,8 +864,10 @@ def _check_profiler(recipe: Recipe, registry: Registry, settings: _Settings, dev
     simulator, whose timing is never performance (Agent Rule 2); a profiler
     that declares supports_power without takes_device; and, for one that
     declares supports_power, a profiled executor that does not run on the
-    profiler's device (_check_power_device). It runs after the probes, so
-    the profiler's own device (profiler.device) is one this host has.
+    profiler's device (_check_power_device; on device kind cpu, one that
+    takes no device section must declare runs_on_host_cpu). It runs after
+    the probes, so the profiler's own device (profiler.device) is one this
+    host has.
     """
     binding = _profiler_binding(recipe)
     if binding is None:
@@ -924,8 +943,20 @@ def _check_power_device(
     run of the run is on the GPU whose power is read and none is measured on
     one GPU while it runs on another. The message names profiler.device and
     the executor's device key, or its binding path when it takes no device.
+    For a profiler on device kind cpu (task P9.1), an executor that takes no
+    device section passes when it declares runs_on_host_cpu, since its
+    programs run on the host CPU. The executor does not pin a run to the
+    package a counter backend reads, so on a host with more than one
+    package an attempt may run on another one (P9.6).
     """
     named = " ".join([held.kind, *(str(index) for index in held.indices)])
+    if held.kind == "cpu" and TAKES_DEVICE not in entry.capabilities:
+        if RUNS_ON_HOST_CPU in entry.capabilities:
+            return
+        raise RunError(
+            f"{recipe.path}: {held.key} names cpu, but Executor {entry.name!r} ({executor.where}) declares neither "
+            f"{RUNS_ON_HOST_CPU!r} nor a device section, so its runs are not on the host CPU"
+        )
     if TAKES_DEVICE not in entry.capabilities:
         raise RunError(
             f"{recipe.path}: {held.key} names {named}, but Executor {entry.name!r} ({executor.where}) takes no "
@@ -966,6 +997,29 @@ def _built_profiler(recipe: Recipe, registry: Registry) -> Profiler | None:
     except ValueError as error:
         raise RunError(
             f"{recipe.path}: Profiler {entry.name!r} ({binding.where}) refused its settings: {error}"
+        ) from None
+
+
+def _profiler_telemetry(recipe: Recipe, profiler: Profiler | None) -> dict[str, Any] | None:
+    """Return the built profiler's telemetry() record for provenance.json, or None when it defines none.
+
+    Task P9.1. The record must be a mapping with string keys and JSON
+    values (the energy profiler's: profiler, backend, measures, label, and
+    what its backend read); anything else is a RunError naming the profiler,
+    before any directory exists.
+    """
+    method = getattr(profiler, "telemetry", None)
+    if profiler is None or not callable(method):
+        return None
+    name = getattr(profiler, "name", type(profiler).__name__)
+    record = method()
+    try:
+        if not isinstance(record, Mapping) or not all(isinstance(key, str) for key in record):
+            raise TypeError(f"{type(record).__name__} is not a mapping with string keys")
+        return json.loads(json.dumps(dict(record), allow_nan=False))
+    except (TypeError, ValueError) as error:
+        raise RunError(
+            f"{recipe.path}: Profiler {name!r} gave a telemetry record outside the contract: {error}"
         ) from None
 
 
@@ -3030,7 +3084,9 @@ def _provenance(run: _Run) -> dict[str, Any]:
     none; task P17.2), and `driver` the distinct drivers those records name,
     joined by "; " (lassi.core.devices.device_driver), null when none names
     one. `serving` holds the backend's serving record when it declares
-    model_check (task P17.3; _served_model) and is absent otherwise.
+    model_check (task P17.3; _served_model) and is absent otherwise, and
+    `telemetry` the profiler's telemetry() record (task P9.1;
+    _profiler_telemetry), absent when it defines none.
     """
     pins = dataclasses.asdict(run.pins)
     return {
@@ -3049,6 +3105,7 @@ def _provenance(run: _Run) -> dict[str, Any]:
         "driver": device_driver(run.devices),
         "device_records": [dataclasses.asdict(item) for item in run.devices],
         **({} if run.serving is None else {"serving": dict(run.serving)}),
+        **({} if run.telemetry is None else {"telemetry": dict(run.telemetry)}),
         "started_utc": _utc(run.started),
         "finished_utc": None,
         "pins": {name: version for name, version in pins.items() if version is not None},
@@ -3187,6 +3244,16 @@ def _serving_rows(provenance: Mapping[str, Any]) -> list[tuple[str, str]]:
     return [("Server", serving_line(provenance["serving"]))]
 
 
+def _telemetry_rows(provenance: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Return run.md's Telemetry row when provenance has `telemetry`: profiler, backend, measures, and label."""
+    if "telemetry" not in provenance:
+        return []
+    record = provenance["telemetry"]
+    text = f"{record.get('profiler')} {record.get('backend')}: measures {record.get('measures')}"
+    label = record.get("label")
+    return [("Telemetry", text if label is None else f"{text} ({label})")]
+
+
 def _run_md(
     run: _Run, provenance: Mapping[str, Any], trials: Sequence[Trial], metrics: RunMetrics | None = None
 ) -> str:
@@ -3208,6 +3275,7 @@ def _run_md(
         *_executor_rows(provenance),
         ("Driver", fmt_provenance(provenance["driver"])),
         *_serving_rows(provenance),
+        *_telemetry_rows(provenance),
         ("Started (UTC)", provenance["started_utc"]),
         ("Finished (UTC)", fmt(provenance["finished_utc"])),
         ("Trials", str(len(trials))),

@@ -106,6 +106,13 @@ RUNS_CODE = "runs_code"
 # refuses, before any directory exists, such a profiler without TAKES_DEVICE, or one beside a profiled executor that
 # runs on another device; run_loop refuses power values from a profiler that does not declare it.
 SUPPORTS_POWER = "supports_power"
+# The capability of an Executor whose programs run on the host CPU (task P9.1; the native executor). The runner reads
+# it, never the executor's name: a power profiler whose device section names kind cpu (the energy profiler's rapl or
+# wall backend) is accepted beside a profiled executor that takes no device section only when that executor declares
+# it, so every profiled attempt runs on the host CPU. A simulator is refused first (Agent Rule 2). The native
+# executor does not pin its runs to the package rapl reads: on a host with more than one package (alpha01 has
+# two) an attempt may run on another, and rapl's values are that package's, not the attempt's (P9.6).
+RUNS_ON_HOST_CPU = "runs_on_host_cpu"
 
 # The capability of an Agent that is an adversary (task P16.2; bible Agents And Judges, the Adversary role;
 # Adversarial Setups, item 1): it provides propose(view) (Adversary below). A recipe's adversary section binds an

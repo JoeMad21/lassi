@@ -48,6 +48,18 @@ The contract these tests fix:
 - Recipes without a profiler keep their resolved recipes and hashes (the
   loader adds no profiler; tests/core/test_single_executor_golden.py and
   tests/core/test_recipe.py pin the hashes) and record null profiles.
+- Task P9.1 (OQ-088): lassi.core.capabilities RUNS_ON_HOST_CPU is
+  "runs_on_host_cpu", which the native executor alone declares. A power
+  profiler on device kind cpu (the energy profiler's rapl or wall backend)
+  runs beside a profiled executor that takes no device section only when
+  it declares runs_on_host_cpu, else the run is refused naming
+  profiler.device and the executor's key; a simulator is still refused
+  (Agent Rule 2). A profiler that defines telemetry() has its record in
+  provenance.json as `telemetry` and a Telemetry row in run.md (wall's
+  label "wall time, not energy" among it); a record that is not a JSON
+  mapping is refused before any directory. An energy counter the host
+  cannot read is a RunError naming profiler.device and the file, with no
+  fallback to wall time.
 
 Every component is a fake in a test Registry beside the real stages
 (baseline, generate, compile_loop, run_loop); the fake executors start no
@@ -990,3 +1002,176 @@ def test_a_stop_result_outside_the_contract_is_refused(tmp_path: Path, kind: str
     with pytest.raises(ValueError, match=named) as caught:
         run_recipe(write_recipe(tmp_path, kind, data), options(tmp_path, make_registry(log)))
     assert kind in str(caught.value), "the error names the profiler"
+
+
+# ---------------------------------------------------------------------------
+# The energy profiler on the host CPU (task P9.1; OQ-088): device kind cpu beside a host-CPU executor
+
+RUNS_ON_HOST_CPU = "runs_on_host_cpu"
+CPU = {"kind": "cpu"}
+CPU_MODEL = "SYNTHETIC CPU model 9000"
+WALL_LABEL = "wall time, not energy"
+# The host path of the SYNTHETIC zone's counter; the zone directory writes the kernel's ':' as '-' (tests/profilers).
+ENERGY_FILE = "/sys/class/powercap/intel-rapl/intel-rapl-0/energy_uj"
+
+
+class ConstantCounter:
+    """A TelemetrySource (lassi.profilers.energy) whose energy counter climbs by `step_j` joules at each read."""
+
+    measures = "energy"
+    range_j = 1000.0
+    label = None
+
+    def __init__(self, step_j: float) -> None:
+        """Start the SYNTHETIC counter at 0 J."""
+        self.step_j = step_j
+        self.value = 0.0
+
+    def read(self) -> float:
+        """Return the counter, then advance it (wrapping at range_j)."""
+        value = self.value
+        self.value = (self.value + self.step_j) % self.range_j
+        return value
+
+    def record(self) -> dict[str, object]:
+        """Return the SYNTHETIC provenance record of this source."""
+        return {"domain": "package-0", "zones": {"/sys/class/powercap/intel-rapl:0": "package-0"}}
+
+
+@dataclass
+class NamedCpuProbe:
+    """A cpu probe whose SYNTHETIC facts name the CPU model."""
+
+    kind: str = "cpu"
+
+    def probe(self) -> HostFacts:
+        """Return SYNTHETIC cpu facts with a model name."""
+        return HostFacts(count=8, name=CPU_MODEL, memory_bytes=None, driver=None, runtime=None)
+
+
+def energy_registry(log: Log, **fixed: Any) -> Registry:
+    """Return make_registry(log) plus the host-CPU executors and the registered energy profiler with `fixed`."""
+    registry = make_registry(log)
+    registry.register("Executor", "hostexec", fake_executor("hostexec", RUNNER | {RUNS_ON_HOST_CPU}, log))
+    simhost = fake_executor("simhost", RUNNER | {RUNS_ON_HOST_CPU, "simulator"}, log)
+    registry.register("Executor", "simhost", simhost)
+    registry.register("Profiler", "energy", with_keywords(profiled("energy", "EnergyProfiler"), **fixed))
+    return registry
+
+
+def test_runs_on_host_cpu_is_declared_by_the_native_executor_only() -> None:
+    profilers()
+    assert getattr(capabilities_module, "RUNS_ON_HOST_CPU", None) == RUNS_ON_HOST_CPU
+    names = DEFAULT_REGISTRY.names("Executor")
+    declared = {name for name in names if RUNS_ON_HOST_CPU in DEFAULT_REGISTRY.get("Executor", name).capabilities}
+    assert declared == {"native"}, declared
+
+
+def test_energy_wall_on_the_host_cpu_records_runtime_and_its_label(tmp_path: Path) -> None:
+    log = Log(replies=[GOOD["cuda"]])
+    section = {"kind": "energy", "backend": "wall", "device": CPU}
+    data = recipe_data([OMP_TO_CUDA], {"kind": "hostexec"}, profiler=section)
+    run_options = RunOptions(
+        runs_root=tmp_path / "runs-root", run_id="profile-run", bench_root=write_bench(tmp_path / "bench"),
+        registry=energy_registry(log), probes={**fake_probes(), "cpu": NamedCpuProbe()},
+    )
+    run_dir = run_recipe(write_recipe(tmp_path, "wall", data), run_options)
+    outcome = Outcome(run_dir, "wall", json.loads((run_dir / "provenance.json").read_bytes().decode("ascii")))
+    (attempt,) = outcome.trial(OMP_TO_CUDA).attempts
+    assert attempt.profile.runtime_s is not None, "wall measures runtime"
+    assert (attempt.profile.avg_power_w, attempt.profile.energy_j) == (None, None), "and nothing else"
+    telemetry = outcome.provenance["telemetry"]
+    assert (telemetry["profiler"], telemetry["backend"], telemetry["measures"], telemetry["label"]) == (
+        "energy", "wall", "runtime", WALL_LABEL,
+    )
+    (record,) = [item for item in outcome.provenance["device_records"] if item["key"] == "profiler.device"]
+    assert (record["kind"], record["indices"], record["name"]) == ("cpu", [], CPU_MODEL), "the CPU model"
+    page = (run_dir / "run.md").read_bytes().decode("ascii")
+    assert any(line.startswith("| Telemetry |") and WALL_LABEL in line for line in page.splitlines()), page
+
+
+def test_energy_on_a_counter_fills_energy_and_records_the_domains(tmp_path: Path) -> None:
+    log = Log(replies=[GOOD["cuda"]], attempt_sleep_s=0.02)
+    section = {"kind": "energy", "backend": "rapl", "device": CPU, "package": 0, "interval_ms": 10}
+    data = recipe_data([OMP_TO_CUDA], {"kind": "hostexec"}, profiler=section)
+    outcome = run_all(tmp_path, "counter", data, energy_registry(log, source=ConstantCounter(3.0)))
+    (attempt,) = outcome.trial(OMP_TO_CUDA).attempts
+    assert attempt.profile.energy_j is not None and attempt.profile.energy_j >= 3.0, attempt.profile
+    assert attempt.profile.energy_j % 3.0 == pytest.approx(0.0, abs=1e-9), "a whole number of counter steps"
+    telemetry = outcome.provenance["telemetry"]
+    assert telemetry["backend"] == "rapl" and telemetry["measures"] == "energy" and telemetry["label"] is None
+    assert telemetry["zones"] == {"/sys/class/powercap/intel-rapl:0": "package-0"}
+    assert sampler_threads() == []
+
+
+def test_a_profiler_without_telemetry_leaves_provenance_without_it(tmp_path: Path) -> None:
+    log = Log(replies=[GOOD["cuda"]])
+    data = recipe_data([OMP_TO_CUDA], {"kind": "plainexec"}, profiler={"kind": "faketime"})
+    assert "telemetry" not in run_all(tmp_path, "no-telemetry-record", data, make_registry(log)).provenance
+
+
+def test_energy_on_the_cpu_beside_an_executor_off_the_host_cpu_is_refused(tmp_path: Path) -> None:
+    log = Log()
+    section = {"kind": "energy", "backend": "wall", "device": CPU}
+    data = recipe_data([OMP_TO_CUDA], {"kind": "plainexec"}, profiler=section)
+    message = refused(tmp_path, "off-cpu", data, log, energy_registry(log))
+    assert "profiler.device" in message and "executor.kind" in message and RUNS_ON_HOST_CPU in message, message
+
+
+def test_energy_on_the_cpu_beside_a_gpu_device_is_refused(tmp_path: Path) -> None:
+    log = Log()
+    section = {"kind": "energy", "backend": "wall", "device": CPU}
+    data = recipe_data([OMP_TO_CUDA], {"kind": "devexec", "device": ROCM_0}, profiler=section)
+    message = refused(tmp_path, "cpu-vs-gpu", data, log, energy_registry(log))
+    assert "profiler.device" in message and "executor.device" in message, message
+
+
+def test_energy_beside_a_simulator_on_the_host_cpu_is_still_refused(tmp_path: Path) -> None:
+    log = Log()
+    section = {"kind": "energy", "backend": "wall", "device": CPU}
+    data = recipe_data([OMP_TO_CUDA], {"kind": "simhost"}, profiler=section)
+    message = refused(tmp_path, "sim-cpu", data, log, energy_registry(log))
+    assert "simulator" in message and "Agent Rule 2" in message, message
+    assert "profiler energy" not in log.events
+
+
+def test_an_unreadable_rapl_counter_is_refused_before_any_directory_with_no_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = tmp_path / "host"
+    zone = host / "sys" / "class" / "powercap" / "intel-rapl" / "intel-rapl-0"
+    zone.mkdir(parents=True)
+    for name, text in (("name", "package-0\n"), ("energy_uj", "5000000\n"), ("max_energy_range_uj", "1000000000\n")):
+        (zone / name).write_bytes(text.encode("ascii"))
+    real = Path.read_bytes
+    blocked = zone / "energy_uj"
+
+    def read_bytes(self: Path) -> bytes:
+        if Path(self) == blocked:
+            raise PermissionError(13, "Permission denied", str(self))
+        return real(self)
+
+    monkeypatch.setattr(Path, "read_bytes", read_bytes)
+    log = Log()
+    section = {"kind": "energy", "backend": "rapl", "device": CPU, "package": 0, "interval_ms": 10}
+    data = recipe_data([OMP_TO_CUDA], {"kind": "hostexec"}, profiler=section)
+    message = refused(tmp_path, "no-rapl", data, log, energy_registry(log, root=host))
+    assert "profiler.device" in message and ENERGY_FILE in message and "telemetry" in message, message
+    assert "wall" not in message, "no fallback to wall time"
+
+
+def test_a_telemetry_record_outside_the_contract_is_refused_before_any_directory(tmp_path: Path) -> None:
+    log = Log()
+    registry = make_registry(log)
+
+    class BadRecord(fake_profiler("badrecord", frozenset(), log, timing_profile)):  # type: ignore[misc]
+        """A profiler whose telemetry() is not a JSON mapping."""
+
+        def telemetry(self) -> Any:
+            """Return a SYNTHETIC record that is not a mapping."""
+            return {"SYNTHETIC"}
+
+    registry.register("Profiler", "badrecord", BadRecord)
+    data = recipe_data([OMP_TO_CUDA], {"kind": "plainexec"}, profiler={"kind": "badrecord"})
+    message = refused(tmp_path, "bad-record", data, log, registry)
+    assert "badrecord" in message and "telemetry" in message, message

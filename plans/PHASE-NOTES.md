@@ -168,6 +168,14 @@ Repository-specific hints for planning. The bible stays authoritative; these not
 - From the P4 notes: P4.11's entry (the trainer skips df-v0's null reward, never reads it as 0; P17.9's grpo smoke skips a null fixture reward with one TRL reward function, bible Training Module, Safeguards, and P7 and P8 keep the rule for df-v0 and its components) and the P4.8 presentation follow-up (fix the Windows console before the training table draws the same way).
 - The training data loader excludes attempts marked alignment_missing (owner, OQ-028, 2026-10-05). The guard's not-run reason, which the loader may select or report by, and its not-checked rates (P17.14): bible Result Record, Guards; Evaluation Protocol, Run Metrics, Guard coverage.
 
+## P9 LASSI-EE
+
+- Branch route (P9's planning, 2026-10-25): p9-ee branched from p16-adversarial at e43a1e0 and follows All Phases, Stacked phase branches; P15 is planned beside it on p15-judges, and P9.10 and P9.11 consume P15.2's judge.
+- Hand-offs from P9.1's audit (2026-10-25), for the tasks named:
+  - P9.4 (it next touches lassi/profilers/energy.py): the telemetry record merges `{**head, "label": ..., **source.record()}`, so a backend's record could overwrite profiler, backend, measures, or label, wall's label included; merge head last or refuse colliding keys. And _settings skips a key the backend does not take when its value is null (interval_ms: null under wall); refuse it like any other value, as the tests' "nothing is ignored" says.
+  - P9.6: native runs are not pinned to the package rapl reads, and alpha01 has two packages (plans/spikes/p0-nvcc.md), so an attempt may run on the other one; pin the run to the package's cores or record the cores it ran on before P9.13. Also add `telemetry` beside `serving` in Result Record, Storage, and consider copying backend, domain, and label into each trial's provenance with the protocol's Profile fields, so a trial read outside its run tree keeps them.
+  - P9.6 and P9.5: stop sampling a Tenstorrent card for the rest of a window after its first all-ones read (1110490560; plans/spikes/p9-tt-power.md, Verdict).
+
 ## P11 Dataflow Dialect (deferred separate project)
 
 - A separate project, deferred by the owner on 2026-10-18 for later incorporation (OQ-066; plans/LESSONS.md, Owner directions): P11 is outside the work order (AGENTS.md, Work Order; tools/status.py WORK_ORDER), and its phase stays BLOCKED until the owner records in its Note that the project is incorporated. Its plan, plans/p11-df.md, stays on branch p11-df, frozen, with every open P11 task BLOCKED there, and its owner-queue items OQ-060 to OQ-062 are closed as withdrawn; the df project reopens them. The notes this section held (design notes first, its place in the work order under OQ-055 decision 9 (a), and its branch route) stand as written at b988907 and on p11-df.

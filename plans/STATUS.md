@@ -182,7 +182,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.30 | DONE | Exact declarations at generation, nearest names, and the full API pack (opt-in) | P17.26 | lookup at generation (core, core_api.txt), nearest names, tt-metalium-5280a9cf-full; bible master rev 372 |
 | P17.31 | READY | The development split for tt-pairs-v0 (OQ-083 (b)) | - |  |
 | P17.32 | READY | The night window of 2026-10-25: the sweep with the new features on 70B-class models | P17.29,P17.30 |  |
-| P9.1 | READY | The energy seam and the CPU backends (rapl, wall) | - |  |
+| P9.1 | DONE | The energy seam and the CPU backends (rapl, wall) | - | energy seam (TelemetrySource), profiler energy, backends rapl and wall, runs_on_host_cpu; wall's label and rapl's package live in provenance telemetry and profiler.package (not the Profile or the device section); bible rev 389 |
 | P9.2 | READY | Spike: CPU energy telemetry on alpha01, and the excess-files inventory | - | local source reading first; one read-only rx exec waits for the owner's yes (Agent Rule 17; OQ-092) |
 | P9.3 | DONE | Spike: Tenstorrent power telemetry at the pins | - | plans/spikes/p9-tt-power.md: hwmon power1_input via sysfs, no device open (Agent Rule 9 holds); core power only; OQ-093; bible rev 378 |
 | P9.4 | READY | AMD and NVIDIA backends on the seam | P9.1 |  |

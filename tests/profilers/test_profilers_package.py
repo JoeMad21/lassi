@@ -1,4 +1,4 @@
-"""Tests for the lassi.profilers package as a whole (task P17.7): registration, imports, and module hygiene.
+"""Tests for the lassi.profilers package as a whole (tasks P17.7, P9.1): registration, imports, module hygiene.
 
 Bible: Design Principle 9 (vendor code stays behind interfaces; device
 files and telemetry are read only in lassi/executors and lassi/profilers),
@@ -8,10 +8,10 @@ Constraints (OQ-002: no SMI tool starts and no GPU node opens).
 
 The contract these tests fix:
 
-- Importing lassi.profilers registers exactly the Profilers timing, nvml,
-  and rocm_smi, and imports no vendor library: pynvml is imported only when
-  an nvml source is built, so the package registers all three when pynvml
-  cannot be imported at all. Importing lassi.core.runner registers them too
+- Importing lassi.profilers registers exactly the Profilers energy (task
+  P9.1), timing, nvml, and rocm_smi, and imports no vendor library: pynvml
+  is imported only when an nvml source is built, so the package registers
+  all four when pynvml cannot be imported at all. Importing lassi.core.runner registers them too
   (the runner binds `profiler`), and neither it nor lassi.cli imports a
   vendor library.
 - At module level, every module under lassi/profilers imports only the
@@ -48,8 +48,8 @@ from profiler_fakes import profilers_module
 REPO = Path(__file__).resolve().parents[2]
 PROFILERS_DIR = REPO / "lassi" / "profilers"
 CORE_DIR = REPO / "lassi" / "core"
-EXPECTED_MODULES = ("__init__.py", "nvml.py", "power.py", "rocm_smi.py", "timing.py")
-REGISTERED = ["nvml", "rocm_smi", "timing"]
+EXPECTED_MODULES = ("__init__.py", "energy.py", "nvml.py", "power.py", "rapl.py", "rocm_smi.py", "timing.py")
+REGISTERED = ["energy", "nvml", "rocm_smi", "timing"]
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 MAX_FUNCTION_LINES = 60
 # Vendor libraries and frameworks no import of lassi.profilers, the runner, or the CLI may load.
@@ -162,7 +162,7 @@ def test_the_package_holds_the_profiler_modules() -> None:
     assert set(EXPECTED_MODULES) <= set(names), names
 
 
-def test_importing_lassi_profilers_registers_three_profilers_and_no_vendor_library() -> None:
+def test_importing_lassi_profilers_registers_four_profilers_and_no_vendor_library() -> None:
     profilers_module()
     code = (
         "import json, sys\n"
@@ -177,11 +177,17 @@ def test_importing_lassi_profilers_registers_three_profilers_and_no_vendor_libra
     found = python_says(code)
     assert found["names"] == REGISTERED, "the package registers its profilers without the vendor library"
     assert found["capabilities"] == {
+        "energy": ["supports_power", "takes_device"],
         "nvml": ["supports_power", "takes_device"],
         "rocm_smi": ["supports_power", "takes_device"],
         "timing": [],
     }
-    assert found["config_keys"] == {"nvml": ["interval_ms"], "rocm_smi": ["interval_ms"], "timing": []}
+    assert found["config_keys"] == {
+        "energy": ["backend", "interval_ms", "package"],
+        "nvml": ["interval_ms"],
+        "rocm_smi": ["interval_ms"],
+        "timing": [],
+    }
 
 
 def test_importing_the_runner_registers_the_profilers_and_loads_no_vendor_library() -> None:
@@ -190,6 +196,7 @@ def test_importing_the_runner_registers_the_profilers_and_loads_no_vendor_librar
         "import json, sys\n"
         "import lassi.core.runner, lassi.cli\n"
         "import lassi.profilers.nvml, lassi.profilers.rocm_smi, lassi.profilers.timing, lassi.profilers.power\n"
+        "import lassi.profilers.energy, lassi.profilers.rapl\n"
         "from lassi.core.registry import DEFAULT_REGISTRY as registry\n"
         f"loaded = sorted(name for name in {list(VENDOR_MODULES)!r} if sys.modules.get(name) is not None)\n"
         "print(json.dumps({'names': registry.names('Profiler'), 'loaded': loaded}))\n"

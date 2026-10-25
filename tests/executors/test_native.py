@@ -167,7 +167,7 @@ def is_typed(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 def test_registered_as_executor_native(native: ModuleType) -> None:
     entry = registry.DEFAULT_REGISTRY.get("Executor", "native")
     assert entry.factory is native.NativeExecutor
-    assert entry.capabilities == frozenset({"runs_code", "sandboxed"})
+    assert entry.capabilities == frozenset({"runs_code", "sandboxed", "runs_on_host_cpu"}), "task P9.1"
     assert entry.config_keys == frozenset({"harness"})
     assert native.NativeExecutor.name == "native"
 

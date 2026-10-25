@@ -26,7 +26,9 @@ the program. See NativeExecutor.run for the exact environment.
 
 NativeExecutor.device() names the device its programs run on, the host CPU,
 with the CPU model read from CPUINFO (task P4.5; Agent Rule 1); the runner
-records it in provenance.json and every trial's provenance.
+records it in provenance.json and every trial's provenance. It declares
+runs_on_host_cpu (task P9.1; lassi.core.capabilities RUNS_ON_HOST_CPU), so a
+power profiler on device kind cpu may profile its runs.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from types import MappingProxyType
 
+from lassi.core.capabilities import RUNS_ON_HOST_CPU
 from lassi.core.interfaces import Limits, RunResult
 from lassi.core.registry import register
 from lassi.executors.sandbox import SANDBOX_PATH, Sandbox, SandboxSpec, SandboxUnavailableError
@@ -172,7 +175,7 @@ class NativeExecutor:
     """
 
     name = "native"
-    capabilities = frozenset({"runs_code", "sandboxed"})
+    capabilities = frozenset({"runs_code", "sandboxed", RUNS_ON_HOST_CPU})
     config_keys = frozenset({"harness"})
 
     def __init__(
