@@ -223,8 +223,36 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 ### P17.23 The feature matrix in the owner's windows
 - Added on 2026-10-23 from the owner's direction ("do separate tests for all combinations of features added to base LASSI (RAG, API Reference, training, fuzzing, returning benchmark and tolerance reports)").
 - Accept: one recipe per combination of the features built so far, per model, run by plans/runs/rngd-sweep/run.sh in the owner's windows, with tables per combination and provenance under results/; a feature not yet built is listed with its reason in the window's run report, never silently left out. The evening window of 2026-10-23 runs the mismatch report and the fuzzer (four combinations, projects/lassi-demo/sweep5; plans/runs/2026-10-23-evening-window.md); the API reference, retrieval, and training join as P17.21, P17.22, and P17.19 land.
-- Files: projects/lassi-demo/, plans/runs/rngd-sweep/, results/.
+- Files: projects/lassi-demo/, plans/runs/rngd-sweep/, plans/runs/window/, results/.
 - Host: Windows, then alpha01 in the owner's windows. Depends: P17.21, P17.22 for their combinations.
+
+### P17.24 Classify the cpp -> tt build errors across the sweep records
+- Added on 2026-10-25: the first of the four corrections proposed after the passes of 2026-10-23 and 2026-10-24 (63 of the 65 cpp -> tt trials of those passes ended at the correction cap at S1, a build error; one passed, and one ended at S0, no extractable output; results/rngd-sweep5-20261024, results/rngd-matrix-short-20261024), and the owner's "launch as much as you can".
+- Bible: Result Record (the diagnostics), Agent Rules 1 and 5.
+- Accept: a tool that reads trial.json records under a runs root and buckets every compile-stage error of every cpp -> tt attempt by a fixed rule (the compiler's message with identifiers and paths abstracted), per model, combination, item, and attempt index, and whether a bucket recurs across corrections; it reads only records, runs nothing, and prints counts, never prompt or reference text; its report for the night's runs goes to results/ with the provenance of the runs it read.
+- Files: tools/, tests/tools/, results/.
+- Host: Windows for the tool and its tests; alpha01 in a window to read the records (one rx run). Depends: none.
+
+### P17.25 Restarts: a fresh generation after N failed corrections (opt-in)
+- Added on 2026-10-25 from the same evidence: every pass came at correction 0 to 4, and no trial stuck at a build error recovered later.
+- Bible: Component Interfaces (the loop), Project Recipes (Loop opt-ins), Agent Rules 1 and 4.
+- Accept: an opt-in loop key (restart_after, an int from 1 to the cap) under which, after that many corrections without a clean run, the next request is a fresh generation from generate.txt instead of a correction, the count and cap unchanged; refused under faithful: true; off when absent, so every recipe keeps its prompts and hash; each restart recorded as a request of its own kind; tests first.
+- Files: lassi/core/stages.py, lassi/core/recipe.py, lassi/core/runner.py, tests/core/.
+- Host: Windows. Depends: none.
+
+### P17.26 Declaration lookup: the API pack's declarations for the identifiers a build error names (opt-in)
+- Added on 2026-10-25: the API reference reaches the model as its own summary of the pack, which can lose exact signatures; a correction can carry the exact declarations instead.
+- Bible: Component Interfaces (the context blocks), Project Recipes, Harness Contract, Agent Rule 5.
+- Accept: an opt-in recipe key under which a compile correction under a template set gets, in a templated block, the pack's declarations of each tt-metal identifier its listed errors name (whole declarations, skipped whole past a character budget, never cut); queries only from the errors the prompt shows; refused under faithful: true and without a pack; off when absent with prompts byte for byte unchanged; tests first.
+- Files: lassi/core/stages.py, lassi/core/runner.py, lassi/core/recipe.py, assets/prompts/tt-host-v0/, tests/core/.
+- Host: Windows. Depends: none.
+
+### P17.27 bf16 rounding in tt -> cpp outputs
+- Added on 2026-10-25: tt-host-v0's generate.txt says "A bf16 value is the upper 16 bits of the f32 of the same value", which holds for reading inputs, while the C++ references round to nearest, ties to even, when they write bf16 (assets/bench/tt-pairs-v0/eltwise_sfpu/cpp/eltwise_sfpu.cpp:28-37); a candidate that truncates is off by one bf16 unit and misses a max_abs tolerance. A hypothesis until the generated code is read.
+- Bible: Harness Contract, Agent Rule 5 (a generic statement about the format, never an item's answer; the tt-pairs-v0 items stay unassigned until P7, so the statement must rest on tt-metal's own bf16 conversion at the pin, not on item outcomes or an item's reference).
+- Accept: P17.24's tool, or a reading of the records, shows whether the tt -> cpp candidates that ran clean and missed the tolerance truncate when they write bf16; if they do, a new template set (tt-host-v0 stays as it is, so earlier results stay comparable) states the rounding generically, with golden tests.
+- Files: assets/prompts/, tests/prompts/.
+- Host: Windows. Depends: P17.24.
 
 ### P17.11 Gate part (a): recipes and the hardware-free evidence
 - Bible: Build Roadmap (P17 row, Gate part (a)), Agent Rules 1, 7, and 10; AGENTS.md Phase Gate and Results.

@@ -1039,3 +1039,28 @@ Options:
 - Not tonight: only the sweep runs.
 Recommendation: none given; the question set out the three.
 Answer: Owner's choice (in the working session, 2026-10-24, 00:03 EDT; recorded by the agent): "Not tonight". No training ran.
+
+## OQ-080 GPT-OSS Reasoning Effort: The Server's Default, Neither Set Nor Recorded
+State: OPEN
+Kind: decision
+Blocks: none (the window of 2026-10-25 runs GPT-OSS with the server's default)
+Evidence: docs/BIBLE.md, Serving Rules ("gpt-oss: enable the reasoning parser so fenced code lands in `content`; fix reasoning effort per arm and record it."); developer.furiosa.ai v2026.4.0, furiosa_llm/models/gpt-oss.html (read 2026-10-25: furiosa-llm detects the harmony format with no reasoning parser, returns the reasoning in message.reasoning apart from the answer in message.content, and takes reasoning_effort low, medium, or high through the request); lassi/llm/openai_compat.py complete() (sends model, messages, temperature, top_p, max_tokens, and stream, nothing else); projects/lassi-demo/sweep6/gpt-oss-*/base-*.yaml.
+Question: The window of 2026-10-25 serves gpt-oss-20b and gpt-oss-120b without --reasoning-parser, since the server handles harmony itself and the answer still lands in content, so the first half of the Serving Rules line holds. The second half does not: openai_compat sends no reasoning_effort, so each request runs at the server's default effort, which no record names. How should the reasoning effort be handled?
+Options:
+- (a) An opt-in recipe key, llm.sampling.reasoning_effort (low, medium, or high), that openai_compat sends in the request body and the resolved recipe and its hash record; one recipe per effort when an effort is compared. Consequence: a small backend change with tests and a bible entry; this window's GPT-OSS results stay labeled as the server's default effort.
+- (b) Keep the server's default and record the departure from the Serving Rules line in the bible. Consequence: no code; GPT-OSS results never name their effort.
+Recommendation: (a), since the bible asks for the effort to be fixed per arm and recorded; until then every GPT-OSS result says it ran at the server's default effort.
+Answer:
+
+## OQ-081 Disk Space For gpt-oss-120b On alpha01
+State: OPEN
+Kind: decision
+Blocks: P17.23 (gpt-oss-120b's combinations)
+Evidence: results/rngd-matrix-short-20261024/provenance.json (the gate's scratch free space after the last job of 2026-10-24); plans/runs/window/run-all.sh (gpt-oss-120b's RNGD build at v2026.4 is 68.12 GB, the sum of the tag's root files in https://huggingface.co/api/models/furiosa-ai/gpt-oss-120b/tree/v2026.4, read 2026-10-25; the job downloads it only with 140 GB free, keeping the gate's 60 GB floor for big jobs and a margin on the shared disk); plans/runs/rngd-sweep/models3.tsv and results/rngd-sweep5-20261024 (the models already cached and how they did).
+Question: The scratch disk had 117.1 GB free at the last reading, so the window of 2026-10-25 will most likely skip gpt-oss-120b, the bigger model the owner asked for. Room needs files removed from the shared scratch root, which needs the owner's approval (AGENTS.md, Remote Execution). Which model weights may go? The owner removes them, or approves their removal (plans/PHASE-NOTES.md: the owner removes what the owner chooses).
+Options:
+- (a) Remove the cached weights of the models with no trial at alignment 1.0 in any pass so far that are not in the matrix (gemma-4-31B-it-FP8-block, Qwen3-8B-FP8, Meta-Llama-3.1-8B-Instruct-FP8-dynamic, Mistral-Nemo-Instruct-2407-FP8, Qwen3-30B-A3B-Instruct-2507-FP8, Qwen3-32B-FP8; Qwen3-8B-FP8 finished no trial at all), after a listing of their sizes in the next window. Consequence: room for gpt-oss-120b; those models would need a fresh download to run again.
+- (b) Keep every cached model and skip gpt-oss-120b. Consequence: no bigger GPT-OSS model.
+- (c) Back the weights up to the workstation first (zipped), then remove them. Consequence: as (a), at the cost of a long copy.
+Recommendation: (a): none of those six models has a trial at alignment 1.0 in the tables so far, and each can be downloaded again at its pinned tag.
+Answer:

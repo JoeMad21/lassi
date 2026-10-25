@@ -1,0 +1,11 @@
+# The owner's window of 2026-10-25 (08:00 to 15:00 EDT): the feature matrix (projects/lassi-demo/sweep6) on
+# gpt-oss first (owner: "Try bigger models like GPT-OSS especially with the modifications"), then the two models of
+# the earlier passes; gpt-oss-120b third, so its background download has the first two models' time to finish.
+# gpt-oss-20b on 1 card and gpt-oss-120b on 4 (developer.furiosa.ai v2026.4.0, furiosa_llm/models/gpt-oss.html,
+# read 2026-10-25), at the v2026.4 tag, served from furiosa-venv-2026.4 with no --reasoning-parser: the server
+# handles the harmony format itself, and the reasoning effort is its default (OQ-080). plans/runs/window/run-all.sh
+# downloads them, the revision read from this table's third column.
+gpt-oss-20b	furiosa-ai/gpt-oss-20b	v2026.4	1	-	furiosa-venv-2026.4
+qwen3-coder-30b	furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8	v2026.4	4	-	furiosa-venv-2026.4
+gpt-oss-120b	furiosa-ai/gpt-oss-120b	v2026.4	4	-	furiosa-venv-2026.4
+exaone4-32b	furiosa-ai/EXAONE-4.0-32B-FP8	v2026.4	4	-	furiosa-venv-2026.4
