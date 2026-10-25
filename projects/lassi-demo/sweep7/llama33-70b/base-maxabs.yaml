@@ -1,0 +1,16 @@
+# The seventh pass of the owner's RNGD sweep, the owner's window of 2026-10-25, 20:00 to 02:00 ("We must
+# significantly improve results"), run by plans/runs/night/run-night.sh. cpp -> tt only (OQ-086); 3 samples per item
+# with a correction cap of 8 (OQ-086); the fuzzer adversary in every recipe (it runs after the oracle and never feeds
+# the loop). tt-pairs-v0 is a development set (OQ-083 (b)). Exploratory; every TT program runs on ttsim, a simulator.
+# Combination base: no feature beyond the fuzzer.
+# Llama-3.3-70B-Instruct-FP8-dynamic at v2026.4 on 4 RNGD cards (OQ-087), not a reasoning model: a
+# budget of 8192 tokens; a 70B model is expected, not measured, to be slower, so the timeout is 1800 s.
+extends: ../../sweep6/qwen3-coder-30b/base-maxabs.yaml
+model:
+  id: furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic
+  timeout_s: 1800
+llm:
+  sampling:
+    max_tokens: 8192
+trials: {n: 3}
+loop: {max_corrections: 8}

@@ -1,0 +1,9 @@
+# The seventh pass of the owner's RNGD sweep, the owner's window of 2026-10-25, 20:00 to 02:00 ("We must
+# significantly improve results"), run by plans/runs/night/run-night.sh. cpp -> tt only (OQ-086); 3 samples per item
+# with a correction cap of 8 (OQ-086); the fuzzer adversary in every recipe (it runs after the oracle and never feeds
+# the loop). tt-pairs-v0 is a development set (OQ-083 (b)). Exploratory; every TT program runs on ttsim, a simulator.
+# Combination lowall: all, at reasoning effort low, the control OQ-080's answer asks for.
+extends: all-maxabs.yaml
+llm:
+  sampling:
+    reasoning_effort: low

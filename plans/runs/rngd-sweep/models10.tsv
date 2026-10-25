@@ -1,0 +1,9 @@
+# The owner's window of 2026-10-25, 20:00 to 02:00 (OQ-087): Llama-3.3-70B-Instruct-FP8-dynamic first, so the
+# background download of gpt-oss-120b has Llama's share to finish; both at the v2026.4 tag on 4 RNGD cards
+# (developer.furiosa.ai v2026.4.0 and each model card, read 2026-10-25), served from furiosa-venv-2026.4.
+# No --reasoning-parser: the server handles gpt-oss-120b's harmony format itself (OQ-080's evidence); its recipes
+# set the reasoning effort (medium, low as a control; OQ-080's answer). plans/runs/night/run-night.sh downloads
+# both, every file of the v2026.4 revision (its model ids and revision are written in the script, the same as here),
+# and runs run.sh once per row.
+llama33-70b	furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic	v2026.4	4	-	furiosa-venv-2026.4
+gpt-oss-120b	furiosa-ai/gpt-oss-120b	v2026.4	4	-	furiosa-venv-2026.4

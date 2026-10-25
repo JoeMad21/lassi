@@ -1,0 +1,17 @@
+# The seventh pass of the owner's RNGD sweep, the owner's window of 2026-10-25, 20:00 to 02:00 ("We must
+# significantly improve results"), run by plans/runs/night/run-night.sh. cpp -> tt only (OQ-086); 3 samples per item
+# with a correction cap of 8 (OQ-086); the fuzzer adversary in every recipe (it runs after the oracle and never feeds
+# the loop). tt-pairs-v0 is a development set (OQ-083 (b)). Exploratory; every TT program runs on ttsim, a simulator.
+# Combination base: no feature beyond the fuzzer.
+# gpt-oss-120b at v2026.4 on 4 RNGD cards (OQ-087), a reasoning model: reasoning effort medium with a
+# budget of 32768 tokens (OQ-080's answer), the reasoning counted in the budget; timeout 3600 s.
+extends: ../../sweep6/qwen3-coder-30b/base-pcc.yaml
+model:
+  id: furiosa-ai/gpt-oss-120b
+  timeout_s: 3600
+llm:
+  sampling:
+    max_tokens: 32768
+    reasoning_effort: medium
+trials: {n: 3}
+loop: {max_corrections: 8}

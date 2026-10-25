@@ -1,0 +1,26 @@
+# The seventh pass of the owner's RNGD sweep, the owner's window of 2026-10-25, 20:00 to 02:00 ("We must
+# significantly improve results"), run by plans/runs/night/run-night.sh. cpp -> tt only (OQ-086); 3 samples per item
+# with a correction cap of 8 (OQ-086); the fuzzer adversary in every recipe (it runs after the oracle and never feeds
+# the loop). tt-pairs-v0 is a development set (OQ-083 (b)). Exploratory; every TT program runs on ttsim, a simulator.
+# Combination all: ex and lk, retrieval over the tt-metal docs, the mismatch report, and a restart
+# after 3 failed corrections in a row.
+extends: ex-maxabs.yaml
+context: [tt-metalium-5280a9cf-full]  # tools/build_tt_context.py --name ... --limit-bytes 131072
+lookup:
+  max_chars: 32000
+  prompts: [generate, correct]
+  nearest: 3
+  core:
+  - tt-metalium/host_api.hpp
+  - tt-metalium/distributed.hpp
+  - tt-metalium/mesh_device.hpp
+  - tt-metalium/mesh_buffer.hpp
+  - tt-metalium/buffer_types.hpp
+  - tt-metalium/circular_buffer_config.hpp
+  - tt-metalium/kernel_types.hpp
+  - tt-metalium/core_coord.hpp
+  - tt-metalium/mesh_workload.hpp
+  - tt-metalium/mesh_command_queue.hpp
+  - tt-metalium/bfloat16.hpp
+retrieval: {index: tt-metal-docs, k: 4, max_chars: 6000, prompts: [generate, correct]}
+loop: {correct_on_mismatch: true, restart_after: 3}
