@@ -6,12 +6,12 @@
 # reference off, retrieval off, mismatch report off.
 # furiosa-ai/gpt-oss-120b at v2026.4. furiosa-llm 2026.4 serves GPT-OSS in its harmony format with no --reasoning-parser
 # (developer.furiosa.ai v2026.4.0, gpt-oss): the reasoning comes back apart from the answer, and the backend
-# reads the answer, message.content. The reasoning effort is the server's default: openai_compat sends no
-# reasoning_effort, so it is neither set nor recorded per request, a departure from the Serving Rules' gpt-oss
-# line (OQ-080). The reasoning counts against max_tokens, so the budget is 16384, as for the other reasoning
+# reads the answer, message.content. The reasoning effort is the server's default: this recipe sets no
+# llm.sampling.reasoning_effort, so openai_compat sends none and no record names the effort (OQ-080;
+# gpt-oss-20b-low sets it). The reasoning counts against max_tokens, so the budget is 16384, as for the other reasoning
 # models, and a request takes longer, so the timeout is 1800 s. A served backend checks no context: a server
-# refusal, or a reply whose reasoning uses the whole budget and returns a null content, is a ServingError that
-# ends this recipe's run; an empty content is an S0 attempt and gets a correction. Otherwise the Qwen3-Coder-30B base.
+# refusal is a ServingError that ends this recipe's run; a reply cut at the budget with no answer (a null content,
+# finish_reason length) is the empty answer, as an empty content is, an S0 attempt that gets a correction. Otherwise the Qwen3-Coder-30B base.
 extends: ../qwen3-coder-30b/base-pcc.yaml
 model:
   id: furiosa-ai/gpt-oss-120b

@@ -28,6 +28,15 @@ UNLOAD_BEFORE_RUN = "unload_before_run"
 # any directory exists and writes the record it returns to provenance.json as `serving`.
 MODEL_CHECK = "model_check"
 
+# The capability of an LLM backend that takes llm.sampling.reasoning_effort (OQ-080; bible Serving Rules: fix
+# reasoning effort per arm and record it), and the values that key may hold. When a recipe sets the key, the runner
+# builds such a backend as factory(model.id, **config, reasoning_effort=<value>), and as before when it does not; it
+# reads the capability, never the backend's name, and refuses the key with any other backend before any directory
+# exists. openai_compat sends the value as the chat request's top-level reasoning_effort; replay takes it and, as with
+# every sampling value, replays the same completions. The recipe key and the keyword share this name.
+REASONING_EFFORT = "reasoning_effort"
+REASONING_EFFORTS = ("low", "medium", "high")
+
 # The capability of a ScoreProfile that also scores each attempt: it provides score_attempts(trial), one Score per
 # attempt in attempt order. A scoring pass writes attempt scores only for a profile that declares it.
 SCORES_ATTEMPTS = "scores_attempts"
@@ -142,6 +151,19 @@ def unload_before_run(backend: object) -> None:
     """
     if declares(backend, UNLOAD_BEFORE_RUN):
         cast(Unloads, backend).unload()
+
+
+def checked_reasoning_effort(value: object) -> str | None:
+    """Return `value` when it is None or one of REASONING_EFFORTS; raise ValueError naming reasoning_effort otherwise.
+
+    A backend that declares REASONING_EFFORT checks its keyword with it, so a
+    direct caller meets the same values the recipe loader allows.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str) and value in REASONING_EFFORTS:
+        return value
+    raise ValueError(f"{REASONING_EFFORT} must be one of {', '.join(REASONING_EFFORTS)} or None, not {value!r}")
 
 
 @dataclass(frozen=True)

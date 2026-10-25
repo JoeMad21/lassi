@@ -43,6 +43,7 @@ jobs:
           tests/core/test_recipe_serving.py
           tests/llm/test_serving.py
           tests/llm/test_served_runs.py
+          tests/llm/test_reasoning_effort.py
           tests/llm/test_package.py
           tests/core/test_context_exceeded.py
           tests/core/test_recipe_model_pin.py

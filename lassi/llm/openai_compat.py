@@ -9,6 +9,21 @@ estimated. serving() returns what a run records about the server
 (lassi.llm._serving): the entry check() found and the version the server
 reports at its root, never a key (task P17.3).
 
+Reasoning effort (OQ-080; bible Serving Rules, reasoning effort): the backend
+declares the capability reasoning_effort, so a recipe that sets
+llm.sampling.reasoning_effort builds it with reasoning_effort low, medium, or
+high, and every chat request then carries that value as its top-level
+`reasoning_effort` field; without it the body is what it always was. A
+reasoning model's server returns its reasoning apart from the answer
+(furiosa-llm in message.reasoning); only message.content is read, so the
+reasoning is never returned as a reply or recorded in one, though a
+ServingError's message, which quotes up to 500 characters of the body, can show
+its start. When a reply's content is null and its finish_reason is "length",
+the model gave no answer within max_tokens (or the model's context, for which
+a server also reports length), and complete() returns the empty answer "" with
+the server's token counts rather than stopping the run; no record field marks
+it, and a completion_tokens equal to max_tokens is the sign.
+
 API keys (Agent Rule 12): api_key_env names an environment variable, and the
 key is read from os.environ each time a request is made and sent as
 `Authorization: Bearer <key>`. The key is never stored in an attribute and
@@ -27,7 +42,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from lassi.core.capabilities import MODEL_CHECK
+from lassi.core.capabilities import MODEL_CHECK, REASONING_EFFORT, checked_reasoning_effort
 from lassi.core.interfaces import Completion, Message, Sampling
 from lassi.core.registry import register
 from lassi.llm._http import (
@@ -35,6 +50,7 @@ from lassi.llm._http import (
     ServingError,
     checked_base_url,
     checked_timeout,
+    pick,
     reply_text,
     request_json,
     served_entry,
@@ -48,6 +64,8 @@ DEFAULT_BASE_URL = "http://127.0.0.1:8123/v1"
 _KEY_TEXT = re.compile(r"[\x21-\x7e]+")
 # api_key_env holds a variable name; this refuses a key value passed by mistake, such as "sk-...".
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# The finish_reason of a reply cut at max_tokens (OpenAI chat API); with a null content it is an empty answer.
+_LENGTH = "length"
 
 
 @register("LLMBackend", "openai_compat")
@@ -59,7 +77,7 @@ class OpenAICompatBackend:
     """
 
     name = "openai_compat"
-    capabilities = frozenset({"chat", MODEL_CHECK})
+    capabilities = frozenset({"chat", MODEL_CHECK, REASONING_EFFORT})
     # The model-section keys a recipe may set; the runner passes them as keyword settings (task P17.3).
     config_keys = frozenset({"base_url", "timeout_s", "api_key_env"})
 
@@ -70,14 +88,16 @@ class OpenAICompatBackend:
         base_url: str = DEFAULT_BASE_URL,
         api_key_env: str | None = None,
         timeout_s: float = 600.0,
+        reasoning_effort: str | None = None,
     ) -> None:
         """Keep the settings; base_url loses any trailing '/'. No key is read until a request is made.
 
         Raises ValueError for a base_url that is not a plain http(s) URL (see
         lassi.llm._http.checked_base_url), such as one with a password or a
-        query; for a timeout_s that is not a finite number above zero; and for
+        query; for a timeout_s that is not a finite number above zero; for
         an api_key_env that is not an environment variable name, such as a key
-        passed by mistake (the message never shows the value).
+        passed by mistake (the message never shows the value); and for a
+        reasoning_effort other than None, low, medium, or high.
         """
         if api_key_env is not None and not (isinstance(api_key_env, str) and _ENV_NAME.fullmatch(api_key_env)):
             raise ValueError(
@@ -88,6 +108,7 @@ class OpenAICompatBackend:
         self.base_url = checked_base_url(base_url)
         self.api_key_env = api_key_env
         self.timeout_s = checked_timeout(timeout_s)
+        self.reasoning_effort = checked_reasoning_effort(reasoning_effort)
         self._entry: dict[str, Any] | None = None
 
     def __repr__(self) -> str:
@@ -111,12 +132,18 @@ class OpenAICompatBackend:
     def complete(self, messages: Sequence[Message], sampling: Sampling) -> Completion:
         """Return the server's reply text and token counts for `messages` under `sampling`.
 
-        Calls check() first. POSTs <base_url>/chat/completions with stream off.
-        A missing or null content or token count, a non-2xx status, or a body
-        that is not JSON raises ServingError.
+        Calls check() first. POSTs <base_url>/chat/completions with stream off,
+        and with reasoning_effort at the top level of the body only when it is
+        set. A content that is JSON null in a choice whose finish_reason is
+        "length" is the empty answer "": the model gave none within max_tokens.
+        A missing content, a null content with any other finish_reason or none,
+        a missing or null token count, a non-2xx status, or a body that is not
+        JSON raises ServingError. Only the content is read; a reasoning text
+        beside it is never returned, though a ServingError quotes the start of
+        the body.
         """
         self.check()
-        body = {
+        body: dict[str, Any] = {
             "model": self.model_id,
             "messages": [{"role": message.role, "content": message.content} for message in messages],
             "temperature": float(sampling.temperature),
@@ -124,9 +151,11 @@ class OpenAICompatBackend:
             "max_tokens": sampling.max_tokens,
             "stream": False,
         }
+        if self.reasoning_effort is not None:
+            body[REASONING_EFFORT] = self.reasoning_effort
         reply = self._request("POST", "/chat/completions", body)
         return Completion(
-            text=reply_text(reply, "choices", 0, "message", "content"),
+            text="" if _cut_without_answer(reply) else reply_text(reply, "choices", 0, "message", "content"),
             prompt_tokens=token_count(reply, "usage", "prompt_tokens"),
             completion_tokens=token_count(reply, "usage", "completion_tokens"),
         )
@@ -196,3 +225,15 @@ class OpenAICompatBackend:
                 "header; it must be visible ASCII with no spaces"
             )
         return key
+
+
+def _cut_without_answer(reply: JSONReply) -> bool:
+    """Return True when choices[0].message.content is JSON null and choices[0].finish_reason is "length".
+
+    A missing content key is not null, so it stays the ServingError of
+    reply_text, as does a null content with any other finish_reason.
+    """
+    message = pick(reply.data, "choices", 0, "message")
+    if not isinstance(message, dict) or "content" not in message or message["content"] is not None:
+        return False
+    return pick(reply.data, "choices", 0, "finish_reason") == _LENGTH

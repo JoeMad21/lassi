@@ -75,6 +75,8 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    direction's source and target are one language (task P16.8); a backend that declares
    `unload_before_run` but has no unload(), or `needs_reference` but has no
    with_reference() (or, with fixes.fence_tag off, no with_untagged_fence());
+   llm.sampling.reasoning_effort with a backend that does not declare
+   `reasoning_effort` (OQ-080; _reasoning_effort);
    a `score` profile or, when the recipe names metrics, any registered
    ScoreProfile that cannot be built, and a `metrics` name that no
    registered provider offers, that two offer, or that is named twice
@@ -340,6 +342,7 @@ from lassi.core.capabilities import (
     COMPUTES_REWARD,
     DEVICE_KEY,
     MODEL_CHECK,
+    REASONING_EFFORT,
     SILICON,
     SIMULATOR,
     SUPPORTS_POWER,
@@ -363,6 +366,7 @@ from lassi.core.parquet import write_run_parquet
 from lassi.core.progress import STAGE_START, TRIAL_END, TRIAL_START, GuardedObserver, Observer, ProgressEvent, notify
 from lassi.core.recipe import (
     LOOKUP,
+    REASONING_EFFORT_KEY,
     RECORDING_KEY,
     RECORDING_SHA256_KEY,
     RESTART_AFTER,
@@ -988,10 +992,15 @@ def _backend(recipe: Recipe, registry: Registry, settings: _Settings) -> Any:
     secret, so the RunError quotes them. Construction sends no request. A
     backend that takes model.recording reads the file again here, so an
     OSError (a file removed since load) is a RunError naming model.recording,
-    and _check_recording compares the bytes it read with the loader's.
+    and _check_recording compares the bytes it read with the loader's. When
+    the recipe sets llm.sampling.reasoning_effort, the factory also gets
+    reasoning_effort=<value> (_reasoning_effort).
     """
     factory = registry.get("LLMBackend", settings.backend).factory
-    config = _backend_config(recipe)
+    config = dict(_backend_config(recipe))
+    effort = _reasoning_effort(recipe, registry, settings)
+    if effort is not None:
+        config[REASONING_EFFORT] = effort
     try:
         backend = factory(settings.model_id, **config)
     except ValueError as error:
@@ -1005,6 +1014,24 @@ def _backend(recipe: Recipe, registry: Registry, settings: _Settings) -> Any:
         ) from None
     _check_recording(recipe, settings, backend)
     return backend
+
+
+def _reasoning_effort(recipe: Recipe, registry: Registry, settings: _Settings) -> str | None:
+    """Return llm.sampling.reasoning_effort, or None when the recipe does not set it (OQ-080).
+
+    A set value goes only to a backend that declares REASONING_EFFORT, read
+    from its registry entry, never its name; any other backend is a RunError
+    naming the key, raised before the backend is built and before any
+    directory exists, so no run claims an effort its requests never carried.
+    """
+    effort = recipe.data["llm"]["sampling"].get(REASONING_EFFORT)
+    if effort is None or REASONING_EFFORT in registry.get("LLMBackend", settings.backend).capabilities:
+        return effort
+    raise RunError(
+        f"{recipe.path}: {REASONING_EFFORT_KEY} is {effort}, but LLMBackend {settings.backend!r} does not declare "
+        f"{REASONING_EFFORT!r}, so its requests would not carry it; remove {REASONING_EFFORT_KEY} or bind a backend "
+        "that declares it, such as openai_compat"
+    )
 
 
 def _check_recording(recipe: Recipe, settings: _Settings, backend: Any) -> None:

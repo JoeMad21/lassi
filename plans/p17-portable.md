@@ -254,6 +254,13 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: assets/prompts/, tests/prompts/.
 - Host: Windows. Depends: P17.24.
 
+### P17.28 Reasoning effort as a recipe key, and a reply cut at max_tokens as the empty answer
+- Added on 2026-10-25 in the owner's window: at the server's default reasoning effort, every one of gpt-oss-20b's 18 matrix recipes in the relaunched run ended on an HTTP 200 reply with a null content beside its reasoning, a ServingError that stopped each recipe run, with no trial finished (plans/runs/2026-10-25-window.md). The Serving Rules' gpt-oss line asks for a fixed, recorded effort per arm; OQ-080 recommends option (a) and is unanswered, so the key is opt-in and option (b) stays open.
+- Bible: Model Serving (Serving Rules, the gpt-oss line), Project Recipes (Notes, a Reasoning effort bullet), Component Interfaces (LLMBackend), Agent Rules 1, 3, 4, and 10.
+- Accept, tests first: llm.sampling.reasoning_effort, one of low, medium, high, absent by default and never materialized, so every existing recipe keeps its resolved recipe and hash and every request body its bytes; any other value refused at load naming the key, and any value under faithful: true, set or inherited; the runner passes it to a backend that declares the capability reasoning_effort (openai_compat, replay) and refuses it with any other before any directory exists, reading the capability, never a name; openai_compat sends a top-level reasoning_effort only when set; a reply whose content is JSON null with finish_reason length is the empty answer with the server's token counts, every other null or missing content stays a ServingError, and the reasoning is never returned or recorded as a reply; the record schema unchanged.
+- Files: lassi/core/capabilities.py, lassi/core/recipe.py, lassi/core/runner.py, lassi/llm/openai_compat.py, lassi/llm/replay.py, tests/llm/, .github/workflows/cpu-tests.yml, docs/BIBLE.md; the window's projects/lassi-demo/sweep6/gpt-oss-20b-low/ and plans/runs/rngd-sweep/models9.tsv.
+- Host: Windows. Depends: none.
+
 ### P17.11 Gate part (a): recipes and the hardware-free evidence
 - Bible: Build Roadmap (P17 row, Gate part (a)), Agent Rules 1, 7, and 10; AGENTS.md Phase Gate and Results.
 - Accept, from one clean commit on alpha01, with graphics off:

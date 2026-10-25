@@ -1050,6 +1050,7 @@ Options:
 - (a) An opt-in recipe key, llm.sampling.reasoning_effort (low, medium, or high), that openai_compat sends in the request body and the resolved recipe and its hash record; one recipe per effort when an effort is compared. Consequence: a small backend change with tests and a bible entry; this window's GPT-OSS results stay labeled as the server's default effort.
 - (b) Keep the server's default and record the departure from the Serving Rules line in the bible. Consequence: no code; GPT-OSS results never name their effort.
 Recommendation: (a), since the bible asks for the effort to be fixed per arm and recorded; until then every GPT-OSS result says it ran at the server's default effort.
+Note (2026-10-25, 12:40 EDT): built under (a) as task P17.28, opt-in (llm.sampling.reasoning_effort), after every one of gpt-oss-20b's 18 matrix recipes in the relaunched run ended on a null-content reply at the server's default effort (plans/runs/2026-10-25-window.md); the window's last part runs gpt-oss-20b at low (projects/lassi-demo/sweep6/gpt-oss-20b-low). A recipe without the key is unchanged, so (b) stays possible; your answer decides whether the key stays.
 Answer:
 
 ## OQ-081 Disk Space For gpt-oss-120b On alpha01

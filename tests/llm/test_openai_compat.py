@@ -192,14 +192,14 @@ def keyed_backend(stub_server: StubServer, monkeypatch: pytest.MonkeyPatch) -> O
 def test_registered_as_llm_backend_openai_compat() -> None:
     entry = DEFAULT_REGISTRY.get("LLMBackend", "openai_compat")
     assert entry.factory is OpenAICompatBackend
-    assert entry.capabilities == frozenset({"chat", "model_check"})
+    assert entry.capabilities == frozenset({"chat", "model_check", "reasoning_effort"})
     assert llm.OpenAICompatBackend is OpenAICompatBackend
 
 
 def test_name_capabilities_and_default_port() -> None:
     assert OpenAICompatBackend.name == "openai_compat"
     assert isinstance(OpenAICompatBackend.capabilities, frozenset)
-    assert OpenAICompatBackend.capabilities == frozenset({"chat", "model_check"})
+    assert OpenAICompatBackend.capabilities == frozenset({"chat", "model_check", "reasoning_effort"})
     assert DEFAULT_BASE_URL == "http://127.0.0.1:8123/v1"
 
 
@@ -210,6 +210,7 @@ def test_constructor_signature() -> None:
         ("base_url", inspect.Parameter.KEYWORD_ONLY, DEFAULT_BASE_URL),
         ("api_key_env", inspect.Parameter.KEYWORD_ONLY, None),
         ("timeout_s", inspect.Parameter.KEYWORD_ONLY, 600.0),
+        ("reasoning_effort", inspect.Parameter.KEYWORD_ONLY, None),
     ]
 
 

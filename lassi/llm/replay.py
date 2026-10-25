@@ -36,6 +36,11 @@ then, so the runner compares its recording_sha256 with
 model.recording_sha256 and refuses a run whose recording changed in between.
 A direct caller passes any path, read against the working directory as
 given.
+
+It declares the capability reasoning_effort (OQ-080), so a recipe that sets
+llm.sampling.reasoning_effort, as one written for a served backend may, still
+replays: the runner passes reasoning_effort, which is checked and kept, and, as
+with every sampling value, the replayed completions never depend on it.
 """
 
 from __future__ import annotations
@@ -48,6 +53,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from lassi.core.capabilities import REASONING_EFFORT, checked_reasoning_effort
 from lassi.core.interfaces import Completion, Message, Sampling
 from lassi.core.registry import register
 from lassi.llm._http import ServingError
@@ -70,11 +76,17 @@ class ReplayBackend:
     """Replays a recording of scripted, synthetic completions in order; token counts are approximate word counts."""
 
     name = "replay"
-    capabilities = frozenset({"chat"})
+    capabilities = frozenset({"chat", REASONING_EFFORT})
     # model.recording, which the recipe loader checks and resolves to the file under tests/fixtures/ (task P16.13).
     config_keys = frozenset({"recording"})
 
-    def __init__(self, model_id: str, *, recording: str | os.PathLike[str] | None = None) -> None:
+    def __init__(
+        self,
+        model_id: str,
+        *,
+        recording: str | os.PathLike[str] | None = None,
+        reasoning_effort: str | None = None,
+    ) -> None:
         """Keep `model_id` and read the recording at `recording`, a path to a synthetic JSON recording.
 
         The file is read and checked here, so a bad recording fails when the
@@ -82,9 +94,12 @@ class ReplayBackend:
         one that cannot be read. recording_sha256 is the sha256 of the bytes
         read, from that one read, so it describes the completions replayed
         (task P16.13). With no recording (None), it is None and complete()
-        raises ServingError.
+        raises ServingError. reasoning_effort is kept as given and changes no
+        completion; one other than None, low, medium, or high raises
+        ValueError.
         """
         self.model_id = model_id
+        self.reasoning_effort = checked_reasoning_effort(reasoning_effort)
         self._path = None if recording is None else Path(recording)
         self.recording_sha256: str | None = None
         self._completions: tuple[_Recorded, ...] | None = None

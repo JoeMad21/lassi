@@ -1,0 +1,5 @@
+# The owner's window of 2026-10-25, its last part: gpt-oss-20b at reasoning effort low (projects/lassi-demo/sweep6/
+# gpt-oss-20b-low, the same recipes as gpt-oss-20b with llm.sampling.reasoning_effort: low; OQ-080), in the time
+# models8.tsv's run had left for EXAONE-4.0-32B: at the server's default effort, every one of gpt-oss-20b's 18
+# recipes in that run ended on a reply with no answer. gpt-oss-20b on 1 card, at v2026.4 from furiosa-venv-2026.4.
+gpt-oss-20b-low	furiosa-ai/gpt-oss-20b	v2026.4	1	-	furiosa-venv-2026.4

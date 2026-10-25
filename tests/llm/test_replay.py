@@ -158,8 +158,9 @@ def test_constructor_signature() -> None:
     assert [(p.name, p.kind) for p in params] == [
         ("model_id", inspect.Parameter.POSITIONAL_OR_KEYWORD),
         ("recording", inspect.Parameter.KEYWORD_ONLY),
+        ("reasoning_effort", inspect.Parameter.KEYWORD_ONLY),
     ]
-    assert params[1].default is None
+    assert params[1].default is None and params[2].default is None
 
 
 def test_declares_recording_as_its_one_config_key() -> None:

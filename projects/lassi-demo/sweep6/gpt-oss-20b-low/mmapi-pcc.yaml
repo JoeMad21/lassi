@@ -1,0 +1,14 @@
+# The sixth pass of the owner's RNGD sweep, the feature matrix (owner, 2026-10-23: "do separate tests for all
+# combinations of features added to base LASSI"; 2026-10-25: "Try bigger models like GPT-OSS especially with the
+# modifications"), run by plans/runs/rngd-sweep/matrix.sh in an owner's window. cpp -> tt only. The fuzzer adversary
+# is in every recipe; it runs after the oracle and never feeds the loop. Exploratory, one sample; every TT program
+# runs on ttsim, a simulator.
+# Combination mmapi, as gpt-oss-20b/mmapi-pcc.yaml,
+# with the reasoning effort fixed at low and recorded (llm.sampling.reasoning_effort; the Serving Rules' gpt-oss
+# line; OQ-080): at the server's default effort, all 18 of gpt-oss-20b's recipes in the window of 2026-10-25's
+# relaunched run ended on a reply with no answer, the last at 12:17 EDT: a null content beside its reasoning, with a
+# budget of 16384 tokens; the finish_reason lay past the logged 500 characters (plans/runs/2026-10-25-window.md).
+extends: ../gpt-oss-20b/mmapi-pcc.yaml
+llm:
+  sampling:
+    reasoning_effort: low

@@ -10,8 +10,8 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
    switches between its two forms replaces the inherited one, and a `device` mapping replaces the
    inherited one whole, since a device is one choice);
 5. materializes the defaults (`project`: the loaded file's recipe name; `faithful: false`; every fix on; no
-   `extract` leniency, no LOOP_OPT_INS key, no `retrieval` section, and no `lookup` section, each off when absent, so
-   a recipe without one keeps its resolved recipe and hash);
+   `extract` leniency, no LOOP_OPT_INS key, no `retrieval` section, no `lookup` section, and no
+   llm.sampling.reasoning_effort, each off when absent, so a recipe without one keeps its resolved recipe and hash);
 6. applies the faithful overrides (bible, Project Recipes Notes; Design Principle 4);
 7. checks types and required choices, never picking a value for a choice left open, and refuses an EXTRACT
    leniency set true under faithful: true or with fixes.fence_tag off (_check_extract), a LOOP_OPT_INS key
@@ -19,7 +19,8 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
    (_check_loop; task P17.25), naming its key, and a `retrieval` section (task P17.22: every
    key required, k and max_chars within RETRIEVAL_K and RETRIEVAL_MAX_CHARS, prompts distinct RETRIEVAL_PROMPTS)
    under faithful: true (_check_retrieval), and a `lookup` section (task P17.26: both keys required, max_chars
-   within LOOKUP_MAX_CHARS, prompts distinct LOOKUP_PROMPTS) under faithful: true (_check_lookup);
+   within LOOKUP_MAX_CHARS, prompts distinct LOOKUP_PROMPTS) under faithful: true (_check_lookup), and
+   llm.sampling.reasoning_effort (OQ-080: one of REASONING_EFFORTS) under faithful: true (_check_sampling);
 8. binds components and checks their capabilities without constructing any (Component Interfaces), the
    adversary section's Agent among them, which must declare proposes_inputs (task P16.2); refuses a faithful
    recipe that binds a toolchain declaring a proxy capability (PROXY_CAPABILITIES), a toolchain upstream
@@ -74,7 +75,14 @@ from typing import Any, Callable, Mapping, Sequence
 import yaml
 
 from lassi.bench.registry import FORBIDDEN_PURPOSES, HELD_SPLITS
-from lassi.core.capabilities import DEVICE_KEY, PROPOSES_INPUTS, RUNS_CODE, TAKES_DEVICE
+from lassi.core.capabilities import (
+    DEVICE_KEY,
+    PROPOSES_INPUTS,
+    REASONING_EFFORT,
+    REASONING_EFFORTS,
+    RUNS_CODE,
+    TAKES_DEVICE,
+)
 from lassi.core.devices import DeviceSectionError, parse_device
 from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry, RegistryError, check_bindings, device_path
 
@@ -184,6 +192,12 @@ LOOKUP = "lookup"
 LOOKUP_CORRECT = "correct"
 LOOKUP_PROMPTS = (LOOKUP_CORRECT,)
 LOOKUP_MAX_CHARS = (500, 32000)
+
+# The opt-in sampling key llm.sampling.reasoning_effort (OQ-080; bible Serving Rules, reasoning effort): one of
+# REASONING_EFFORTS, which a backend declaring the capability of that name takes (lassi.core.capabilities). Off when
+# absent, and never materialized, so a recipe without it keeps its resolved recipe and hash. Upstream sends no such
+# field, so it is refused under faithful: true, set or inherited (_check_sampling).
+REASONING_EFFORT_KEY = f"llm.sampling.{REASONING_EFFORT}"
 
 
 # Toolchain capabilities of a proxy build that is not upstream's: `openmp_multicore` builds OpenMP target regions
@@ -565,6 +579,10 @@ _SHA256 = _Leaf(
     "a sha256: 64 lowercase hexadecimal characters",
     lambda value: isinstance(value, str) and _SHA256_TEXT.fullmatch(value) is not None,
 )
+# llm.sampling.reasoning_effort (OQ-080): one of REASONING_EFFORTS as written.
+_REASONING_EFFORT = _Leaf(
+    f"one of {', '.join(REASONING_EFFORTS)}", lambda value: isinstance(value, str) and value in REASONING_EFFORTS
+)
 _STRINGS = _ListOf(_STR)
 _KIND = _KindSection()
 _EXECUTOR = _ExecutorSection()
@@ -612,7 +630,14 @@ SCHEMA = _Fields(
         "faithful": _BOOL,
         "fixes": _Fields({name: _BOOL for name in FIXES}),
         "extract": _Fields({name: _BOOL for name in EXTRACT}),  # opt-in leniencies; absent means off
-        "llm": _Fields({"sampling": _Fields({"temperature": _NUMBER, "top_p": _NUMBER, "max_tokens": _INT})}),
+        # reasoning_effort is an opt-in, absent means none is sent (OQ-080)
+        "llm": _Fields(
+            {
+                "sampling": _Fields(
+                    {"temperature": _NUMBER, "top_p": _NUMBER, "max_tokens": _INT, REASONING_EFFORT: _REASONING_EFFORT}
+                )
+            }
+        ),
         # opt-ins off when absent; RESTART_AFTER is the one int among them (task P17.25)
         "loop": _Fields(
             {"max_corrections": _CORRECTIONS, **{name: _BOOL for name in LOOP_OPT_INS}, RESTART_AFTER: _AT_LEAST_ONE}
@@ -795,6 +820,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     _check_loop(path, data)
     _check_retrieval(path, data)
     _check_lookup(path, data)
+    _check_sampling(path, data)
     bindings = _bindings(data)
     registry = DEFAULT_REGISTRY if registry is None else registry
     try:
@@ -1377,6 +1403,20 @@ def _check_lookup(path: Path, data: Mapping[str, Any]) -> None:
             f"{path}: {LOOKUP} is set, but faithful: true reproduces upstream, whose prompts carry no declarations "
             f"from a context pack; a recipe with faithful: true may not set it, so remove {LOOKUP} or set "
             "faithful: false"
+        )
+
+
+def _check_sampling(path: Path, data: Mapping[str, Any]) -> None:
+    """Refuse llm.sampling.reasoning_effort under faithful: true, inherited or not: upstream sends no such field.
+
+    Runs after the type check, so the key, when present, holds one of
+    REASONING_EFFORTS (Design Principle 4, Agent Rule 4).
+    """
+    if REASONING_EFFORT in data["llm"]["sampling"] and data["faithful"] is True:
+        raise RecipeError(
+            f"{path}: {REASONING_EFFORT_KEY} is {data['llm']['sampling'][REASONING_EFFORT]}, but faithful: true "
+            "reproduces upstream, whose requests carry no reasoning effort; a recipe with faithful: true may not set "
+            f"it, so remove {REASONING_EFFORT_KEY} or set faithful: false"
         )
 
 
