@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The feature matrix in an owner's window (owner, 2026-10-23: "do separate tests for all combinations of features
 # added to base LASSI"): projects/lassi-demo/sweep6, cpp -> tt, the API reference pack (P17.21) on or off, retrieval
-# over the tt-metal docs (P17.22) on or off, and the coarse mismatch report on or off, with the fuzzer adversary in
-# every recipe, for the models of models6.tsv. Self-contained, so it needs no session once started: it builds the
+# over the tt-metal docs (P17.22) on or off, and the coarse mismatch report on or off, plus mmapiragrl, all three
+# with restarts (P17.25) and declaration lookup (P17.26), with the fuzzer adversary in every recipe, for the models
+# of models6.tsv. Self-contained, so it needs no session once started: it builds the
 # two generated assets on the build host, checks that each tracked manifest is unchanged, runs run.sh, and tabulates.
 # Started from a clean commit on the build host (plans/runs/rngd-sweep/start-matrix.sh does this) as
 #   PYTHONIOENCODING=utf-8 uv run tools/rx.py job start --big --name rngd-matrix --timeout <seconds> -- \
