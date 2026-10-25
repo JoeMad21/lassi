@@ -1132,7 +1132,7 @@ Recommendation: (a): corrections rarely converged, so more fresh draws; tt -> cp
 Answer: Owner's choice (in the working session, 2026-10-25, about 15:10 EDT; recorded by the agent): "3 samples, cap 8 (Recommended)", and the defaults "cpp -> tt only", "Autonomy to stop/relaunch", and "Skip training tonight".
 
 ## OQ-087 Model Weights On alpha01: Remove 8B To 60B, Bring In Bigger Models; Back Up The Rest Of The Home Directory
-State: OPEN
+State: ANSWERED
 Kind: decision
 Blocks: the models of the window of 2026-10-25, 20:00 to 02:00
 Evidence: rx 20261025-131415-exec-62a6, rx 20261025-131520-exec-5abf, and rx 20261025-131620-exec-ce04 (read-only listings of /mnt/nvme10/joseph_ufl, which is the account's home: 359G, .cache 267G of it, the furiosa-ai models of 8B to 60B about 258G with gpt-oss-20b's shared store); https://huggingface.co/api/models?author=furiosa-ai and each model's tree at v2026.4, read 2026-10-25 (Llama-3.3-70B-Instruct-FP8-dynamic 73.8 GB, Solar-Open-100B-NVFP4A16 68.6 GB, gpt-oss-120b 198.6 GB, each on 4 RNGD cards by its model card; the BF16 Llama-3.3-70B-Instruct has no v2026.4 tag, and DeepSeek-R1-Distill-Llama-70B and the INT8 Llama only v2025.3.0); tools/server/gate.py (allowed_path and MAX_TAR_BYTES: rx pulls only run records, lassi-runs, and lassi-wt, at most 200 MB); AGENTS.md (raw ssh, scp, and rsync are forbidden to agents).
@@ -1142,4 +1142,4 @@ Options:
 - (b) Llama-3.3-70B-Instruct-FP8-dynamic and gpt-oss-120b: 272 GB, likely about 10 GB short of the 60 GB floor and a 5 GB margin.
 - (c) Llama-3.3-70B-Instruct-FP8-dynamic only.
 Recommendation: (a). The backup and deletion scripts are on the workstation, outside the repository, in C:/Users/Joseph/alpha01-backup-20261025 (backup.sh, then delete-on-alpha01.sh, which asks before each section and offers the models only with MODELS=yes); the agent deletes nothing there.
-Answer:
+Answer: Owner's choice (in the working session, 2026-10-25, about 16:40 EDT; recorded by the agent), after removing the models of 8B to 60B and the home directory's non-project files themselves (a listing at 13:33 on alpha01's clock, rx 20261025-133317-exec-489c, read 346 GB free and a 94G home): "Let's do Llama 70B and GPT-OSS, save the other large models for later testing suggestions." Tonight: furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic and furiosa-ai/gpt-oss-120b at v2026.4 (272.4 GB). For later testing: K-EXAONE-236B-A23B-NVFP4A16 (150.7 GB), Solar-Open-100B-NVFP4A16 (68.6 GB), and EXAONE-4.5-33B-FP8 (43.9 GB), each at v2026.4 on 4 RNGD cards; Qwen3.6-27B-FP8 and Qwen3.6-35B-A3B-FP8 need the v2026.5 SDK, a pin change (Agent Rule 10).
