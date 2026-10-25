@@ -188,7 +188,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P9.4 | READY | AMD and NVIDIA backends on the seam | P9.1 |  |
 | P9.5 | READY | Tenstorrent and Cerebras backends | P9.1,P9.3 |  |
 | P9.6 | READY | The LASSI-EE power protocol | P9.1 |  |
-| P9.7 | READY | The lassi-ee-22 manifest and its CPU-port references | - | manifest on Windows; reference runs on alpha01 in a window |
+| P9.7 | DONE | The lassi-ee-22 manifest and its CPU-port references | - | Windows half: assets/bench/lassi-ee-22.yaml (22 items, 18 ported, four absent), masks, the registry's absent key; a real fetch on the workstation checked all 82 sha256; XSBench's build is P9.15 and the remote reference test P9.16; bible rev 395 |
 | P9.8 | DONE | Spike: the paper's protocol details | - | plans/spikes/p9-ee-protocol.md: stop at counter > 0.8 (v1, v2), cap unstated (tables reach 11), single runs, metric conditioning; 27 open choices for P9.6, P9.9-P9.12; OQ-094; bible rev 381 |
 | P9.9 | READY | EE stages 0 to 2 and the lassi-ee-2026 prompts | P9.6,P9.8 |  |
 | P9.10 | READY | Stages 3 and 4: refine_loop, select, compare_report | P9.9,P15.2 | P15.2 is provisional: the P15 task that delivers the Judge interface (p15-judges) |
@@ -197,3 +197,5 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P9.13 | BLOCKED | The CPU-port run on alpha01 with RNGD generators | P9.2,P9.12 | OQ-089 answered: the 18 OpenMP apps, gpt-oss-120b generating, llama-3.3-70b judging, a pilot then an owner-picked subset at n=30; waits on an owner window after OQ-092's batch |
 | P9.14 | BLOCKED | GPU and device energy runs | P9.4,P9.5,P9.12 | BLOCKED: MI300X access (OQ-002, OQ-040), an NVIDIA host (OQ-003), TT silicon human-started only with OQ-078, Cerebras hardware (OQ-004) |
 | P9.G | READY | Phase gate, part (a): the CPU port runs end to end on alpha01 with energy or labeled wall time per Evaluation Protocol | P9.13 | part (b), the GPU acceptance criteria, stays with P9.14 |
+| P9.15 | READY | XSBench's cross-directory sources under gcc-native | P9.7 | XSBench's omp and hip builds take five .cu sources and a header from ../xsbench-cuda (compiled as C++ for omp); gcc-native compiles only a build's own .cpp files; a toolchain or manifest change, with a test |
+| P9.16 | BLOCKED | lassi-ee-22's reference builds and runs on alpha01 | P9.7,P9.15 | P9.7's remote test: every omp reference builds with gcc-native and runs twice in the sandbox with identical masked stdout; an owner window (OQ-092) |

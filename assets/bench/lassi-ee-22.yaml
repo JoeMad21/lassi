@@ -1,0 +1,516 @@
+# The LASSI-EE suite (bible Benchmark Suites: lassi-ee-22, single language, eval only; Source Papers, LASSI-EE).
+# Sources are pinned by commit and fetched by tools/fetch_bench.py under $LASSI_SCRATCH, never into git.
+suite: lassi-ee-22
+repo: https://github.com/zjin-lcf/HeCBench
+# lassi-hecbench-10's pin (plans/spikes/p1-hecbench-pin.md). The 22 apps are the paper's Table I (arXiv:2505.02184
+# v3; plans/spikes/p5-v0-corpus.md, section 4): 20 HeCBench apps, XSBench (HeCBench's xsbench), and miniMDock, which
+# HeCBench does not hold. Each sha256 below is that of the file at this commit (HeCBench's GitHub tree and raw
+# files, read 2026-10-25); tools/fetch_bench.py refuses a fetch whose files differ.
+commit: 692cba32c5744f6ef024cca59f65e9488edba8bf
+# Per item, each of omp, cuda, and hip that HeCBench holds at the pin as src/<app>-<language> (its sycl versions are
+# not listed). OQ-089 (a): the CPU port runs the 18 items with an omp version; the four without one declare it under
+# absent, with the reason, and are named as not ported in every result. The cuda and hip entries serve the GPU arms.
+# files: the language directory's own sources (every .cpp, .cu, and .h file in it but reference.h), which a model
+# sees and may change. support: harness files of that language's build directory, each {upstream, sha256}: each
+# file its Makefile takes from another directory (-I../<app>-cuda, ../<app>-cuda/<file>), under its own name, and
+# reference.h, the CPU reference check, in every language, as lassi-hecbench-10 keeps entropy's out of the model's
+# files (there as item-level support; here per language, so each carries a sha256 that tools/fetch_bench.py checks).
+# run_args [DESIGN]: the arguments of the app's Makefile run target at the pin (`$(LAUNCHER) ./$(program) <args>`),
+# the same in every language, and an empty list where it passes none; lassi-hecbench-10's are upstream LASSI's
+# instead, so the nine apps both suites hold run with other arguments here.
+# passfail: the languages whose sources print PASS as a whole word, the token the passfail oracle reads (bible
+# Oracles); the others are scored by the masked stdout alone.
+items:
+  all-pairs-distance:
+    split: eval
+    run_args: ["10000"]
+    passfail: [omp, cuda, hip]
+    languages:
+      omp:
+        dir: src/all-pairs-distance-omp
+        files: [main.cpp]
+        sha256: {main.cpp: bdf569a6485a8d34288f9a14fa9b932cf0e0925da13b53dbd4ae011151b0b40e}
+      cuda:
+        dir: src/all-pairs-distance-cuda
+        files: [main.cu]
+        sha256: {main.cu: 25c5823fe8c4dbe9388e0be5534f9f117c6cf438fc274fba998edf99d4d2e5c9}
+      hip:
+        dir: src/all-pairs-distance-hip
+        files: [main.cu]
+        sha256: {main.cu: 3bd01416194fc09ea258868eeef83dc9dee5d83bdbf576849ca4a1bb84370f4a}
+  bsearch:
+    split: eval
+    run_args: ["8388608", "100"]
+    passfail: []
+    languages:
+      omp:
+        dir: src/bsearch-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 7510f31aa1f2349aa3423691c25cf6fc499ebb69d89a020f5af140961561bf7b}
+      cuda:
+        dir: src/bsearch-cuda
+        files: [main.cu]
+        sha256: {main.cu: 0268969ff49b7d55c6066c930e101eeecf3d145e63faef3b8df4327b8001a574}
+      hip:
+        dir: src/bsearch-hip
+        files: [main.cu]
+        sha256: {main.cu: 8b57fbc6f472c953a6e1a386384c675efa0d926938a6c2a9fcecf62aa0f98929}
+  chacha20:
+    # The HIP version includes the CUDA directory's chacha20.h (-I../chacha20-cuda).
+    split: eval
+    run_args: ["100000"]
+    passfail: [omp, cuda, hip]
+    languages:
+      omp:
+        dir: src/chacha20-omp
+        files: [main.cpp, chacha20.h]
+        sha256:
+          main.cpp: 49cb9ff907e1431da79ef9c6cc5a311794927885530d1d79c3b60d504e6047f2
+          chacha20.h: 017bd6f9e74332fcae409537cda42b6946022d8e0dd4560e9d07e88df95df42c
+      cuda:
+        dir: src/chacha20-cuda
+        files: [main.cu, chacha20.h]
+        sha256:
+          main.cu: f36a13b7eddeff23fd65970bc3f48481c38802d396aa1898621177ee15af2828
+          chacha20.h: 1f0a9de5314a5e4ea7db10f292f182dfd735b2c9af7a535bfc86ff5a454a5909
+      hip:
+        dir: src/chacha20-hip
+        files: [main.cu]
+        sha256: {main.cu: 3118ee7ef623f21e82c2a709878754571523155ed67e5234d18713c847697cf8}
+        support:
+          chacha20.h:
+            upstream: src/chacha20-cuda/chacha20.h
+            sha256: 1f0a9de5314a5e4ea7db10f292f182dfd735b2c9af7a535bfc86ff5a454a5909
+  colorwheel:
+    split: eval
+    run_args: ["10", "4096", "100"]
+    passfail: [omp, cuda, hip]
+    languages:
+      omp:
+        dir: src/colorwheel-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 4093121818bc0c40f0f2f7ba9e8750c9918812838df1208d755a00596fed85a5}
+      cuda:
+        dir: src/colorwheel-cuda
+        files: [main.cu]
+        sha256: {main.cu: 38107094523e3a5066ae1942ff6a59bc2a5f293d2d6ba1a714fea632ac3dfa3e}
+      hip:
+        dir: src/colorwheel-hip
+        files: [main.cu]
+        sha256: {main.cu: ad5fce773cbfa5e39a979e5293e513939cdd55ea1e8c2c63e6150ee62b00f49f}
+  dense-embedding:
+    split: eval
+    run_args: ["100000", "256", "1000"]
+    passfail: [omp, cuda, hip]
+    languages:
+      omp:
+        dir: src/dense-embedding-omp
+        files: [main.cpp]
+        sha256: {main.cpp: e47a75f577ae1775d9d55fefd4d109fb2a1868c9e2a61ca89198853e6ffcb020}
+      cuda:
+        dir: src/dense-embedding-cuda
+        files: [main.cu]
+        sha256: {main.cu: 1b55b9f9aea4bc62b2cdf321c6d480344707ec4e912d4c479bc2f6b8dac5777b}
+      hip:
+        dir: src/dense-embedding-hip
+        files: [main.cu]
+        sha256: {main.cu: 3be1667526f986027cc6eada11857964a45c49f0ef2ecc50c9ef4b924b95d331}
+  entropy:
+    split: eval
+    run_args: ["8192", "8192", "100"]
+    passfail: [omp, cuda, hip]
+    languages:
+      omp:
+        dir: src/entropy-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 572cfb561a4fec6d2478e08fd0a227d1d8a1633326fd9b597ad9974445049fa6}
+        support:
+          reference.h:
+            upstream: src/entropy-cuda/reference.h
+            sha256: 302a437f9434bfb04f5b1a54629a159b3aff4edee4c3e17bbdc414212cb67a80
+      cuda:
+        dir: src/entropy-cuda
+        files: [main.cu]
+        sha256: {main.cu: af5c64a0a1cfa7c10fe41d690a0b89b5f313120f95910ed954dc2eae0ba9c3eb}
+        support:
+          reference.h:
+            upstream: src/entropy-cuda/reference.h
+            sha256: 302a437f9434bfb04f5b1a54629a159b3aff4edee4c3e17bbdc414212cb67a80
+      hip:
+        dir: src/entropy-hip
+        files: [main.cu]
+        sha256: {main.cu: fa5b600756ac3e9a9c7d8e0747eb0d7683c30ab1cd1c1f0027263e4fa77fd1bb}
+        support:
+          reference.h:
+            upstream: src/entropy-cuda/reference.h
+            sha256: 302a437f9434bfb04f5b1a54629a159b3aff4edee4c3e17bbdc414212cb67a80
+  extrema:
+    # Prints FAILED on a mismatch and nothing on a match: no PASS token in any language.
+    split: eval
+    run_args: ["100"]
+    passfail: []
+    languages:
+      omp:
+        dir: src/extrema-omp
+        files: [main.cpp]
+        sha256: {main.cpp: d142765c952224fe82c7c0d75441d0f9fe5277d9a2bc1fcf4d52dea317f4f56c}
+      cuda:
+        dir: src/extrema-cuda
+        files: [main.cu]
+        sha256: {main.cu: f9357a1a111d0cdb332189be2d284d00f2195d1264d67a89a459a51658353164}
+      hip:
+        dir: src/extrema-hip
+        files: [main.cu]
+        sha256: {main.cu: 8a4815eb175b4c80fadfb6b2054848d73069f7af9dd61d310d33e3078d9d438b}
+  floydwarshall:
+    split: eval
+    run_args: ["1024", "100", "16"]
+    passfail: [omp, cuda, hip]
+    languages:
+      omp:
+        dir: src/floydwarshall-omp
+        files: [main.cpp]
+        sha256: {main.cpp: a487cabe1384d0c209ea1be4810da98a50912235a94e706d8adf0993b3dec1cf}
+      cuda:
+        dir: src/floydwarshall-cuda
+        files: [main.cu]
+        sha256: {main.cu: 36e28b8fc46d35c2df1e8b4847ce33fddf6686c4e2f61e490c749471004517e3}
+      hip:
+        dir: src/floydwarshall-hip
+        files: [main.cu]
+        sha256: {main.cu: 233876c7dd8e3fbd6f9c3d244679dacc0a5594191e4e20547ea4d4edcc4408b0}
+  jaccard:
+    # The HIP version prints PASSED or FAILED, which are not the PASS and FAIL tokens.
+    split: eval
+    run_args: ["1024", "512", "1000"]
+    passfail: [cuda]
+    absent:
+      omp: >-
+        no src/jaccard-omp at the pin: HeCBench holds its cuda, hip, and sycl versions only;
+        not ported to the CPU (OQ-089 (a))
+    languages:
+      cuda:
+        dir: src/jaccard-cuda
+        files: [main.cu]
+        sha256: {main.cu: b95129e86e07d7d8da7ea7ab60efdb6f9943d83a455b841b4554d27458eaf873}
+      hip:
+        dir: src/jaccard-hip
+        files: [main.cu]
+        sha256: {main.cu: d830538b4335c45034ec8eb07c27ded241e640c95e6ae6d0b3e53e37fc8dd81e}
+  jacobi:
+    # The Makefile's run target passes no argument.
+    split: eval
+    run_args: []
+    passfail: [omp, cuda, hip]
+    languages:
+      omp:
+        dir: src/jacobi-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 437d064e9e2b3dd23dcb436b56c73c6403d0758db5d1d325ed4cce519a43a556}
+      cuda:
+        dir: src/jacobi-cuda
+        files: [main.cu]
+        sha256: {main.cu: 1bdccb9acc89b641971cf484d00fdaf80deccf608563a47c0206cb268be663b4}
+      hip:
+        dir: src/jacobi-hip
+        files: [main.cu]
+        sha256: {main.cu: 903af8dcb1c4917e61c07ff6a3fc21c7cc6e1d3f5c9e04fc13547337c42d56d9}
+  keogh:
+    split: eval
+    run_args: ["256", "20000000", "100"]
+    passfail: [omp, cuda, hip]
+    languages:
+      omp:
+        dir: src/keogh-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 99002fe7fc86a6f58ca61351a9ac35180ffbcc9179baece0abe7e18fae46046a}
+        support:
+          reference.h:
+            upstream: src/keogh-cuda/reference.h
+            sha256: fc065eea4990fb6951efc6fc83807effbf782e93631032eb74d5453a91cd8590
+      cuda:
+        dir: src/keogh-cuda
+        files: [main.cu]
+        sha256: {main.cu: 04d789d3a21567bd843986978c823b620754fb19a0c485f4deff1c927dd76f02}
+        support:
+          reference.h:
+            upstream: src/keogh-cuda/reference.h
+            sha256: fc065eea4990fb6951efc6fc83807effbf782e93631032eb74d5453a91cd8590
+      hip:
+        dir: src/keogh-hip
+        files: [main.cu]
+        sha256: {main.cu: 8e238e7f16b4bff7b77f6fe61081cde61712147c79ad2992a776fb85c3c95254}
+        support:
+          reference.h:
+            upstream: src/keogh-cuda/reference.h
+            sha256: fc065eea4990fb6951efc6fc83807effbf782e93631032eb74d5453a91cd8590
+  layout:
+    split: eval
+    run_args: ["1000"]
+    passfail: [omp, cuda, hip]
+    languages:
+      omp:
+        dir: src/layout-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 004471a88f8e4bd9310c9b6d7d6eed97c346ec0792d3c5fa9ed4ad2ee8a18917}
+      cuda:
+        dir: src/layout-cuda
+        files: [main.cu]
+        sha256: {main.cu: 4c9be5825f1b1165127047dfd70e57304f9a6bfa522eab876a5a42b5958774a3}
+      hip:
+        dir: src/layout-hip
+        files: [main.cu]
+        sha256: {main.cu: aaf3c825380c5734ad14ba73deaf9d85b97cfd56842d6a4810cebb7fdf16343e}
+  lid-driven-cavity:
+    # The OpenMP version's kernels are the headers its main.cpp includes.
+    # The Makefile's run target passes no argument.
+    split: eval
+    run_args: []
+    passfail: []
+    languages:
+      omp:
+        dir: src/lid-driven-cavity-omp
+        files:
+          - main.cpp
+          - black_kernel.h
+          - calc_residual.h
+          - calculate_F.h
+          - calculate_G.h
+          - calculate_u.h
+          - calculate_v.h
+          - red_kernel.h
+          - set_BCs.h
+          - set_horz_pres_BCs.h
+          - set_vert_pres_BCs.h
+          - sum_pressure.h
+        sha256:
+          main.cpp: 2afefb3e387cd8a0b31a614cf05a7c2f596a3a0097acc62ac40f6fa477c5e140
+          black_kernel.h: d6440c77607c2f7ea9a64fffd58c92d63898ae67e840e8b71db49bfc4e692ebc
+          calc_residual.h: 91a748d649ceddeb46d27714d0a15e1c8af77fa161ed4a7e12e26d93920f5246
+          calculate_F.h: 31e53a11952c8b86254dfd00cc6b3f28e083f9b7667b52d2b314a3bef71f1760
+          calculate_G.h: e8cce2e027fb705104305f6b0631b0491509d9ee766aa446ae08ce6207a64df4
+          calculate_u.h: 12fde7d19342ef7e35dfdc41dfd5537fa3648082078f43111d48ac48bbf7ad6e
+          calculate_v.h: 1e2902f559007cebdbbc7a311e8fc6384e1d0c6cf333f653f4828b1fc5f34067
+          red_kernel.h: 662c84e56aa958326bb5c38494132c8f295046a039d422fec8e286c2013f1e94
+          set_BCs.h: 9de9ee758dfa2795aed88673952820886d3b21fb72e164f7e69e9f25939d1104
+          set_horz_pres_BCs.h: a5d365ef7507fd9867cba08959773965347b1b0d623c3620d8d8346ff1d75f93
+          set_vert_pres_BCs.h: 8d3b2af6ac486166c5fc22fffb2ecf34eabb5ff289ce2de82010beff7530566a
+          sum_pressure.h: d2ef4d9e37f486fbc9885278a07a2453a304574efcfa23cd81163b59024c95b5
+      cuda:
+        dir: src/lid-driven-cavity-cuda
+        files: [main.cu]
+        sha256: {main.cu: 4c0328f3cf149d77d1feac9027ca6ca07faa42a76e7a7beca58ae63601a45ed2}
+      hip:
+        dir: src/lid-driven-cavity-hip
+        files: [main.cu]
+        sha256: {main.cu: c15f6a894de9134e6f6edb0203298557b9eb72d314ec81a7386ef0bb2b4c117b}
+  marchingCubes:
+    # The HIP version includes the CUDA directory's tables.h (-I../marchingCubes-cuda).
+    split: eval
+    run_args: ["100"]
+    passfail: [cuda, hip]
+    absent:
+      omp: >-
+        no src/marchingCubes-omp at the pin: HeCBench holds its cuda, hip, and sycl versions only;
+        not ported to the CPU (OQ-089 (a))
+    languages:
+      cuda:
+        dir: src/marchingCubes-cuda
+        files: [main.cu, tables.h]
+        sha256:
+          main.cu: 77856e4911be31f8d68a503a4cfab2c8d2a7434a80430f1be7d66be83cb21dac
+          tables.h: c239c60a76242e70b028dc4625a11ca9e2e3cc6a6dc5b91db9dbd5f715700829
+      hip:
+        dir: src/marchingCubes-hip
+        files: [main.cu]
+        sha256: {main.cu: 1ded7c74ea31290e4ded9d166945ca2a50db1e860d048617bd9b2dff8d338a0f}
+        support:
+          tables.h:
+            upstream: src/marchingCubes-cuda/tables.h
+            sha256: c239c60a76242e70b028dc4625a11ca9e2e3cc6a6dc5b91db9dbd5f715700829
+  matrix-rotate:
+    split: eval
+    run_args: ["5000", "100"]
+    passfail: [omp, cuda, hip]
+    languages:
+      omp:
+        dir: src/matrix-rotate-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 0a75e4a6aac2d73821bb73d4fbc3ad5d1efa796082597a7598757567293bc4c8}
+      cuda:
+        dir: src/matrix-rotate-cuda
+        files: [main.cu]
+        sha256: {main.cu: ed315e736acb3621d48965b11b316e292e5cad82d474f66f61191a92f9edb7b5}
+      hip:
+        dir: src/matrix-rotate-hip
+        files: [main.cu]
+        sha256: {main.cu: ead59707c49ecfba972cd8adeb5baf809e14d4ec7eca85e808679199d83ba20e}
+  miniMDock:
+    # No sources at the pin, so no languages and no run_args.
+    split: eval
+    passfail: []
+    absent:
+      omp: >-
+        not in HeCBench at the pin: no src/miniMDock-* directory (plans/spikes/p5-v0-corpus.md,
+        section 4); not ported (OQ-089 (a))
+      cuda: >-
+        not in HeCBench at the pin: no src/miniMDock-* directory (plans/spikes/p5-v0-corpus.md,
+        section 4); not ported (OQ-089 (a))
+      hip: >-
+        not in HeCBench at the pin: no src/miniMDock-* directory (plans/spikes/p5-v0-corpus.md,
+        section 4); not ported (OQ-089 (a))
+    languages: {}
+  murmurhash3:
+    # Prints SUCCESS or FAIL, never PASS, so no language is listed under passfail.
+    split: eval
+    run_args: ["100000", "100"]
+    passfail: []
+    languages:
+      omp:
+        dir: src/murmurhash3-omp
+        files: [murmurhash3.cpp]
+        sha256: {murmurhash3.cpp: d022df719fc1cfb7e310dc286d168e530961866a13a0d8e5de63dae4e51255c3}
+      cuda:
+        dir: src/murmurhash3-cuda
+        files: [murmurhash3.cu]
+        sha256: {murmurhash3.cu: 79d958a4deb49ddd5ecda67df4183af9b1a95f70322367d6c99f809e10dfd336}
+      hip:
+        dir: src/murmurhash3-hip
+        files: [murmurhash3.cu]
+        sha256: {murmurhash3.cu: 8bea6bb2db9d89c28ffd12d3ebb93d59c3cbfd5325323a4053a1f51bd7097f36}
+  pathfinder:
+    split: eval
+    run_args: ["100000", "1000", "5"]
+    passfail: []
+    languages:
+      omp:
+        dir: src/pathfinder-omp
+        files: [main.cpp]
+        sha256: {main.cpp: ebcb3d25cdd6da85b07b8a8850fe3e548fc79e4e3e268a98b8e811fe8428ebe3}
+      cuda:
+        dir: src/pathfinder-cuda
+        files: [main.cu]
+        sha256: {main.cu: a97520e25758e91b45c1dd7fec39f7b64691b69032c72e221f9629963cbd0ac9}
+      hip:
+        dir: src/pathfinder-hip
+        files: [main.cu]
+        sha256: {main.cu: 73ff52b1c371332be2ab80300d9fbbf67ec691823449ae64010656cb85891bb3}
+  randomAccess:
+    # The OpenMP version prints no PASS (as in lassi-hecbench-10).
+    split: eval
+    run_args: ["10"]
+    passfail: [cuda, hip]
+    languages:
+      omp:
+        dir: src/randomAccess-omp
+        files: [main.cpp]
+        sha256: {main.cpp: d8901f8c2b4e70ef58b0cea790876c6623e81545bbdbe41d91cbca71e889ab42}
+      cuda:
+        dir: src/randomAccess-cuda
+        files: [main.cu]
+        sha256: {main.cu: 28ecb90f300e7c537bd094acca9ab1c61b20005004ab6c9eb659df708c9300e2}
+      hip:
+        dir: src/randomAccess-hip
+        files: [main.cu]
+        sha256: {main.cu: 0e8739fd3aed5fd8b231f980a37c490bf651a0c4413e8606bed0b11de5bad0a0}
+  segment-reduce:
+    split: eval
+    run_args: ["16384", "100"]
+    passfail: []
+    absent:
+      omp: >-
+        no src/segment-reduce-omp at the pin: HeCBench holds its cuda, hip, and sycl versions only;
+        not ported to the CPU (OQ-089 (a))
+    languages:
+      cuda:
+        dir: src/segment-reduce-cuda
+        files: [main.cu]
+        sha256: {main.cu: 592830e8871e845aad774ea61c8033ff6425f563b23cbe8708d77cab6da85461}
+      hip:
+        dir: src/segment-reduce-hip
+        files: [main.cu]
+        sha256: {main.cu: 21b49848577ff7f25788bb2d835ef7cf9899815043825df401d3d60de0a7651e}
+  threadfence:
+    split: eval
+    run_args: ["100", "10000000"]
+    passfail: [omp, cuda, hip]
+    languages:
+      omp:
+        dir: src/threadfence-omp
+        files: [main.cpp]
+        sha256: {main.cpp: 934a92ab1ab35cc3ec4d56acd7a5b8883ad5945a995d7a18997e0415f1e1c197}
+      cuda:
+        dir: src/threadfence-cuda
+        files: [main.cu]
+        sha256: {main.cu: cdbc37d97ea0e91c0087d319618a5d2645f54e049f9cc7edc6c78e7423dd8381}
+      hip:
+        dir: src/threadfence-hip
+        files: [main.cu]
+        sha256: {main.cu: a2c723c581262752e74a793b0dff0a989a1d2d95ee88a7966cd8939355b6fb1f}
+  XSBench:
+    # HeCBench's xsbench (its Main.cu says version 19). The OpenMP and HIP builds compile their own
+    # Simulation source with the CUDA directory's other five sources and its header (their Makefiles:
+    # -I../xsbench-cuda and ../xsbench-cuda/<file>.cu, which the OpenMP Makefile compiles as C++ with
+    # -x c++); each of those six is a support file of those two languages here. It prints a
+    # verification checksum and no PASS token.
+    split: eval
+    run_args: ["-s", "large", "-m", "event", "-r", "10"]
+    passfail: []
+    languages:
+      omp:
+        dir: src/xsbench-omp
+        files: [Simulation.cpp]
+        sha256: {Simulation.cpp: d0f9bb7c2104c00bfac3627c592960ac6b5873a5d92b28d4dce573c09f56d2a3}
+        support:
+          GridInit.cu:
+            upstream: src/xsbench-cuda/GridInit.cu
+            sha256: e08aa7f578b5faf1f89da17b6c2e6c406b50318b5c7534cc45410704a69557cc
+          Main.cu:
+            upstream: src/xsbench-cuda/Main.cu
+            sha256: 4bc8bb1026dc2761c92af8138c53a712d36020ae780cbe5973c9a6ded1feee0b
+          Materials.cu:
+            upstream: src/xsbench-cuda/Materials.cu
+            sha256: 124a200dd087028a6986162bcd62a93820bbe599d297d2abb82213ed526b55ed
+          XSutils.cu:
+            upstream: src/xsbench-cuda/XSutils.cu
+            sha256: 6010eb5f0b02897936a61da4788f54805ad04de99b8d856649c7a33641e4ceab
+          XSbench_header.h:
+            upstream: src/xsbench-cuda/XSbench_header.h
+            sha256: f7fc7944d5cc9205c2b87385d3a35ac99c1af920501259f913d192671ac3a4ca
+          io.cu:
+            upstream: src/xsbench-cuda/io.cu
+            sha256: 3a94403c93992457d9904c4cce16859b1c27b9ec9aad64a9bcada2c28a71bf51
+      cuda:
+        dir: src/xsbench-cuda
+        files: [GridInit.cu, Main.cu, Materials.cu, Simulation.cu, XSutils.cu, XSbench_header.h, io.cu]
+        sha256:
+          GridInit.cu: e08aa7f578b5faf1f89da17b6c2e6c406b50318b5c7534cc45410704a69557cc
+          Main.cu: 4bc8bb1026dc2761c92af8138c53a712d36020ae780cbe5973c9a6ded1feee0b
+          Materials.cu: 124a200dd087028a6986162bcd62a93820bbe599d297d2abb82213ed526b55ed
+          Simulation.cu: 07fe4f05e8a16f933e6c274df7f4b1367d8579aae240de0fda45b5f5b09a3d33
+          XSutils.cu: 6010eb5f0b02897936a61da4788f54805ad04de99b8d856649c7a33641e4ceab
+          XSbench_header.h: f7fc7944d5cc9205c2b87385d3a35ac99c1af920501259f913d192671ac3a4ca
+          io.cu: 3a94403c93992457d9904c4cce16859b1c27b9ec9aad64a9bcada2c28a71bf51
+      hip:
+        dir: src/xsbench-hip
+        files: [Simulation.cu]
+        sha256: {Simulation.cu: fe50db967041b02fd5e2eced947cb2338defd528af7c5f0f159740be0613ec6e}
+        support:
+          GridInit.cu:
+            upstream: src/xsbench-cuda/GridInit.cu
+            sha256: e08aa7f578b5faf1f89da17b6c2e6c406b50318b5c7534cc45410704a69557cc
+          Main.cu:
+            upstream: src/xsbench-cuda/Main.cu
+            sha256: 4bc8bb1026dc2761c92af8138c53a712d36020ae780cbe5973c9a6ded1feee0b
+          Materials.cu:
+            upstream: src/xsbench-cuda/Materials.cu
+            sha256: 124a200dd087028a6986162bcd62a93820bbe599d297d2abb82213ed526b55ed
+          XSutils.cu:
+            upstream: src/xsbench-cuda/XSutils.cu
+            sha256: 6010eb5f0b02897936a61da4788f54805ad04de99b8d856649c7a33641e4ceab
+          XSbench_header.h:
+            upstream: src/xsbench-cuda/XSbench_header.h
+            sha256: f7fc7944d5cc9205c2b87385d3a35ac99c1af920501259f913d192671ac3a4ca
+          io.cu:
+            upstream: src/xsbench-cuda/io.cu
+            sha256: 3a94403c93992457d9904c4cce16859b1c27b9ec9aad64a9bcada2c28a71bf51

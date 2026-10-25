@@ -1,0 +1,68 @@
+# Timing masks of the lassi-ee-22 suite for the stdout_mask oracle (task P9.7; bible Oracles, Harness Contract).
+# Each item lists regular expressions; lassi.oracles.load_masks reads them, and a line that one of its item's
+# masks matches (re.search) is a run-varying line, replaced whole by one marker line before stdouts are compared.
+# The masks come from the stdout print statements of the build files of the item's pinned sources in every
+# language (the manifest assets/bench/lassi-ee-22.yaml pins them; a language's build files are its files and its
+# support files). A print is run-varying when its text names a time or a rate per second (G/s, Lookups/s), so the
+# rates derived from a timing are masked with it; lid-driven-cavity's "Time = " line, the simulated time, is not.
+# Each mask matches the fixed text that starts a run-varying print, never the printed number, so any number format
+# is masked. The nine items lassi-hecbench-10 also holds keep its masks. miniMDock has no sources and no masks.
+# tests/bench/test_lassi_ee22_masks.py renders every stdout print of the pinned sources and checks both
+# directions: each run-varying line is masked and no other line is.
+suite: lassi-ee-22
+items:
+  all-pairs-distance:
+    - '^CPU time: '
+    - '^Average kernel execution time \(w/o? shared memory\): '
+  # The OpenMP version says "device" where the CUDA and HIP versions say "kernel".
+  bsearch:
+    - '^Average (kernel|device) execution time \(bs[1-4]\) '
+  chacha20:
+    - '^Average execution time of kernels: '
+  colorwheel:
+    - '^Average kernel execution time : '
+  dense-embedding:
+    - '^Average execution time of dense embedding kernel \(k[12]\): '
+  entropy:
+    - '^Average kernel \((baseline|optimized)\) execution time '
+  extrema:
+    - '^Average [12]D kernel \(type = '
+    - '^Total kernel execution time: '
+  floydwarshall:
+    - '^Average kernel execution time '
+  jaccard:
+    - '^Average execution time of kernels: '
+  jacobi:
+    - '^Average execution time per iteration: '
+    - '^Total elapsed time: '
+  keogh:
+    - '^Average kernel execution time: '
+  layout:
+    - '^Average kernel execution time \((AoS|SoA)\): '
+  lid-driven-cavity:
+    - '^Total execution time of the iteration loop: '
+  marchingCubes:
+    - '^Average kernel execution time \(generatingTriangles\): '
+  matrix-rotate:
+    - '^Average kernel execution time: '
+  murmurhash3:
+    - '^Average kernel execution time '
+  # The OpenMP version prints no space before "(s)" on the offloading line; the mask stops before the number.
+  pathfinder:
+    - '^Total kernel execution time: '
+    - '^Device offloading time = '
+  randomAccess:
+    - '^Average kernel execution time: '
+  # The rate ends a line that two earlier prints start (num_segments, then segment_size), so the mask is not
+  # anchored at the line's start.
+  segment-reduce:
+    - 'Throughput = '
+  threadfence:
+    - '^Average kernel execution time: '
+  # The rates follow a label print and are printed by the comma-grouping helper; the MPI lines are compiled only
+  # with -DMPI, which no build here sets.
+  XSBench:
+    - '^Runtime: '
+    - '^Average kernel execution time: '
+    - '^(Total )?Lookups/s: '
+    - '^Avg Lookups/s per MPI rank: '

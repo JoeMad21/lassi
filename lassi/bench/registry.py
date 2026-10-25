@@ -72,6 +72,13 @@ Optional keys for hand-written pairs (task P4.13, tt-pairs-v0):
   generate_inputs and stage_inputs read only inputs and seed.
 - per item, `unpack_to_dest`: a non-empty note on the item's unpack_to_dest
   check (ttsim Facts; plans/spikes/p4-ttsim-runtime.md).
+- per item, `absent: {<language>: <note>}` (task P9.7): each language the
+  item has no version of at the pinned commit, with a non-empty note
+  saying why, such as lassi-ee-22's apps with no OpenMP version in
+  HeCBench (OQ-089). A language may not be both absent and under
+  `languages`, and `languages` may be empty only on an item that declares
+  `absent`, an app with no sources at the pin. Reading an absent
+  language's sources raises ValueError quoting its note.
 
 A tracked suite (task P16.8): a manifest may leave out `repo` and
 `commit` together, for a suite written wholly in this repository, such as
@@ -126,7 +133,9 @@ _OUTPUT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,246}")
 _REPO = Path(__file__).resolve().parents[2]
 # The root tracked paths are read under: this repository (tests point it elsewhere).
 TRACKED_ROOT = _REPO
-_ITEM_KEYS = {"run_args", "passfail", "support", "tolerance", "inputs", "outputs", "seed", "unpack_to_dest", "contract"}
+_ITEM_KEYS = {
+    "run_args", "passfail", "support", "tolerance", "inputs", "outputs", "seed", "unpack_to_dest", "contract", "absent",
+}  # fmt: skip
 _HELD_OUT = ("inputs", "outputs", "seed")
 
 
@@ -191,8 +200,10 @@ class SuiteItem:
     `tolerance` is the tolerance its two references must meet (None when the
     manifest declares none). `inputs`, `outputs`, and `seed` are its
     held-out inputs (empty and None when it declares none),
-    `unpack_to_dest` its unpack_to_dest note, and `contract` its input
-    contract (lassi.harness InputContract; None without held-out inputs).
+    `unpack_to_dest` its unpack_to_dest note, `contract` its input
+    contract (lassi.harness InputContract; None without held-out inputs),
+    and `absent` maps each language it has no version of at the pin to
+    the note saying why (empty when it declares none).
     """
 
     name: str
@@ -207,6 +218,7 @@ class SuiteItem:
     seed: int | None = None
     unpack_to_dest: str | None = None
     contract: InputContract | None = None
+    absent: Mapping[str, str] = field(default_factory=dict)
 
 
 def _held_message(suite: str, name: str, split: str, purpose: str) -> str:
@@ -321,8 +333,11 @@ class Suite:
         return BenchItem(suite=self.name, item=name, split=found.split, direction=direction.name)
 
     def _language(self, found: SuiteItem, language: str) -> LanguageSources:
-        """Return one language's sources of an item; ValueError naming the item's languages when it lacks it."""
+        """Return one language's sources of an item; a ValueError quotes its absent note, else names its languages."""
         spec = found.languages.get(language)
+        if spec is None and language in found.absent:
+            note = found.absent[language]
+            raise ValueError(f"{self.name}/{found.name} has no {language!r} sources at the pin: {note}")
         if spec is None:
             known = ", ".join(found.languages)
             raise ValueError(f"{self.name}/{found.name} has no {language!r} sources; languages: {known}")
@@ -480,9 +495,10 @@ def _item(name: Any, spec: Any, where: str) -> SuiteItem:
     _keys(spec, {"split", "languages"}, where, optional=_ITEM_KEYS)
     if spec["split"] not in SPLITS:
         raise ValueError(f"{where}.split must be one of {', '.join(SPLITS)}, got {spec['split']!r}")
-    if not isinstance(spec["languages"], dict) or not spec["languages"]:
-        raise ValueError(f"{where}.languages must be a non-empty mapping")
+    if not isinstance(spec["languages"], dict) or not (spec["languages"] or "absent" in spec):
+        raise ValueError(f"{where}.languages must be a non-empty mapping, or empty on an item that declares absent")
     languages = {lang: _language(value, f"{where}.languages.{lang}") for lang, value in spec["languages"].items()}
+    absent = _absent(spec, languages, where)
     run_args = spec.get("run_args", [])
     if not isinstance(run_args, list) or not all(isinstance(arg, str) for arg in run_args):
         raise ValueError(f"{where}.run_args must be a list of strings, got {run_args!r}")
@@ -512,7 +528,23 @@ def _item(name: Any, spec: Any, where: str) -> SuiteItem:
         seed=seed,
         unpack_to_dest=note,
         contract=contract,
+        absent=absent,
     )
+
+
+def _absent(spec: Mapping[str, Any], languages: Mapping[str, LanguageSources], where: str) -> dict[str, str]:
+    """Check an item's `absent` key: a non-empty mapping of language -> non-empty note, none under `languages`."""
+    if "absent" not in spec:
+        return {}
+    value = spec["absent"]
+    entries = list(value.items()) if isinstance(value, dict) else []
+    notes = [isinstance(key, str) and isinstance(text, str) and bool(text.strip()) for key, text in entries]
+    if not notes or not all(notes):
+        raise ValueError(f"{where}.absent must map each language the pin lacks to a non-empty note, got {value!r}")
+    both = sorted(language for language in value if language in languages)
+    if both:
+        raise ValueError(f"{where}.absent names {both[0]!r}, which the item's languages also list")
+    return dict(value)
 
 
 def _item_support(support: Any, languages: Mapping[str, LanguageSources], where: str) -> dict[str, str]:

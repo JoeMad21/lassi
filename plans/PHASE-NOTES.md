@@ -175,6 +175,9 @@ Repository-specific hints for planning. The bible stays authoritative; these not
   - P9.4 (it next touches lassi/profilers/energy.py): the telemetry record merges `{**head, "label": ..., **source.record()}`, so a backend's record could overwrite profiler, backend, measures, or label, wall's label included; merge head last or refuse colliding keys. And _settings skips a key the backend does not take when its value is null (interval_ms: null under wall); refuse it like any other value, as the tests' "nothing is ignored" says.
   - P9.6: native runs are not pinned to the package rapl reads, and alpha01 has two packages (plans/spikes/p0-nvcc.md), so an attempt may run on the other one; pin the run to the package's cores or record the cores it ran on before P9.13. Also add `telemetry` beside `serving` in Result Record, Storage, and consider copying backend, domain, and label into each trial's provenance with the protocol's Profile fields, so a trial read outside its run tree keeps them.
   - P9.6 and P9.5: stop sampling a Tenstorrent card for the rest of a window after its first all-ones read (1110490560; plans/spikes/p9-tt-power.md, Verdict).
+- Hand-offs from P9.7's audit (2026-10-25):
+  - P9.15 or P9.12: lassi/core/runner.py _check_trials appends the fetch hint to every ValueError, so a refusal for an `absent` language also tells the user to fetch sources that do not exist; skip the hint for that refusal. lassi/core/stages.py target_files gives the plain error without the item's note.
+  - Later: tests/bench/test_lassi_ee22_masks.py loads tests/oracles/test_harness_masks.py by path and calls its private helpers; move the shared print renderer into one test helper module when either changes.
 
 ## P11 Dataflow Dialect (deferred separate project)
 
