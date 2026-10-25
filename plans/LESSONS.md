@@ -72,6 +72,16 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 
 ## alpha01
 
+- `rx job kill` ends only the job runner, not the job's command, which the runner starts in a session of its own
+  (OQ-082): on 2026-10-25 the killed window job's run-all.sh kept running with its server on npu0 to npu3 and 18
+  lassi runs. After a kill, with the owner's approval for the window (Agent Rule 17), find the command's session
+  (`ps -o pid,sid,args` through rx exec), check that its leader is the job's command, end it with
+  `pkill -TERM -s <sid>`, and wait for every process to exit, every card to read 0.00 GiB, and port 8123 to close
+  before starting again.
+- A model served from the Hugging Face cache needs every file of its revision: furiosa-llm checks the snapshot
+  offline and refused gpt-oss-20b fetched with `ignore_patterns` (IncompleteSnapshotError, 2026-10-25). Fetch whole
+  revisions, and size the disk check on every file (the API's `tree/<rev>?recursive=1`), not the root files; the
+  window's job had to be restarted at 08:23, and gpt-oss-120b's whole revision (198.61 GB) did not fit.
 - run.sh's per-model time share (SWEEP_MAX_SHARE) caps the last model too, so a sweep can end long before its
   deadline with that model's trials cut short: the fifth pass of 2026-10-24 ended at 02:25 EDT, 79 minutes early,
   with Llama-3.1-8B at 5 of 10 trials per recipe, its recipes ending rc 124 at the 4800 s share (rx
