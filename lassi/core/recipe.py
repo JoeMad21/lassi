@@ -18,8 +18,9 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
    set true (restart_after: set at all) under faithful: true, and a loop.restart_after past loop.max_corrections
    (_check_loop; task P17.25), naming its key, and a `retrieval` section (task P17.22: every
    key required, k and max_chars within RETRIEVAL_K and RETRIEVAL_MAX_CHARS, prompts distinct RETRIEVAL_PROMPTS)
-   under faithful: true (_check_retrieval), and a `lookup` section (task P17.26: both keys required, max_chars
-   within LOOKUP_MAX_CHARS, prompts distinct LOOKUP_PROMPTS) under faithful: true (_check_lookup), and
+   under faithful: true (_check_retrieval), and a `lookup` section (task P17.26: max_chars and prompts required,
+   max_chars within LOOKUP_MAX_CHARS, prompts distinct LOOKUP_PROMPTS; core required exactly when prompts lists
+   generate, nearest within LOOKUP_NEAREST only when it lists correct) under faithful: true (_check_lookup), and
    llm.sampling.reasoning_effort (OQ-080: one of REASONING_EFFORTS) under faithful: true (_check_sampling);
 8. binds components and checks their capabilities without constructing any (Component Interfaces), the
    adversary section's Agent among them, which must declare proposes_inputs (task P16.2); refuses a faithful
@@ -37,6 +38,11 @@ A project is a recipe, not code (bible, Design Principle 1). Loading a recipe:
    which must then match, so a rerun from the resolved recipe reads the same bytes; the backend's binding
    carries the checked file, and the adversary's binding the sha256 beside the path as written;
 10. serializes the resolved mapping to canonical YAML and hashes it.
+
+The optional `examples` section (EXAMPLES; OQ-083 (b)) is like `lookup`: never materialized in step 5, so a recipe
+without it keeps its resolved recipe and hash, and in step 7 every key required (pack a plain name, max_chars within
+EXAMPLES_MAX_CHARS, prompts [generate] or [generate, correct]) and the section refused under faithful: true, set or
+inherited (_check_examples).
 
 `executor` has two forms (task P4.5). The single form is a kind section, `{kind: <name>, <config>...}`,
 binding one Executor at executor.kind for every language. The per-language form is a non-empty mapping
@@ -185,13 +191,35 @@ _INDEX_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 # The optional lookup section (task P17.26): the target language's context pack's declarations of the identifiers a
 # compile correction's listed errors name, before the prompts it lists (lassi.core.stages). Off when absent, and never
 # materialized, so a recipe without it keeps its resolved recipe and hash. Upstream's prompts carry no declarations,
-# so it is refused under faithful: true (_check_lookup). Its keys are both required: max_chars (the declarations'
-# total text per prompt) within the bounds below, and prompts (distinct LOOKUP_PROMPTS; a generation prompt shows no
-# error to read, so only a correction may carry them).
+# so it is refused under faithful: true (_check_lookup). Two keys are required: max_chars (the declarations'
+# total text per prompt) within the bounds below, and prompts (distinct LOOKUP_PROMPTS). A generation prompt shows no
+# error to read, so when prompts lists generate the declarations it carries are those of the pack's header parts
+# that core names (2026-10-25): core is then required, a non-empty list of distinct header paths as the pack's
+# include lines name them (the runner refuses one the pack has no part for), and refused otherwise. nearest
+# (optional, within LOOKUP_NEAREST, only when prompts lists correct) adds, for each identifier of a listed error that
+# names no declaration, a line naming up to that many declared names nearest to it.
 LOOKUP = "lookup"
+LOOKUP_GENERATE = "generate"
 LOOKUP_CORRECT = "correct"
-LOOKUP_PROMPTS = (LOOKUP_CORRECT,)
+LOOKUP_PROMPTS = (LOOKUP_GENERATE, LOOKUP_CORRECT)
 LOOKUP_MAX_CHARS = (500, 32000)
+LOOKUP_CORE = "core"
+LOOKUP_NEAREST = "nearest"
+LOOKUP_NEAREST_RANGE = (1, 8)
+# A header path of lookup.core: no blank, `<`, or `>`, as the include line `// ==== #include <H> ====` holds it.
+_HEADER_TEXT = re.compile(r"[^\s<>]+")
+
+# The optional examples section (OQ-083 (b), 2026-10-25): worked examples, complete programs from a pack under
+# assets/examples/ (lassi.prompts.examples), before the prompts it lists (lassi.core.stages). Off when absent, and
+# never materialized, so a recipe without it keeps its resolved recipe and hash. Upstream's prompts carry no
+# examples, so it is refused under faithful: true (_check_examples). Its keys are all required: pack (a directory
+# under assets/examples/ holding MANIFEST.yaml), max_chars (the examples' total text per prompt) within the bounds
+# below, and prompts (distinct EXAMPLES_PROMPTS holding generate: [generate] or [generate, correct]).
+EXAMPLES = "examples"
+EXAMPLES_GENERATE = "generate"
+EXAMPLES_CORRECT = "correct"
+EXAMPLES_PROMPTS = (EXAMPLES_GENERATE, EXAMPLES_CORRECT)
+EXAMPLES_MAX_CHARS = (1000, 64000)
 
 # The opt-in sampling key llm.sampling.reasoning_effort (OQ-080; bible Serving Rules, reasoning effort): one of
 # REASONING_EFFORTS, which a backend declaring the capability of that name takes (lassi.core.capabilities). Off when
@@ -546,11 +574,29 @@ def _is_retrieval_prompts(value: Any) -> bool:
     return len(set(value)) == len(value)
 
 
+def _is_lookup_core(value: Any) -> bool:
+    """Return True for a non-empty list of distinct header paths, each with no blank, `<`, or `>` (_HEADER_TEXT)."""
+    if not isinstance(value, list) or not value:
+        return False
+    if not all(isinstance(item, str) and _HEADER_TEXT.fullmatch(item) for item in value):
+        return False
+    return len(set(value)) == len(value)
+
+
 def _is_lookup_prompts(value: Any) -> bool:
     """Return True for a non-empty list of distinct names among LOOKUP_PROMPTS."""
     if not isinstance(value, list) or not value:
         return False
     if not all(isinstance(item, str) and item in LOOKUP_PROMPTS for item in value):
+        return False
+    return len(set(value)) == len(value)
+
+
+def _is_examples_prompts(value: Any) -> bool:
+    """Return True for a list of distinct names among EXAMPLES_PROMPTS that holds EXAMPLES_GENERATE."""
+    if not isinstance(value, list) or EXAMPLES_GENERATE not in value:
+        return False
+    if not all(isinstance(item, str) and item in EXAMPLES_PROMPTS for item in value):
         return False
     return len(set(value)) == len(value)
 
@@ -606,7 +652,8 @@ _RETRIEVAL = _Fields(
     },
     required=frozenset({"index", "k", "max_chars", "prompts"}),
 )
-# The lookup section (task P17.26; LOOKUP): a mapping with both keys required.
+# The lookup section (task P17.26; LOOKUP): a mapping with max_chars and prompts required; core and nearest are
+# checked against prompts by _check_lookup.
 _LOOKUP = _Fields(
     {
         "max_chars": _Leaf(
@@ -614,8 +661,35 @@ _LOOKUP = _Fields(
             lambda value: _is_between(value, LOOKUP_MAX_CHARS),
         ),
         "prompts": _Leaf(f"a non-empty list of distinct names among {', '.join(LOOKUP_PROMPTS)}", _is_lookup_prompts),
+        LOOKUP_CORE: _Leaf(
+            "a non-empty list of distinct header paths as the pack's include lines name them, such as "
+            "tt-metalium/host_api.hpp (no blank, '<', or '>')",
+            _is_lookup_core,
+        ),
+        LOOKUP_NEAREST: _Leaf(
+            f"an integer from {LOOKUP_NEAREST_RANGE[0]} to {LOOKUP_NEAREST_RANGE[1]}",
+            lambda value: _is_between(value, LOOKUP_NEAREST_RANGE),
+        ),
     },
     required=frozenset({"max_chars", "prompts"}),
+)
+# The examples section (OQ-083 (b); EXAMPLES): a mapping with every key required.
+_EXAMPLES = _Fields(
+    {
+        "pack": _Leaf(
+            f"a pack name matching {_INDEX_TEXT.pattern}, a directory under assets/examples holding MANIFEST.yaml",
+            lambda value: isinstance(value, str) and _INDEX_TEXT.fullmatch(value) is not None,
+        ),
+        "max_chars": _Leaf(
+            f"an integer from {EXAMPLES_MAX_CHARS[0]} to {EXAMPLES_MAX_CHARS[1]}",
+            lambda value: _is_between(value, EXAMPLES_MAX_CHARS),
+        ),
+        "prompts": _Leaf(
+            f"a list of distinct names among {', '.join(EXAMPLES_PROMPTS)} that holds {EXAMPLES_GENERATE}",
+            _is_examples_prompts,
+        ),
+    },
+    required=frozenset({"pack", "max_chars", "prompts"}),
 )
 
 # Every key a run recipe may hold and its type. Inside a fixed mapping every key is optional unless REQUIRED
@@ -654,6 +728,7 @@ SCHEMA = _Fields(
         "context": _STRINGS,
         RETRIEVAL: _RETRIEVAL,  # opt-in documentation passages (task P17.22); absent means off
         LOOKUP: _LOOKUP,  # opt-in declarations from the context pack (task P17.26); absent means off
+        EXAMPLES: _EXAMPLES,  # opt-in worked examples from a pack (OQ-083 (b)); absent means off
         "toolchain": _OpenMap(_STR),
         "stages": _ListOf(_STR, non_empty=True),
         "executor": _EXECUTOR,
@@ -820,6 +895,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     _check_loop(path, data)
     _check_retrieval(path, data)
     _check_lookup(path, data)
+    _check_examples(path, data)
     _check_sampling(path, data)
     bindings = _bindings(data)
     registry = DEFAULT_REGISTRY if registry is None else registry
@@ -1393,16 +1469,53 @@ def _check_retrieval(path: Path, data: Mapping[str, Any]) -> None:
 
 
 def _check_lookup(path: Path, data: Mapping[str, Any]) -> None:
-    """Refuse a `lookup` section under faithful: true, inherited or not: upstream's prompts carry no declarations.
+    """Refuse a `lookup` section under faithful: true, and core or nearest that its prompts do not call for.
 
     Runs after the type check, so a section that is present is a mapping
-    of its two keys (Design Principle 4, Agent Rule 4).
+    of its keys, each of its type. Upstream's prompts carry no declarations,
+    so the section is refused under faithful: true, inherited or not
+    (Design Principle 4, Agent Rule 4). core is required when prompts lists
+    generate and refused otherwise; nearest is refused unless prompts lists
+    correct, since only a correction reads errors.
     """
-    if LOOKUP in data and data["faithful"] is True:
+    section = data.get(LOOKUP)
+    if not isinstance(section, Mapping):
+        return
+    prompts = f"{LOOKUP}.prompts"
+    if LOOKUP_GENERATE in section["prompts"] and LOOKUP_CORE not in section:
+        raise RecipeError(
+            f"{path}: {_required_message(f'{LOOKUP}.{LOOKUP_CORE}')}: {prompts} lists {LOOKUP_GENERATE}, whose "
+            f"prompt shows no error to name a declaration, so {LOOKUP}.{LOOKUP_CORE} names the pack's header parts "
+            f"it carries"
+        )
+    if LOOKUP_CORE in section and LOOKUP_GENERATE not in section["prompts"]:
+        raise RecipeError(
+            f"{path}: {LOOKUP}.{LOOKUP_CORE} is set, but {prompts} does not list {LOOKUP_GENERATE}, the only prompt "
+            f"that carries the header parts it names; list {LOOKUP_GENERATE} or remove {LOOKUP}.{LOOKUP_CORE}"
+        )
+    if LOOKUP_NEAREST in section and LOOKUP_CORRECT not in section["prompts"]:
+        raise RecipeError(
+            f"{path}: {LOOKUP}.{LOOKUP_NEAREST} is set, but {prompts} does not list {LOOKUP_CORRECT}, the only "
+            f"prompt whose errors name identifiers; list {LOOKUP_CORRECT} or remove {LOOKUP}.{LOOKUP_NEAREST}"
+        )
+    if data["faithful"] is True:
         raise RecipeError(
             f"{path}: {LOOKUP} is set, but faithful: true reproduces upstream, whose prompts carry no declarations "
             f"from a context pack; a recipe with faithful: true may not set it, so remove {LOOKUP} or set "
             "faithful: false"
+        )
+
+
+def _check_examples(path: Path, data: Mapping[str, Any]) -> None:
+    """Refuse an `examples` section under faithful: true, inherited or not: upstream's prompts carry no examples.
+
+    Runs after the type check, so a section that is present is a mapping
+    of its three keys (Design Principle 4, Agent Rule 4).
+    """
+    if EXAMPLES in data and data["faithful"] is True:
+        raise RecipeError(
+            f"{path}: {EXAMPLES} is set, but faithful: true reproduces upstream, whose prompts carry no worked "
+            f"examples; a recipe with faithful: true may not set it, so remove {EXAMPLES} or set faithful: false"
         )
 
 

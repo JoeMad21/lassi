@@ -256,6 +256,35 @@ def test_only_the_manifest_is_tracked_in_the_pack() -> None:
     assert set(listed) <= {f"assets/context/{PACK_NAME}/{MANIFEST}"}, listed
 
 
+# The fuller pack (tools/build_tt_context.py --name FULL_NAME --limit-bytes FULL_LIMIT_BYTES, 2026-10-25): built
+# by the same rules with a larger limit, its manifest tracked beside the default's and its fragments gitignored.
+FULL_NAME = f"{PACK_NAME}-full"
+FULL_DIR = REPO / "assets" / "context" / FULL_NAME
+FULL_LIMIT_BYTES = 128 * 1024
+
+
+def test_gitignore_keeps_the_full_packs_fragments_out_and_its_manifest_in() -> None:
+    for name in (*(f"{key}.txt" for key in KEYS), "extra.yaml", "nested/fragment.txt"):
+        assert ignored(f"assets/context/{FULL_NAME}/{name}"), f"{name} is not ignored"
+    assert not ignored(f"assets/context/{FULL_NAME}/{MANIFEST}")
+    listed = git("ls-files", "--", f"assets/context/{FULL_NAME}").stdout.split()
+    assert set(listed) <= {f"assets/context/{FULL_NAME}/{MANIFEST}"}, listed
+
+
+def test_full_manifest_shares_the_default_packs_rules_with_its_own_limit() -> None:
+    data = (FULL_DIR / MANIFEST).read_bytes()
+    assert data.isascii() and b"\r" not in data, "the manifest is plain ASCII with LF newlines"
+    full, default = yaml.safe_load(data.decode("ascii")), yaml.safe_load((PACK_DIR / MANIFEST).read_text("ascii"))
+    assert full["limit_bytes"] == FULL_LIMIT_BYTES
+    assert {key: value for key, value in full.items() if key not in ("limit_bytes", "entries", "cut_by_limit")} == \
+        {key: value for key, value in default.items() if key not in ("limit_bytes", "entries", "cut_by_limit")}
+    assert full["entries"][0] == default["entries"][0], "the same guide"
+    full_sources = [source["path"] for source in full["entries"][1]["sources"]]
+    default_sources = [source["path"] for source in default["entries"][1]["sources"]]
+    assert [path for path in full_sources if path in default_sources] == default_sources, "the same fill order"
+    assert sorted(full_sources[2:] + full["cut_by_limit"]) == sorted(default_sources[2:] + default["cut_by_limit"])
+
+
 # ---------------------------------------------------------------- the generated pack
 
 

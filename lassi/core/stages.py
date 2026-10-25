@@ -239,15 +239,38 @@ as query_from_diagnostic reads them), the target language's pack's
 declarations of it (pack_declarations, from the pack's header parts;
 names_declaration), each skipped whole when it would take their text past
 lookup.max_chars (looked_up_declarations), rendered with
-DECLARATION_PROMPT and joined into LOOKED_UP_PROMPT. The generation
-prompt, a run-error correction, and an oracle mismatch's correction get
-none, and with no declaration carried there is no block. Each block goes
+DECLARATION_PROMPT and joined into LOOKED_UP_PROMPT; with lookup.nearest,
+each identifier that names no declaration of the pack adds, after them,
+one UNDECLARED_PROMPT line naming up to that many declared names nearest
+to it (undeclared_names). With lookup.prompts listing generate, the
+generation prompt gets a core block, CORE_API_PROMPT in words that name no
+error, holding every declaration of the header parts lookup.core names, in
+pack order, each skipped whole past lookup.max_chars (core_declarations). A run-error correction and an oracle
+mismatch's correction get none, and with nothing carried there is no
+block. Each block goes
 before the prompt without its trailing line feeds, one blank line apart
 (with_blocks), and a request that carried passages gets one
 RETRIEVED_CODE note on its Request (retrieved_note), one that carried
-declarations one LOOKED_UP_CODE note (looked_up_note), never on an
+declarations or nearest names one LOOKED_UP_CODE note (looked_up_note, or
+core_note for the generation prompt), never on an
 attempt, so neither enters a prompt. With none of these features a prompt
 is byte for byte what it was before.
+
+Worked examples (OQ-083 (b), the owner's answer of 2026-10-25). With the
+recipe's examples section (lassi.core.recipe, an opt-in the loader refuses
+under faithful: true and the runner refuses with a fragment set, a
+template set that cannot render EXAMPLE_TEMPLATES, or a pack that does not
+match its manifest), the generation prompt, and each compile correction
+when examples.prompts lists correct, get the examples block after the
+knowledge block and before the retrieved and looked-up blocks: the run's
+pack (RunContext.examples, lassi.prompts.examples, loaded once per run)
+carried whole in pack order, an example whose text would take their total
+past examples.max_chars skipped whole, never cut (carried_examples), each
+rendered with EXAMPLE_PROMPT and joined into EXAMPLES_PROMPT. A run-error
+correction and an oracle mismatch's correction get none, and with no
+example carried there is no block. A request that carried examples gets
+one EXAMPLES_CODE note on its Request (examples_note); without the section
+a prompt is byte for byte what it was before.
 
 A context stage names the Trial.context field it fills in `fills_context`,
 and generate names the fields its fragment prompt joins, when a pack serves
@@ -366,6 +389,7 @@ compile-only executor's placeholder values are never copied into the record.
 from __future__ import annotations
 
 import dataclasses
+import difflib
 import errno
 import functools
 import re
@@ -403,8 +427,14 @@ from lassi.core.interfaces import (
 )
 from lassi.core.progress import ATTEMPT, REQUEST_SENT, Observer, notify
 from lassi.core.recipe import (
+    EXAMPLES,
+    EXAMPLES_CORRECT,
+    EXAMPLES_GENERATE,
     LOOKUP,
+    LOOKUP_CORE,
     LOOKUP_CORRECT,
+    LOOKUP_GENERATE,
+    LOOKUP_NEAREST,
     RESTART_AFTER,
     RETRIEVAL,
     RETRIEVAL_CORRECT,
@@ -435,6 +465,7 @@ from lassi.core.store import BlobStore, TextStore
 from lassi.core.tolerance import STAT_FIELDS, within
 from lassi.executors.workdir import build_dir, fresh_build_dir
 from lassi.prompts import render
+from lassi.prompts.examples import Example
 from lassi.prompts.retrieval import SCORE_DIGITS, Index, Passage, query_from_diagnostic
 from lassi.prompts.retrieval import _identifiers as message_identifiers
 
@@ -605,6 +636,29 @@ DECLARATION_PROMPT = "declaration"
 DECLARATION_FIELDS = ("name", "header", "scope", "text")
 LOOKUP_TEMPLATES = {LOOKED_UP_PROMPT: LOOKED_UP_FIELDS, DECLARATION_PROMPT: DECLARATION_FIELDS}
 LOOKED_UP_CODE = "looked-up"
+# The line lookup.nearest adds to the looked-up block for an identifier the pack declares nothing of (2026-10-25),
+# with its fields: the identifier, and its nearest declared names joined by NEAREST_JOINER. The runner renders it
+# when the recipe sets lookup.nearest. NEAREST_MIN_RATIO is the least difflib ratio a name is listed at
+# (nearest_declared).
+UNDECLARED_PROMPT = "undeclared"
+UNDECLARED_FIELDS = ("name", "candidates")
+NEAREST_TEMPLATES = {UNDECLARED_PROMPT: UNDECLARED_FIELDS}
+# The template of the generation prompt's core block (lookup.core, 2026-10-25): the same `declarations` field as the
+# looked-up block, in words that name no error, since a generation prompt shows none. The runner renders it when
+# lookup.prompts lists generate.
+CORE_API_PROMPT = "core_api"
+CORE_TEMPLATES = {CORE_API_PROMPT: LOOKED_UP_FIELDS}
+NEAREST_JOINER = ", "
+NEAREST_MIN_RATIO = 0.75
+# The templates of the examples block (OQ-083 (b)), with their fields: the block, whose `examples` are the entries one
+# blank line apart, and one example, its name and its files as FILE blocks. The runner renders both when the recipe
+# sets examples. EXAMPLES_CODE is the code of the note on a request that carried examples.
+EXAMPLES_PROMPT = "examples"
+EXAMPLES_FIELDS = ("examples",)
+EXAMPLE_PROMPT = "example"
+EXAMPLE_FIELDS = ("name", "files")
+EXAMPLE_TEMPLATES = {EXAMPLES_PROMPT: EXAMPLES_FIELDS, EXAMPLE_PROMPT: EXAMPLE_FIELDS}
+EXAMPLES_CODE = "examples"
 # The line that heads each header part of a context pack's API reference: tools/build_tt_context.py writes it before
 # the declarations of header H (the include line of assets/context/tt-metalium-5280a9cf.head.txt).
 _INCLUDE_LINE = re.compile(r"^// ==== #include <([^<>\n]+)> ====$", re.MULTILINE)
@@ -692,6 +746,8 @@ class RunContext:
     Agent); None means DEFAULT_REGISTRY. `retrieval` is the run's
     documentation index (task P17.22), loaded once per run when the recipe
     sets retrieval and shared read-only by every trial, else None.
+    `examples` is the run's worked examples pack (OQ-083 (b)), in pack
+    order, loaded once per run when the recipe sets examples, else empty.
     """
 
     recipe: Recipe
@@ -715,6 +771,7 @@ class RunContext:
     profiler: Profiler | None = None
     registry: Registry | None = None
     retrieval: Index | None = None
+    examples: tuple[Example, ...] = ()
 
 
 def executor_for(context: RunContext, language: str) -> Executor:
@@ -1206,18 +1263,27 @@ def with_context_blocks(
     prompt: str,
     passages: Sequence[Passage] = (),
     looked_up: Sequence[tuple[str, Declaration]] = (),
+    undeclared: Sequence[tuple[str, tuple[str, ...]]] = (),
+    core: Sequence[Declaration] = (),
+    examples: Sequence[Example] = (),
 ) -> tuple[str, list[Diagnostic]]:
     """Return a template set's `prompt` with its context blocks before it, and the notes its request gets.
 
     The blocks (with_blocks) are KNOWLEDGE_PROMPT with
     Trial.context.knowledge_summary when that is not empty, then, when
-    `passages` holds any, the retrieved block (retrieved_block), for which
-    the request gets one note (retrieved_note), then, when `looked_up`
-    (identifier, declaration pairs; looked_up_declarations) holds any, the
+    `examples` holds any (carried_examples), the examples block
+    (examples_block), for which the request gets one note (examples_note),
+    then, when `passages` holds any, the retrieved block (retrieved_block),
+    for which the request gets one note (retrieved_note), then, when `looked_up`
+    (identifier, declaration pairs; looked_up_declarations) or `undeclared`
+    (identifier, nearest names pairs; undeclared_names) holds any, the
     looked-up block (looked_up_block), for which it gets one note
-    (looked_up_note). With none, the prompt comes back unchanged with no
-    note. A fragment set's prompt is never changed: its own generation
-    prompt joins the summary.
+    (looked_up_note), or, for the generation prompt, when `core`
+    (core_declarations) holds any, the core block of them (looked_up_block
+    with CORE_API_PROMPT), last, with one core_note.
+    With none, the prompt comes back unchanged with no note. A fragment
+    set's prompt is never changed: its own generation prompt joins the
+    summary.
     """
     if context.fragments:
         return prompt, []
@@ -1226,12 +1292,18 @@ def with_context_blocks(
     summary = trial.context.knowledge_summary
     if summary:
         blocks.append(render(context.prompts, KNOWLEDGE_PROMPT, {"knowledge_summary": summary}))
+    if examples:
+        blocks.append(examples_block(context.prompts, examples))
+        notes.append(examples_note(context, examples))
     if passages:
         blocks.append(retrieved_block(context.prompts, passages))
         notes.append(retrieved_note(passages))
-    if looked_up:
-        blocks.append(looked_up_block(context.prompts, [declaration for _, declaration in looked_up]))
-        notes.append(looked_up_note(looked_up))
+    if looked_up or undeclared:
+        blocks.append(looked_up_block(context.prompts, [declaration for _, declaration in looked_up], undeclared))
+        notes.append(looked_up_note(looked_up, undeclared))
+    if core:
+        blocks.append(looked_up_block(context.prompts, core, template=CORE_API_PROMPT))
+        notes.append(core_note(core))
     return with_blocks(blocks, prompt), notes
 
 
@@ -1295,7 +1367,7 @@ class Declaration:
 
 
 def lookup_on(context: RunContext, kind: str) -> bool:
-    """Return True when the recipe's lookup section lists the prompt kind `kind` (correct; task P17.26).
+    """Return True when the recipe's lookup section lists the prompt kind `kind` (generate or correct; P17.26).
 
     The section is off when absent (lassi.core.recipe LOOKUP); the loader
     refuses it under faithful: true, and the runner with a fragment set or
@@ -1507,13 +1579,7 @@ def looked_up_declarations(context: RunContext, previous: Attempt) -> list[tuple
     is a fragment set or no pack serves the target; the runner refuses
     both first.
     """
-    pack = context.packs.get(context.direction.target)
-    if pack is None or context.fragments:
-        raise ValueError(
-            f"{context.recipe.path}: {LOOKUP} needs a template prompt set and a context pack for the target language "
-            f"{context.direction.target!r}, which the runner refuses the recipe without; run it with lassi run"
-        )
-    declarations = pack_declarations(pack)
+    declarations = pack_declarations(_lookup_pack(context))
     budget = context.recipe.data[LOOKUP]["max_chars"]
     carried: list[tuple[str, Declaration]] = []
     total = 0
@@ -1529,24 +1595,165 @@ def looked_up_declarations(context: RunContext, previous: Attempt) -> list[tuple
     return carried
 
 
-def looked_up_block(prompts: str, declarations: Sequence[Declaration]) -> str:
-    """Return LOOKED_UP_PROMPT of set `prompts` with `declarations`, each DECLARATION_PROMPT rendered.
+def _lookup_pack(context: RunContext) -> str:
+    """Return the target language's pack text; raise ValueError for a fragment set or no pack (the runner's checks)."""
+    pack = context.packs.get(context.direction.target)
+    if pack is None or context.fragments:
+        raise ValueError(
+            f"{context.recipe.path}: {LOOKUP} needs a template prompt set and a context pack for the target language "
+            f"{context.direction.target!r}, which the runner refuses the recipe without; run it with lassi run"
+        )
+    return pack
 
-    The entries go one blank line apart, as the retrieved block's passages do.
+
+def pack_parts(pack: str) -> tuple[str, ...]:
+    """Return the header of each header part of a context pack's text, in pack order (_INCLUDE_LINE's H)."""
+    return tuple(head.group(1) for head in _INCLUDE_LINE.finditer(pack))
+
+
+def core_declarations(context: RunContext) -> list[Declaration]:
+    """Return the declarations the generation prompt carries when lookup.prompts lists generate (2026-10-25).
+
+    They are every declaration of the target language's pack
+    (pack_declarations) whose header part lookup.core names, in pack order,
+    whatever the order of lookup.core; one whose text would take their
+    total text past lookup.max_chars is skipped whole, never cut, and a
+    later smaller one may still fit. The runner refuses a lookup.core
+    header the pack has no part for. Raises ValueError as
+    looked_up_declarations does.
+    """
+    section = context.recipe.data[LOOKUP]
+    wanted, budget = set(section[LOOKUP_CORE]), section["max_chars"]
+    carried: list[Declaration] = []
+    total = 0
+    for declaration in pack_declarations(_lookup_pack(context)):
+        if declaration.header in wanted and total + len(declaration.text) <= budget:
+            carried.append(declaration)
+            total += len(declaration.text)
+    return carried
+
+
+def qualified_name(declaration: Declaration) -> str:
+    """Return a declaration's name qualified by its scope (`scope::name`), or its name at global scope."""
+    return f"{declaration.scope}::{declaration.name}" if declaration.scope else declaration.name
+
+
+def nearest_declared(identifier: str, declarations: Sequence[Declaration], count: int) -> tuple[str, ...]:
+    """Return up to `count` qualified names of `declarations` nearest `identifier`, nearest first.
+
+    A declaration scores the higher of difflib.SequenceMatcher(None, form,
+    identifier).ratio() over two forms, its name and its qualified name
+    (qualified_name), as difflib.get_close_matches scores a word, so both
+    `CreateKernal` and `distributed::EnqueueWriteMeshBufer` find their
+    function. Each qualified name is listed once (overloads share one), only
+    at a score of at least NEAREST_MIN_RATIO (0.75: a one-letter slip in a
+    ten-letter name scores 0.9, and unrelated names are expected, not
+    measured, to score lower), and ties go to the earlier in pack order.
+    """
+    matcher = difflib.SequenceMatcher()
+    matcher.set_seq2(identifier)
+    scored: dict[str, tuple[float, int]] = {}
+    for order, declaration in enumerate(declarations):
+        name = qualified_name(declaration)
+        if name in scored:
+            continue
+        best = 0.0
+        for form in (declaration.name, name):
+            matcher.set_seq1(form)
+            if matcher.real_quick_ratio() >= NEAREST_MIN_RATIO and matcher.quick_ratio() >= NEAREST_MIN_RATIO:
+                best = max(best, matcher.ratio())
+        if best >= NEAREST_MIN_RATIO:
+            scored[name] = (best, order)
+    return tuple(sorted(scored, key=lambda name: (-scored[name][0], scored[name][1]))[:count])
+
+
+def undeclared_names(context: RunContext, previous: Attempt) -> list[tuple[str, tuple[str, ...]]]:
+    """Return (identifier, nearest names) for each identifier of a correction's errors the pack declares nothing of.
+
+    The identifiers are error_identifiers(previous), in order; one that
+    names no declaration of the target language's pack (names_declaration)
+    gets up to lookup.nearest names (nearest_declared), and one with no
+    name at NEAREST_MIN_RATIO or above is left out. Off (empty) when the
+    recipe does not set lookup.nearest. Raises ValueError as
+    looked_up_declarations does.
+    """
+    count = context.recipe.data[LOOKUP].get(LOOKUP_NEAREST)
+    if count is None:
+        return []
+    declarations = pack_declarations(_lookup_pack(context))
+    found: list[tuple[str, tuple[str, ...]]] = []
+    for identifier in error_identifiers(previous):
+        if any(names_declaration(identifier, declaration) for declaration in declarations):
+            continue
+        names = nearest_declared(identifier, declarations, count)
+        if names:
+            found.append((identifier, names))
+    return found
+
+
+def looked_up_block(
+    prompts: str, declarations: Sequence[Declaration], undeclared: Sequence[tuple[str, tuple[str, ...]]] = (),
+    template: str = LOOKED_UP_PROMPT,
+) -> str:
+    """Return `template` (default LOOKED_UP_PROMPT) of `prompts` with each of `declarations` as DECLARATION_PROMPT.
+
+    After them comes one UNDECLARED_PROMPT line per `undeclared` pair (an
+    identifier and its nearest names, joined by NEAREST_JOINER). The entries
+    go one blank line apart, as the retrieved block's passages do. The
+    generation prompt's core block passes CORE_API_PROMPT.
     """
     texts = [render(prompts, DECLARATION_PROMPT, dataclasses.asdict(item)).rstrip("\n") for item in declarations]
-    return render(prompts, LOOKED_UP_PROMPT, {"declarations": BLOCK_JOINER.join(texts)})
+    texts += [
+        render(prompts, UNDECLARED_PROMPT, {"name": name, "candidates": NEAREST_JOINER.join(names)}).rstrip("\n")
+        for name, names in undeclared
+    ]
+    return render(prompts, template, {"declarations": BLOCK_JOINER.join(texts)})
 
 
-def looked_up_note(carried: Sequence[tuple[str, Declaration]]) -> Diagnostic:
-    """Return the note of a request that carried declarations: code LOOKED_UP_CODE, severity note.
+def core_note(declarations: Sequence[Declaration]) -> Diagnostic:
+    """Return the note of a generation request that carried lookup.core's declarations: code LOOKED_UP_CODE.
+
+    Its message gives the count and total text, then each header part in
+    pack order with how many declarations came from it. Like looked_up_note
+    it is a parse-stage note on the Request, so it never enters a prompt.
+    """
+    counts: dict[str, int] = {}
+    for declaration in declarations:
+        counts[declaration.header] = counts.get(declaration.header, 0) + 1
+    listing = ", ".join(f"{header} ({count})" for header, count in counts.items())
+    total = sum(len(declaration.text) for declaration in declarations)
+    message = (
+        f"the prompt carried {len(declarations)} declaration(s) from the context pack, {total} characters, from the "
+        f"header parts lookup.core names, in pack order: {listing}"
+    )
+    return Diagnostic(stage="parse", severity="note", code=LOOKED_UP_CODE, message=message)
+
+
+def looked_up_note(
+    carried: Sequence[tuple[str, Declaration]], undeclared: Sequence[tuple[str, tuple[str, ...]]] = (),
+) -> Diagnostic:
+    """Return the note of a request that carried declarations or nearest names: code LOOKED_UP_CODE, severity note.
 
     Its message gives the count and total text, then each carried
     identifier in order with the header part of each declaration it carried
-    and how many came from that part. Its stage is parse, as for the
-    retrieved note, and it rides on the Request, never on an attempt, so it
-    never enters a prompt.
+    and how many came from that part; with `undeclared` (lookup.nearest),
+    it then names each such identifier with its nearest names, and with
+    none it is what it was before lookup.nearest. Its stage is parse, as
+    for the retrieved note, and it rides on the Request, never on an
+    attempt, so it never enters a prompt.
     """
+    sentences = [_carried_sentence(carried)] if carried else []
+    if undeclared:
+        listing = "; ".join(f"{name} -> {NEAREST_JOINER.join(names)}" for name, names in undeclared)
+        sentences.append(
+            f"the prompt named the nearest declared names for {len(undeclared)} identifier(s) its errors name that "
+            f"the context pack declares nothing of, in order: {listing}"
+        )
+    return Diagnostic(stage="parse", severity="note", code=LOOKED_UP_CODE, message="; ".join(sentences))
+
+
+def _carried_sentence(carried: Sequence[tuple[str, Declaration]]) -> str:
+    """Return looked_up_note's account of the carried declarations: count, total text, identifiers, header parts."""
     parts: dict[str, dict[str, int]] = {}
     for identifier, declaration in carried:
         counts = parts.setdefault(identifier, {})
@@ -1556,19 +1763,104 @@ def looked_up_note(carried: Sequence[tuple[str, Declaration]]) -> Diagnostic:
         for identifier, counts in parts.items()
     )
     total = sum(len(declaration.text) for _, declaration in carried)
-    message = (
+    return (
         f"the prompt carried {len(carried)} declaration(s) from the context pack, {total} characters, for the "
         f"identifiers its errors name, in order: {listing}"
     )
-    return Diagnostic(stage="parse", severity="note", code=LOOKED_UP_CODE, message=message)
 
 
 def declarations_described(context: RunContext) -> str:
     """Return what compile_loop's describe() adds when lookup lists correct (task P17.26), else ""."""
     if not lookup_on(context, LOOKUP_CORRECT):
         return ""
-    budget = context.recipe.data[LOOKUP]["max_chars"]
-    return f", with the context pack's declarations of the names its errors give (up to {budget} characters)"
+    section = context.recipe.data[LOOKUP]
+    nearest = section.get(LOOKUP_NEAREST)
+    near = f", and up to {nearest} declared names nearest each name it declares nothing of" if nearest else ""
+    return (
+        f", with the context pack's declarations of the names its errors give (up to {section['max_chars']} "
+        f"characters){near}"
+    )
+
+
+def core_described(context: RunContext) -> str:
+    """Return what generate's describe() adds when lookup lists generate (2026-10-25), else ""."""
+    if not lookup_on(context, LOOKUP_GENERATE):
+        return ""
+    section = context.recipe.data[LOOKUP]
+    return (
+        f", with the context pack's declarations of {len(section[LOOKUP_CORE])} header part(s) "
+        f"(up to {section['max_chars']} characters)"
+    )
+
+
+def examples_on(context: RunContext, kind: str) -> bool:
+    """Return True when the recipe's examples section lists the prompt kind `kind` (generate or correct; OQ-083 (b)).
+
+    The section is off when absent (lassi.core.recipe EXAMPLES); the loader
+    refuses it under faithful: true, and the runner with a fragment set or
+    a pack that does not match its manifest.
+    """
+    section = context.recipe.data.get(EXAMPLES)
+    return isinstance(section, Mapping) and kind in section["prompts"]
+
+
+def carried_examples(context: RunContext) -> list[Example]:
+    """Return the worked examples one prompt carries: RunContext.examples whole, in pack order, within max_chars.
+
+    An example whose text (its files as FILE blocks, Example.text) would
+    take the carried examples' total text past examples.max_chars is
+    skipped whole, never cut, and a later smaller one may still fit. Raises
+    ValueError when the RunContext carries no pack or the prompt set is a
+    fragment set; the runner refuses both first.
+    """
+    if not context.examples or context.fragments:
+        raise ValueError(
+            f"{context.recipe.path}: {EXAMPLES} needs a template prompt set and the run's examples pack, which the "
+            "runner loads once per run; run the recipe with lassi run"
+        )
+    budget = context.recipe.data[EXAMPLES]["max_chars"]
+    carried: list[Example] = []
+    total = 0
+    for example in context.examples:
+        size = len(example.text)
+        if total + size > budget:
+            continue
+        carried.append(example)
+        total += size
+    return carried
+
+
+def examples_block(prompts: str, examples: Sequence[Example]) -> str:
+    """Return EXAMPLES_PROMPT of set `prompts` with `examples`, each EXAMPLE_PROMPT rendered, one blank line apart."""
+    texts = [render(prompts, EXAMPLE_PROMPT, {"name": item.name, "files": item.text}).rstrip("\n") for item in examples]
+    return render(prompts, EXAMPLES_PROMPT, {"examples": BLOCK_JOINER.join(texts)})
+
+
+def examples_note(context: RunContext, examples: Sequence[Example]) -> Diagnostic:
+    """Return the note of a request that carried `examples`: code EXAMPLES_CODE, severity note.
+
+    Its message names the pack, the count and total text, and each carried
+    example in order with its file count. Its stage is parse, as for the
+    retrieved note, and it rides on the Request, never on an attempt, so it
+    never enters a prompt.
+    """
+    pack = context.recipe.data[EXAMPLES]["pack"]
+    total = sum(len(item.text) for item in examples)
+    listing = ", ".join(f"{item.name} ({len(item.files)} files)" for item in examples)
+    message = (
+        f"the prompt carried {len(examples)} worked example(s) from the pack {pack}, {total} characters, in pack "
+        f"order: {listing}"
+    )
+    return Diagnostic(stage="parse", severity="note", code=EXAMPLES_CODE, message=message)
+
+
+def examples_described(context: RunContext, kind: str) -> str:
+    """Return what describe() adds when the examples section lists the prompt kind `kind`, else ""."""
+    if not examples_on(context, kind):
+        return ""
+    section = context.recipe.data[EXAMPLES]
+    where = "the prompt" if kind == EXAMPLES_GENERATE else "each compile correction prompt"
+    return f", with the {section['pack']} worked examples (up to {section['max_chars']} characters) before {where}"
 
 
 def _harness_build(
@@ -1981,7 +2273,10 @@ class GenerateStage:
 
         The prompt comes from _prompt, after the context blocks of a
         template set (with_context_blocks: the knowledge block, then the
-        passages for generate_query when retrieval lists generate); with
+        worked examples of carried_examples when the examples section lists
+        generate, then the passages for generate_query when retrieval lists
+        generate, then the declarations of core_declarations when lookup lists
+        generate); with
         the prompt_spaces fix off, each run of spaces in it is cut to one.
         It is kept in the text store and sent as the user message, after the
         system prompt when there is one. With the fence_tag fix on the
@@ -1994,7 +2289,9 @@ class GenerateStage:
         system, prompt = self._prompt(trial, expected)
         on = retrieval_on(context, RETRIEVAL_GENERATE)
         passages = retrieved_passages(context, generate_query(context)) if on else []
-        prompt, notes = with_context_blocks(context, trial, prompt, passages)
+        core = core_declarations(context) if lookup_on(context, LOOKUP_GENERATE) else []
+        examples = carried_examples(context) if examples_on(context, EXAMPLES_GENERATE) else []
+        prompt, notes = with_context_blocks(context, trial, prompt, passages, core=core, examples=examples)
         if not fix_on(context, "prompt_spaces"):
             prompt = fragment_text.collapse_spaces(prompt)
         try:
@@ -2050,9 +2347,10 @@ class GenerateStage:
         if fix_on(self.context, "fence_tag") and extract_on(self.context, UNFENCED_FILE_LINES):
             reply += ", or unfenced FILE lines when the reply holds none"
         passages = passages_described(self.context, RETRIEVAL_GENERATE)
+        examples = examples_described(self.context, EXAMPLES_GENERATE)
         return (
             f"generate: one {direction.source} to {direction.target} translation from {source}, parsed from "
-            f"{reply}{passages}"
+            f"{reply}{examples}{passages}{core_described(self.context)}"
         )
 
 
@@ -2206,6 +2504,7 @@ class CompileLoopStage:
         return (
             f"compile_loop: build {context.direction.target} with {builder}, then correct from {source} with "
             f"{errors} while an error remains ({limit}{restarts_described(context)})"
+            f"{examples_described(context, EXAMPLES_CORRECT)}"
             f"{passages_described(context, RETRIEVAL_CORRECT)}{declarations_described(context)}"
         )
 
@@ -2757,10 +3056,13 @@ def _corrected(
     The correction prompt for the last attempt with `errors` comes from
     _correction_messages (`mismatch`: an oracle mismatch's, with `errors`
     its mismatch_text), after the context blocks of a template set
-    (with_context_blocks: the knowledge block, then, when retrieval lists
-    correct and this is no mismatch, the passages for correction_query,
-    then, when lookup lists correct and this is a compile correction, no
-    run error or mismatch, the declarations of looked_up_declarations).
+    (with_context_blocks: the knowledge block, then, when the examples
+    section lists correct and this is a compile correction, no run error or
+    mismatch, the worked examples of carried_examples, then, when retrieval
+    lists correct and this is no mismatch, the passages for
+    correction_query, then, when lookup lists correct and this is a compile
+    correction, the declarations of looked_up_declarations and, with
+    lookup.nearest, the nearest names of undeclared_names).
     With fixes.prompt_newlines off every line feed is removed from it
     before it is stored and sent. The reply is read as generate reads
     attempt 0 (_reply_attempt), and the attempt keeps its diff from the last
@@ -2778,9 +3080,15 @@ def _corrected(
     if not mismatch and retrieval_on(context, RETRIEVAL_CORRECT):
         passages = retrieved_passages(context, correction_query(previous, errors, run_error=run_error))
     looked_up: list[tuple[str, Declaration]] = []
+    undeclared: list[tuple[str, tuple[str, ...]]] = []
     if not (mismatch or run_error) and lookup_on(context, LOOKUP_CORRECT):
         looked_up = looked_up_declarations(context, previous)
-    prompt, notes = with_context_blocks(context, trial, prompt, passages, looked_up)
+        undeclared = undeclared_names(context, previous)
+    examples: list[Example] = []
+    if not (mismatch or run_error) and examples_on(context, EXAMPLES_CORRECT):
+        examples = carried_examples(context)
+    prompt, notes = with_context_blocks(
+        context, trial, prompt, passages, looked_up, undeclared, examples=examples)
     if not fix_on(context, "prompt_newlines"):
         prompt = prompt.replace("\n", "")
     try:

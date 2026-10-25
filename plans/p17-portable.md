@@ -261,6 +261,33 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: lassi/core/capabilities.py, lassi/core/recipe.py, lassi/core/runner.py, lassi/llm/openai_compat.py, lassi/llm/replay.py, tests/llm/, .github/workflows/cpu-tests.yml, docs/BIBLE.md; the window's projects/lassi-demo/sweep6/gpt-oss-20b-low/ and plans/runs/rngd-sweep/models9.tsv.
 - Host: Windows. Depends: none.
 
+### P17.29 Worked examples: complete host programs at the pin in the prompt (opt-in)
+- Added on 2026-10-25 under the owner's answer to OQ-083, option (b) (tt-pairs-v0 a development set): the build-error report (results/build-errors-20261025, results/rngd-matrix-20261025) shows the models writing the TT-Metalium host API from memory, an older one, and they never see a host program that compiles at the pin.
+- Bible: Project Recipes (Notes, an Examples bullet), Component Interfaces (the context blocks bullet), Result Record (Trial.requests), Agent Rules 1, 4, 5, and 10.
+- Accept, tests first: tools/build_tt_examples.py fetches or reads tt-metal's programming examples at the pin and builds tt-examples-v0 from a tracked spec listing only directories of tt-train-v0's include list (never a Tier A item or a duplicate), with that data set's near-copy checks; only the spec and MANIFEST.yaml are tracked; a check mode verifies the fragments. The recipe section `examples` {pack, max_chars, prompts} is opt-in, never materialized, refused under faithful: true and by the runner with a fragment set, a missing or unrendering examples.txt or example.txt, or a pack that fails its manifest; the block goes before generation and, when listed, compile corrections, each example whole or skipped, with one examples note on the Request.
+- Files: tools/build_tt_examples.py, lassi/prompts/examples.py, lassi/core/recipe.py, lassi/core/stages.py, lassi/core/runner.py, assets/examples/tt-examples-v0/, assets/prompts/tt-host-v0/, tests/core/, tests/tools/, docs/BIBLE.md.
+- Host: Windows, the pack built and checked on the build host before a run. Depends: P17.26.
+
+### P17.30 Exact declarations at generation, nearest names, and the full API pack (opt-in)
+- Added on 2026-10-25 from the same evidence and OQ-083 (b): the 40 KiB pack cut mesh_workload.hpp, buffer.hpp, program.hpp, device.hpp, and others, and lookup carried declarations only at compile corrections and only for names that exist.
+- Bible: Project Recipes (Notes, the Lookup bullet), Component Interfaces (the context blocks bullet), Result Record (Trial.requests), Agent Rules 1, 4, and 10.
+- Accept, tests first: tools/build_tt_context.py --name and --limit-bytes build a fuller pack, tt-metalium-5280a9cf-full at 131072 bytes, with its tracked manifest, the default pack's bytes unchanged; lookup.prompts may list generate, with a required lookup.core of header parts whose declarations the generation prompt carries through core_api.txt (words that name no error), refused by the runner for a header the pack lacks or a template set without core_api.txt; lookup.nearest (1 to 8, with correct) adds, for an error identifier the pack does not declare, its nearest declared names (undeclared.txt); every key absent by default and refused under faithful: true.
+- Files: tools/build_tt_context.py, assets/context/tt-metalium-5280a9cf-full/MANIFEST.yaml, lassi/core/recipe.py, lassi/core/stages.py, lassi/core/runner.py, assets/prompts/tt-host-v0/, tests/core/, tests/tools/, tests/prompts/, docs/BIBLE.md.
+- Host: Windows, the full pack built and checked on the build host before a run. Depends: P17.26.
+
+### P17.31 The development split for tt-pairs-v0 (OQ-083 (b))
+- Added on 2026-10-25: OQ-083's answer (b) makes tt-pairs-v0 a development set; the bible records the decision, while the manifest's splits and lassi.bench.registry SPLITS (train, eval, unassigned) are unchanged until this task.
+- Bible: Benchmark Suites (splits), Agent Rule 5.
+- Accept: a split value for development items, which the registry gives to evaluation and to prompt and feature development and still refuses to training and corpus harvest; tt-pairs-v0's five items assigned to it; every recipe that reads them with `split: unassigned` moved to it; tests first; a plan for the held-out Tier A set that evaluation needs.
+- Files: lassi/bench/registry.py, assets/bench/tt-pairs-v0.yaml, projects/, tests/, docs/BIBLE.md.
+- Host: Windows. Depends: none.
+
+### P17.32 The night window of 2026-10-25: the sweep with the new features on 70B-class models
+- Added on 2026-10-25 for the owner's window of 20:00 to 02:00 ("We must significantly improve results"): projects/lassi-demo/sweep7 (base, ex, lk, all, and gpt-oss-120b's lowall) on Llama-3.3-70B-Instruct-FP8-dynamic and gpt-oss-120b (OQ-087), 3 samples per item at cap 8, cpp -> tt only (OQ-086), run by plans/runs/night/run-night.sh.
+- Accept: the run in the window, its tables, per-trial feature counts, and the classifier's report under results/ with provenance, labeled development results (OQ-083 (b)), and the run report plans/runs/2026-10-25-night.md.
+- Files: projects/lassi-demo/sweep7/, plans/runs/night/, plans/runs/rngd-sweep/models10.tsv, results/, plans/runs/.
+- Host: alpha01 in the owner's window. Depends: P17.29, P17.30.
+
 ### P17.11 Gate part (a): recipes and the hardware-free evidence
 - Bible: Build Roadmap (P17 row, Gate part (a)), Agent Rules 1, 7, and 10; AGENTS.md Phase Gate and Results.
 - Accept, from one clean commit on alpha01, with graphics off:

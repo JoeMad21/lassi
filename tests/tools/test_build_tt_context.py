@@ -940,3 +940,107 @@ def test_fresh_guide_holds_no_sixty_character_span_of_any_tier_a_file(tool: Modu
     flat = " ".join(uncut.split())
     assert any(flat[k:k + SPAN] in spans for k in range(len(flat) - SPAN + 1)), \
         "without the SPMD cut the check finds the matmul_multi_core comment, so it can fail"
+
+
+# ---------------------------------------------------------------- the fuller pack (--name, --limit-bytes)
+#
+# The tool builds a second pack by the same rules under another name with a larger byte limit (2026-10-25): the
+# default pack's bytes and manifest stay as they were, and the fuller pack's manifest records its own limit.
+
+FULL_NAME = "tt-metalium-5280a9cf-full"
+FULL_PACK = f"context/{FULL_NAME}"
+FULL_LIMIT = 128 * 1024
+
+
+def routed_build(tool: ModuleType, monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Replace the tool's build with one returning a SYNTHETIC pack; return the list each call's limit lands in."""
+    limits: list[int] = []
+
+    def build(tree: Path, limit: int = tool.LIMIT_BYTES) -> object:
+        limits.append(limit)
+        fragments = (tool.Fragment("metalium_guide.tt", ("METALIUM_GUIDE.md",), "SYNTHETIC guide.\n"),
+                     tool.Fragment("host_api.tt", (HEAD_SOURCE, TEMPLATE_SOURCE), "int synthetic();\n"))
+        return tool.Pack(fragments, {HEAD_SOURCE: "2" * 64, TEMPLATE_SOURCE: "3" * 64}, ("b.hpp",), limit)
+
+    monkeypatch.setattr(tool, "build", build)
+    monkeypatch.setattr(tool, "SOURCES", {"METALIUM_GUIDE.md": "1" * 64})
+    return limits
+
+
+def test_main_builds_a_named_pack_with_its_own_limit_beside_the_default(
+    tool: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    limits = routed_build(tool, monkeypatch)
+    out = tmp_path / "assets"
+    status, output = run_tool(tool, "--tree", str(tmp_path), "--out", str(out), "--name", FULL_NAME,
+                              "--limit-bytes", str(FULL_LIMIT))
+    assert status == 0, output
+    assert limits == [FULL_LIMIT], "the limit reaches the build"
+    assert not (out / PACK).exists(), "a named pack leaves the default pack's directory alone"
+    loaded = yaml.safe_load((out / FULL_PACK / MANIFEST).read_text(encoding="ascii"))
+    assert loaded["limit_bytes"] == FULL_LIMIT and loaded["cut_by_limit"] == ["b.hpp"]
+    assert sorted(path.name for path in (out / FULL_PACK).iterdir()) == [MANIFEST, "host_api.tt.txt",
+                                                                        "metalium_guide.tt.txt"]
+    assert f"of {FULL_LIMIT} bytes" in output, output
+    status, output = run_tool(tool, "--tree", str(tmp_path), "--out", str(out))
+    assert status == 0, output
+    assert limits == [FULL_LIMIT, LIMIT], "without the options the build gets LIMIT_BYTES"
+    assert yaml.safe_load((out / PACK / MANIFEST).read_text(encoding="ascii"))["limit_bytes"] == LIMIT
+
+
+def test_the_default_options_give_the_manifest_text_of_before(tool: ModuleType) -> None:
+    fragments = [tool.Fragment(key="host_api.tt", sources=(HEAD_SOURCE,), text="int a();\n")]
+    hashes = {HEAD_SOURCE: "2" * 64}
+    default = tool.manifest_text(fragments, hashes, ("b.hpp",))
+    assert tool.manifest_text(fragments, hashes, ("b.hpp",), tool.LIMIT_BYTES) == default
+    assert f"limit_bytes: {LIMIT}\n" in default and "name" not in yaml.safe_load(default), "no new field"
+    other = tool.manifest_text(fragments, hashes, ("b.hpp",), FULL_LIMIT)
+    assert other == default.replace(f"limit_bytes: {LIMIT}\n", f"limit_bytes: {FULL_LIMIT}\n")
+    assert tool.PACK_TREE == PACK and tool.pack_tree() == PACK and tool.pack_tree(FULL_NAME) == FULL_PACK
+
+
+@pytest.mark.parametrize(("option", "value"), [
+    ("--name", "../tt-metalium-5280a9cf-full"), ("--name", "other-pack"), ("--name", "tt-metalium-5280a9cf-"),
+    ("--name", "tt-metalium-5280a9cf/full"), ("--name", "tt-metalium-5280a9cf-Full"), ("--limit-bytes", "0"),
+    ("--limit-bytes", "-5"),
+], ids=["parent", "other-name", "empty-suffix", "slash", "capital", "zero", "negative"])
+def test_main_refuses_a_bad_name_or_limit_and_writes_nothing(
+    tool: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, option: str, value: str,
+) -> None:
+    limits = routed_build(tool, monkeypatch)
+    out = tmp_path / "assets"
+    status, output = run_tool(tool, "--tree", str(tmp_path), "--out", str(out), option, value)
+    assert status == 1 and "refused" in output and option.lstrip("-") in output, output
+    assert limits == [] and not out.exists(), "a refusal builds and writes nothing"
+
+
+@pytest.fixture(scope="module")
+def fresh_full(tool: ModuleType, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Return an assets root holding the fuller pack built from the pinned tree; skip without one."""
+    tree = pinned_tree()
+    if tree is None:
+        pytest.skip(TREE_SKIP)
+    out = tmp_path_factory.mktemp("assets-full")
+    status, output = run_tool(tool, "--tree", str(tree), "--out", str(out), "--name", FULL_NAME,
+                              "--limit-bytes", str(FULL_LIMIT))
+    assert status == 0, f"the tool exited {status}: {output[-3000:]}"
+    return out
+
+
+def test_committed_full_manifest_matches_a_fresh_build(fresh_full: Path) -> None:
+    committed = (REPO / "assets" / FULL_PACK / MANIFEST).read_bytes()
+    assert (fresh_full / FULL_PACK / MANIFEST).read_bytes() == committed, "regenerate the full pack's manifest"
+
+
+def test_fresh_full_pack_fits_its_limit_and_keeps_every_header_the_default_keeps(
+    tool: ModuleType, fresh: Path, fresh_full: Path,
+) -> None:
+    full = yaml.safe_load((fresh_full / FULL_PACK / MANIFEST).read_text(encoding="ascii"))
+    default = fresh_manifest(fresh)
+    assert full["limit_bytes"] == FULL_LIMIT
+    kept = [source["path"] for source in full["entries"][1]["sources"]]
+    assert set(source["path"] for source in default["entries"][1]["sources"]) <= set(kept)
+    assert full["entries"][0] == default["entries"][0], "the guide is the default pack's"
+    texts = [(fresh_full / FULL_PACK / f"{entry['key']}.txt").read_bytes() for entry in full["entries"]]
+    assert sum(len(text) for text in texts) + len(texts) - 1 <= FULL_LIMIT
+    assert len(full["cut_by_limit"]) < len(default["cut_by_limit"])

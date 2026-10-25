@@ -178,3 +178,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.26 | DONE | Declaration lookup: the API pack's declarations for the identifiers a build error names (opt-in) | - | declaration lookup (lookup section); bible master rev 357 |
 | P17.27 | OWNER | bf16 rounding in tt -> cpp outputs: check the generated code, then a generic prompt fix | P17.24 | OQ-083: is steering prompt text from Tier A (unassigned) outcomes prompt tuning under Agent Rule 5? |
 | P17.28 | DONE | Reasoning effort as a recipe key, and a reply cut at max_tokens as the empty answer | - | llm.sampling.reasoning_effort opt-in (OQ-080 (a), unanswered); length-cut null content as the empty answer; bible master rev 368 |
+| P17.29 | DONE | Worked examples: complete host programs at the pin in the prompt (opt-in) | P17.26 | examples section, tt-examples-v0 (shard_data_rm, add_2_integers_in_riscv); bible master rev 372 |
+| P17.30 | DONE | Exact declarations at generation, nearest names, and the full API pack (opt-in) | P17.26 | lookup at generation (core, core_api.txt), nearest names, tt-metalium-5280a9cf-full; bible master rev 372 |
+| P17.31 | READY | The development split for tt-pairs-v0 (OQ-083 (b)) | - |  |
+| P17.32 | READY | The night window of 2026-10-25: the sweep with the new features on 70B-class models | P17.29,P17.30 |  |

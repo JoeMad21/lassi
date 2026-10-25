@@ -14,8 +14,9 @@ The contract these tests fix (the P17.26 design, points 1 to 7):
    `lookup: {max_chars: 8000, prompts: [correct]}`, with two required keys:
    max_chars, the declarations' total text per prompt, an integer from 500
    to 32000 (a bool or a float refused); and prompts, a non-empty list of
-   distinct names among {correct} (generate is refused: a generation prompt
-   shows no error to read). A section that is not a mapping, a null, an
+   distinct names among {generate, correct} (since 2026-10-25 generate needs
+   lookup.core, as the section at this file's end fixes, since a generation
+   prompt shows no error to read). A section that is not a mapping, a null, an
    unknown or missing key, and a value of the wrong type or range are
    refused at load naming `lookup.<key>`; the section is refused at load
    under faithful: true, inherited or not, naming `lookup`. Absent, nothing
@@ -61,7 +62,8 @@ The contract these tests fix (the P17.26 design, points 1 to 7):
    retrieved block when there are any, one blank line apart, each block
    without its trailing line feeds. With no declaration carried there is no
    block, and the prompt is byte for byte what it is without the section.
-   The generation prompt, a run-error correction, and an oracle-mismatch
+   Unless prompts lists generate, the generation prompt, and always a
+   run-error correction and an oracle-mismatch
    correction get none, even when their text names a declared identifier.
 6. A request that carried declarations gets exactly one Diagnostic with code
    `looked-up`, severity note, on its Request (never on an attempt, whose
@@ -88,9 +90,11 @@ read. No value here is a measurement.
 
 from __future__ import annotations
 
+import difflib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -141,7 +145,13 @@ from test_template_context import (
 
 from lassi.core.recipe import RecipeError, load_recipe
 from lassi.core.record import Diagnostic, Request, Trial
-from lassi.core.stages import DIAGNOSTIC_COUNT_CAP, prompt_diagnostics
+from lassi.core.stages import (
+    DIAGNOSTIC_COUNT_CAP,
+    NEAREST_MIN_RATIO,
+    core_described,
+    declarations_described,
+    prompt_diagnostics,
+)
 from lassi.prompts import render
 from lassi.prompts.retrieval import load_index, query_from_diagnostic
 
@@ -149,6 +159,8 @@ from lassi.prompts.retrieval import load_index, query_from_diagnostic
 LOOKUP = "lookup"
 SECTION = {"max_chars": 8000, "prompts": ["correct"]}
 LOOKED_UP = "looked_up"
+# The template of the generation prompt's core block (lookup.core), which names no error.
+CORE_API = "core_api"
 DECLARATION = "declaration"
 LOOKUP_TEMPLATES = {LOOKED_UP: ("declarations",), DECLARATION: ("name", "header", "scope", "text")}
 LOOKED_UP_CODE = "looked-up"
@@ -325,10 +337,16 @@ def entry_text(declaration: Declaration) -> str:
     return render(PROMPTS, DECLARATION, fields)
 
 
-def lookup_blocks(declarations: Sequence[Declaration]) -> set[str]:
-    """Return the lookup block for `declarations`: entries one blank line apart, with or without a last line feed."""
+def lookup_blocks(declarations: Sequence[Declaration], template: str = LOOKED_UP) -> set[str]:
+    """Return the `template` block for `declarations`: entries one blank line apart, with or without a last line
+    feed."""
     text = "\n\n".join(entry_text(item).rstrip("\n") for item in declarations)
-    return {render(PROMPTS, LOOKED_UP, {"declarations": value}) for value in (text, text + "\n")}
+    return {render(PROMPTS, template, {"declarations": value}) for value in (text, text + "\n")}
+
+
+def core_carrying(prompt: str, declarations: Sequence[Declaration]) -> set[str]:
+    """Return the forms the generation prompt `prompt` may take with the core block (core_api.txt)."""
+    return {joined([block], prompt) for block in lookup_blocks(declarations, CORE_API)}
 
 
 def carrying(prompt: str, declarations: Sequence[Declaration], before: Sequence[str] = ()) -> set[str]:
@@ -628,3 +646,226 @@ def test_tt_host_v0_holds_the_lookup_template_and_it_renders_with_its_fields(nam
 @pytest.mark.parametrize("name", sorted(LOOKUP_TEMPLATES))
 def test_tt_host_v0_lookup_template_is_generic(name: str) -> None:
     assert named_tier_a(template_text(name)) == [], f"{name}.txt names a Tier A item or file (Agent Rule 5)"
+
+
+# ---------------------------------------------------------------------------
+# Lookup at generation (lookup.core) and nearest names (lookup.nearest), 2026-10-25
+#
+# The contract: lookup.prompts may list generate, and then lookup.core is required: a non-empty list of distinct
+# header paths exactly as the pack's include lines name them. The generation prompt then carries, in the looked-up
+# block, every declaration of those header parts, in pack order, each skipped whole past max_chars, and its request
+# one looked-up note naming each part. core is refused unless prompts lists generate, and the runner refuses a name
+# the pack has no part for, before any directory exists. lookup.nearest (an integer from 1 to 8; off when absent)
+# needs prompts to list correct: for an identifier of a listed error that names no declaration of the pack, the
+# block adds one line, undeclared.txt ($name, $candidates), naming up to `nearest` declared names nearest to it
+# (difflib ratio over the declarations' names and qualified names, ties by pack order, at least
+# NEAREST_MIN_RATIO), after the declarations; the note records each such line. Corrections keep their behavior.
+
+UNDECLARED = "undeclared"
+UNDECLARED_FIELDS = ("name", "candidates")
+GEN_SECTION = {"max_chars": 8000, "prompts": ["generate", "correct"], "core": [TYPES_PART, HOST_PART]}
+HOST_DECLARATIONS = [KERNEL_AT_CORE, KERNEL_ON_RANGE, CIRCULAR_BUFFER, RUNTIME_ARGS]
+TYPES_DECLARATIONS = [BUFFER_CONFIG, BUFFER_TYPE]
+PACK_ORDER = [*HOST_DECLARATIONS, *TYPES_DECLARATIONS, MESH_WRITE, ALPHA, BETA, GAMMA, DELTA]
+MISSPELLED_KERNEL = "CreateKernal"
+MISSPELLED_WRITE = "distributed::EnqueueWriteMeshBufer"
+NEAR_NOTHING = "zorbquant_tile"
+# A reply whose one error names a misspelled function, a misspelled qualified function, and a name near nothing.
+MISSPELLED = program(
+    0,
+    f"{ERROR}use of undeclared identifier '{MISSPELLED_KERNEL}'; did you mean '{MISSPELLED_WRITE}' "
+    f"or '{NEAR_NOTHING}'?",
+)
+
+
+def qualified(declaration: Declaration) -> str:
+    """Return a declaration's qualified name: its scope and name joined by `::`, or its name at global scope."""
+    return f"{declaration.scope}::{declaration.name}" if declaration.scope else declaration.name
+
+
+def nearest_names(identifier: str, count: int) -> list[str]:
+    """Return the qualified names nearest `identifier`, read independently of the stage with difflib's ratio."""
+    scored: dict[str, tuple[float, int]] = {}
+    for order, item in enumerate(PACK_ORDER):
+        name = qualified(item)
+        score = max(difflib.SequenceMatcher(None, form, identifier).ratio() for form in (item.name, name))
+        if name not in scored and score >= NEAREST_MIN_RATIO:
+            scored[name] = (score, order)
+    return sorted(scored, key=lambda name: (-scored[name][0], scored[name][1]))[:count]
+
+
+def undeclared_line(identifier: str, names: Sequence[str]) -> str:
+    """Return undeclared.txt rendered for `identifier` and its nearest names, comma separated."""
+    return render(PROMPTS, UNDECLARED, {"name": identifier, "candidates": ", ".join(names)})
+
+
+def blocks_with(declarations: Sequence[Declaration], lines: Sequence[str]) -> set[str]:
+    """Return the looked-up block for `declarations`, then the undeclared `lines`, entries one blank line apart."""
+    entries = [entry_text(item).rstrip("\n") for item in declarations] + [line.rstrip("\n") for line in lines]
+    text = "\n\n".join(entries)
+    return {render(PROMPTS, LOOKED_UP, {"declarations": value}) for value in (text, text + "\n")}
+
+
+def generation_pair(base: Path, bench: Path, lookup: Mapping[str, Any]) -> tuple[list[str], list[str], Trial]:
+    """Run [generate, one compile correction] on BROKEN without the section and with `lookup`; return both prompts."""
+    base.mkdir(parents=True, exist_ok=True)
+    plain = Script(replies=[BROKEN, program(1)], attempts=[doubled])
+    run(base, bench, plain, recipe_data(context=[DECL_PACK], loop={}), "plain")
+    script = Script(replies=[BROKEN, program(1)], attempts=[doubled])
+    _, trial = run(base, bench, script, recipe_data(context=[DECL_PACK], loop={}, lookup=dict(lookup)), "looking")
+    return user_prompts(plain), user_prompts(script), trial
+
+
+def test_a_generation_section_loads_as_written_and_enters_the_hash(base: Path) -> None:
+    (base / "one").mkdir()
+    (base / "two").mkdir()
+    loaded = load(base / "one", recipe_data(lookup=GEN_SECTION), "recipe")
+    assert loaded.data[LOOKUP] == GEN_SECTION
+    other = load(base / "two", recipe_data(lookup={**GEN_SECTION, "nearest": 3}), "recipe")
+    assert other.data[LOOKUP]["nearest"] == 3 and other.recipe_hash != loaded.recipe_hash
+
+
+def test_core_is_required_when_prompts_lists_generate(base: Path) -> None:
+    message = load_refusal(base, recipe_data(lookup=section(prompts=["generate"])))
+    assert f"{LOOKUP}.core" in message and "generate" in message, message
+
+
+def test_core_is_refused_unless_prompts_lists_generate(base: Path) -> None:
+    message = load_refusal(base, recipe_data(lookup=section(core=[HOST_PART])))
+    assert f"{LOOKUP}.core" in message and "generate" in message, message
+
+
+def test_nearest_is_refused_unless_prompts_lists_correct(base: Path) -> None:
+    message = load_refusal(base, recipe_data(lookup={**GEN_SECTION, "prompts": ["generate"], "nearest": 2}))
+    assert f"{LOOKUP}.nearest" in message and "correct" in message, message
+
+
+NEW_BAD_VALUES = [
+    ("core", []), ("core", HOST_PART), ("core", [1]), ("core", [HOST_PART, HOST_PART]), ("core", [""]),
+    ("core", ["tt-metalium/a b.hpp"]), ("core", ["<tt-metalium/host_api.hpp>"]), ("core", {HOST_PART: True}),
+    ("nearest", 0), ("nearest", 9), ("nearest", True), ("nearest", "3"), ("nearest", 2.5), ("nearest", None),
+]
+
+
+@pytest.mark.parametrize(("key", "value"), NEW_BAD_VALUES, ids=[f"{key}-{value!r}" for key, value in NEW_BAD_VALUES])
+def test_a_new_key_of_the_wrong_type_or_range_is_refused_naming_it(base: Path, key: str, value: Any) -> None:
+    assert f"{LOOKUP}.{key}" in load_refusal(base, recipe_data(lookup={**GEN_SECTION, key: value}))
+
+
+@pytest.mark.parametrize("value", [1, 8])
+def test_the_bounds_of_nearest_load(base: Path, value: int) -> None:
+    assert load(base, recipe_data(lookup=section(nearest=value))).data[LOOKUP]["nearest"] == value
+
+
+@pytest.mark.parametrize("extra", [{"core": [HOST_PART], "prompts": ["generate"]}, {"nearest": 2}],
+                         ids=["core", "nearest"])
+def test_a_section_with_a_new_key_is_refused_under_faithful(base: Path, extra: dict[str, Any]) -> None:
+    message = load_refusal(base, recipe_data(lookup=section(**extra), faithful=True, loop={}))
+    assert LOOKUP in message and "faithful: true" in message, message
+
+
+def test_the_runner_refuses_a_core_header_the_pack_has_no_part_for(base: Path, bench: Path) -> None:
+    data = recipe_data(context=[DECL_PACK], lookup={**GEN_SECTION, "core": [HOST_PART, "tt-metalium/absent.hpp"]})
+    message = run_refusal(base, bench, data)
+    assert f"{LOOKUP}.core" in message and "tt-metalium/absent.hpp" in message and HOST_PART in message, message
+
+
+def test_the_runner_refuses_a_template_set_without_undeclared_when_nearest_is_set(
+    base: Path, bench: Path, assets: Path,
+) -> None:
+    name = template_set(assets, "lacks-undeclared", drop=[UNDECLARED])
+    message = run_refusal(base, bench, recipe_data(prompts=name, context=[DECL_PACK], lookup=section(nearest=2)))
+    assert f"{UNDECLARED}.txt" in message, message
+    run(base, bench, Script(replies=[BROKEN, program(1)], attempts=[doubled]),
+        recipe_data(prompts=name, context=[DECL_PACK], lookup=SECTION, loop={}), "without-nearest")
+
+
+def test_the_generation_prompt_carries_the_core_parts_in_pack_order(base: Path, bench: Path) -> None:
+    plain, prompts, trial = generation_pair(base, bench, GEN_SECTION)
+    assert prompts[0] in core_carrying(plain[0], [*HOST_DECLARATIONS, *TYPES_DECLARATIONS]), prompts[0]
+    (note,) = looked_up_notes((trial.requests or [])[0])
+    assert HOST_PART in note.message and TYPES_PART in note.message and MESH_PART not in note.message, note.message
+    assert attempt_notes(trial) == []
+
+
+def test_with_generate_listed_the_corrections_keep_their_prompt(base: Path, bench: Path) -> None:
+    _, with_generate, _ = generation_pair(base / "first", bench, GEN_SECTION)
+    _, correct_only, _ = generation_pair(base / "second", bench, SECTION)
+    assert with_generate[1] == correct_only[1], "a correction carries the declarations its errors name, as before"
+
+
+def test_with_generate_alone_a_correction_carries_none(base: Path, bench: Path) -> None:
+    plain, prompts, trial = generation_pair(base, bench, {**GEN_SECTION, "prompts": ["generate"]})
+    assert prompts[1] == plain[1]
+    assert looked_up_notes((trial.requests or [])[1]) == []
+
+
+def test_core_skips_a_declaration_past_max_chars_whole(base: Path, bench: Path) -> None:
+    plain, prompts, _ = generation_pair(
+        base, bench, {"max_chars": SIZED_MAX_CHARS, "prompts": ["generate"], "core": [SIZED_PART]})
+    assert prompts[0] in core_carrying(plain[0], [ALPHA, GAMMA]), prompts[0]
+    assert BETA.text not in prompts[0] and DELTA.text not in prompts[0]
+
+
+def test_nearest_adds_one_line_per_undeclared_identifier(base: Path, bench: Path) -> None:
+    plain, prompt, trial = correction_pair(base, bench, MISSPELLED, section(nearest=2))
+    near_kernel = nearest_names(MISSPELLED_KERNEL, 2)
+    near_write = nearest_names(MISSPELLED_WRITE, 2)
+    assert near_kernel[0] == qualified(KERNEL_AT_CORE) and near_write[0] == qualified(MESH_WRITE)
+    assert nearest_names(NEAR_NOTHING, 2) == [], "the fixture's third name is near nothing"
+    lines = [undeclared_line(MISSPELLED_KERNEL, near_kernel), undeclared_line(MISSPELLED_WRITE, near_write)]
+    assert prompt in {joined([block], plain) for block in blocks_with([], lines)}, prompt
+    (note,) = looked_up_notes((trial.requests or [])[1])
+    for name in (MISSPELLED_KERNEL, MISSPELLED_WRITE, *near_kernel, *near_write):
+        assert name in note.message, note.message
+    assert NEAR_NOTHING not in note.message, note.message
+
+
+def test_nearest_lines_follow_the_declarations_and_a_declared_name_gets_none(base: Path, bench: Path) -> None:
+    reply = program(0, f"{ERROR}no matching function for call to 'SetRuntimeArgs'; see '{MISSPELLED_KERNEL}'")
+    plain, prompt, _ = correction_pair(base, bench, reply, section(nearest=1))
+    line = undeclared_line(MISSPELLED_KERNEL, nearest_names(MISSPELLED_KERNEL, 1))
+    assert prompt in {joined([block], plain) for block in blocks_with([RUNTIME_ARGS], [line])}, prompt
+
+
+def test_without_nearest_an_undeclared_identifier_adds_nothing(base: Path, bench: Path) -> None:
+    plain, prompt, trial = correction_pair(base, bench, MISSPELLED, SECTION)
+    assert prompt == plain
+    assert all(looked_up_notes(request) == [] for request in trial.requests or [])
+
+
+def test_tt_host_v0_holds_undeclared_and_it_renders_with_its_fields() -> None:
+    fields = {field_name: f"<SYNTHETIC {field_name}>" for field_name in UNDECLARED_FIELDS}
+    rendered = render(PROMPTS, UNDECLARED, fields)
+    assert all(value in rendered for value in fields.values()), rendered
+    text = template_text(UNDECLARED)
+    assert text.isascii() and "\r" not in text and named_tier_a(text) == []
+
+
+def test_the_descriptions_mention_core_and_nearest_only_when_set() -> None:
+    def context(lookup: Mapping[str, Any]) -> Any:
+        return SimpleNamespace(recipe=SimpleNamespace(data={LOOKUP: dict(lookup)}))
+
+    assert core_described(context(SECTION)) == ""
+    assert "2 header part(s)" in core_described(context(GEN_SECTION))
+    plain = declarations_described(context(SECTION))
+    assert "nearest" not in plain and plain
+    assert declarations_described(context(section(nearest=3))).startswith(plain)
+    assert "3 declared names nearest" in declarations_described(context(section(nearest=3)))
+
+
+def test_tt_host_v0_core_api_renders_its_declarations_and_names_no_error() -> None:
+    template_text(CORE_API)
+    rendered = render(PROMPTS, CORE_API, {"declarations": "<SYNTHETIC declarations>"})
+    assert "<SYNTHETIC declarations>" in rendered
+    assert "error" not in rendered.lower(), "the generation prompt shows no error to read"
+
+
+def test_the_runner_refuses_a_template_set_without_core_api_when_generate_is_listed(
+    base: Path, bench: Path, assets: Path,
+) -> None:
+    name = template_set(assets, "lacks-core-api", drop=[CORE_API])
+    message = run_refusal(base, bench, recipe_data(prompts=name, context=[DECL_PACK], lookup=GEN_SECTION))
+    assert f"{CORE_API}.txt" in message, message
+    run(base, bench, Script(replies=[BROKEN, program(1)], attempts=[doubled]),
+        recipe_data(prompts=name, context=[DECL_PACK], lookup=SECTION, loop={}), "correct-only")

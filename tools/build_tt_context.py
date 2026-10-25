@@ -2,7 +2,7 @@
 
 Usage:
 
-    uv run tools/build_tt_context.py --tree DIR [--out DIR]
+    uv run tools/build_tt_context.py --tree DIR [--out DIR] [--name NAME --limit-bytes N]
 
 `--tree` is tt-metal at commit 5280a9cfb00998fd49667a29523d03aee905c129
 (toolchains/tt-metal.pin): the installed tree on the build host
@@ -14,8 +14,9 @@ assets/bench/tt-pairs-v0.yaml names, and every file TIER_A_EXAMPLE_FILES
 names, each with the sha256 recorded there. Anything else is refused with
 exit status 1, a message, and no file written.
 
-It writes `context/tt-metalium-5280a9cf/` under `--out` (default assets/):
-MANIFEST.yaml (plain ASCII, LF) and one `<key>.txt` per fragment, which
+It writes `context/<NAME>/` under `--out` (default assets/; NAME defaults to
+PACK_NAME, tt-metalium-5280a9cf): MANIFEST.yaml (plain ASCII, LF) and one
+`<key>.txt` per fragment, which
 lassi.prompts joins in manifest order into the pack that upstream's
 summarize_context stage sends for the target language tt. No choice of
 content below looks at a Tier A item, its programs, or any result on it
@@ -69,6 +70,19 @@ and skipped otherwise, the fill going on to the next. The manifest names
 every skipped header in `cut_by_limit`. A guide and roots that alone pass
 the limit are refused, naming the sizes.
 
+A fuller pack (2026-10-25). `--name` and `--limit-bytes` build a second pack
+by the same rules from the same tree, head file, and template, under
+`context/<NAME>/`, with `--limit-bytes` in place of LIMIT_BYTES: FULL_NAME
+with FULL_LIMIT_BYTES (128 KiB) gives the declaration lookup
+(lassi.core.stages, pack_declarations) the headers the default pack's limit
+cuts. NAME is PACK_NAME, or PACK_NAME followed by one or more
+`-<lowercase letters and digits>` parts, so it names the pin; any other
+name, or a limit below 1, is refused with exit status 1 and nothing
+written. Without the options the tool writes the default pack exactly as
+before. The two manifests differ only in limit_bytes and in the
+reference's sources, sha256, and cut_by_limit; both are tracked, and both
+packs' fragments are gitignored.
+
 Agent Rule 5. No source is a programming example (the Tier A items are
 tt-metal's programming examples loopback, eltwise_binary, eltwise_sfpu,
 matmul_single_core, and matmul_multi_core). Before writing, every fragment
@@ -102,7 +116,13 @@ sys.path.insert(0, str(REPO))
 from lassi.prompts.assets import PACK_JOINER  # noqa: E402
 
 DEFAULT_OUT = REPO / "assets"
-PACK_TREE = "context/tt-metalium-5280a9cf"
+PACK_NAME = "tt-metalium-5280a9cf"
+PACK_TREE = f"context/{PACK_NAME}"
+# The fuller pack (the docstring's "A fuller pack"): its name and its limit, which the tool takes as options.
+FULL_NAME = f"{PACK_NAME}-full"
+FULL_LIMIT_BYTES = 128 * 1024
+# A pack name the tool accepts: PACK_NAME, then optional `-<lowercase letters and digits>` parts.
+_PACK_NAME_RULE = re.compile(rf"{re.escape(PACK_NAME)}(?:-[a-z0-9]+)*")
 MANIFEST = "MANIFEST.yaml"
 GENERATOR = "tools/build_tt_context.py"
 PIN_FILE = REPO / "toolchains" / "tt-metal.pin"
@@ -118,7 +138,9 @@ LANGUAGE = "tt"
 # token the pack takes 40,960 / r tokens, so the pack alone passes those budgets only when r falls below 1.43 or
 # 2.50 bytes per token. At an assumed r of 3.0 it takes 13,654 tokens and leaves 15,018 or 2,730 tokens for the
 # rest of the prompt (the request's own text, or a generate prompt's source and kernels); a served window above
-# the floor leaves more.
+# the floor leaves more. The fuller pack's FULL_LIMIT_BYTES (131,072) takes 43,691 tokens at the same assumed r,
+# past a 32,768-token window, so a recipe that names it gives its text to the declaration lookup, whose
+# lookup.max_chars bounds what a prompt carries, and lists no stage that sends the whole pack (summarize_context).
 LIMIT_BYTES = 40 * 1024
 # The pack's own text (OQ-018 restricts only upstream text, so it is tracked): the reference's preamble, then the
 # line each header's declarations follow, holding {include}. Its sha256 is a source of host_api.tt.
@@ -1141,11 +1163,12 @@ def headers_of(sources: Mapping[str, str]) -> list[str]:
 
 @dataclass(frozen=True)
 class Pack:
-    """A built pack: its fragments, the sha256 of this repository's sources, and the headers the limit skipped."""
+    """A built pack: its fragments, the sha256 of this repository's own sources, its limit, and what that skipped."""
 
     fragments: tuple[Fragment, ...]
     own: Mapping[str, str]
     cut: tuple[str, ...]
+    limit: int = LIMIT_BYTES
 
 
 def read_template(path: Path = TEMPLATE_FILE) -> tuple[str, str]:
@@ -1157,8 +1180,10 @@ def read_template(path: Path = TEMPLATE_FILE) -> tuple[str, str]:
         raise Refusal(f"the generate template {path.name} is not UTF-8 ({error})") from error
 
 
-def build(tree: Path, head_file: Path = HEAD_FILE, template_file: Path = TEMPLATE_FILE) -> Pack:
-    """Return the pack built from `tree`, `head_file`, and `template_file`, checked by check_pack.
+def build(
+    tree: Path, head_file: Path = HEAD_FILE, template_file: Path = TEMPLATE_FILE, limit: int = LIMIT_BYTES,
+) -> Pack:
+    """Return the pack built from `tree`, `head_file`, and `template_file` to `limit` bytes, checked by check_pack.
 
     The names the template uses that the walk defines (prompt_names) put
     their defining headers right after the roots (walk_order); the check is
@@ -1171,31 +1196,48 @@ def build(tree: Path, head_file: Path = HEAD_FILE, template_file: Path = TEMPLAT
     guide = Fragment(GUIDE_KEY, (GUIDE,), guide_text(sources[GUIDE]))
     declared = declared_headers(sources, headers_of(sources))
     order, _ = walk_order(declared, names=prompt_names(template, declared))
-    reference, cut = fit_reference(guide, [(path, sources[path]) for path in order], head, keep=len(ROOTS))
+    reference, cut = fit_reference(guide, [(path, sources[path]) for path in order], head, limit, keep=len(ROOTS))
     fragments = (guide, reference)
-    check_pack(fragments, tier_a_references(tree))
-    return Pack(fragments, {HEAD_SOURCE: head.sha256, TEMPLATE_SOURCE: template_sha256}, cut)
+    check_pack(fragments, tier_a_references(tree), limit)
+    return Pack(fragments, {HEAD_SOURCE: head.sha256, TEMPLATE_SOURCE: template_sha256}, cut, limit)
 
 
-def manifest_text(fragments: Sequence[Fragment], hashes: Mapping[str, str], cut: Sequence[str] = ()) -> str:
-    """Return MANIFEST.yaml: the header, the pin and limit, each entry's key, sources, and sha256, and the cut."""
+def manifest_text(
+    fragments: Sequence[Fragment], hashes: Mapping[str, str], cut: Sequence[str] = (), limit: int = LIMIT_BYTES,
+) -> str:
+    """Return MANIFEST.yaml: the header, the pin and `limit`, each entry's key, sources, and sha256, and the cut."""
     entries = [{
         "key": fragment.key,
         "sources": [{"path": path, "sha256": hashes[path]} for path in fragment.sources],
         "sha256": hashlib.sha256(fragment.text.encode("utf-8")).hexdigest(),
     } for fragment in fragments]
     document = {"generator": GENERATOR, "repo": REPO_URL, "commit": PIN, "language": LANGUAGE,
-                "limit_bytes": LIMIT_BYTES, "entries": entries, "cut_by_limit": list(cut)}
+                "limit_bytes": limit, "entries": entries, "cut_by_limit": list(cut)}
     return HEADER + yaml.safe_dump(document, sort_keys=False, default_flow_style=False, width=120)
 
 
-def write_pack(out: Path, pack: Pack) -> Path:
-    """Write the fragments and MANIFEST.yaml under `out`/PACK_TREE, each file only if it changed; return the tree."""
-    tree = out / PACK_TREE
+def pack_tree(name: str = PACK_NAME) -> str:
+    """Return the assets-relative directory of the pack `name`: context/<name>."""
+    return f"context/{name}"
+
+
+def check_options(name: str, limit: int) -> None:
+    """Raise Refusal unless `name` follows _PACK_NAME_RULE and `limit` is at least 1, naming the option."""
+    if not _PACK_NAME_RULE.fullmatch(name):
+        raise Refusal(f"--name {name!r} is not {PACK_NAME} or {PACK_NAME} with -<lowercase letters and digits> "
+                      f"parts, such as {FULL_NAME}")
+    if limit < 1:
+        raise Refusal(f"--limit-bytes {limit} is below 1; the default pack's is {LIMIT_BYTES}, the fuller pack's "
+                      f"{FULL_LIMIT_BYTES}")
+
+
+def write_pack(out: Path, pack: Pack, name: str = PACK_NAME) -> Path:
+    """Write the fragments and MANIFEST.yaml under `out`/context/`name`, each file only if it changed; return it."""
+    tree = out / pack_tree(name)
     tree.mkdir(parents=True, exist_ok=True)
     files = {f"{fragment.key}.txt": fragment.text.encode("utf-8") for fragment in pack.fragments}
     hashes = {**SOURCES, **pack.own}
-    files[MANIFEST] = manifest_text(pack.fragments, hashes, pack.cut).encode("ascii")
+    files[MANIFEST] = manifest_text(pack.fragments, hashes, pack.cut, pack.limit).encode("ascii")
     for name, data in files.items():
         path = tree / name
         if not (path.is_file() and path.read_bytes() == data):
@@ -1208,15 +1250,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate the tt-metalium context pack from tt-metal at the pin.")
     parser.add_argument("--tree", type=Path, required=True, help="tt-metal at the pin: an install or fetched files")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="assets root to write the pack under")
+    parser.add_argument("--name", default=PACK_NAME, help=f"the pack's name (default {PACK_NAME}; or {FULL_NAME})")
+    parser.add_argument("--limit-bytes", type=int, default=LIMIT_BYTES,
+                        help=f"the whole pack's byte limit (default {LIMIT_BYTES}; {FULL_LIMIT_BYTES} for {FULL_NAME})")
     args = parser.parse_args(argv)
     try:
-        pack = build(args.tree)
+        check_options(args.name, args.limit_bytes)
+        pack = build(args.tree, limit=args.limit_bytes)
     except Refusal as refusal:
         print(f"build_tt_context: refused: {refusal}", file=sys.stderr)
         return 1
-    tree = write_pack(args.out, pack)
+    tree = write_pack(args.out, pack, args.name)
     sizes = ", ".join(f"{fragment.key} {len(fragment.text.encode('utf-8'))} bytes" for fragment in pack.fragments)
-    print(f"{tree.as_posix()}: {sizes}; the pack {pack_size(pack.fragments)} of {LIMIT_BYTES} bytes; "
+    print(f"{tree.as_posix()}: {sizes}; the pack {pack_size(pack.fragments)} of {pack.limit} bytes; "
           f"{len(pack.cut)} headers cut by the limit")
     return 0
 

@@ -1041,7 +1041,7 @@ Recommendation: none given; the question set out the three.
 Answer: Owner's choice (in the working session, 2026-10-24, 00:03 EDT; recorded by the agent): "Not tonight". No training ran.
 
 ## OQ-080 GPT-OSS Reasoning Effort: The Server's Default, Neither Set Nor Recorded
-State: ANSWERED
+State: CLOSED
 Kind: decision
 Blocks: none (the window of 2026-10-25 runs GPT-OSS with the server's default)
 Evidence: docs/BIBLE.md, Serving Rules ("gpt-oss: enable the reasoning parser so fenced code lands in `content`; fix reasoning effort per arm and record it."); developer.furiosa.ai v2026.4.0, furiosa_llm/models/gpt-oss.html (read 2026-10-25: furiosa-llm detects the harmony format with no reasoning parser, returns the reasoning in message.reasoning apart from the answer in message.content, and takes reasoning_effort low, medium, or high through the request); lassi/llm/openai_compat.py complete() (sends model, messages, temperature, top_p, max_tokens, and stream, nothing else); projects/lassi-demo/sweep6/gpt-oss-*/base-*.yaml.
@@ -1080,7 +1080,7 @@ Recommendation: (a), so a kill does what it reports; until then (b), which is no
 Answer:
 
 ## OQ-083 Corrections Steered By Tier A Outcomes: Prompt Tuning On Unassigned Items?
-State: ANSWERED
+State: CLOSED
 Kind: policy
 Blocks: P17.27 (a bf16 rounding statement in a new template set)
 Evidence: docs/BIBLE.md, Agent Rule 5 and Benchmark Suites (a suite item's split is train, eval, or unassigned; the registry refuses eval and unassigned items to training, prompt tuning, and corpus harvest; all five Tier A items of tt-pairs-v0 are unassigned until P7, OQ-025 (d); an assigned split never changes); plans/p17-portable.md (P17.21 and P17.22 added on the owner's directions of 2026-10-23, "Okay, get that built and added." and "Ready a RAG of Tenstorrent documentation as well in case this is not sufficient."; P17.24 to P17.27 proposed after the outcomes of the passes of 2026-10-23 and 2026-10-24 on tt-pairs-v0, P17.27 also from reading assets/bench/tt-pairs-v0/eltwise_sfpu/cpp/eltwise_sfpu.cpp:28-37, an item's own C++ reference); results/build-errors-20261025 (the buckets of those passes); the rules audit of that summary on 2026-10-25, which raised this.
@@ -1120,7 +1120,7 @@ Note (2026-10-25, about 15:10 EDT, in the working session): the owner chose "Ski
 Answer:
 
 ## OQ-086 The Window Of 2026-10-25, 20:00 To 02:00: Sampling, Scope, And Autonomy
-State: ANSWERED
+State: CLOSED
 Kind: decision
 Blocks: none
 Evidence: results/rngd-matrix-20261025/summary.md (79 of 82 trials at the 15-correction cap, restarts not helping yet); plans/runs/2026-10-25-window.md; plans/LESSONS.md (OQ-082's manual session cleanup).
@@ -1132,7 +1132,7 @@ Recommendation: (a): corrections rarely converged, so more fresh draws; tt -> cp
 Answer: Owner's choice (in the working session, 2026-10-25, about 15:10 EDT; recorded by the agent): "3 samples, cap 8 (Recommended)", and the defaults "cpp -> tt only", "Autonomy to stop/relaunch", and "Skip training tonight".
 
 ## OQ-087 Model Weights On alpha01: Remove 8B To 60B, Bring In Bigger Models; Back Up The Rest Of The Home Directory
-State: ANSWERED
+State: CLOSED
 Kind: decision
 Blocks: the models of the window of 2026-10-25, 20:00 to 02:00
 Evidence: rx 20261025-131415-exec-62a6, rx 20261025-131520-exec-5abf, and rx 20261025-131620-exec-ce04 (read-only listings of /mnt/nvme10/joseph_ufl, which is the account's home: 359G, .cache 267G of it, the furiosa-ai models of 8B to 60B about 258G with gpt-oss-20b's shared store); https://huggingface.co/api/models?author=furiosa-ai and each model's tree at v2026.4, read 2026-10-25 (Llama-3.3-70B-Instruct-FP8-dynamic 73.8 GB, Solar-Open-100B-NVFP4A16 68.6 GB, gpt-oss-120b 198.6 GB, each on 4 RNGD cards by its model card; the BF16 Llama-3.3-70B-Instruct has no v2026.4 tag, and DeepSeek-R1-Distill-Llama-70B and the INT8 Llama only v2025.3.0); tools/server/gate.py (allowed_path and MAX_TAR_BYTES: rx pulls only run records, lassi-runs, and lassi-wt, at most 200 MB); AGENTS.md (raw ssh, scp, and rsync are forbidden to agents).

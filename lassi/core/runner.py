@@ -56,8 +56,17 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    fails the manifest's sha256 (_retrieval_index, which loads the index
    once per run); the lookup section (task P17.26) with a fragment set,
    then without a context pack serving a direction's target language,
-   then with a template set whose looked_up.txt or declaration.txt
-   (LOOKUP_TEMPLATES) is missing or does not render (_check_lookup);
+   then with a lookup.core header that pack has no header part for, then
+   with a template set whose looked_up.txt or declaration.txt
+   (LOOKUP_TEMPLATES), or with lookup.nearest set its undeclared.txt
+   (NEAREST_TEMPLATES), or with lookup.prompts listing generate its
+   core_api.txt (CORE_TEMPLATES), is missing or does not render
+   (_check_lookup);
+   the examples section (OQ-083 (b)) with a fragment set, or with a
+   template set whose examples.txt or example.txt (EXAMPLE_TEMPLATES) is
+   missing or does not render (_check_examples), and a pack whose
+   MANIFEST.yaml is missing or whose files are missing or fail it
+   (_examples_pack, which loads the pack once per run);
    loop.restart_after (task P17.25) with a fragment set
    (_check_restart); a project (the recipe's `project`, the first
    trial id segment) that is not one plain segment or that names an entry
@@ -365,7 +374,11 @@ from lassi.core.interfaces import Executor, Profiler, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
 from lassi.core.progress import STAGE_START, TRIAL_END, TRIAL_START, GuardedObserver, Observer, ProgressEvent, notify
 from lassi.core.recipe import (
+    EXAMPLES,
     LOOKUP,
+    LOOKUP_CORE,
+    LOOKUP_GENERATE,
+    LOOKUP_NEAREST,
     REASONING_EFFORT_KEY,
     RECORDING_KEY,
     RECORDING_SHA256_KEY,
@@ -396,13 +409,17 @@ from lassi.core.registry import DEFAULT_REGISTRY, Binding, Entry, Registry, devi
 from lassi.core.stages import (
     BASELINE_X10,
     CONTEXT_PROMPTS,
+    CORE_TEMPLATES,
     CORRECT_ON_MISMATCH,
+    EXAMPLE_TEMPLATES,
     LOOKUP_TEMPLATES,
+    NEAREST_TEMPLATES,
     PURPOSE,
     RETRIEVAL_PROMPTS,
     RUNS_CODE,
     SANDBOXED,
     RunContext,
+    pack_parts,
 )
 from lassi.core.store import TextStore, write_trial
 from lassi.core.trial_md import fenced, fmt, fmt_provenance
@@ -410,6 +427,7 @@ from lassi.executors import workdir
 from lassi.executors.sandbox import SandboxedCompileRunner
 from lassi.llm import ServingError, model_info, serving_line
 from lassi.prompts import assets as prompt_assets
+from lassi.prompts import examples as examples_pack
 from lassi.prompts import load_recipe_assets, rag_corpus, render
 from lassi.prompts.retrieval import GENERATOR as INDEX_GENERATOR
 from lassi.prompts.retrieval import Index, load_index
@@ -628,6 +646,8 @@ class _Run:
     Profiler, built before the first trial (_built_profiler), or None when
     the recipe binds none. `retrieval` is the run's one documentation index
     (_retrieval_index), or None when the recipe sets no retrieval section.
+    `examples` is the run's worked examples pack (_examples_pack), empty
+    when the recipe sets no examples section.
     """
 
     recipe: Recipe
@@ -650,6 +670,7 @@ class _Run:
     serving: Mapping[str, Any] | None = None
     profiler: Profiler | None = None
     retrieval: Index | None = None
+    examples: tuple[examples_pack.Example, ...] = ()
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -704,6 +725,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     bench = _bench(recipe, settings, options)
     _check_plan(recipe, registry, settings, bench)
     retrieval = _retrieval_index(recipe)
+    examples = _examples_pack(recipe)
     _check_adversary(recipe, registry, settings, bench)
     devices = probe_devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
     _check_one_role(recipe, registry, devices)
@@ -743,6 +765,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         serving=serving,
         profiler=profiler,
         retrieval=retrieval,
+        examples=examples,
     )
 
 
@@ -1318,6 +1341,32 @@ def _retrieval_index(recipe: Recipe) -> Index | None:
         raise RunError(f"{where}: {error}") from error
 
 
+def _examples_pack(recipe: Recipe) -> tuple[examples_pack.Example, ...]:
+    """Load the worked examples pack the recipe's examples section names, once per run; () without the section.
+
+    The pack is <assets root>/EXAMPLES_DIR/<examples.pack> under
+    lassi.prompts.assets.default_root(), read only when every file matches
+    its MANIFEST.yaml (lassi.prompts.examples load_pack). A missing manifest,
+    and a fragment that is missing or fails it, are each a RunError naming
+    examples.pack, raised before any directory exists.
+    """
+    section = recipe.data.get(EXAMPLES)
+    if section is None:
+        return ()
+    where = f"{recipe.path}: {EXAMPLES}.pack {section['pack']!r}"
+    tree = prompt_assets.default_root() / examples_pack.EXAMPLES_DIR / section["pack"]
+    manifest = tree / examples_pack.MANIFEST
+    if not manifest.is_file():
+        raise RunError(
+            f"{where} names no pack: {manifest} does not exist; name a directory under "
+            f"assets/{examples_pack.EXAMPLES_DIR}/ that holds its {examples_pack.MANIFEST}"
+        )
+    try:
+        return examples_pack.load_pack(tree)
+    except (OSError, ValueError) as error:
+        raise RunError(f"{where}: {error}") from error
+
+
 def resolve_runs_root(option: Path | None, recipe: Recipe) -> Path:
     """Return the runs root: `option`, else $LASSI_RUNS_ROOT, else the recipe's runs_root; absolute, outside the repo.
 
@@ -1766,6 +1815,7 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     _check_template_context(recipe, entries, settings)
     _check_retrieval_prompts(recipe, settings)
     _check_lookup(recipe, settings)
+    _check_examples(recipe, settings)
     _check_restart(recipe, settings)
 
 
@@ -1828,10 +1878,14 @@ def _check_lookup(recipe: Recipe, settings: _Settings) -> None:
 
     In this order: a fragment set, whose prompts (upstream's) carry no
     declarations; a direction whose target language no context pack of the
-    recipe serves, since the declarations come from that pack; and a
-    template set in which a template of LOOKUP_TEMPLATES (the looked-up
-    block and one declaration) does not render with its fields. A recipe
-    without the section is never checked.
+    recipe serves, since the declarations come from that pack; a
+    lookup.core header that pack has no header part for (pack_parts); and
+    a template set in which a template of LOOKUP_TEMPLATES (the looked-up
+    block and one declaration), or with lookup.nearest set the template of
+    NEAREST_TEMPLATES (one undeclared line), or with lookup.prompts listing
+    generate the template of CORE_TEMPLATES (the generation prompt's core
+    block), does not render with its fields. A recipe without the section is
+    never checked.
     """
     if LOOKUP not in recipe.data:
         return
@@ -1848,7 +1902,42 @@ def _check_lookup(recipe: Recipe, settings: _Settings) -> None:
                 f"{direction.target!r}, whose declarations it would carry; the recipe's context serves: {served}; "
                 f"name a pack for {direction.target!r} in context or remove {LOOKUP}"
             )
+        _check_core_parts(recipe, settings.packs[direction.target], direction.target)
     _check_templates(recipe, settings, f"{LOOKUP} is set", LOOKUP_TEMPLATES)
+    if LOOKUP_NEAREST in recipe.data[LOOKUP]:
+        _check_templates(recipe, settings, f"{LOOKUP}.{LOOKUP_NEAREST} is set", NEAREST_TEMPLATES)
+    if LOOKUP_GENERATE in recipe.data[LOOKUP]["prompts"]:
+        _check_templates(recipe, settings, f"{LOOKUP}.prompts lists {LOOKUP_GENERATE}", CORE_TEMPLATES)
+
+
+def _check_core_parts(recipe: Recipe, pack: str, language: str) -> None:
+    """Refuse a lookup.core header that the pack serving `language` has no header part for (stages.pack_parts)."""
+    parts = pack_parts(pack)
+    missing = [header for header in recipe.data[LOOKUP].get(LOOKUP_CORE, ()) if header not in parts]
+    if missing:
+        raise RunError(
+            f"{recipe.path}: {LOOKUP}.{LOOKUP_CORE} names {', '.join(missing)}, for which the context pack serving "
+            f"{language!r} has no header part; its parts are: {', '.join(parts) or 'none'}"
+        )
+
+
+def _check_examples(recipe: Recipe, settings: _Settings) -> None:
+    """Refuse the examples section with a fragment set, or a template set that cannot render its block (OQ-083 (b)).
+
+    Upstream's prompts hold no worked examples, so a fragment set cannot
+    carry them; a template set needs each template of EXAMPLE_TEMPLATES
+    (lassi.core.stages: the examples block and one example) rendering with
+    its fields. The pack itself is checked by _examples_pack. A recipe
+    without the section is never checked.
+    """
+    if EXAMPLES not in recipe.data:
+        return
+    if settings.fragments:
+        raise RunError(
+            f"{recipe.path}: {EXAMPLES} is set, but {settings.prompts!r} is a fragment prompt set, upstream's "
+            f"prompts, which carry no worked examples; use a template set or remove {EXAMPLES}"
+        )
+    _check_templates(recipe, settings, f"{EXAMPLES} is set", EXAMPLE_TEMPLATES)
 
 
 def _check_templates(
@@ -2818,6 +2907,7 @@ def _context(run: _Run, backend: Any, direction: Direction, item: str) -> RunCon
         profiler=run.profiler,
         registry=run.registry,
         retrieval=run.retrieval,
+        examples=run.examples,
     )
 
 
