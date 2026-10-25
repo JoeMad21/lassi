@@ -183,7 +183,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.31 | READY | The development split for tt-pairs-v0 (OQ-083 (b)) | - |  |
 | P17.32 | READY | The night window of 2026-10-25: the sweep with the new features on 70B-class models | P17.29,P17.30 |  |
 | P9.1 | READY | The energy seam and the CPU backends (rapl, wall) | - |  |
-| P9.2 | READY | Spike: CPU energy telemetry on alpha01, and the excess-files inventory | - | local source reading first; one read-only rx exec waits for the owner's yes (Agent Rule 17) |
+| P9.2 | READY | Spike: CPU energy telemetry on alpha01, and the excess-files inventory | - | local source reading first; one read-only rx exec waits for the owner's yes (Agent Rule 17; OQ-092) |
 | P9.3 | READY | Spike: Tenstorrent power telemetry at the pins | - | source reading only; no probe of the cards |
 | P9.4 | READY | AMD and NVIDIA backends on the seam | P9.1 |  |
 | P9.5 | READY | Tenstorrent and Cerebras backends | P9.1,P9.3 |  |
@@ -194,6 +194,6 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P9.10 | READY | Stages 3 and 4: refine_loop, select, compare_report | P9.9,P15.2 | P15.2 is provisional: the P15 task that delivers the Judge interface (p15-judges) |
 | P9.11 | READY | The equivalence judge in the pipeline | P9.9,P15.2 | P15.2 is provisional: the P15 task that delivers the Judge interface (p15-judges) |
 | P9.12 | READY | The ee score profile, metrics, recipes, and a mock dry run | P9.6,P9.7,P9.10,P9.11 | dry run on alpha01 in a window |
-| P9.13 | OWNER | The CPU-port run on alpha01 with RNGD generators | P9.2,P9.12 | waits on the owner's models and scale items (plan drafts B and C) and an owner window |
+| P9.13 | BLOCKED | The CPU-port run on alpha01 with RNGD generators | P9.2,P9.12 | OQ-089 answered: the 18 OpenMP apps, gpt-oss-120b generating, llama-3.3-70b judging, a pilot then an owner-picked subset at n=30; waits on an owner window after OQ-092's batch |
 | P9.14 | BLOCKED | GPU and device energy runs | P9.4,P9.5,P9.12 | BLOCKED: MI300X access (OQ-002, OQ-040), an NVIDIA host (OQ-003), TT silicon human-started only with OQ-078, Cerebras hardware (OQ-004) |
 | P9.G | READY | Phase gate, part (a): the CPU port runs end to end on alpha01 with energy or labeled wall time per Evaluation Protocol | P9.13 | part (b), the GPU acceptance criteria, stays with P9.14 |

@@ -107,7 +107,7 @@ Constraints for every task: Agent Rules 1, 2, 5 (lassi-ee-22 is eval only: no pr
 
 Tonight, hardware-free on Windows: P9.1, P9.3, P9.8 at once; then P9.4, P9.5, P9.6; P9.7's manifest half; P9.9. P9.10 and P9.11 start when P15.2 is DONE. One owner window batches P9.2's probe, P9.7's remote test, and P9.12's dry run; a later window runs P9.13.
 
-## Owner queue (drafts, numbered when filed)
+## Owner queue (filed 2026-10-25 as OQ-089, answered: A (a), B (a), C (a); the alpha01 batch as OQ-092)
 
 - A. lassi-ee-22's CPU port: the four apps without an OpenMP version at 692cba3, and the suite's pin. Recommendation: run 18 apps at 692cba3 and name the four as not ported.
 - B. Generator and judge models on RNGD. Recommendation: generator gpt-oss-120b, equivalence judge llama-3.3-70b (another family, as Agents And Judges requires), coordinated with P15's choice.
