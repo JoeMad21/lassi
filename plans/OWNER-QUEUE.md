@@ -1103,3 +1103,16 @@ Options:
 - (c) Compile every candidate's kernels on ttsim first (the ttsim executor's JIT), and send to silicon only candidates whose kernels built there, keeping (a) on silicon. Consequence: no JIT failure reaches the cards in practice; a candidate is built twice; a runner change.
 Recommendation: (c) when model output first runs on silicon, since it keeps (3a) as you chose and costs only a second build; (a) until then, which is what is built.
 Answer:
+
+## OQ-085 alpha01 Went Down During The Window Of 2026-10-25
+State: OPEN
+Kind: review
+Blocks: CPU training on alpha01 (plans/runs/train-window/run.sh), left out of the window's relaunch
+Evidence: plans/runs/2026-10-25-window.md (What Ran); rx 20261025-082252-exec-d05d (journalctl --list-boots as this account reads it: its first and last entries of the boot that ran the window's jobs, 05:00:33 and 06:09:52 PDT, and of the next boot from 08:21:43 PDT; that boot's last 30 readable lines are ordinary user-scope and sshd lines); rx 20261025-082310-exec-f0e6 (the kernel log is readable only by the adm and systemd-journal groups; the boot before ends with this account's session reaching the Shutdown target); rx 20261025-082222-exec-c06b ("08:22:22 up 7 min"; no process of this account but the gate's; every RNGD card at 0.00 GiB); rx 20261025-052309-window2-6ecd (state lost); from 09:15 to 11:21 EDT every rx call failed at the cluster's ssh gateway (`websocket: bad handshake`).
+Question: alpha01 stopped at or soon after 06:09:52 PDT (09:09:52 EDT; the last entries this account can read) and the next boot began about 08:15 PDT (11:15 EDT, from uptime), about two hours of the window. The journal this account can read has no shutdown lines for that boot, unlike the boot before it, but the cause cannot be read here. At that moment the window's job, rx 20261025-052309-window2-6ecd, was serving gpt-oss-20b on npu0 to 18 recipes (ttsim builds and runs in the sandbox) and, two minutes earlier, had started a CPU training recipe (tt-prompt-tuning-qwen3-1.7b, 64 threads). Could you check the kernel log or the machine's management log for the cause, and say whether training may run there again?
+Options:
+- (a) The cause was outside this work (power, maintenance, hardware): training may run in later windows as planned.
+- (b) The cause was this work, or cannot be ruled out: training stays off alpha01 until a cause is found, and the window runs only the sweeps that ran before without trouble.
+- (c) The cause was the RNGD serving of gpt-oss-20b: GPT-OSS stays off until a fix; training may run.
+Recommendation: whichever the log shows. Until then the relaunch at 11:24 EDT runs the matrix alone, without training, and keeps GPT-OSS first, as you asked; that leaves (c)'s suspect running, since GPT-OSS is this window's aim and it had served for about 40 minutes without trouble before the stop.
+Answer:
