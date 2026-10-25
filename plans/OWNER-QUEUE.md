@@ -1219,3 +1219,16 @@ Options:
 - (c) No Tenstorrent energy in LASSI-EE: backend tt declares it cannot measure, like cerebras. Consequence: no Tenstorrent energy results until a board-level meter exists.
 Recommendation: (a). It is the only source that keeps Agent Rule 9 by construction. Its scope is stated, so no figure is mislabeled, and the read-only sysfs probe (spike, Finding 7) can confirm it in the next owner window.
 Answer:
+
+## OQ-094 The Paper's Prompt Wording In Tracked lassi-ee-2026 Templates
+State: OPEN
+Kind: policy
+Blocks: P9.9 (the template files only; the stage code does not wait)
+Evidence: plans/spikes/p9-ee-protocol.md (Finding 2; the draft under Consequences for the plan); OQ-018 (its answer: "I did not want the LASSI prompts in the repository. Remove them and keep the prompts local only."); docs/BIBLE.md, Source Papers, LASSI-EE.
+Question: The only published LASSI-EE prompt texts are v1 Tables 1 to 8 of arXiv:2505.02184 (CUDA; CC BY-SA 4.0); v2 cites appendix prompts its arXiv copy lacks, v3 prints none, and no prompt set is released. OQ-018 kept upstream LASSI's prompts out of the repository. May the lassi-ee-2026 templates carry the paper's wording in tracked files?
+Options:
+- (a) Local only: a tool generates the templates from the paper into a gitignored tree, as lassi-2024's are kept; the repository holds a manifest with sha256 and every run records the bytes it used. Matches OQ-018 and keeps the paper's wording exact; costs a generator and a local step on each host.
+- (b) Tracked templates in the project's own words that follow the tables' structure and inputs, no sentence copied, labeled a port. Simple; a paraphrase drifts from the paper.
+- (c) Tracked with the paper's wording and CC BY-SA attribution. Most faithful; adds share-alike text to the public repository, which OQ-018's answer argues against.
+Recommendation: (a), since it matches OQ-018's answer and keeps the wording faithful; (b) as the fallback if no generator is wanted.
+Answer:

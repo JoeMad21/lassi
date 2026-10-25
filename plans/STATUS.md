@@ -189,7 +189,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P9.5 | READY | Tenstorrent and Cerebras backends | P9.1,P9.3 |  |
 | P9.6 | READY | The LASSI-EE power protocol | P9.1 |  |
 | P9.7 | READY | The lassi-ee-22 manifest and its CPU-port references | - | manifest on Windows; reference runs on alpha01 in a window |
-| P9.8 | READY | Spike: the paper's protocol details | - |  |
+| P9.8 | DONE | Spike: the paper's protocol details | - | plans/spikes/p9-ee-protocol.md: stop at counter > 0.8 (v1, v2), cap unstated (tables reach 11), single runs, metric conditioning; 27 open choices for P9.6, P9.9-P9.12; OQ-094; bible rev 381 |
 | P9.9 | READY | EE stages 0 to 2 and the lassi-ee-2026 prompts | P9.6,P9.8 |  |
 | P9.10 | READY | Stages 3 and 4: refine_loop, select, compare_report | P9.9,P15.2 | P15.2 is provisional: the P15 task that delivers the Judge interface (p15-judges) |
 | P9.11 | READY | The equivalence judge in the pipeline | P9.9,P15.2 | P15.2 is provisional: the P15 task that delivers the Judge interface (p15-judges) |
