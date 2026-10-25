@@ -1041,7 +1041,7 @@ Recommendation: none given; the question set out the three.
 Answer: Owner's choice (in the working session, 2026-10-24, 00:03 EDT; recorded by the agent): "Not tonight". No training ran.
 
 ## OQ-080 GPT-OSS Reasoning Effort: The Server's Default, Neither Set Nor Recorded
-State: OPEN
+State: ANSWERED
 Kind: decision
 Blocks: none (the window of 2026-10-25 runs GPT-OSS with the server's default)
 Evidence: docs/BIBLE.md, Serving Rules ("gpt-oss: enable the reasoning parser so fenced code lands in `content`; fix reasoning effort per arm and record it."); developer.furiosa.ai v2026.4.0, furiosa_llm/models/gpt-oss.html (read 2026-10-25: furiosa-llm detects the harmony format with no reasoning parser, returns the reasoning in message.reasoning apart from the answer in message.content, and takes reasoning_effort low, medium, or high through the request); lassi/llm/openai_compat.py complete() (sends model, messages, temperature, top_p, max_tokens, and stream, nothing else); projects/lassi-demo/sweep6/gpt-oss-*/base-*.yaml.
@@ -1051,7 +1051,7 @@ Options:
 - (b) Keep the server's default and record the departure from the Serving Rules line in the bible. Consequence: no code; GPT-OSS results never name their effort.
 Recommendation: (a), since the bible asks for the effort to be fixed per arm and recorded; until then every GPT-OSS result says it ran at the server's default effort.
 Note (2026-10-25, 12:40 EDT): built under (a) as task P17.28, opt-in (llm.sampling.reasoning_effort), after every one of gpt-oss-20b's 18 matrix recipes in the relaunched run ended on a null-content reply at the server's default effort (plans/runs/2026-10-25-window.md); the window's last part runs gpt-oss-20b at low (projects/lassi-demo/sweep6/gpt-oss-20b-low). A recipe without the key is unchanged, so (b) stays possible; your answer decides whether the key stays.
-Answer:
+Answer: Owner's choice (in the working session, 2026-10-25, about 15:10 EDT; recorded by the agent): "Reasoning models at medium": keep the key (option (a), P17.28); the reasoning models of the window of 2026-10-25, 20:00 to 02:00, run at medium with a 32768-token budget, low as a control.
 
 ## OQ-081 Disk Space For gpt-oss-120b On alpha01
 State: OPEN
@@ -1080,7 +1080,7 @@ Recommendation: (a), so a kill does what it reports; until then (b), which is no
 Answer:
 
 ## OQ-083 Corrections Steered By Tier A Outcomes: Prompt Tuning On Unassigned Items?
-State: OPEN
+State: ANSWERED
 Kind: policy
 Blocks: P17.27 (a bf16 rounding statement in a new template set)
 Evidence: docs/BIBLE.md, Agent Rule 5 and Benchmark Suites (a suite item's split is train, eval, or unassigned; the registry refuses eval and unassigned items to training, prompt tuning, and corpus harvest; all five Tier A items of tt-pairs-v0 are unassigned until P7, OQ-025 (d); an assigned split never changes); plans/p17-portable.md (P17.21 and P17.22 added on the owner's directions of 2026-10-23, "Okay, get that built and added." and "Ready a RAG of Tenstorrent documentation as well in case this is not sufficient."; P17.24 to P17.27 proposed after the outcomes of the passes of 2026-10-23 and 2026-10-24 on tt-pairs-v0, P17.27 also from reading assets/bench/tt-pairs-v0/eltwise_sfpu/cpp/eltwise_sfpu.cpp:28-37, an item's own C++ reference); results/build-errors-20261025 (the buckets of those passes); the rules audit of that summary on 2026-10-25, which raised this.
@@ -1090,7 +1090,7 @@ Options:
 - (b) Treat tt-pairs-v0 openly as a development set: a bible decision adds a dev split value beside train, eval, and unassigned (Benchmark Suites, the registry), assigns the five items to it now, which revisits OQ-025 (d)'s assignment in P7, and, since an assigned split never changes, means these five can never later be eval; feature and prompt work steered by them is then allowed, and a separate held-out Tier A set is built for evaluation before any claim. Consequence: P17.27 may proceed; every result so far is a development result; new items are needed for evaluation.
 - (c) Count all of it as prompt tuning: stop proposing corrections from these outcomes, and run new features only on items assigned to train in P7. Consequence: P17.27 stops, and the corrections' results in the matrix of 2026-10-25 are exploratory only.
 Recommendation: (b), since it states what the corrections have been doing in practice: the five items' outcomes proposed P17.24 to P17.27, so naming them a development set says so plainly, and a fresh held-out set keeps a clean evaluation possible. Until you answer, P17.27 waits (OWNER), and results on these items say the corrections were proposed from them.
-Answer:
+Answer: Owner's choice (in the working session, 2026-10-25, about 15:10 EDT; recorded by the agent): "(b) Dev set, build all (Recommended)". tt-pairs-v0 is a development set; prompt and feature work steered by its outcomes is allowed (worked examples, a core-API block at generation, nearest names from the pack, and P17.27), and a held-out Tier A set is built later for evaluation.
 
 ## OQ-084 A Kernel JIT Failure On Silicon Quarantines Every Card
 State: OPEN
@@ -1116,4 +1116,30 @@ Options:
 - (b) The cause was this work, or cannot be ruled out: training stays off alpha01 until a cause is found, and the window runs only the sweeps that ran before without trouble.
 - (c) The cause was the RNGD serving of gpt-oss-20b: GPT-OSS stays off until a fix; training may run.
 Recommendation: whichever the log shows. Until then the relaunch at 11:24 EDT runs the matrix alone, without training, and keeps GPT-OSS first, as you asked; that leaves (c)'s suspect running, since GPT-OSS is this window's aim and it had served for about 40 minutes without trouble before the stop.
+Note (2026-10-25, about 15:10 EDT, in the working session): the owner chose "Skip training tonight" for the window of 20:00 to 02:00; the cause, and whether training runs there later, are still asked.
+Answer:
+
+## OQ-086 The Window Of 2026-10-25, 20:00 To 02:00: Sampling, Scope, And Autonomy
+State: ANSWERED
+Kind: decision
+Blocks: none
+Evidence: results/rngd-matrix-20261025/summary.md (79 of 82 trials at the 15-correction cap, restarts not helping yet); plans/runs/2026-10-25-window.md; plans/LESSONS.md (OQ-082's manual session cleanup).
+Question: For the window the owner booked from 20:00 to 02:00 to improve results: how many samples per item and what correction cap, which direction, whether the agent may stop and relaunch jobs (ending a killed job's processes by hand) without asking, and whether training runs.
+Options:
+- (a) 3 samples per item, cap 8; cpp -> tt only; autonomy to stop and relaunch; no training.
+- (b) 1 sample, cap 15, as today; both directions; ask before each relaunch; training beside the sweep.
+Recommendation: (a): corrections rarely converged, so more fresh draws; tt -> cpp already passes; a relaunch waits on no one at night.
+Answer: Owner's choice (in the working session, 2026-10-25, about 15:10 EDT; recorded by the agent): "3 samples, cap 8 (Recommended)", and the defaults "cpp -> tt only", "Autonomy to stop/relaunch", and "Skip training tonight".
+
+## OQ-087 Model Weights On alpha01: Remove 8B To 60B, Bring In Bigger Models; Back Up The Rest Of The Home Directory
+State: OPEN
+Kind: decision
+Blocks: the models of the window of 2026-10-25, 20:00 to 02:00
+Evidence: rx 20261025-131415-exec-62a6, rx 20261025-131520-exec-5abf, and rx 20261025-131620-exec-ce04 (read-only listings of /mnt/nvme10/joseph_ufl, which is the account's home: 359G, .cache 267G of it, the furiosa-ai models of 8B to 60B about 258G with gpt-oss-20b's shared store); https://huggingface.co/api/models?author=furiosa-ai and each model's tree at v2026.4, read 2026-10-25 (Llama-3.3-70B-Instruct-FP8-dynamic 73.8 GB, Solar-Open-100B-NVFP4A16 68.6 GB, gpt-oss-120b 198.6 GB, each on 4 RNGD cards by its model card; the BF16 Llama-3.3-70B-Instruct has no v2026.4 tag, and DeepSeek-R1-Distill-Llama-70B and the INT8 Llama only v2025.3.0); tools/server/gate.py (allowed_path and MAX_TAR_BYTES: rx pulls only run records, lassi-runs, and lassi-wt, at most 200 MB); AGENTS.md (raw ssh, scp, and rsync are forbidden to agents).
+Question: The owner directed, in the working session on 2026-10-25: "Let's remove all 8b to 60b models currently in memory and replace them with 70b models.", then, asked which bigger models, "Wait a minute on this, additional instructions incoming." The owner also asked for every non-project file of the home directory to be downloaded to the workstation, leaving out big toolchains and Python environments, and for instructions to delete the non-project files and the unused models. The gate cannot pull those paths, so the backup is a script the owner runs with the owner's own ssh. Which models replace the 8B to 60B ones?
+Options:
+- (a) Llama-3.3-70B-Instruct-FP8-dynamic and Solar-Open-100B-NVFP4A16: 142 GB, fits after the removal.
+- (b) Llama-3.3-70B-Instruct-FP8-dynamic and gpt-oss-120b: 272 GB, likely about 10 GB short of the 60 GB floor and a 5 GB margin.
+- (c) Llama-3.3-70B-Instruct-FP8-dynamic only.
+Recommendation: (a). The backup and deletion scripts are on the workstation, outside the repository, in C:/Users/Joseph/alpha01-backup-20261025 (backup.sh, then delete-on-alpha01.sh, which asks before each section and offers the models only with MODELS=yes); the agent deletes nothing there.
 Answer:
