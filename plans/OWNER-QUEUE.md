@@ -1196,7 +1196,7 @@ Recommendation: (b): no training is planned before then, and a threshold chosen 
 Answer:
 
 ## OQ-092 An alpha01 Batch For P9 And P15
-State: OPEN
+State: ANSWERED
 Kind: access
 Blocks: P9.2, P9.7 (remote test), P9.12 (dry run), P15.6, P15.8, P15.9, P15.10
 Evidence: plans/p9-ee.md (Order of work); plans/p15-judges.md (Hosts, P15.6, P15.8 to P15.10); AGENTS.md Agent Rules 8, 13, and 17.
@@ -1205,7 +1205,7 @@ Options:
 - (a) The read-only probe tonight, as one `rx exec` beside the sweep's big job (it reads files only), the rest in the next window the owner books.
 - (b) All of it in the next window the owner books.
 Recommendation: (a), so P9's energy backend is chosen from a measured answer before the next window.
-Answer:
+Answer: Owner's choice (in the working session, 2026-10-25, about 19:35 EDT; recorded by the agent): approved inside tonight's window, beside the sweep: "Read run records" (rx exec reads of earlier trials' outputs and diagnostics under the runs root), "One skeleton build" (one rx run compiling the new C++ -> TT host skeleton and running it once on ttsim, if ready before 01:00), and "RAPL probe (OQ-092 a)". So (a) for the probe; the other steps of the batch wait for the next window.
 
 ## OQ-093 What Tenstorrent Power LASSI-EE Reports
 State: OPEN
@@ -1245,3 +1245,15 @@ Options:
 - (c) A third family for the efficiency judge later (one of the models OQ-087 kept for later testing), at the cost of a download and window time.
 Recommendation: (b): LASSI-EE needs only the equivalence judge, which is on Llama; the efficiency judge serves calibration and prediction studies, where the rule already drops same-family trials; OQ-089 stands as answered.
 Answer:
+
+## OQ-096 Raising C++ -> TT Results: Tonight's Directions And The Host Skeleton's Sources
+State: ANSWERED
+Kind: decision
+Blocks: the C++ -> TT host skeleton task (to be planned on p16-adversarial with P17's tasks)
+Evidence: results/rngd-matrix-20261025/summary.md (79 of 82 trials ended at the correction cap with a build error); results/build-errors-20261025/summary.md (API-shape buckets; 121 of 134 trials repeat a bucket across corrections); results/rngd-matrix-20261025/trials.tsv (TT -> C++ trials reach S5, several at alignment 0.0).
+Question: The owner, 2026-10-25, about 19:30 EDT: "I cannot overstate how important that we get some meaningful results". Should tonight's gpt-oss-120b half also run TT -> C++ trials, and what may a C++ -> TT host skeleton (a generic host program with every API call correct and blanks to fill) be built from?
+Options:
+- Directions: (a) add a TT -> C++ share; (b) keep C++ -> TT only (OQ-086).
+- Skeleton: (a) item-agnostic only, from the pinned headers and tt-metal programming examples outside the five tt-pairs-v0 items; (b) also leave-one-out reference host programs of the other items, labeled so.
+Recommendation: directions (a); skeleton (a).
+Answer: Owner's choice (in the working session, 2026-10-25, about 19:35 EDT; recorded by the agent): "Keep C++ -> TT only"; skeleton "Item-agnostic only (Recommended)".
