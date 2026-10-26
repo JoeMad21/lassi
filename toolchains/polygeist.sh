@@ -12,7 +12,8 @@
 #                     bin/ holds TARGETS and whose lib/clang/18/include holds clang's builtin headers.
 # The PGO data directory compiled into Polygeist's passes (upstream default /var/tmp/polygeist/pgo/) is set to pgo/ in
 # the prefix; nothing creates or writes it, since P5 runs no PGO pass (polygeist.pin, LLVM_CMAKE_FLAGS).
-# Only TARGETS (cgeist, polygeist-opt, mlir-opt, mlir-translate, and clang) are built, and nothing is installed: P5
+# Only TARGETS (cgeist, polygeist-opt, mlir-opt, mlir-translate, clang, and LLVMFrontendOpenACC for P12's flang) are
+# built, and nothing is installed: P5
 # runs the tools from the build tree, and the TT raiser (task P5.8) builds against it later (the space plan of
 # OQ-049). Of what it builds, the build runs its code generators (the TableGen tools), and the script runs the five
 # tools with --version (check_tools); nothing opens a device. cgeist stops at MLIR in P5's use (-S), so it never

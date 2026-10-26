@@ -5,8 +5,8 @@
 # differ from the commit>, or <path in the install> files-sha256 <sha256 of the unpacked files>, the two forms of
 # toolchains/tt-metal-cpm-sources.txt; the one line none means the configure fetched nothing, which
 # plans/spikes/p5-mlir-pins.md (Results 5) expects with Polymer off.
-# PLACEHOLDER until the first install records the list. That install compares nothing; until its list is copied
-# here and committed, every later run of the script refuses the install (check_fetched_sources), and so do the
+# Copied from the first install, rx 20261026-002209-p5-polygeist-6360 (2026-10-26; results/p5-polygeist-install).
+# Every later run of the script compares its configure's list with this one (check_fetched_sources), and so do the
 # remote tests (tests/toolchains/test_polygeist_remote.py). A change here is a pin change, recorded in the bible's
 # Decision Log.
-PLACEHOLDER
+none

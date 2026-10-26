@@ -119,7 +119,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P5.3 | DONE | Spike: Tier B sources at the joint pin | - | Tier B spike: 7 of 7 codec host programs build at the pin, run clean on ttsim as chip-0 copies, 11 of 11 reference checks pass (rx 20261010-184351-p53-tier-b-e64d); OQ-048 Response filed |
 | P5.11 | DONE | lassi/corpus: the v0 migration and corpus records | P5.2 | lassi/corpus (records, gate status, provenance chain, Parquet tables with an exclusive claim and _complete, dedup, registry input) and lassi/ir/form.py (the Agent Rule 11 refusal); lassi corpus summary; master rev 272 |
 | P5.4 | READY | Install tt-mlir and its LLVM at the joint pin | P5.1,P5.15,P5.16,P5.17 | pin, script, and tests committed (d0c7533); the owner's yes for the install is OQ-056 (a), 2026-10-17: it runs unattended through tools/local/longjob.py with a 20G job cap once P5.15, P5.16, and P5.17 are DONE; OQ-054 closed as superseded |
-| P5.5 | ACTIVE | Install Polygeist (cgeist) | P5.1,P5.4 | pin, script, and tests finished from the stash (OQ-063 (a): LLVMFrontendOpenACC in TARGETS); the install runs on alpha01 under the owner's direction of 2026-10-26 |
+| P5.5 | ACTIVE | Install Polygeist (cgeist) | P5.1,P5.4 | installed on alpha01 (rx 20261026-002209-p5-polygeist-6360, results/p5-polygeist-install; OpenACC in TARGETS, OQ-063); the remote tests, the exploratory read, and the bible's install entry follow |
 | P5.6 | READY | IR levels: parse, verify, normalize | P5.4,P5.5,P5.11 |  |
 | P5.7 | READY | C and C++ frontend (cgeist) and the CPU target | P5.5,P5.6 |  |
 | P5.8 | READY | TT raiser: Metalium kernels to ttkernel | P5.4,P5.6 |  |
