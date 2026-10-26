@@ -1262,10 +1262,10 @@ Answer: Owner's choice (in the working session, 2026-10-25, about 19:35 EDT; rec
 State: OPEN
 Kind: access
 Blocks: P9.13's energy (the CPU port runs with backend wall, labeled not energy, until this is answered)
-Evidence: plans/spikes/p9-cpu-energy.md (rx 20261025-182150-exec-2692: package-0 and package-1 under intel-rapl, energy_uj mode 0400, this account's read refused).
-Question: The CPU port of LASSI-EE reports energy only if this account can read /sys/class/powercap/intel-rapl:<n>/energy_uj for the two package zones; today they are root-only, so the rapl backend refuses and only wall time (labeled not energy) is available. Agents make no root-side change. Should the owner grant read access?
+Evidence: plans/spikes/p9-cpu-energy.md (rx 20261025-182150-exec-2692: package-0 and package-1 under intel-rapl, energy_uj mode 0400, this account's read failed).
+Question: The CPU port of LASSI-EE reports energy only if this account can read /sys/class/powercap/intel-rapl:<n>/energy_uj for the two package zones; today each is mode 0400 (owner read only) and this account's read fails, so the rapl backend would refuse and only wall time (labeled not energy) is available. Agents make no root-side change. Should the owner grant read access?
 Options:
-- (a) The owner grants this account read access to the package zones' energy_uj (for example a group-readable mode set at boot), so the port reports package energy (the whole package, other users' load included, as the bible states).
+- (a) The owner grants this account read access to the package zones' energy_uj (for example a group-readable mode set at boot), so the port reports package energy (the whole package, other users' load included, as the bible states). Consequence: counters the kernel restricts to their owner become readable by the granted group on a shared host; the kernel's reason for the mode is to be cited from its source at alpha01's release (P9.2) so the owner can weigh it.
 - (b) No access: the CPU port reports wall time labeled not energy, and energy waits for a GPU host.
 Recommendation: (a), since energy is LASSI-EE's measure; (b) keeps the port running meanwhile.
 Answer:
