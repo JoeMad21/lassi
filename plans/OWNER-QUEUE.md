@@ -1208,7 +1208,7 @@ Recommendation: (a), so P9's energy backend is chosen from a measured answer bef
 Answer:
 
 ## OQ-095 The Efficiency Judge's Model Shares The Generator's Family
-State: OPEN
+State: ANSWERED
 Kind: decision
 Blocks: P15.3 (binding the efficiency judge in a run that gpt-oss-120b generates), P15.7 (which candidates the efficiency set keeps)
 Evidence: plans/OWNER-QUEUE.md OQ-089 (models, option (a)); docs/BIBLE.md, Agents And Judges (a judge uses a different model family from the generator in the same trial) and Model families; plans/p15-judges.md, Decisions taken at planning, Model families (a judge whose family equals the generator's is refused in a run; in calibration such a trial leaves that judge's set); P15.1's audit, 2026-10-25.
@@ -1218,4 +1218,5 @@ Options:
 - (b) Keep gpt-oss-120b for the efficiency judge, used in calibration and in runs another family generates; LASSI-EE's CPU port binds only the equivalence judge, which is all the paper's pipeline uses.
 - (c) A third family for the efficiency judge later (one of the models OQ-087 kept for later testing), at the cost of a download and window time.
 Recommendation: (b): LASSI-EE needs only the equivalence judge, which is on Llama; the efficiency judge serves calibration and prediction studies, where the rule already drops same-family trials; OQ-089 stands as answered.
-Answer:
+Answer: The owner, in the working session of 2026-10-26 at about 03:25 EDT: "For this testing, the same model can act as judge."
+To apply: for the current development and calibration testing a judge may be the generator's model (gpt-oss-120b judging gpt-oss-120b candidates), so neither judge needs Llama-3.3-70B, whose files the owner removed from alpha01 on 2026-10-26. The family rule's exception, labeled on every such judged value with [JUDGED], goes into the bible's judges text with P15.3.
