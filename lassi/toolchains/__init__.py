@@ -5,7 +5,7 @@ Diagnostic records (severity, code, file, line, column, message, stage). The
 compiler's raw stderr is kept as an attachment, the file STDERR_ATTACHMENT in
 the workdir, and never consumed downstream.
 
-Importing this package registers six presets in
+Importing this package registers seven presets in
 lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
 
 - "nvcc-sm80" (nvcc.NvccSm80): CUDA with nvcc for sm_80.
@@ -18,6 +18,10 @@ lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
 - "ttmetal-host" (ttmetal_build.TtMetalHost): a TT host program with the
   host clang++-20 against the pinned tt-metal tree, with the pinned build's
   flags; kernel sources are placed for the kernel JIT, never compiled.
+- "ttkernel-ttmetal" (ttkernel_build.TtKernelBuild): ttkernel MLIR kernel
+  modules lowered to kernel C++ with the pinned tt-mlir tools, then the
+  item's host program, a harness file, built as ttmetal-host builds one;
+  the runner passes the tools of its TOOL_PINS pin as `tools`.
 - "hipcc-gfx942" (hipcc.HipccGfx942): HIP for the gfx942 target with the
   host hipcc, compiled and linked, never run here (compile-only); the
   target is always named, in each build and in the --version check, so
@@ -55,7 +59,7 @@ of its own, which the compile sandbox uses far above any compiler output
 
 from __future__ import annotations
 
-from lassi.toolchains import gcc, hipcc, nvcc, nvcpp, ttmetal_build
+from lassi.toolchains import gcc, hipcc, nvcc, nvcpp, ttkernel_build, ttmetal_build
 from lassi.toolchains._base import (
     STDERR_ATTACHMENT,
     CappedRunner,
@@ -69,6 +73,7 @@ from lassi.toolchains.gcc import GccNative
 from lassi.toolchains.hipcc import HipccGfx942
 from lassi.toolchains.nvcc import NvccSm80, NvccToolchain
 from lassi.toolchains.nvcpp import NvcppCc80, NvcppToolchain
+from lassi.toolchains.ttkernel_build import TtKernelBuild
 from lassi.toolchains.ttmetal_build import TtMetalHost
 
 __all__ = [
@@ -83,6 +88,7 @@ __all__ = [
     "NvccToolchain",
     "NvcppCc80",
     "NvcppToolchain",
+    "TtKernelBuild",
     "TtMetalHost",
     "capped_runner",
     "gcc",
@@ -90,5 +96,6 @@ __all__ = [
     "nvcc",
     "nvcpp",
     "subprocess_runner",
+    "ttkernel_build",
     "ttmetal_build",
 ]

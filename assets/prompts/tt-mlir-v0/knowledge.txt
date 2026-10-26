@@ -1,0 +1,4 @@
+Earlier you wrote a reference card of the ttkernel MLIR dialect of tt-mlir 0.9.0.dev20260221. Your card
+follows; use it where it helps with the task after it.
+
+$knowledge_summary

@@ -25,7 +25,10 @@ The runner checks either kind before any model is asked.
   support files for that language as harness files (Suite.support_files
   with the language: the item-level ones and the language's own, task
   P4.13), and runs it when that language's executor (executor_for) runs
-  programs (capability `runs_code`), with the item's program arguments
+  programs (capability `runs_code`); a language whose manifest entry names
+  a `reference` language (task P17.36) has that language's program as its
+  reference, with that language's toolchain, support files, and executor;
+  it runs with the item's program arguments
   and reference_limits. The arguments come from
   lassi.bench.registry.stage_inputs: an item that declares held-out inputs
   has them written under the build directory's @inputs first, drawn with
@@ -66,7 +69,10 @@ The runner checks either kind before any model is asked.
   Trial.context.source_description.
 - generate appends attempt 0. With a template set it sends generate.txt,
   filled with the source files and the item's kernels (kernel_files) in
-  FILE blocks, as the only message; with a fragment set it sends the
+  FILE blocks, the target's trusted host program (host_files, task P17.36;
+  correct.txt and the mismatch template get it too), and the source
+  lowered to MLIR (source_mlir, "" until a frontend is bound), as the only
+  message; with a fragment set it sends the
   direction's system prompt and the generation prompt
   (lassi.core.fragments.generation_prompt), the source read as text mode
   reads it.
@@ -666,12 +672,14 @@ RUN_LOOP_KEYS = (
 )
 
 # The fields each prompt template gets; a template may use any of them and no other.
-GENERATE_FIELDS = ("source_language", "target_language", "source_files", "target_files", "kernel_files")
-CORRECT_FIELDS = ("target_language", "files", "diagnostics", "target_files", "kernel_files")
+GENERATE_FIELDS = (
+    "source_language", "target_language", "source_files", "target_files", "kernel_files", "host_files", "source_mlir"
+)
+CORRECT_FIELDS = ("target_language", "files", "diagnostics", "target_files", "kernel_files", "host_files")
 # The template of an oracle mismatch's correction (loop.correct_on_mismatch) and its fields: `outputs` is the
 # Oracle's coarse per-output report (mismatch_text), in place of correct.txt's diagnostics.
 MISMATCH_PROMPT = "correct_mismatch"
-MISMATCH_FIELDS = ("target_language", "files", "outputs", "target_files", "kernel_files")
+MISMATCH_FIELDS = ("target_language", "files", "outputs", "target_files", "kernel_files", "host_files")
 # The templates a template set needs to serve context packs (task P17.21), with their fields: the summary request
 # summarize_context sends, and the knowledge block that goes before each later prompt once the summary is filled.
 # The runner renders both, before any directory exists, when the recipe names packs or lists summarize_context.
@@ -774,6 +782,10 @@ UNMATCHED_NOTE = "unmatched "
 # A support file is a kernel when its build path has a directory of this name, where the kernel JIT finds it.
 # The TT host toolchain's is_kernel_source applies the same rule to place a kernel; change the two together.
 KERNEL_DIR = "kernels"
+# A target support file outside KERNEL_DIR with one of these suffixes is a host program the prompt shows read-only
+# (host_files; task P17.36). lassi.toolchains.ttkernel_build HOST_SUFFIXES compiles the same files; change the two
+# together.
+HOST_SUFFIXES = (".cpp", ".cc", ".cxx")
 
 # A lone surrogate code point: JSON can decode one from a reply ("\ud83d"), but it is not Unicode text.
 _SURROGATE = re.compile("[\ud800-\udfff]")
@@ -1257,6 +1269,36 @@ def kernel_files(context: RunContext) -> str:
         files = _support_files(context, language)
         kernels.update({path: text for path, text in files.items() if KERNEL_DIR in PurePosixPath(path).parts[:-1]})
     return render_file_blocks(kernels) if kernels else ""
+
+
+def host_files(context: RunContext) -> str:
+    """Return the template field host_files: the target's trusted host program as FILE blocks, or "" (P17.36).
+
+    A host program is a support file of the direction's target language
+    (_support_files) whose suffix is in HOST_SUFFIXES and whose build path
+    has no directory named KERNEL_DIR: the files a ttkernel build compiles
+    as the host program (lassi.toolchains.ttkernel_build host_sources,
+    the same rule; Design Principle 8 keeps core from importing it). A
+    prompt shows it read-only: a model file at its path is refused at the
+    build. tt-pairs-v0's languages hold none, so their prompts get "".
+    """
+    files = _support_files(context, context.direction.target)
+    hosts = {
+        path: text for path, text in files.items()
+        if PurePosixPath(path).suffix in HOST_SUFFIXES and KERNEL_DIR not in PurePosixPath(path).parts[:-1]
+    }
+    return render_file_blocks(hosts) if hosts else ""
+
+
+def source_mlir(context: RunContext) -> str:
+    """Return the template field source_mlir: the source lowered to MLIR by a frontend, or "" (task P17.36).
+
+    No frontend is bound to a run yet (the C and C++ frontend, cgeist, is
+    task P5.7), so the field is always "" for now; a template places it on
+    a line of its own, which then stays blank.
+    """
+    del context
+    return ""
 
 
 def prompt_diagnostics(diagnostics: Sequence[Diagnostic]) -> list[Diagnostic]:
@@ -2275,10 +2317,13 @@ class BaselineStage:
         direction = self.context.direction
         both = fix_on(self.context, "baseline_both") and direction.source != direction.target
         languages = [direction.target, direction.source] if both else [direction.target]
-        running = [RUNS_CODE in getattr(executor_for(self.context, lang), "capabilities", ()) for lang in languages]
+        running = [
+            RUNS_CODE in getattr(executor_for(self.context, self._program(lang)), "capabilities", ())
+            for lang in languages
+        ]
         only = "" if fix_on(self.context, "baseline_both") else "only "
         parts = [
-            f"{'build and run' if runs else 'build'} {only}the {language} reference program"
+            f"{'build and run' if runs else 'build'} {only}the {language} reference program{self._as(language)}"
             for language, runs in zip(languages, running, strict=True)
         ]
         text = f"baseline: {' and '.join(parts)} before any model call"
@@ -2300,15 +2345,21 @@ class BaselineStage:
         The target's run is kept in Trial.reference_run (_run_info, with its
         output files in the binary store when that Oracle is bound), a failed
         one included; the source reference's files are read but not stored.
+        A language whose manifest entry names a `reference` language (task
+        P17.36; lassi.bench Suite.reference_language) has that language's
+        program as its reference, built with that language's toolchain and
+        support files in <trial>/baseline-<that language>/build and run on
+        its executor.
         """
         context = self.context
         files = self._files(language)
-        toolchain = _toolchain(context, language)
-        workdir = _baseline_dir(context.build_root, trial.trial_id, language)
-        result = _harness_build(context, toolchain, files, workdir, language)
+        program = self._program(language)
+        toolchain = _toolchain(context, program)
+        workdir = _baseline_dir(context.build_root, trial.trial_id, program)
+        result = _harness_build(context, toolchain, files, workdir, program)
         if result.artifact is None:
-            return _ended(trial, BASELINE_COMPILE, self._build_message(language, files, toolchain, result)), None
-        executor = executor_for(context, language)
+            return _ended(trial, BASELINE_COMPILE, self._build_message(program, files, toolchain, result)), None
+        executor = executor_for(context, program)
         if RUNS_CODE not in getattr(executor, "capabilities", ()):
             return trial, None
         item = context.suite.item(context.item, purpose=PURPOSE)
@@ -2367,6 +2418,15 @@ class BaselineStage:
             f"{tolerance.metric} {bound} {tolerance.threshold!r}, on output(s) {', '.join(missed)}"
         )
         return _ended(trial, BASELINE_DISAGREE, message)
+
+    def _program(self, language: str) -> str:
+        """Return the language whose program is the item's reference in `language` (Suite.reference_language)."""
+        return self.context.suite.reference_language(self.context.item, language)
+
+    def _as(self, language: str) -> str:
+        """Return how describe() names a reference that is another language's program, or "" for its own."""
+        program = self._program(language)
+        return "" if program == language else f" (the item's {program} program)"
 
     def _files(self, language: str) -> dict[str, str]:
         """Return the item's reference program in `language` (file name -> text), as the manifest pins it."""
@@ -2461,6 +2521,8 @@ class GenerateStage:
                 "source_files": render_file_blocks(sources),
                 "target_files": ", ".join(expected),
                 "kernel_files": kernel_files(context),
+                "host_files": host_files(context),
+                "source_mlir": source_mlir(context),
             }
             return None, render(context.prompts, "generate", fields)
         direction = context.direction
@@ -3423,6 +3485,7 @@ def _correction_messages(
             field_name: errors,
             "target_files": ", ".join(expected),
             "kernel_files": kernel_files(context),
+            "host_files": host_files(context),
         }
         return None, render(context.prompts, name, fields)
     if mismatch:

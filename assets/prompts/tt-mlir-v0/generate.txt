@@ -1,0 +1,41 @@
+Translate the $source_language program below into Tenstorrent device kernels written in the ttkernel MLIR
+dialect ($target_language). Write the kernels only: the harness provides the host program.
+
+What a $target_language kernel is:
+- One MLIR module per file, for tt-mlir 0.9.0.dev20260221 (commit 5f396fd6) and tt-metal commit 5280a9cf,
+  in the dialects ttkernel, func, arith, and scf (scf.for over index values for loops), with no other.
+- Exactly one func.func, with no arguments and no results, that carries the attribute
+  ttkernel.thread = #ttkernel.thread<noc> for a reader or writer (the host creates it with
+  DataMovementConfig) or ttkernel.thread = #ttkernel.thread<compute> for a compute kernel (ComputeConfig).
+  Its body ends with func.return.
+- It is lowered with ttmlir-opt --convert-ttkernel-to-emitc and ttmlir-translate --ttkernel-to-cpp into a
+  TT-Metalium kernel, void kernel_main(), written at the kernel path the host program launches.
+- Ops are written ttkernel.<op>(<operands>) : (<operand types>) -> <result types>, for example
+  %n = ttkernel.get_arg_val(%c1) : (i32) -> i32 for the runtime argument at index 1, and
+  %cb = ttkernel.get_compile_time_arg_val(0) : () -> !ttkernel.cb<2, !ttcore.tile<32x32, bf16>>.
+  A circular buffer value comes only from a compile-time or runtime argument; a buffer address, a count,
+  or an index is an i32 argument. A DRAM buffer is read and written through
+  ttkernel.TensorAccessorArgs and ttkernel.TensorAccessor with noc_async_read_tile and
+  noc_async_write_tile; circular buffers use cb_reserve_back, get_write_ptr, cb_push_back,
+  cb_wait_front, get_read_ptr, and cb_pop_front; compute uses tile_regs_acquire, the tile ops,
+  tile_regs_commit, tile_regs_wait, pack_tile, and tile_regs_release.
+
+The host program below is the harness's, read-only: it builds and runs your kernels on the device and
+reads the outputs back. Never return it, lassi_io.h, or any other host file. Read it for what each kernel
+must match: the kernel path it launches (write that path with .mlir in place of .cpp), whether the kernel
+is a data-movement or a compute kernel, its compile-time arguments and runtime arguments in the order
+the host passes them, the circular buffers and their indices and page sizes, and the core or cores.
+
+$host_files
+The $source_language program, which computes the outputs the kernels must compute, follows, each file in
+a fenced code block whose first line is // FILE: <path>
+
+$source_files
+$source_mlir
+Write the kernels as these files: $target_files.
+Every output value must be computed by the kernels on the device.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

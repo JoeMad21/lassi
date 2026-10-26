@@ -45,3 +45,9 @@ third_party/LASSI/
 /assets/examples/tt-examples-v0/*
 !/assets/examples/tt-examples-v0/MANIFEST.yaml
 !/assets/examples/tt-examples-v0/spec.yaml
+
+# tt-mlir text written by tools/build_ttkernel_context.py from the pinned tt-mlir: only the manifests (task P17.36)
+/assets/context/ttkernel-5f396fd6/*
+!/assets/context/ttkernel-5f396fd6/MANIFEST.yaml
+/assets/examples/ttkernel-examples-5f396fd6/*
+!/assets/examples/ttkernel-examples-5f396fd6/MANIFEST.yaml

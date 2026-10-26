@@ -1,0 +1,271 @@
+# The cpp -> ttkernel suite (task P17.36): the five tt-pairs-v0 items, unchanged (the same splits, held-out inputs,
+# seeds, outputs, tolerances, notes, and cpp and tt languages; tests/bench/test_ttkernel_suite.py checks it), plus a
+# ttkernel language. tt-pairs-v0 is a development set (OQ-083 (b)). A ttkernel translation is one ttkernel MLIR module
+# per kernel the item's tracked TT host program launches, at that kernel's path with .mlir in place of .cpp; the
+# ttkernel-ttmetal toolchain lowers each module to kernel C++ at the kernel's path with the pinned tt-mlir and builds
+# the host program, a support file the model never writes (bible Level Rules). The ttkernel support holds the tracked
+# host program and lassi_io.h with their sha256 and no kernel: the upstream kernel C++ would be the answer (Agent Rule
+# 5). `reference: tt` makes the item's tt program (the host program with the upstream kernels, fetched by
+# tools/fetch_bench.py) the ttkernel reference the baseline builds and runs, so the oracle reads a ttkernel candidate
+# exactly as it reads a cpp -> tt candidate on tt-pairs-v0. Fetch with
+# `uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-ttkernel.yaml`.
+suite: tt-pairs-v0-ttkernel
+repo: https://github.com/tenstorrent/tt-metal.git
+# tt-metal at P4.2's install commit, the joint pin (toolchains/tt-metal.pin; bible Toolchain Pins), as tt-pairs-v0.yaml
+# pins it; load_suite checks that the pin's COMMIT and URL are this commit and repo. Every item comment below is
+# tt-pairs-v0.yaml's, copied with its item.
+commit: 5280a9cfb00998fd49667a29523d03aee905c129
+pin: tt-metal
+items:
+  eltwise_binary:
+    split: unassigned
+    seed: 2
+    # a + b elementwise over 64 tiles. Upstream fills b with the constant -1.0; b is drawn here instead, so a
+    # candidate that ignores b cannot pass. The sums stay in (-1, 1).
+    inputs:
+      - {name: a, dtype: bf16, shape: [65536], dist: uniform, lo: 0.0, hi: 1.0}
+      - {name: b, dtype: bf16, shape: [65536], dist: uniform, lo: -1.0, hi: 0.0}
+    outputs: [c]  # f32 on both sides: the TT program widens the device's bf16 result exactly
+    # absolute 1e-2: the upstream check fails an element whose result differs from the f32 sum by more than 1e-2
+    tolerance: {metric: max_abs, threshold: 0.01}
+    unpack_to_dest: >-
+      not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
+      buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the
+      same: its one ComputeConfig sets only math_fidelity HiFi4, and its three circular buffers (c_0, c_1, c_16) are
+      Float16_b (tests/bench/test_tt_pairs.py checks it)
+    languages:
+      cpp:
+        dir: assets/bench/tt-pairs-v0/eltwise_binary/cpp
+        tracked: true
+        files: [eltwise_binary.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-pairs-v0/eltwise_binary/tt
+        tracked: true
+        files: [eltwise_binary.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          eltwise_binary/kernels/dataflow/read_tiles.cpp:
+            upstream: tt_metal/programming_examples/eltwise_binary/kernels/dataflow/read_tiles.cpp
+            sha256: 4f667427aa88e9c85bed20109eda7c0ec71e7f2171f56ac98b51f22f16bb2c6e
+          eltwise_binary/kernels/dataflow/write_tile.cpp:
+            upstream: tt_metal/programming_examples/eltwise_binary/kernels/dataflow/write_tile.cpp
+            sha256: 9c7fa7775ef350eada5e60a2db20d51af4e8244398ebd886585bc6b7c9b86b95
+          eltwise_binary/kernels/compute/tiles_add.cpp:
+            upstream: tt_metal/programming_examples/eltwise_binary/kernels/compute/tiles_add.cpp
+            sha256: f3a596d336425cfaf938b10574340c8a5b870bdfdd640484970597b07f9103b3
+      ttkernel:
+        dir: assets/bench/tt-pairs-v0/eltwise_binary/ttkernel  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - eltwise_binary/kernels/dataflow/read_tiles.mlir
+          - eltwise_binary/kernels/dataflow/write_tile.mlir
+          - eltwise_binary/kernels/compute/tiles_add.mlir
+        reference: tt
+        support:
+          eltwise_binary.cpp:
+            tracked: assets/bench/tt-pairs-v0/eltwise_binary/tt/eltwise_binary.cpp
+            sha256: cc6f2fba6f6f40ce7525e5d29559b5ead62e5f980d67dd7ac925a86a70877ce0
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  eltwise_sfpu:
+    split: unassigned
+    seed: 3
+    # exp elementwise over 64 tiles of uniform [0, 1), as upstream draws them; the results lie in [1, e)
+    inputs:
+      - {name: src0, dtype: bf16, shape: [65536], dist: uniform, lo: 0.0, hi: 1.0}
+    outputs: [result]  # bf16 on both sides
+    # absolute 5e-2, the upstream check: eltwise_sfpu.cpp:147 sets its eps to 5e-2 (rx 20261005-111942-exec-4372);
+    # the comment above it says 2e-2, which plans/spikes/p4-ttsim-runtime.md first read (corrected 2026-10-05)
+    tolerance: {metric: max_abs, threshold: 0.05}
+    unpack_to_dest: >-
+      not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
+      buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the
+      same: its one ComputeConfig sets only math_fidelity HiFi4 and math_approx_mode false, and its two circular
+      buffers (c_0, c_16) are Float16_b (tests/bench/test_tt_pairs.py checks it)
+    languages:
+      cpp:
+        dir: assets/bench/tt-pairs-v0/eltwise_sfpu/cpp
+        tracked: true
+        files: [eltwise_sfpu.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-pairs-v0/eltwise_sfpu/tt
+        tracked: true
+        files: [eltwise_sfpu.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          kernels/dataflow/read_tile.cpp:
+            upstream: tt_metal/programming_examples/eltwise_sfpu/kernels/dataflow/read_tile.cpp
+            sha256: 6cadb4ef111bcc20369688aeaf447065d69a8969e20b36838ebf3398760c972c
+          kernels/dataflow/write_tile.cpp:
+            upstream: tt_metal/programming_examples/eltwise_sfpu/kernels/dataflow/write_tile.cpp
+            sha256: 4e271495b72d57d4dfec3e23665cdb9d34339e96b546a2f5f73defe454fdc734
+          kernels/compute/eltwise_sfpu.cpp:
+            upstream: tt_metal/programming_examples/eltwise_sfpu/kernels/compute/eltwise_sfpu.cpp
+            sha256: 43757a074a6c9e5bbfbfd0369ed93eb0522b2860bce4b565d80d8789e82070ea
+      ttkernel:
+        dir: assets/bench/tt-pairs-v0/eltwise_sfpu/ttkernel  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - kernels/dataflow/read_tile.mlir
+          - kernels/dataflow/write_tile.mlir
+          - kernels/compute/eltwise_sfpu.mlir
+        reference: tt
+        support:
+          eltwise_sfpu.cpp:
+            tracked: assets/bench/tt-pairs-v0/eltwise_sfpu/tt/eltwise_sfpu.cpp
+            sha256: 135f9d308dd1f4617bc1e6dd4e4cd37541fc373801df434930e86ee5ddb4cb94
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  loopback:
+    split: unassigned
+    seed: 1
+    # a DRAM-to-DRAM copy of upstream's 50 tiles as one flat vector, uniform [0, 100) as upstream draws them
+    inputs:
+      - {name: input, dtype: bf16, shape: [51200], dist: uniform, lo: 0.0, hi: 100.0}
+    outputs: [output]  # bf16 on both sides
+    # exact equality: upstream requires every element of the copy to equal the input
+    tolerance: {metric: max_abs, threshold: 0}
+    unpack_to_dest: >-
+      not taken: the example has one data-movement kernel and no compute kernel, so nothing unpacks to dest; the
+      host program written here likewise creates one data-movement kernel and no circular buffer, and names no
+      compute config, fp32_dest_acc_en, or unpack_to_dest_mode (P4.9 reading; tests/bench/test_tt_pairs.py checks it)
+    languages:
+      cpp:
+        dir: assets/bench/tt-pairs-v0/loopback/cpp
+        tracked: true
+        files: [loopback.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-pairs-v0/loopback/tt
+        tracked: true
+        files: [loopback.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          loopback/kernels/loopback_dram_copy.cpp:
+            upstream: tt_metal/programming_examples/loopback/kernels/loopback_dram_copy.cpp
+            sha256: f247ed9ae024f47efac707e598379f3b47ce602c6140a9dfa2a6cc01bd263af1
+      ttkernel:
+        dir: assets/bench/tt-pairs-v0/loopback/ttkernel  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - loopback/kernels/loopback_dram_copy.mlir
+        reference: tt
+        support:
+          loopback.cpp:
+            tracked: assets/bench/tt-pairs-v0/loopback/tt/loopback.cpp
+            sha256: c35e9858ad416094bb514f01160497fc142d3fa4f0d03e0bbb7ff8c423c1457b
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  matmul_multi_core:
+    split: unassigned
+    seed: 5
+    # c = a b at upstream's 640 x 640 x 640, uniform [-0.5, 0.5) as upstream draws them
+    inputs:
+      - {name: a, dtype: bf16, shape: [640, 640], dist: uniform, lo: -0.5, hi: 0.5}
+      - {name: b, dtype: bf16, shape: [640, 640], dist: uniform, lo: -0.5, hi: 0.5}
+    outputs: [c]  # bf16 [640, 640] on both sides
+    # PCC above 0.97 against the CPU result, the upstream check; binary_io passes a PCC at or above the threshold
+    tolerance: {metric: pcc, threshold: 0.97}
+    unpack_to_dest: >-
+      not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
+      buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the
+      same: its one ComputeConfig sets only math_fidelity HiFi4 and empty compile_args, and its three circular
+      buffers (c_0, c_1, c_16) are Float16_b (tests/bench/test_tt_pairs.py checks it)
+    languages:
+      cpp:
+        dir: assets/bench/tt-pairs-v0/matmul_multi_core/cpp
+        tracked: true
+        files: [matmul_multi_core.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-pairs-v0/matmul_multi_core/tt
+        tracked: true
+        files: [matmul_multi_core.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          kernels/dataflow/reader_mm_output_tiles_partitioned.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_multi_core/kernels/dataflow/reader_mm_output_tiles_partitioned.cpp
+            sha256: 2d5924b5f7d4150fe090e72fe6caaaf501191c88b2b8a2663a67a8fd41cb473e
+          kernels/dataflow/writer_unary_interleaved_start_id.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_multi_core/kernels/dataflow/writer_unary_interleaved_start_id.cpp
+            sha256: ac78a2919007fb5dde5052c4eb096e88e582bc8b3bb138b55ef9e5dcb82f8e68
+          kernels/compute/mm.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_multi_core/kernels/compute/mm.cpp
+            sha256: 15b9b6f921ecb67d2edeebf2ba3d6fb83446d9023cce6d8cd5dc2d93f6132250
+      ttkernel:
+        dir: assets/bench/tt-pairs-v0/matmul_multi_core/ttkernel  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - kernels/dataflow/reader_mm_output_tiles_partitioned.mlir
+          - kernels/dataflow/writer_unary_interleaved_start_id.mlir
+          - kernels/compute/mm.mlir
+        reference: tt
+        support:
+          matmul_multi_core.cpp:
+            tracked: assets/bench/tt-pairs-v0/matmul_multi_core/tt/matmul_multi_core.cpp
+            sha256: 87c04009c8e5ac92e44e6e51c2997bd10c7ccba1fed6445a8dec9d6214046806
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  matmul_single_core:
+    split: unassigned
+    seed: 4
+    # c = a b at upstream's 640 x 640 x 640, uniform [0, 1); the TT program refuses a b that is not square, since
+    # upstream's writer arguments agree with the host's only when K == N
+    inputs:
+      - {name: a, dtype: bf16, shape: [640, 640], dist: uniform, lo: 0.0, hi: 1.0}
+      - {name: b, dtype: bf16, shape: [640, 640], dist: uniform, lo: 0.0, hi: 1.0}
+    outputs: [c]  # bf16 [640, 640] on both sides
+    # PCC above 0.97 against the CPU result, the upstream check; binary_io passes a PCC at or above the threshold
+    tolerance: {metric: pcc, threshold: 0.97}
+    unpack_to_dest: >-
+      not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
+      buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the
+      same: its one ComputeConfig sets only math_fidelity HiFi4 and compile_args, and its three circular buffers
+      (c_0, c_1, c_16) are Float16_b (tests/bench/test_tt_pairs.py checks it)
+    languages:
+      cpp:
+        dir: assets/bench/tt-pairs-v0/matmul_single_core/cpp
+        tracked: true
+        files: [matmul_single_core.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-pairs-v0/matmul_single_core/tt
+        tracked: true
+        files: [matmul_single_core.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          matmul/matmul_single_core/kernels/dataflow/reader_single_core_mm.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_single_core/kernels/dataflow/reader_single_core_mm.cpp
+            sha256: 89161eed9b7fd04443be27c46122e60771bdce2a6b72545da1d94ad57f7b71a2
+          matmul/matmul_single_core/kernels/dataflow/writer_single_core_mm.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_single_core/kernels/dataflow/writer_single_core_mm.cpp
+            sha256: baa540e3daf6066dc94183bb8d0b1ec59d8999b3bedabced9cec06364524a12a
+          matmul/matmul_single_core/kernels/compute/mm.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_single_core/kernels/compute/mm.cpp
+            sha256: 19552c7297839909006edc6710df30702233987a84478786658d321bb9f21f92
+      ttkernel:
+        dir: assets/bench/tt-pairs-v0/matmul_single_core/ttkernel  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - matmul/matmul_single_core/kernels/dataflow/reader_single_core_mm.mlir
+          - matmul/matmul_single_core/kernels/dataflow/writer_single_core_mm.mlir
+          - matmul/matmul_single_core/kernels/compute/mm.mlir
+        reference: tt
+        support:
+          matmul_single_core.cpp:
+            tracked: assets/bench/tt-pairs-v0/matmul_single_core/tt/matmul_single_core.cpp
+            sha256: edcddaab1223ab9cdccdcbabb4a6958f78f60876120ddf2238199a55a2f02669
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5

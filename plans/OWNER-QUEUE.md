@@ -1180,3 +1180,16 @@ Options:
 - (c) Keep the rule: silicon stays for human-started evaluation of candidates that passed on ttsim. Consequences: no new device-open or host-memory risk beyond today's; the owner's direction is not met: the correction loop stays on ttsim, simulator gaps stay unverifiable inside the loop, and silicon only checks ttsim passes after the fact.
 Recommendation: (a), with OQ-078 (a) first; (b) for the first windows until pacing and the fault stop have run clean. Training is unaffected either way: RL rewards still never execute on silicon.
 Answer:
+
+## OQ-103 How A ttkernel Kernel Gets Its Circular Buffers
+State: OPEN
+Kind: decision
+Blocks: P17.37 (the four tt-pairs-v0 items beyond loopback in the cpp -> ttkernel arm)
+Evidence: docs/BIBLE.md, Level Rules (the ttkernel bullet); tt-mlir at 5f396fd6, include/ttmlir/Dialect/TTKernel/IR/TTKernelOps.td:2756-2800 and lib/Conversion/TTKernelToEmitC/TTKernelToEmitC.cpp:357-371; the tracked host programs under assets/bench/tt-pairs-v0/<item>/tt/ of eltwise_binary, eltwise_sfpu, matmul_single_core, and matmul_multi_core.
+Question: At the pinned tt-mlir a ttkernel kernel can name a circular buffer only through an argument (get_arg_val, get_common_arg_val, or get_compile_time_arg_val), and the tracked host programs of four of tt-pairs-v0's five items pass no circular buffer index, since their upstream kernels fix the indices themselves. So only loopback can be written in ttkernel today (read from source, not measured). How should the other four items get their circular buffers?
+Options:
+- (a) P17.37 as planned: a tracked ttkernel host program per item that appends each kernel's circular buffer indices as compile-time arguments at fixed, documented positions, otherwise identical to the item's host program (a diff test), checked with the upstream kernels on ttsim in an owner window. Consequence: one small, tested harness change per item, and the cpp -> ttkernel arm covers all five items.
+- (b) Wait for P5.9's program-spec generator, which writes host programs from a spec. Consequence: no hand-made host variants, but the four items stay out of the ttkernel arm until P5.9 lands.
+- (c) Leave the four items out of the ttkernel arm. Consequence: the arm tests loopback only.
+Recommendation: (a): it is small, keeps the same trusted host program with arguments added, and lets the MLIR path run on every item soon; (b) can replace it later.
+Answer:

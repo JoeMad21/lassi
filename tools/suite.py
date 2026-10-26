@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """suite: start LASSI's full RNGD suite on alpha01 as one rx job, then follow, stop, and pull it.
 
-The owner's tool, so the owner can launch the full suite unattended, with a help option on every command (the owner's direction of 2026-10-26). `launch` checks the tree and the build
+The owner's tool, so the owner can launch the full suite unattended, with a help option on every command
+(the owner's direction of 2026-10-26). `launch` checks the tree and the build
 host, shows the plan, asks, and starts plans/runs/suite/run-suite.sh as one big rx job, which downloads the
 models, builds the TT assets, runs plans/runs/rngd-sweep/run.sh once per model and recipe directory (one model
 served at a time on RNGD cards, every TT program on ttsim, a simulator), and writes the tables. `plan` prints

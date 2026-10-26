@@ -46,11 +46,21 @@ Optional keys for hand-written pairs (task P4.13, tt-pairs-v0):
   than from the fetched sources; such a language lists no sha256, since git
   holds the bytes, and tools/fetch_bench.py never fetches it.
 - per language, `support: {<build-dir name>: <entry>}`, that language's own
-  harness files, each entry exactly `{tracked: <path under assets/>}` or
+  harness files, each entry exactly `{tracked: <path under assets/>}`,
+  `{tracked: <path under assets/>, sha256: <64 hex>}`, or
   `{upstream: <path in the pinned sources>, sha256: <64 hex>}`. A name may
   not be one of the language's own files or an item-level support name.
   Suite.support_files(..., language=<language>) adds them to the item-level
-  ones; tools/fetch_bench.py fetches and checks each upstream one.
+  ones and refuses a tracked one whose bytes differ from its sha256 (task
+  P17.36: a trusted host program a build gets is the manifest's);
+  tools/fetch_bench.py fetches and checks each upstream one.
+- per language, `reference: <language>` (task P17.36): another language of
+  the item, with no reference of its own, whose program is this language's
+  reference program: Suite.reference_target gives that language's files and
+  Suite.reference_language names it, so the baseline builds and runs it
+  with that language's toolchain, support files, and executor. Such a
+  language must be `tracked: true`: its own files, the files a translation
+  into it writes, are never read, and nothing is fetched for it.
 - per item, held-out inputs (bible Harness Contract): `inputs`, a non-empty
   list of generate_inputs entries (name, dtype, shape, dist, lo, hi), each
   of at most MAX_INPUT_ELEMENTS elements (lassi.harness.lassi_io
@@ -89,6 +99,7 @@ refused, naming its key, so an unfinished manifest never loads.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
@@ -152,7 +163,8 @@ class SupportFile:
     """One language's support file: its path, whether it is tracked (in this repository), and its sha256.
 
     An upstream file's path is in the pinned sources and its sha256 is the
-    manifest's; a tracked file's path is under TRACKED_ROOT, with no sha256.
+    manifest's; a tracked file's path is under TRACKED_ROOT, with the sha256 its manifest
+    entry may give (Suite.support_files checks it), else none.
     """
 
     path: str
@@ -167,7 +179,8 @@ class LanguageSources:
     `sha256` maps each file name to its sha256 hex digest, or is empty when
     the manifest records none. A `tracked` language lives in this
     repository (see base). `support` maps a build-directory name to a
-    SupportFile.
+    SupportFile. `reference` names the language whose program is this
+    language's reference program (None: its own; task P17.36).
     """
 
     dir: str
@@ -175,6 +188,7 @@ class LanguageSources:
     sha256: Mapping[str, str] = field(default_factory=dict)
     tracked: bool = False
     support: Mapping[str, SupportFile] = field(default_factory=dict)
+    reference: str | None = None
 
     def base(self, root: Path) -> Path:
         """Return the directory the files are read from: TRACKED_ROOT/dir when tracked, else <root>/dir."""
@@ -287,8 +301,22 @@ class Suite:
         return TrainView(self.name, self.commit, MappingProxyType(train), MappingProxyType(held))
 
     def reference_target(self, name: str, direction: Direction, root: Path, *, purpose: str) -> dict[str, str]:
-        """Return the item's files in the direction's target language (file name -> text), read under `root`."""
-        return self._files(name, direction.target, root, purpose)
+        """Return the item's reference program for the direction's target (file name -> text), read under `root`.
+
+        It is the target language's files, or, for a target that names a
+        `reference` language, that language's (reference_language).
+        """
+        return self._files(name, self.reference_language(name, direction.target), root, purpose)
+
+    def reference_language(self, name: str, language: str) -> str:
+        """Return the language whose program is item `name`'s reference in `language`: its `reference`, else itself.
+
+        An unknown item or a language the item lacks raises ValueError.
+        """
+        found = self.items.get(name)
+        if found is None:
+            raise ValueError(f"suite {self.name} has no item {name!r}; items: {', '.join(sorted(self.items))}")
+        return self._language(found, language).reference or language
 
     def source_files(self, name: str, direction: Direction, root: Path, *, purpose: str) -> dict[str, str]:
         """Return the item's files in the direction's source language (file name -> text), read under `root`."""
@@ -302,15 +330,22 @@ class Suite:
         They are harness files for the item's build directories: the
         item-level ones, read under `root`, and, with `language`, that
         language's own (an upstream one under `root`, a tracked one under
-        TRACKED_ROOT). A language the item lacks raises ValueError; an item
-        refused to `purpose` raises EvalSplitError.
+        TRACKED_ROOT). A language the item lacks raises ValueError, and so
+        does a tracked file whose bytes differ from the sha256 its entry
+        records; an item refused to `purpose` raises EvalSplitError.
         """
         found = self.item(name, purpose=purpose)
         files = {file: (Path(root) / path).read_bytes().decode("utf-8") for file, path in found.support.items()}
         if language is not None:
             for file, entry in self._language(found, language).support.items():
                 base = TRACKED_ROOT if entry.tracked else Path(root)
-                files[file] = (base / entry.path).read_bytes().decode("utf-8")
+                data = (base / entry.path).read_bytes()
+                if entry.tracked and entry.sha256 and hashlib.sha256(data).hexdigest() != entry.sha256:
+                    raise ValueError(
+                        f"{self.name}/{name}: the {language} support file {entry.path} differs from the sha256 its "
+                        f"manifest records ({entry.sha256}); the manifest pins the trusted file's bytes"
+                    )
+                files[file] = data.decode("utf-8")
         return files
 
     def bench_item(self, name: str, direction: Direction) -> BenchItem:
@@ -483,6 +518,7 @@ def _item(name: Any, spec: Any, where: str) -> SuiteItem:
     if not isinstance(spec["languages"], dict) or not spec["languages"]:
         raise ValueError(f"{where}.languages must be a non-empty mapping")
     languages = {lang: _language(value, f"{where}.languages.{lang}") for lang, value in spec["languages"].items()}
+    _check_references(languages, f"{where}.languages")
     run_args = spec.get("run_args", [])
     if not isinstance(run_args, list) or not all(isinstance(arg, str) for arg in run_args):
         raise ValueError(f"{where}.run_args must be a list of strings, got {run_args!r}")
@@ -586,12 +622,33 @@ def _tolerance(value: Any, where: str) -> Tolerance:
         raise ValueError(f"{where}: {error}") from None
 
 
+def _check_references(languages: Mapping[str, LanguageSources], where: str) -> None:
+    """Refuse a `reference` that names no other language of the item, or one with a reference of its own."""
+    for language, sources in languages.items():
+        named = sources.reference
+        if named is None:
+            continue
+        if named == language or named not in languages:
+            others = ", ".join(sorted(set(languages) - {language})) or "none"
+            raise ValueError(f"{where}.{language}.reference must name another language of the item ({others}), "
+                             f"got {named!r}")
+        if languages[named].reference is not None:
+            raise ValueError(f"{where}.{language}.reference names {named!r}, which names a reference of its own; "
+                             "a reference program is a language's own")
+
+
 def _language(value: Any, where: str) -> LanguageSources:
     """Check one language entry: its directory and files, their sha256, whether it is tracked, and its support."""
-    _keys(value, {"dir", "files"}, where, optional={"sha256", "tracked", "support"})
+    _keys(value, {"dir", "files"}, where, optional={"sha256", "tracked", "support", "reference"})
     tracked = value.get("tracked", False)
     if not isinstance(tracked, bool):
         raise ValueError(f"{where}.tracked must be true or false, got {tracked!r}")
+    reference = value.get("reference")
+    if "reference" in value and not (isinstance(reference, str) and _NAME.fullmatch(reference)):
+        raise ValueError(f"{where}.reference must name a language of the item, got {reference!r}")
+    if reference is not None and not tracked:
+        raise ValueError(f"{where}: a language with a reference must be tracked: true, since its own files are "
+                         "never read and nothing is fetched for it")
     if not _relative(value["dir"]):
         raise ValueError(f"{where}.dir must be a relative path without '..', got {value['dir']!r}")
     if tracked and not value["dir"].startswith(TRACKED_PREFIX):
@@ -607,7 +664,10 @@ def _language(value: Any, where: str) -> LanguageSources:
     if "sha256" in value and not valid:
         raise ValueError(f"{where}.sha256 must map each listed file to a 64-hex sha256 digest, got {digests!r}")
     support = _language_support(value.get("support", {}), files, f"{where}.support")
-    return LanguageSources(dir=value["dir"], files=tuple(files), sha256=dict(digests), tracked=tracked, support=support)
+    return LanguageSources(
+        dir=value["dir"], files=tuple(files), sha256=dict(digests), tracked=tracked, support=support,
+        reference=reference,
+    )
 
 
 def _language_support(value: Any, files: list[str], where: str) -> dict[str, SupportFile]:
@@ -619,11 +679,14 @@ def _language_support(value: Any, files: list[str], where: str) -> dict[str, Sup
         at = f"{where}.{name}"
         if name in files:
             raise ValueError(f"{at}: {name!r} is one of the language's own files")
-        if isinstance(entry, dict) and set(entry) == {"tracked"}:
+        if isinstance(entry, dict) and set(entry) in ({"tracked"}, {"tracked", "sha256"}):
             path = entry["tracked"]
             if not (_relative(path) and path.startswith(TRACKED_PREFIX)):
                 raise ValueError(f"{at}: tracked must be a relative path under {TRACKED_PREFIX} without '..'")
-            support[name] = SupportFile(path=path, tracked=True)
+            digest = entry.get("sha256")
+            if "sha256" in entry and not (isinstance(digest, str) and _SHA256.fullmatch(digest)):
+                raise ValueError(f"{at}: sha256 must be a 64-hex sha256 digest, got {digest!r}")
+            support[name] = SupportFile(path=path, tracked=True, sha256=digest)
         elif isinstance(entry, dict) and set(entry) == {"upstream", "sha256"}:
             if not _relative(entry["upstream"]):
                 raise ValueError(f"{at}: upstream must be a relative path without '..', got {entry['upstream']!r}")

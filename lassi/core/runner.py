@@ -2201,7 +2201,8 @@ def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
             try:
                 sources = bench.suite.source_files(item, direction, bench.root, purpose=PURPOSE)
                 bench.suite.reference_target(item, direction, bench.root, purpose=PURPOSE)
-                for language in (direction.target, direction.source):
+                program = bench.suite.reference_language(item, direction.target)
+                for language in dict.fromkeys((direction.target, direction.source, program)):
                     bench.suite.support_files(item, bench.root, purpose=PURPOSE, language=language)
             except (OSError, ValueError) as error:
                 raise RunError(
@@ -2209,6 +2210,40 @@ def _check_trials(recipe: Recipe, settings: _Settings, bench: _Bench) -> None:
                     + _fetch_hint(bench.suite)
                 ) from error
             _check_one_file(recipe, settings, bench, item, direction, len(sources))
+            _check_reference_bindings(recipe, bench, item, direction)
+
+
+def _check_reference_bindings(recipe: Recipe, bench: _Bench, item: str, direction: Direction) -> None:
+    """Refuse a target whose reference is another language's program when that language has no toolchain or executor.
+
+    The baseline builds such a reference with the reference language's
+    toolchain and runs it on that language's executor (lassi.bench
+    Suite.reference_language; task P17.36), so with executors bound per
+    language both must be bound for it, each message naming the key. A
+    reference that is the direction's own source language is refused too:
+    the baseline would build that one program as both references. The
+    caller has already read the reference language's support files.
+    """
+    program = bench.suite.reference_language(item, direction.target)
+    if program == direction.target:
+        return
+    where = f"{recipe.path}: {bench.suite.name}/{item} ({direction.name})"
+    if program == direction.source:
+        raise RunError(
+            f"{where}: the {direction.target} reference is the item's {program} program, the direction's own source, "
+            "so the baseline would build one program twice and compare it with itself; translate from another language"
+        )
+    if program not in recipe.data.get("toolchain", {}):
+        raise RunError(
+            f"{where}: the {direction.target} reference is the item's {program} program, which the baseline builds "
+            f"with the {program} toolchain; set toolchain.{program}"
+        )
+    executors = recipe.data.get("executor", {})
+    if isinstance(executors, dict) and "kind" not in executors and program not in executors:
+        raise RunError(
+            f"{where}: the {direction.target} reference is the item's {program} program, which the baseline runs "
+            f"on the {program} executor; set executor.{program}"
+        )
 
 
 def _check_one_file(
@@ -2490,7 +2525,9 @@ def _pinned_toolchain(name: str, factory: type, root: Path | None, build_root: P
     prefix, or a compile layout the sandbox refuses. Then
     `<executable> --version`, with the class's VERSION_ARGS if it declares
     them (_version_argv), must print the pin's EXPECT_VERSION in the
-    compile sandbox.
+    compile sandbox. A class that declares TOOL_PINS also gets the tools of
+    those pins, each checked (_tool_pins), as factory(..., tools=...), and
+    their pins join the toolchain's (task P17.36).
     """
     pin_name = factory.PIN
     host = getattr(factory, "PIN_BIN", None) is None
@@ -2501,14 +2538,64 @@ def _pinned_toolchain(name: str, factory: type, root: Path | None, build_root: P
     else:
         resolved, executable = _pinned_executable(name, factory, pin, root)
     keywords = {} if check_tree is None else {"tree": _checked_tree(name, pin_name, pin, resolved, check_tree)}
+    tool_pins, tools = _tool_pins(name, factory, resolved)
     tmpdir = _checked_tmpdir()
     hidden_roots = _compile_hidden_roots(build_root)
     environment = _compile_environment()
     pins = {pin_name: pin, **_linked_pins(name, pin_name, pin, resolved, environment)}
     runner = _compile_runner(name, environment, resolved, hidden_roots, build_root)
     version, status = _checked_version(name, _version_argv(factory, executable), runner, Path(tmpdir), pin_name, pin)
+    for tool_pin, tool in tools.values():
+        _checked_version(name, [tool, "--version"], runner, Path(tmpdir), tool_pin, tool_pins[tool_pin])
+    if tool_pins:
+        keywords["tools"] = {key: tool for key, (_, tool) in tools.items()}
+        pins.update(tool_pins)
     toolchain = factory(executable=str(executable), runner=runner, **keywords)
     return BuiltToolchain(name, (), toolchain, str(executable), environment, pins, version, status)
+
+
+def _tool_pins(
+    name: str, factory: type, root: Path
+) -> tuple[dict[str, dict[str, str]], dict[str, tuple[str, str]]]:
+    """Return the pins a class's TOOL_PINS names and, by pin key, each tool's pin and path (task P17.36).
+
+    TOOL_PINS maps a pin name to the keys of that pin whose values are tool
+    paths relative to its install, <root>/<PREFIX_NAME> (ttkernel-ttmetal:
+    tt-mlir's TTMLIR_OPT and TTMLIR_TRANSLATE). The install must be a
+    directory inside the resolved root that the class's check_tool_pin, when
+    it defines one, accepts, and each tool a file resolving inside the root.
+    These are filesystem checks, made before any process starts; the caller
+    then runs each tool's `--version` through the compile runner, which
+    must print that pin's EXPECT_VERSION (_checked_version). Every refusal
+    is a RunError; a class without TOOL_PINS gets ({}, {}).
+    """
+    found: dict[str, dict[str, str]] = {}
+    tools: dict[str, tuple[str, str]] = {}
+    check = getattr(factory, "check_tool_pin", None)
+    for tool_pin, keys in getattr(factory, "TOOL_PINS", {}).items():
+        pin = _pin(tool_pin)
+        home = root / pin["PREFIX_NAME"]
+        install = f"toolchains/{tool_pin}.sh"
+        if not home.is_dir() or not _within(home.resolve(), root):
+            raise RunError(
+                f"toolchain {name!r} needs the installed {tool_pin} at {home}, which is not a directory inside the "
+                f"toolchains root; install it on the build host with {install}"
+            )
+        try:
+            if check is not None:
+                check(tool_pin, home, pin)
+        except (OSError, ValueError) as error:
+            raise RunError(f"toolchain {name!r}: {error}") from error
+        for key in keys:
+            tool = home / pin.get(key, "")
+            if not pin.get(key) or not tool.is_file() or not _within(tool.resolve(), root):
+                raise RunError(
+                    f"toolchain {name!r}: the pinned tool {tool} ({key} in toolchains/{tool_pin}.pin) is not a file "
+                    f"inside the toolchains root; install it on the build host with {install}"
+                )
+            tools[key] = (tool_pin, str(tool))
+        found[tool_pin] = pin
+    return found, tools
 
 
 def _host_executable(name: str, pin_name: str, pin: Mapping[str, str], root: Path | None) -> tuple[Path, str]:

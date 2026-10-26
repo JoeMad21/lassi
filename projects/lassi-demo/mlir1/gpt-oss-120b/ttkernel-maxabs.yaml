@@ -1,0 +1,40 @@
+# The first C++ -> TT MLIR pass (task P17.36): cpp -> ttkernel on tt-pairs-v0's items (the sibling suite
+# tt-pairs-v0-ttkernel, assets/bench/tt-pairs-v0-ttkernel.yaml), the max_abs half. The model writes each kernel as a
+# ttkernel MLIR module; ttkernel-ttmetal lowers it with the pinned tt-mlir (ttmlir-opt --convert-ttkernel-to-emitc,
+# ttmlir-translate --ttkernel-to-cpp) and builds the item's tracked TT host program, a harness file. tt-pairs-v0 is a
+# development set (OQ-083 (b)). Exploratory; every TT program runs on ttsim, a simulator. The reference is the
+# item's tt program (the host program with the upstream kernels) on ttsim, and the oracle judges a candidate against
+# it within the references' own agreement, as sweep7 judges cpp -> tt.
+# gpt-oss-120b with sweep7/gpt-oss-120b's model settings (reasoning effort medium, a budget of 32768 tokens, timeout
+# 3600 s; OQ-080, OQ-087), restated here since sweep7's chain carries the adversary stage, which this pass leaves
+# out (tests/core/test_mlir1_recipes.py checks the settings are sweep7's). 3 samples, a correction cap of 8, and
+# the mismatch report and simulator-gap feedback on.
+# Before the run: `uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-ttkernel.yaml` and
+# `uv run tools/build_ttkernel_context.py fetch --dest <dir>` then `... build --tree <dir>` (the dialect pack and the
+# worked example; only their manifests are tracked).
+extends: ../../tier-a-rngd-maxabs.yaml  # the max_abs items, baseline_both, ttsim for TT, native for C++, from_baseline
+model:
+  id: furiosa-ai/gpt-oss-120b
+  timeout_s: 3600
+llm:
+  sampling:
+    max_tokens: 32768
+    reasoning_effort: medium
+extract:
+  unfenced_file_lines: true  # as sweep2 on (sweep7's chain)
+bench:
+  suite: tt-pairs-v0-ttkernel
+  # loopback only, of this half's eltwise_binary, eltwise_sfpu, and loopback: at tt-mlir 5f396fd6 a ttkernel kernel gets a circular buffer only from an argument
+  # (TTKernelOps.td:2756-2800), and the other items' tracked host programs pass no CB index (task P17.37).
+  items: [loopback]
+directions: [{source: cpp, target: ttkernel}]
+prompts: tt-mlir-v0
+toolchain:
+  ttkernel: ttkernel-ttmetal  # the pinned tt-mlir tools, then the host program with the pinned clang++-20
+executor:
+  ttkernel: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # candidates run in the sandbox on ttsim, a simulator
+context: [ttkernel-5f396fd6]  # the ttkernel dialect's ops at the pin, built by tools/build_ttkernel_context.py
+examples: {pack: ttkernel-examples-5f396fd6, max_chars: 8000, prompts: [generate, correct]}
+stages: [baseline, summarize_context, generate, compile_loop, run_loop, oracle]
+trials: {n: 3}
+loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true}

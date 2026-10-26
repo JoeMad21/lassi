@@ -203,6 +203,15 @@ build_asset() {  # build_asset <need>: 0 when the asset built and its manifest e
     retrieval:tt-metal-docs)
       uv run tools/build_tt_rag.py build --tree "$tree" > "$out/rag.log" 2>&1 \
         && git diff --quiet HEAD -- assets/rag && uv run tools/build_tt_rag.py check --tree "$tree" >> "$out/rag.log" 2>&1 ;;
+    context:ttkernel-5f396fd6|examples:ttkernel-examples-5f396fd6)
+      # The cpp -> ttkernel recipes (task P17.36): their suite's sources under $LASSI_SCRATCH/bench, then both packs
+      # from the tt-mlir sources at the pin that toolchains/tt-mlir.sh installed (one build writes both).
+      local mlir="$toolchains/tt-mlir@0.9.0.dev20260221/src/tt-mlir"
+      [ -d "$mlir" ] || { echo "no tt-mlir sources at $mlir"; return 1; }
+      uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-ttkernel.yaml > "$out/ttkernel-bench.log" 2>&1 \
+        && uv run tools/build_ttkernel_context.py build --tree "$mlir" > "$out/ttkernel-packs.log" 2>&1 \
+        && git diff --quiet HEAD -- assets/context assets/examples \
+        && uv run tools/build_ttkernel_context.py check --tree "$mlir" >> "$out/ttkernel-packs.log" 2>&1 ;;
     *) echo "run-suite has no build step for $1"; return 1 ;;
   esac
 }

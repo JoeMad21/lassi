@@ -1,0 +1,16 @@
+The reference below lists the operations of the ttkernel MLIR dialect of tt-mlir 0.9.0.dev20260221 (commit
+5f396fd6), the dialect $target_language kernels are written in: for each op its name, summary, operands,
+results, and textual form, then the dialect's types and enums.
+
+Write a reference card that a kernel author needs, for:
+- reading compile-time and runtime arguments, and getting circular buffers from them;
+- reading and writing DRAM buffers with TensorAccessorArgs, TensorAccessor, and the noc ops;
+- reserving, filling, pushing, waiting on, reading, and popping circular buffers;
+- the compute kernel's startup and init ops, the dst register ops, the tile math ops (copy, add, exp,
+  matmul, and the like), and pack_tile.
+Give each op exactly as the reference writes it: its name, its operand and result types in order, and a
+one-line example in the form ttkernel.<op>(<operands>) : (<operand types>) -> <result types>. Keep every
+type spelling exactly (such as !ttkernel.cb<...>, !ttcore.tile<32x32, bf16>, and i32 or index), and leave
+out what such kernels do not need. Answer with the reference card only.
+
+$context_pack

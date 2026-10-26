@@ -109,7 +109,9 @@ def _digests(suite: Suite) -> dict[str, str]:
     for item in suite.items.values():
         for spec in item.languages.values():
             found.update({f"{spec.dir}/{file}": digest for file, digest in spec.sha256.items()})
-            found.update({entry.path: entry.sha256 for entry in spec.support.values() if entry.sha256})
+            found.update(
+                {entry.path: entry.sha256 for entry in spec.support.values() if entry.sha256 and not entry.tracked}
+            )
     return found
 
 

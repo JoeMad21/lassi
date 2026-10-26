@@ -60,7 +60,14 @@ DIGESTS = {
     ("adv-seeded-v0", "scale_i64", "x"): "1789264892c2376a62bf82c58174ad7d5e46de9747f9ebb3c7d4e885882dc463",
     ("adv-seeded-v0", "signed_root", "x"): "efc14187fdfe04ce8532f297e17eae3670b84c30e1660493471e5bcd96af5bec",
 }
-RECORDED_SUITES = ("adv-seeded-v0", "lassi-hecbench-10", "tt-pairs-v0")
+# tt-pairs-v0-ttkernel (task P17.36) holds tt-pairs-v0's items with the same inputs and seeds, so its files are
+# tt-pairs-v0's, byte for byte (tests/bench/test_ttkernel_suite.py checks that the entries are equal).
+DIGESTS.update({
+    ("tt-pairs-v0-ttkernel", item, name): digest
+    for (suite, item, name), digest in list(DIGESTS.items())
+    if suite == "tt-pairs-v0"
+})
+RECORDED_SUITES = ("adv-seeded-v0", "lassi-hecbench-10", "tt-pairs-v0", "tt-pairs-v0-ttkernel")
 
 
 def harness() -> ModuleType:
