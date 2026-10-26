@@ -1,0 +1,6 @@
+Using CPython 3.10.12 interpreter at: /usr/bin/python3.10
+Creating virtual environment at: .venv
+   Building lassi @ file:///mnt/nvme10/joseph_ufl/lassi-wt/night
+      Built lassi @ file:///mnt/nvme10/joseph_ufl/lassi-wt/night
+Installed 19 packages in 21ms
+/mnt/nvme10/joseph_ufl/lassi-wt/night/assets/context/tt-metalium-5280a9cf-full: metalium_guide.tt 7371 bytes, host_api.tt 115570 bytes; the pack 122942 of 131072 bytes; 0 headers cut by the limit

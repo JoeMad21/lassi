@@ -1,0 +1,136 @@
+2026-10-25T17:12:10-0700 sweep 20261025-1712: deadline 19:58:35, 9985 s left, output /mnt/nvme10/joseph_ufl/lassi-runs/rngd-sweep/20261025-1712
+2026-10-25T17:12:10-0700 START llama33-70b: furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-10-25T17:14:36-0700 READY llama33-70b: running 8 recipes side by side for at most 9239 s
+2026-10-25T19:09:42-0700 llama33-70b run 1602682 ended rc=0
+2026-10-25T19:09:42-0700 llama33-70b run 1602684 ended rc=0
+2026-10-25T19:09:42-0700 llama33-70b run 1602686 ended rc=0
+2026-10-25T19:09:42-0700 llama33-70b run 1602687 ended rc=0
+2026-10-25T19:09:42-0700 llama33-70b run 1602689 ended rc=0
+2026-10-25T19:09:42-0700 llama33-70b run 1602692 ended rc=0
+2026-10-25T19:09:42-0700 llama33-70b run 1602693 ended rc=0
+2026-10-25T19:09:42-0700 llama33-70b run 1602694 ended rc=0
+llama33-70b--all-maxabs	cpp-tt/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/eltwise_binary/run03	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/loopback/run01	S5	0.0	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/loopback/run02	S5	0.0	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/loopback/run03	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_multi_core/run03	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_single_core/run01	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_single_core/run02	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_single_core/run03	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_binary/run03	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/loopback/run01	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/loopback/run02	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/loopback/run03	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_multi_core/run03	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_single_core/run01	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_single_core/run02	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_single_core/run03	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_binary/run03	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/loopback/run01	S5	0.0	1	-	2
+llama33-70b--ex-maxabs	cpp-tt/loopback/run02	S5	1.0	1	-	2
+llama33-70b--ex-maxabs	cpp-tt/loopback/run03	S5	1.0	2	-	3
+llama33-70b--ex-pcc	cpp-tt/matmul_multi_core/run01	S4	None	8	correction-cap	9
+llama33-70b--ex-pcc	cpp-tt/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--ex-pcc	cpp-tt/matmul_multi_core/run03	S1	None	8	correction-cap	9
+llama33-70b--ex-pcc	cpp-tt/matmul_single_core/run01	S1	None	8	correction-cap	9
+llama33-70b--ex-pcc	cpp-tt/matmul_single_core/run02	S1	None	8	correction-cap	9
+llama33-70b--ex-pcc	cpp-tt/matmul_single_core/run03	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_binary/run03	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_sfpu/run02	S4	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/loopback/run01	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/loopback/run02	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/loopback/run03	S1	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_multi_core/run02	S4	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_multi_core/run03	S1	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_single_core/run01	S1	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_single_core/run02	S1	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_single_core/run03	S1	None	8	correction-cap	9
+2026-10-25T19:09:44-0700 server 1261943 exited
+2026-10-25T19:09:44-0700 DONE llama33-70b; free cards now 8; 2931 s left
+2026-10-25T19:09:44-0700 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+llama33-70b--all-maxabs	cpp-tt/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/eltwise_binary/run03	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/loopback/run01	S5	0.0	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/loopback/run02	S5	0.0	8	correction-cap	9
+llama33-70b--all-maxabs	cpp-tt/loopback/run03	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_multi_core/run03	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_single_core/run01	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_single_core/run02	S1	None	8	correction-cap	9
+llama33-70b--all-pcc	cpp-tt/matmul_single_core/run03	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_binary/run03	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/loopback/run01	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/loopback/run02	S1	None	8	correction-cap	9
+llama33-70b--base-maxabs	cpp-tt/loopback/run03	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_multi_core/run03	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_single_core/run01	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_single_core/run02	S1	None	8	correction-cap	9
+llama33-70b--base-pcc	cpp-tt/matmul_single_core/run03	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_binary/run03	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+llama33-70b--ex-maxabs	cpp-tt/loopback/run01	S5	0.0	1	-	2
+llama33-70b--ex-maxabs	cpp-tt/loopback/run02	S5	1.0	1	-	2
+llama33-70b--ex-maxabs	cpp-tt/loopback/run03	S5	1.0	2	-	3
+llama33-70b--ex-pcc	cpp-tt/matmul_multi_core/run01	S4	None	8	correction-cap	9
+llama33-70b--ex-pcc	cpp-tt/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--ex-pcc	cpp-tt/matmul_multi_core/run03	S1	None	8	correction-cap	9
+llama33-70b--ex-pcc	cpp-tt/matmul_single_core/run01	S1	None	8	correction-cap	9
+llama33-70b--ex-pcc	cpp-tt/matmul_single_core/run02	S1	None	8	correction-cap	9
+llama33-70b--ex-pcc	cpp-tt/matmul_single_core/run03	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_binary/run03	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_sfpu/run02	S4	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/loopback/run01	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/loopback/run02	S1	None	8	correction-cap	9
+llama33-70b--lk-maxabs	cpp-tt/loopback/run03	S1	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_multi_core/run02	S4	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_multi_core/run03	S1	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_single_core/run01	S1	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_single_core/run02	S1	None	8	correction-cap	9
+llama33-70b--lk-pcc	cpp-tt/matmul_single_core/run03	S1	None	8	correction-cap	9
+2026-10-25T19:09:44-0700 sweep ended
