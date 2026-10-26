@@ -1,0 +1,12 @@
+The reference below documents the API that $target_language programs are written against. For tt it is
+the TT-Metalium host API of tt-metal commit 5280a9cf: a guide, then declarations from its headers.
+
+Summarize what a $target_language host program needs from this reference to:
+- open the device and its command queue, and close the device;
+- create buffers in DRAM or L1, write the inputs to them, and read the results back;
+- create a program, its circular buffers, and its kernels, with their compile and runtime arguments;
+- enqueue the program and wait for it to finish.
+Keep every name, signature, namespace, header, enum value, and argument order exactly as the reference
+writes it, and leave out what such a program does not need. Answer with the summary only.
+
+$context_pack

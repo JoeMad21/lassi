@@ -1,0 +1,5 @@
+Declarations from the TT-Metalium API reference of tt-metal commit 5280a9cf follow, copied exactly, for
+the names the errors in the task after them mention. Each starts with its qualified name and the header
+that declares it; check every call, argument type, and member against them.
+
+$declarations
