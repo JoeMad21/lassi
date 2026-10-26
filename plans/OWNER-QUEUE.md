@@ -1257,3 +1257,15 @@ Options:
 - Skeleton: (a) item-agnostic only, from the pinned headers and tt-metal programming examples outside the five tt-pairs-v0 items; (b) also leave-one-out reference host programs of the other items, labeled so.
 Recommendation: directions (a); skeleton (a).
 Answer: Owner's choice (in the working session, 2026-10-25, about 19:35 EDT; recorded by the agent): "Keep C++ -> TT only"; skeleton "Item-agnostic only (Recommended)".
+
+## OQ-097 Read Access To alpha01's RAPL Energy Counters
+State: OPEN
+Kind: access
+Blocks: P9.13's energy (the CPU port runs with backend wall, labeled not energy, until this is answered)
+Evidence: plans/spikes/p9-cpu-energy.md (rx 20261025-182150-exec-2692: package-0 and package-1 under intel-rapl, energy_uj mode 0400, this account's read refused).
+Question: The CPU port of LASSI-EE reports energy only if this account can read /sys/class/powercap/intel-rapl:<n>/energy_uj for the two package zones; today they are root-only, so the rapl backend refuses and only wall time (labeled not energy) is available. Agents make no root-side change. Should the owner grant read access?
+Options:
+- (a) The owner grants this account read access to the package zones' energy_uj (for example a group-readable mode set at boot), so the port reports package energy (the whole package, other users' load included, as the bible states).
+- (b) No access: the CPU port reports wall time labeled not energy, and energy waits for a GPU host.
+Recommendation: (a), since energy is LASSI-EE's measure; (b) keeps the port running meanwhile.
+Answer:
