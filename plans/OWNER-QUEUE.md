@@ -1234,7 +1234,7 @@ Recommendation: (a), since it matches OQ-018's answer and keeps the wording fait
 Answer:
 
 ## OQ-095 The Efficiency Judge's Model Shares The Generator's Family
-State: OPEN
+State: ANSWERED
 Kind: decision
 Blocks: P15.3 (binding the efficiency judge in a run that gpt-oss-120b generates), P15.7 (which candidates the efficiency set keeps)
 Evidence: plans/OWNER-QUEUE.md OQ-089 (models, option (a)); docs/BIBLE.md, Agents And Judges (a judge uses a different model family from the generator in the same trial) and Model families; plans/p15-judges.md, Decisions taken at planning, Model families (a judge whose family equals the generator's is refused in a run; in calibration such a trial leaves that judge's set); P15.1's audit, 2026-10-25.
@@ -1244,7 +1244,8 @@ Options:
 - (b) Keep gpt-oss-120b for the efficiency judge, used in calibration and in runs another family generates; LASSI-EE's CPU port binds only the equivalence judge, which is all the paper's pipeline uses.
 - (c) A third family for the efficiency judge later (one of the models OQ-087 kept for later testing), at the cost of a download and window time.
 Recommendation: (b): LASSI-EE needs only the equivalence judge, which is on Llama; the efficiency judge serves calibration and prediction studies, where the rule already drops same-family trials; OQ-089 stands as answered.
-Answer:
+Answer: The owner, in the working session of 2026-10-26 at about 03:25 EDT: "For this testing, the same model can act as judge."
+To apply: for the current development and calibration testing a judge may be the generator's model (gpt-oss-120b judging gpt-oss-120b candidates), so neither judge needs Llama-3.3-70B, whose files the owner removed from alpha01 on 2026-10-26. The family rule's exception, labeled on every such judged value with [JUDGED], goes into the bible's judges text with P15.3.
 
 ## OQ-096 Raising C++ -> TT Results: Tonight's Directions And The Host Skeleton's Sources
 State: ANSWERED
@@ -1259,7 +1260,7 @@ Recommendation: directions (a); skeleton (a).
 Answer: Owner's choice (in the working session, 2026-10-25, about 19:35 EDT; recorded by the agent): "Keep C++ -> TT only"; skeleton "Item-agnostic only (Recommended)".
 
 ## OQ-097 Read Access To alpha01's RAPL Energy Counters
-State: OPEN
+State: ANSWERED
 Kind: access
 Blocks: P9.13's energy (the CPU port runs with backend wall, labeled not energy, until this is answered)
 Evidence: plans/spikes/p9-cpu-energy.md (rx 20261025-182150-exec-2692: package-0 and package-1 under intel-rapl, energy_uj mode 0400, this account's read failed).
@@ -1268,4 +1269,5 @@ Options:
 - (a) The owner grants this account read access to the package zones' energy_uj (for example a group-readable mode set at boot), so the port reports package energy (the whole package, other users' load included, as the bible states). Consequence: counters the kernel restricts to their owner become readable by the granted group on a shared host; the kernel's reason for the mode is to be cited from its source at alpha01's release (P9.2) so the owner can weigh it.
 - (b) No access: the CPU port reports wall time labeled not energy, and energy waits for a GPU host.
 Recommendation: (a), since energy is LASSI-EE's measure; (b) keeps the port running meanwhile.
-Answer:
+Answer: (a). The owner, in the working session of 2026-10-26 at about 03:25 EDT: "Go with recommendation on QQ-097."
+To apply: the owner makes the root-side change on alpha01 (agents make none); P9.2 then reads the zones' mode, owner, and group again in an approved window and records whether the rapl backend reads.
