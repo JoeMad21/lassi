@@ -1,0 +1,115 @@
+# Polygeist pin (task P5.5; bible Toolchain Pins, MLIR stacks; plans/spikes/p5-mlir-pins.md, Results 1, 4, and 5).
+# Shell-sourced by toolchains/polygeist.sh, which builds in place at $LASSI_TOOLCHAINS/$PREFIX_NAME: LLVM with clang
+# and MLIR, and Polygeist as LLVM's external project, in one in-tree build (README.md:89-95), of TARGETS only, with no
+# install (the space plan of OQ-049). The tree is an install once it holds lassi-install.txt. The script's space check
+# plans for both MLIR stacks together whichever is built first (INSTALL_KIB, RESERVE_KIB). Values read from upstream
+# with `gh api` on 2026-10-13 and checked again on 2026-10-26; file:line citations are at COMMIT for Polygeist and at
+# LLVM_COMMIT for llvm-project.
+NAME=polygeist
+# llvm/Polygeist main's head (2024-07-31), the commit the P5 plan's rule chose (bible Toolchain Pins, MLIR stacks).
+# Polygeist has no release, so VERSION is the commit's first eight characters, as tt-metal.pin's is; PREFIX_NAME is
+# <NAME>@<VERSION> (lassi/toolchains/pins.py). README.md:10 clones https://github.com/llvm/Polygeist.
+VERSION=77c04bb2
+PREFIX_NAME=polygeist@77c04bb2
+COMMIT=77c04bb2a7a2406ca9480bcc9e729b07d2c8d077
+URL=https://github.com/llvm/Polygeist.git
+# LLVM is the llvm-project gitlink in COMMIT's tree, at the path and from the URL .gitmodules:1-3 names. The script
+# fetches it by commit at depth 1, never through `git submodule` (its whole history), and checks that Polygeist's tree
+# records LLVM_COMMIT at LLVM_SUBMODULE. This is the CPU stack's own LLVM: Polygeist does not build against tt-mlir's
+# LLVM (spike, Results 1), so the two stacks never share one.
+LLVM_COMMIT=26eb4285b56edd8c897642078d91f16ff0fd3472
+LLVM_URL=https://github.com/llvm/llvm-project.git
+LLVM_SUBMODULE=llvm-project
+# What Trial.toolchain_pins.llvm records for this stack: LLVM's PACKAGE_VERSION, 18.0.0git (llvm/CMakeLists.txt:11-26),
+# and LLVM_COMMIT's first eight characters, so this LLVM is never mistaken for tt-mlir's (22.0.0git at 4efe170d, which
+# only the tt_mlir field names, through tt-mlir.pin's VERSION). Today the runner records each pin's VERSION alone
+# (lassi/core/runner.py, _pin_versions), so polygeist gets VERSION and nothing fills llvm yet; recording LLVM_VERSION
+# in the llvm field comes in a later task (P5.6 or P5.7), with a Decision Log entry.
+LLVM_VERSION=18.0.0git-26eb4285
+# The in-tree build of README.md:89-95: LLVM's llvm/ directory, projects clang and mlir (:90; no polly, which only
+# Polymer with ISL needs, README.md:37), Polygeist as the external project polygeist (:91; llvm/tools/CMakeLists.txt:54-57
+# adds it, and llvm/cmake/modules/AddLLVM.cmake:1491-1493 caches its source directory, which the script sets, as :92
+# does), the host target (:93; llvm/cmake/config-ix.cmake:520-528 turns it into X86 in a variable, while the cache
+# keeps "host"; LLVM's default is all, llvm/CMakeLists.txt:469-470, and cgeist links ${LLVM_TARGETS_TO_BUILD},
+# tools/cgeist/CMakeLists.txt:2; the NVPTX and AMDGPU code of lib/polygeist/Passes/SerializeToCubin.cpp:18 and
+# SerializeToHsaco.cpp:4 compiles only with CUDA or ROCm on), and assertions on (:94; tt-mlir.pin builds its LLVM so
+# too). Four changes:
+# - CMAKE_BUILD_TYPE is Release, the P5 plan's planning decision (plans/p5-ir.md, "One LLVM or two"), where
+#   README.md:95 has DEBUG; upstream CI builds this LLVM as Release (.github/workflows/build.yml:18, :91). Assertions
+#   stay on as set, since LLVM turns them off by default outside Debug (llvm/CMakeLists.txt:589-593).
+# - LLVM_INCLUDE_TESTS is off, by the same planning decision; LLVM's default is on (llvm/CMakeLists.txt:737), and
+#   MLIR's and clang's tests follow it (mlir/CMakeLists.txt:126-128, clang/CMakeLists.txt:438-440), so mlir-opt links
+#   no MLIR test library (mlir/tools/mlir-opt/CMakeLists.txt:14). Polygeist's own lit targets are still configured
+#   and name FileCheck, not, count, split-file, llvm-config, cgeist, clang, and polygeist-opt as dependencies
+#   (test/CMakeLists.txt:8-12; tools/cgeist/Test/CMakeLists.txt:11-22), which must exist as targets: FileCheck, not,
+#   count, and split-file come from LLVM_INCLUDE_UTILS (llvm/CMakeLists.txt:717, :1168-1175) and llvm-config from
+#   LLVM_INCLUDE_TOOLS (:713), so both keep their default, on. Nothing builds those lit targets here.
+# - CMAKE_CXX_FLAGS is -Wno-c++11-narrowing, which Polygeist's CI passes when it builds this LLVM with clang
+#   (.github/workflows/build.yml:91); its Polygeist build (:107) passes none, but here one configure builds both.
+# - CUDA, ROCm, and Polymer are set off (CMakeLists.txt:5-10, each 0 by default), so the cache records them and
+#   check_cache reads them back; ISL and Pluto (:9-10) follow Polymer, off. MLIR's CUDA and ROCm runners (default 0,
+#   mlir/CMakeLists.txt:118-119; README.md:33-35) and MLIR's Python bindings (default 0, mlir/CMakeLists.txt:152) keep
+#   their defaults, off.
+# No linker is named: LLVM links with the compiler's default linker, and POLYGEIST_USE_LINKER (read at
+# CMakeLists.txt:90-97, defined nowhere) stays unset. The script adds the compilers, Ninja and the Python by path,
+# the Polygeist source directory, and POLYGEIST_PGO_DEFAULT_DATA_DIR under the prefix (CMakeLists.txt:44 defaults it to
+# /var/tmp/polygeist/pgo/, which lib/polygeist/Passes/CMakeLists.txt:76-81 compiles into the passes that read it,
+# LowerAlternatives.cpp:50-56 and ConvertPolygeistToLLVM.cpp:1849-1855), and builds TARGETS in the build tree.
+LLVM_CMAKE_FLAGS="-G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS=clang;mlir -DLLVM_EXTERNAL_PROJECTS=polygeist -DLLVM_TARGETS_TO_BUILD=host -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_INCLUDE_TESTS=OFF -DCMAKE_CXX_FLAGS=-Wno-c++11-narrowing -DPOLYGEIST_ENABLE_CUDA=0 -DPOLYGEIST_ENABLE_ROCM=0 -DPOLYGEIST_ENABLE_POLYMER=0"
+# Built instead of all or install: the tools P5 calls, cgeist (tools/cgeist/CMakeLists.txt:20), polygeist-opt
+# (tools/polygeist-opt/CMakeLists.txt:18), which runs Polygeist's passes on a module cgeist wrote, and that LLVM's
+# mlir-opt, mlir-translate, and clang (mlir/tools/mlir-opt/CMakeLists.txt:82, mlir/tools/mlir-translate/CMakeLists.txt:8,
+# clang/tools/driver/CMakeLists.txt:26). clang depends on clang-resource-headers (clang/tools/driver/CMakeLists.txt:59),
+# which places the builtin headers in <build>/lib/clang/18/include (clang/lib/Headers/CMakeLists.txt:329, :434), so
+# that target is not named. clangTooling, which the TT raiser links, is left for task P5.8, which builds it later in
+# the same build tree. LLVMFrontendOpenACC is built for P12's flang, which builds standalone against this tree: its
+# acc_gen step writes the OpenACC headers flang's parser includes at LLVM_COMMIT (OQ-063 (a), answered 2026-10-26:
+# "You can download openACC."; plans/spikes/p12-frontend-pins.md, section 4). An added target changes the install
+# record, so a tree built without it is refused, never rebuilt over.
+TARGETS="cgeist polygeist-opt mlir-opt mlir-translate clang LLVMFrontendOpenACC"
+# Host tools on the build host (plans/spikes/p5-mlir-pins.md, Results 4; rx 20261006-214920-exec-4a93), the ones
+# toolchains/tt-mlir.pin names; the script refuses others. CMake by path (/usr/local/bin/cmake, first on PATH; LLVM
+# needs 3.20 and Polygeist 3.13.4, CMakeLists.txt:1); Ninja; clang-17 and clang++-17 by name, as tt-mlir.pin, since
+# Polygeist's CI builds LLVM and Polygeist with clang (.github/workflows/build.yml:23-24, :37-38, :91, :107) and the
+# host has no unversioned clang; and Python 3.10, which LLVM's configure finds (llvm/CMakeLists.txt:872-873) and which
+# reads the core limit back.
+CMAKE=/usr/local/bin/cmake
+CMAKE_EXPECT="cmake version 3.31.6"
+NINJA=/usr/bin/ninja
+NINJA_EXPECT=1.10.1
+CLANG_C=clang-17
+CLANG_CXX=clang++-17
+CLANG_EXPECT="clang version 17.0.6"
+PYTHON=/usr/bin/python3.10
+PYTHON_EXPECT="Python 3.10.12"
+# The tools, relative to the prefix. In the in-tree build every tool goes to the build tree's bin directory
+# (CMakeLists.txt:38 sets LLVM_RUNTIME_OUTPUT_INTDIR to ${CMAKE_BINARY_DIR}/bin), so cgeist, finding clang's resource
+# directory from its own path when given no -resource-dir (tools/cgeist/Lib/clang-mlir.cc:6027-6031), reads
+# <bin>/../lib/clang/18 (cmake/Modules/GetClangResourceDir.cmake:18), where clang's builtin headers are. P5 runs them
+# there (task P5.6, the MLIR tool wrappers; P5.7, the cgeist frontend). cgeist stops at MLIR in P5's use (-S); without
+# it, cgeist writes LLVM IR to a /tmp file (tools/cgeist/driver.cc:1200-1202).
+CGEIST=build/bin/cgeist
+POLYGEIST_OPT=build/bin/polygeist-opt
+MLIR_OPT=build/bin/mlir-opt
+MLIR_TRANSLATE=build/bin/mlir-translate
+LLVM_CLANG=build/bin/clang
+# Text the tools' --version output holds. cgeist parses its options with cl::ParseCommandLineOptions
+# (tools/cgeist/driver.cc:521), polygeist-opt calls MlirOptMain (tools/polygeist-opt/polygeist-opt.cpp:110), and
+# neither they nor the MLIR tools add a version printer, so all four print LLVM's: "<PACKAGE_NAME> version
+# <PACKAGE_VERSION>" on its second line (llvm/lib/Support/CommandLine.cpp:2545-2556), PACKAGE_NAME LLVM
+# (llvm/CMakeLists.txt:336) and PACKAGE_VERSION 18.0.0git (llvm/CMakeLists.txt:11-26). That clang prints "clang
+# version " and CLANG_VERSION (clang/lib/Basic/Version.cpp:92-105), which leaves the git suffix out
+# (clang/CMakeLists.txt:293-294). It then appends "(<origin URL> <HEAD>)" read from the checkout's git metadata at build
+# time (LLVM_APPEND_VC_REV, on by default, llvm/CMakeLists.txt:325-326; llvm/cmake/modules/VersionFromVCS.cmake:17-46),
+# through `git remote get-url`, which applies the host's URL rewrites, so the pin expects the part the source fixes;
+# the script prints the whole line, which the first install's summary records.
+EXPECT_VERSION="LLVM version 18.0.0git"
+LLVM_CLANG_EXPECT="clang version 18.0.0"
+# Space, PROJECTED, not measured (plans/spikes/p5-mlir-pins.md, Results 5, configuration A, upper ends, rounded up to
+# whole KiB). INSTALL_KIB is the Polygeist stack, 19.15 GiB, the RESERVE_KIB toolchains/tt-mlir.pin holds for it;
+# RESERVE_KIB is the tt-mlir stack, 23.30 GiB, tt-mlir.pin's INSTALL_KIB. The space check plans for both stacks
+# together, 42.45 GiB, under the stop line (bible, Toolchain Pins, MLIR stacks; OQ-049): INSTALL_KIB alone once
+# tt-mlir's install is complete, since du of the scratch root then counts that stack, and INSTALL_KIB plus RESERVE_KIB
+# otherwise. The install's du before and after measures this stack.
+INSTALL_KIB=20080231
+RESERVE_KIB=24431821

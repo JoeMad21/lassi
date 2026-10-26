@@ -1,0 +1,12 @@
+# The sources the configure of the pinned Polygeist install fetched (task P5.5; bible Toolchain Pins): a line for
+# line copy of the install's lassi-fetched-sources.txt, which toolchains/polygeist.sh (record_fetched_sources) writes
+# after the in-tree configure of LLVM, clang, MLIR, and Polygeist. It lists FetchContent's and ExternalProject's
+# source directories in the build tree. Each line is <path in the install> git <commit> changed=<tracked files that
+# differ from the commit>, or <path in the install> files-sha256 <sha256 of the unpacked files>, the two forms of
+# toolchains/tt-metal-cpm-sources.txt; the one line none means the configure fetched nothing, which
+# plans/spikes/p5-mlir-pins.md (Results 5) expects with Polymer off.
+# PLACEHOLDER until the first install records the list. That install compares nothing; until its list is copied
+# here and committed, every later run of the script refuses the install (check_fetched_sources), and so do the
+# remote tests (tests/toolchains/test_polygeist_remote.py). A change here is a pin change, recorded in the bible's
+# Decision Log.
+PLACEHOLDER

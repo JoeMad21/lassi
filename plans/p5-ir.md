@@ -98,6 +98,7 @@ PHASE-NOTES P5 items, by task: owner review first, done (above); Polygeist and t
   - Trial.toolchain_pins records llvm, polygeist, and tt_mlir with no ambiguity when two LLVMs exist (a Result Record edit if the llvm field must split; trial.md and the Parquet mirror follow the field list, and older records load). `results/p5-polygeist-install/` with the local provenance writer's provenance.json and a summary.md naming the workstation; Toolchain Pins with a Decision Log entry.
 - Files: `toolchains/`, `tests/toolchains/`, `results/p5-polygeist-install/`, `lassi/core/record.py` and `tests/core/` (golden trial.md, the record and Parquet tests; only if the llvm field splits), `docs/BIBLE.md`.
 - Host: as P5.4's local route, job name p5-polygeist; unattended after P5.4's build (decision 4 (b)). Depends: P5.1, P5.4.
+- Host change, 2026-10-26: the owner allowed builds that need no accelerator on alpha01 in the working session ("If they don't require the hardware accelerators, you can build them now."), so this install runs there as one big rx job from a clean commit, as P5.4's did (rx 20261025-233336-tt-mlir-b1f8), with `rx pull` provenance. The space check plans this stack alone when tt-mlir's install is complete, and both stacks otherwise.
 
 ### P5.6 IR levels: parse, verify, normalize
 - Bible: IR Strategy (levels), Level Rules, Corpus Pipeline (Normalize), Component Interfaces (IRLevel; Toolchain diagnostics records), Repository Layout (ir/), Agent Rules 3 and 11.
