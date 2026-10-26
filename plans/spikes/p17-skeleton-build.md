@@ -41,3 +41,10 @@ host.cpp as it stood then (sha256 b29049b7...) compiled and linked against the p
 ttmetal-host command line, with no error and no warning. The committed host.cpp adds one comment line above main
 (sha256 5756f7da..., MANIFEST.yaml), so the clean-commit compile is still to be run. Nothing was run on ttsim: the
 skeleton's placeholder kernel paths hold no kernel.
+
+## The clean-commit compile
+
+From the clean commit 36f263b (the owner approved it in the working session), the same script compiled host.cpp as
+committed (sha256 5756f7da...) with exit 0, no error, and no warning: rx
+20261025-202808-desktop-8r113ei-detached-36f263b3-2007, [MEASURED] with its provenance in
+results/p17-skeleton-build/.

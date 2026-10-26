@@ -182,6 +182,6 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.30 | DONE | Exact declarations at generation, nearest names, and the full API pack (opt-in) | P17.26 | lookup at generation (core, core_api.txt), nearest names, tt-metalium-5280a9cf-full; bible master rev 372 |
 | P17.31 | READY | The development split for tt-pairs-v0 (OQ-083 (b)) | - |  |
 | P17.32 | READY | The night window of 2026-10-25: the sweep with the new features on 70B-class models | P17.29,P17.30 |  |
-| P17.33 | ACTIVE | The C++ -> TT host skeleton (opt-in) | P17.29 | built and audited (PASS on re-audit); bible rev 420; the compile from a clean commit on alpha01 waits for the owner's yes (exploratory dirty-snapshot compile passed, plans/spikes/p17-skeleton-build.md) |
+| P17.33 | DONE | The C++ -> TT host skeleton (opt-in) | P17.29 | skeleton tt-host-skeleton-v0 and the skeleton section; compiles at the pin from clean commit 36f263b (rx 20261025-202808-desktop-8r113ei-detached-36f263b3-2007, results/p17-skeleton-build); bible rev 423 |
 | P17.34 | READY | The next window's sweep (sweep8) | P17.27,P17.33,P17.35 |  |
 | P17.35 | READY | Simulator gaps: reported as not verifiable, and fed back (OQ-098) | - |  |
