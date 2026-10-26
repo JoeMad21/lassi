@@ -44,6 +44,12 @@ without it keeps its resolved recipe and hash, and in step 7 every key required 
 EXAMPLES_MAX_CHARS, prompts [generate] or [generate, correct]) and the section refused under faithful: true, set or
 inherited (_check_examples).
 
+The optional `skeleton` section (SKELETON; OQ-096 (a)) is never materialized either, so a recipe without it keeps
+its resolved recipe and hash. In step 7 name and prompts are required (prompts [generate] or [generate, correct]),
+and _bind_skeleton refuses the section under faithful: true, set or inherited, then reads the skeleton by name
+(lassi.prompts.skeletons), refusing one that does not match its manifest, a stated skeleton.sha256 that is not its
+sha256, and a direction whose target is not its language, and enters its sha256 at skeleton.sha256.
+
 `executor` has two forms (task P4.5). The single form is a kind section, `{kind: <name>, <config>...}`,
 binding one Executor at executor.kind for every language. The per-language form is a non-empty mapping
 without `kind`, from a language to an Executor name (`cuda: native`) or to a kind section with that
@@ -91,6 +97,7 @@ from lassi.core.capabilities import (
 )
 from lassi.core.devices import DeviceSectionError, parse_device
 from lassi.core.registry import DEFAULT_REGISTRY, Binding, Registry, RegistryError, check_bindings, device_path
+from lassi.prompts import skeletons as skeleton_files
 
 # The value of loop.max_corrections that means no cap (upstream LASSI's loop; bible LASSI quirk table).
 UNCAPPED = "uncapped"
@@ -220,6 +227,19 @@ EXAMPLES_GENERATE = "generate"
 EXAMPLES_CORRECT = "correct"
 EXAMPLES_PROMPTS = (EXAMPLES_GENERATE, EXAMPLES_CORRECT)
 EXAMPLES_MAX_CHARS = (1000, 64000)
+
+# The optional skeleton section (OQ-096, option (a), 2026-10-25): a host program skeleton, a directory under
+# assets/skeletons/ (lassi.prompts.skeletons), whose block goes before the prompts it lists (lassi.core.stages). Off
+# when absent, and never materialized, so a recipe without it keeps its resolved recipe and hash. Upstream's prompts
+# carry no skeleton, so it is refused under faithful: true (_bind_skeleton). Two keys are required: name (a plain
+# name) and prompts (distinct SKELETON_PROMPTS holding generate: [generate] or [generate, correct]). The loader reads
+# the skeleton by name, refusing one that does not match its manifest, and enters its sha256 at skeleton.sha256,
+# which a recipe may state and which must then match, so the recipe hash covers the skeleton's bytes.
+SKELETON = "skeleton"
+SKELETON_GENERATE = "generate"
+SKELETON_CORRECT = "correct"
+SKELETON_PROMPTS = (SKELETON_GENERATE, SKELETON_CORRECT)
+SKELETON_SHA256_KEY = "sha256"
 
 # The opt-in sampling key llm.sampling.reasoning_effort (OQ-080; bible Serving Rules, reasoning effort): one of
 # REASONING_EFFORTS, which a backend declaring the capability of that name takes (lassi.core.capabilities). Off when
@@ -594,9 +614,19 @@ def _is_lookup_prompts(value: Any) -> bool:
 
 def _is_examples_prompts(value: Any) -> bool:
     """Return True for a list of distinct names among EXAMPLES_PROMPTS that holds EXAMPLES_GENERATE."""
-    if not isinstance(value, list) or EXAMPLES_GENERATE not in value:
+    return _holds_generate(value, EXAMPLES_PROMPTS, EXAMPLES_GENERATE)
+
+
+def _is_skeleton_prompts(value: Any) -> bool:
+    """Return True for a list of distinct names among SKELETON_PROMPTS that holds SKELETON_GENERATE."""
+    return _holds_generate(value, SKELETON_PROMPTS, SKELETON_GENERATE)
+
+
+def _holds_generate(value: Any, names: Sequence[str], generate: str) -> bool:
+    """Return True for a list of distinct names among `names` that holds `generate`."""
+    if not isinstance(value, list) or generate not in value:
         return False
-    if not all(isinstance(item, str) and item in EXAMPLES_PROMPTS for item in value):
+    if not all(isinstance(item, str) and item in names for item in value):
         return False
     return len(set(value)) == len(value)
 
@@ -691,6 +721,22 @@ _EXAMPLES = _Fields(
     },
     required=frozenset({"pack", "max_chars", "prompts"}),
 )
+# The skeleton section (OQ-096 (a); SKELETON): name and prompts required; sha256 is the loader's record of the
+# skeleton's digest, which a recipe may state (_bind_skeleton).
+_SKELETON = _Fields(
+    {
+        "name": _Leaf(
+            f"a skeleton name matching {_INDEX_TEXT.pattern}, a directory under assets/skeletons holding MANIFEST.yaml",
+            lambda value: isinstance(value, str) and _INDEX_TEXT.fullmatch(value) is not None,
+        ),
+        "prompts": _Leaf(
+            f"a list of distinct names among {', '.join(SKELETON_PROMPTS)} that holds {SKELETON_GENERATE}",
+            _is_skeleton_prompts,
+        ),
+        SKELETON_SHA256_KEY: _SHA256,
+    },
+    required=frozenset({"name", "prompts"}),
+)
 
 # Every key a run recipe may hold and its type. Inside a fixed mapping every key is optional unless REQUIRED
 # names it, and any other key is unknown. A train-only key (TRAIN_SCHEMA's base_model, method, trainer, data, and
@@ -729,6 +775,7 @@ SCHEMA = _Fields(
         RETRIEVAL: _RETRIEVAL,  # opt-in documentation passages (task P17.22); absent means off
         LOOKUP: _LOOKUP,  # opt-in declarations from the context pack (task P17.26); absent means off
         EXAMPLES: _EXAMPLES,  # opt-in worked examples from a pack (OQ-083 (b)); absent means off
+        SKELETON: _SKELETON,  # opt-in host program skeleton (OQ-096 (a)); absent means off
         "toolchain": _OpenMap(_STR),
         "stages": _ListOf(_STR, non_empty=True),
         "executor": _EXECUTOR,
@@ -896,6 +943,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     _check_retrieval(path, data)
     _check_lookup(path, data)
     _check_examples(path, data)
+    _bind_skeleton(path, data)
     _check_sampling(path, data)
     bindings = _bindings(data)
     registry = DEFAULT_REGISTRY if registry is None else registry
@@ -1517,6 +1565,52 @@ def _check_examples(path: Path, data: Mapping[str, Any]) -> None:
             f"{path}: {EXAMPLES} is set, but faithful: true reproduces upstream, whose prompts carry no worked "
             f"examples; a recipe with faithful: true may not set it, so remove {EXAMPLES} or set faithful: false"
         )
+
+
+def _bind_skeleton(path: Path, data: dict[str, Any]) -> None:
+    """Check the `skeleton` section and enter the skeleton's sha256 at skeleton.sha256 (OQ-096 (a); SKELETON).
+
+    Runs after the type check, so a section that is present is a mapping of
+    its keys. In order: the section is refused under faithful: true,
+    inherited or not, since upstream's prompts carry no skeleton (Design
+    Principle 4, Agent Rule 4); the skeleton named is read from
+    <assets root>/skeletons/<name> (lassi.prompts.skeletons load_skeleton:
+    its files must match its manifest and its block must render), each
+    problem refused naming skeleton.name; a stated skeleton.sha256 must be
+    the skeleton's; and every direction's target must be the skeleton's
+    language. The sha256 then enters the section, so the resolved recipe
+    and its hash name the skeleton's bytes (Agent Rule 10).
+    """
+    section = data.get(SKELETON)
+    if not isinstance(section, dict):
+        return
+    if data["faithful"] is True:
+        raise RecipeError(
+            f"{path}: {SKELETON} is set, but faithful: true reproduces upstream, whose prompts carry no host program "
+            f"skeleton; a recipe with faithful: true may not set it, so remove {SKELETON} or set faithful: false"
+        )
+    key = f"{SKELETON}.name"
+    try:
+        skeleton = skeleton_files.load_skeleton(skeleton_files.skeleton_dir(section["name"]))
+    except ValueError as error:
+        raise RecipeError(
+            f"{path}: {key} {section['name']!r} names no skeleton that loads: {error}; name a directory under "
+            f"assets/{skeleton_files.SKELETONS_DIR}/ that holds {skeleton_files.MANIFEST} and its files"
+        ) from None
+    stated = section.get(SKELETON_SHA256_KEY)
+    if stated is not None and stated != skeleton.sha256:
+        raise RecipeError(
+            f"{path}: {SKELETON}.{SKELETON_SHA256_KEY} is {stated}, but the skeleton {skeleton.name}'s sha256 is "
+            f"{skeleton.sha256}; it records the skeleton's bytes, so correct it or remove it"
+        )
+    others = sorted({direction["target"] for direction in data["directions"]} - {skeleton.language})
+    if others:
+        raise RecipeError(
+            f"{path}: {SKELETON} names {skeleton.name}, a skeleton of {skeleton.language!r} programs, but the "
+            f"directions also target {', '.join(repr(name) for name in others)}; a skeleton goes only before prompts "
+            f"for its own language, so run those directions from a recipe without {SKELETON}"
+        )
+    section[SKELETON_SHA256_KEY] = skeleton.sha256
 
 
 def _check_sampling(path: Path, data: Mapping[str, Any]) -> None:

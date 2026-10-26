@@ -289,6 +289,26 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: projects/lassi-demo/sweep7/, plans/runs/night/, plans/runs/rngd-sweep/models10.tsv, results/, plans/runs/.
 - Host: alpha01 in the owner's window. Depends: P17.29, P17.30.
 
+### P17.33 The C++ -> TT host skeleton (opt-in)
+- Added on 2026-10-25 after the owner's "I cannot overstate how important that we get some meaningful results": in the C++ -> TT trials of 2026-10-25, 79 of 82 ended at the correction cap at S1 (results/rngd-matrix-20261025/summary.md); the host program is the model's only file, since the harness provides the kernels. OQ-096 (skeleton (a)): item-agnostic only, from the pinned headers and tt-metal programming examples outside the five tt-pairs-v0 items, never derived from or compared to their reference host programs. tt-pairs-v0 is a development set (OQ-083 (b)).
+- Bible: Project Recipes (Notes: Worked examples, and a new Skeleton bullet), Component Interfaces (the context blocks), Result Record (Trial.requests), Harness Contract (the CPU -> TT guard limits), Repository Layout, Agent Rules 1, 3, 4, 5, and 10.
+- Accept: assets/skeletons/tt-host-skeleton-v0/ holds host.cpp (a complete host program at the pin with named BLANK blocks of valid placeholder code), block.txt, and MANIFEST.yaml (sha256 and bytes); a recipe section `skeleton: {name, prompts}` (refused under faithful: true; validated by name against the manifest; its sha256 in the resolved recipe and hash; a direction whose target is not the skeleton's language refused) renders the block in the listed prompts; a recipe without it keeps its hash; the runner refuses a skeleton changed after load before any directory exists; host.cpp compiles at the pin with the ttmetal-host command line from a clean commit on alpha01 (an exploratory compile from a dirty snapshot passed: rx 20261025-191541-desktop-8r113ei-p16-adversarial-d4c2, never [MEASURED]).
+- Files: assets/skeletons/, lassi/prompts/skeletons.py, lassi/core/recipe.py, lassi/core/stages.py, lassi/core/runner.py, tests/core/, tests/prompts/, tests/toolchains/, lassi/toolchains/ttmetal_guard.py (its limits docstring), plans/runs/night/skeleton_build.sh, plans/spikes/p17-skeleton-build.md, docs/BIBLE.md.
+- Host: Windows; alpha01 for the compile from a clean commit, with the owner's yes in a working session (Agent Rule 17); tonight's one approved build (OQ-092's answer, recorded on branch p9-ee) ran from a dirty snapshot. Depends: P17.29.
+
+### P17.34 The next window's sweep (sweep8)
+- Added on 2026-10-25: projects/lassi-demo/sweep8 on both night models: cpp -> tt on tt-host-v1 with the worked examples (control), with the skeleton, and with every feature plus the skeleton; tt -> cpp on tt-host-v0 (control) and tt-host-v1 (P17.27). Every recipe corrects a wrong output until the cap (OQ-098), and sets the simulator-gap correction once P17.35 lands.
+- Accept: every sweep8 recipe loads (tests/core/test_faithful_bindings.py), a night script runs them with provenance, and the run's tables come back as development results (OQ-083 (b)).
+- Files: projects/lassi-demo/sweep8/, plans/runs/night/, plans/runs/.
+- Host: Windows; alpha01 in the next owner window. Depends: P17.27, P17.33, P17.35.
+
+### P17.35 Simulator gaps: reported as not verifiable, and fed back (OQ-098)
+- Added on 2026-10-25 (OQ-098, simulator gaps (a)): a simulator gap today ends the trial with sim-gap and no correction (lassi/core/stages.py). The owner chose: record the attempt as built but not verifiable on ttsim (never a fail, listed for a later human-started hardware check, Agent Rule 9) and, as a named opt-in, tell the model which construct the simulator cannot run and continue under the same cap.
+- Bible: Project Recipes (Notes: the loop's opt-ins), Result Record, Evaluation Protocol (Reporting Rules), Agent Rules 1, 2, 4, and 9.
+- Accept: an opt-in loop key (refused under faithful: true; off when absent, so earlier recipes keep their hashes) feeds a simulator gap back with its class under the same count and cap, through the template set's run-error correction; the sim-gap attempt keeps its record; a report lists every attempt that hit a gap as built but not verifiable on ttsim, counted apart from failures; tests with fakes.
+- Files: lassi/core/stages.py, lassi/core/recipe.py, plans/runs/rngd-sweep/tabulate.py, tests/core/, docs/BIBLE.md.
+- Host: Windows. Depends: none.
+
 ### P17.11 Gate part (a): recipes and the hardware-free evidence
 - Bible: Build Roadmap (P17 row, Gate part (a)), Agent Rules 1, 7, and 10; AGENTS.md Phase Gate and Results.
 - Accept, from one clean commit on alpha01, with graphics off:

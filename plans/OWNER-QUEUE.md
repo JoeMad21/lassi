@@ -1144,6 +1144,18 @@ Options:
 Recommendation: (a). The backup and deletion scripts are on the workstation, outside the repository, in C:/Users/Joseph/alpha01-backup-20261025 (backup.sh, then delete-on-alpha01.sh, which asks before each section and offers the models only with MODELS=yes); the agent deletes nothing there.
 Answer: Owner's choice (in the working session, 2026-10-25, about 16:40 EDT; recorded by the agent), after removing the models of 8B to 60B and the home directory's non-project files themselves (a listing at 13:33 on alpha01's clock, rx 20261025-133317-exec-489c, read 346 GB free and a 94G home): "Let's do Llama 70B and GPT-OSS, save the other large models for later testing suggestions." Tonight: furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic and furiosa-ai/gpt-oss-120b at v2026.4 (272.4 GB). For later testing: K-EXAONE-236B-A23B-NVFP4A16 (150.7 GB), Solar-Open-100B-NVFP4A16 (68.6 GB), and EXAONE-4.5-33B-FP8 (43.9 GB), each at v2026.4 on 4 RNGD cards; Qwen3.6-27B-FP8 and Qwen3.6-35B-A3B-FP8 need the v2026.5 SDK, a pin change (Agent Rule 10).
 
+## OQ-096 Raising C++ -> TT Results: Tonight's Directions And The Host Skeleton's Sources
+State: ANSWERED
+Kind: decision
+Blocks: the C++ -> TT host skeleton task (to be planned on p16-adversarial with P17's tasks)
+Evidence: results/rngd-matrix-20261025/summary.md (79 of 82 trials ended at the correction cap with a build error); results/build-errors-20261025/summary.md (API-shape buckets; 121 of 134 trials repeat a bucket across corrections); results/rngd-matrix-20261025/trials.tsv (TT -> C++ trials reach S5, several at alignment 0.0).
+Question: The owner, 2026-10-25, about 19:30 EDT: "I cannot overstate how important that we get some meaningful results". Should tonight's gpt-oss-120b half also run TT -> C++ trials, and what may a C++ -> TT host skeleton (a generic host program with every API call correct and blanks to fill) be built from?
+Options:
+- Directions: (a) add a TT -> C++ share; (b) keep C++ -> TT only (OQ-086).
+- Skeleton: (a) item-agnostic only, from the pinned headers and tt-metal programming examples outside the five tt-pairs-v0 items; (b) also leave-one-out reference host programs of the other items, labeled so.
+Recommendation: directions (a); skeleton (a).
+Answer: Owner's choice (in the working session, 2026-10-25, about 19:35 EDT; recorded by the agent): "Keep C++ -> TT only"; skeleton "Item-agnostic only (Recommended)".
+
 ## OQ-098 Wrong Outputs And Simulator Gaps In The Correction Loop
 State: ANSWERED
 Kind: decision

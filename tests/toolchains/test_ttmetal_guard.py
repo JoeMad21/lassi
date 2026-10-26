@@ -4334,3 +4334,34 @@ def test_limit_false_positive_a_member_or_binding_of_an_input_object_carries_all
     shape_free = body.replace("A.rows", "n").replace("A.values.size()", "n").replace("A.first", "n")
     shape_free = shape_free.replace("untilize_nfaces(res, rows,", "untilize_nfaces(res, n,")
     assert_clear(read({"main.cpp": program(shape_free, helpers=helpers.replace("v * scale", "v"), tail=tail)}))
+
+
+ARRAY_READ = (
+    "    lassi_io_array inputs[1] = {};\n"
+    "    if (lassi_io_read(argv[1], &inputs[0]) != 0) {\n"
+    "        return 1;\n"
+    "    }\n"
+)
+ARRAY_SOURCE = "lassi_io_read(argv[1], &inputs[0])"
+NAMED_READ = "    lassi_io_array in0 = {};\n    if (lassi_io_read(argv[1], &in0) != 0) {\n        return 1;\n    }\n"
+
+
+@pytest.mark.parametrize(
+    "use",
+    [
+        CLEAN_BODY + "    c[0] = static_cast<float>(inputs[0].count);\n",
+        READ_BACK + "    res = untilize_nfaces(res, inputs[0].count, 1u);\n" + DEVICE_TO_C,
+    ],
+    ids=["count-copied-into-the-output", "count-passed-to-a-library-call"],
+)
+def test_limit_false_positive_the_metadata_of_an_array_element_carries_all_the_arrays_input(use: str) -> None:
+    # Only a METADATA member read straight from a name (a.count, p->count) is no mention of its object; the base of
+    # inputs[0].count is the array, so an element's count reads as all of the array's input. One named
+    # lassi_io_array variable per input, or a reference or a pointer to the element, reads clear.
+    text = program(ARRAY_READ + use)
+    assert_flow(read({"main.cpp": text}), text, source=ARRAY_SOURCE)
+    named = use.replace("inputs[0].count", "in0.count")
+    assert_clear(read({"main.cpp": program(NAMED_READ + named)}))
+    assert_clear(read({"main.cpp": program(ARRAY_READ + "    const lassi_io_array& in0 = inputs[0];\n" + named)}))
+    pointed = ARRAY_READ + "    const lassi_io_array* p = &inputs[0];\n" + use.replace("inputs[0].count", "p->count")
+    assert_clear(read({"main.cpp": program(pointed)}))

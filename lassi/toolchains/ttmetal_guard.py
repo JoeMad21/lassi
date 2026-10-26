@@ -222,6 +222,11 @@ False positives, which read True, each costing the attempt R = -1:
   passed to a library call on the device result (untilize_nfaces) or
   copied into the output object, or a scalar member used in the
   conversion, reads True;
+- the METADATA member of an array element (inputs[0].count), read as all
+  of the array's input, since the exemption holds only for metadata read
+  from a name (in0.count) or a pointer (p->count), so a size so taken and
+  passed to a library call on the device result (untilize_nfaces) or
+  copied into the output reads True;
 - a pointer re-pointed from an input buffer to an output buffer (alias
   classes never split);
 - an output X initialized from input data and then overwritten by

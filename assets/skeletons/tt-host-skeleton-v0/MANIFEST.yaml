@@ -1,0 +1,19 @@
+# The manifest of tt-host-skeleton-v0, an item-agnostic tt-metal host program skeleton (OQ-096, option (a), the owner's
+# answer of 2026-10-25), written by hand from the pinned tt-metalium headers and tt-metal's add_2_integers_in_riscv
+# and shard_data_rm programming examples, never from a tt-pairs-v0 item. A run recipe carries it with its skeleton
+# section (lassi.core.recipe SKELETON); lassi.prompts.skeletons reads it only when both files match this manifest.
+# language is the target language of every direction that carries it; pin and commit name the toolchain pin its
+# calls are written for. sha256 is the sha256 of the lines '<sha256>  <path>' of the files in order; a change to
+# either file changes its sha256 and bytes here, and the sha256 below.
+skeleton: tt-host-skeleton-v0
+language: tt
+pin: tt-metal
+commit: 5280a9cfb00998fd49667a29523d03aee905c129
+files:
+- path: host.cpp
+  sha256: 5756f7dab5783acf29886a846fe644aa50bd33962fe1bd2135d02e88e0917515
+  bytes: 10614
+- path: block.txt
+  sha256: d1f0bd214e56cf7228c063ef58833bc8e466ddfc3a67163bf926c66b2defe453
+  bytes: 1351
+sha256: 313151639efa7ba70274c4f7be9d4375e9ff02bc733e7940693cdbfbba01a0da

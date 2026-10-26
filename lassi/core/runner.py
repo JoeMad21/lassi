@@ -67,6 +67,10 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    missing or does not render (_check_examples), and a pack whose
    MANIFEST.yaml is missing or whose files are missing or fail it
    (_examples_pack, which loads the pack once per run);
+   the skeleton section (OQ-096 (a)) with a fragment set
+   (_check_skeleton), and a skeleton that no longer loads or whose sha256
+   is not the resolved recipe's skeleton.sha256 (_run_skeleton, which loads
+   it once per run);
    loop.restart_after (task P17.25) with a fragment set
    (_check_restart); a project (the recipe's `project`, the first
    trial id segment) that is not one plain segment or that names an entry
@@ -384,6 +388,8 @@ from lassi.core.recipe import (
     RECORDING_SHA256_KEY,
     RESTART_AFTER,
     RETRIEVAL,
+    SKELETON,
+    SKELETON_SHA256_KEY,
     UNCAPPED,
     Recipe,
     RecipeError,
@@ -429,6 +435,7 @@ from lassi.llm import ServingError, model_info, serving_line
 from lassi.prompts import assets as prompt_assets
 from lassi.prompts import examples as examples_pack
 from lassi.prompts import load_recipe_assets, rag_corpus, render
+from lassi.prompts import skeletons as skeleton_files
 from lassi.prompts.retrieval import GENERATOR as INDEX_GENERATOR
 from lassi.prompts.retrieval import Index, load_index
 from lassi.scoring.run_scoring import (
@@ -647,7 +654,9 @@ class _Run:
     the recipe binds none. `retrieval` is the run's one documentation index
     (_retrieval_index), or None when the recipe sets no retrieval section.
     `examples` is the run's worked examples pack (_examples_pack), empty
-    when the recipe sets no examples section.
+    when the recipe sets no examples section. `skeleton` is the run's host
+    program skeleton (_run_skeleton), or None when the recipe sets no
+    skeleton section.
     """
 
     recipe: Recipe
@@ -671,6 +680,7 @@ class _Run:
     profiler: Profiler | None = None
     retrieval: Index | None = None
     examples: tuple[examples_pack.Example, ...] = ()
+    skeleton: skeleton_files.Skeleton | None = None
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -726,6 +736,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     _check_plan(recipe, registry, settings, bench)
     retrieval = _retrieval_index(recipe)
     examples = _examples_pack(recipe)
+    skeleton = _run_skeleton(recipe)
     _check_adversary(recipe, registry, settings, bench)
     devices = probe_devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
     _check_one_role(recipe, registry, devices)
@@ -766,6 +777,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         profiler=profiler,
         retrieval=retrieval,
         examples=examples,
+        skeleton=skeleton,
     )
 
 
@@ -1367,6 +1379,33 @@ def _examples_pack(recipe: Recipe) -> tuple[examples_pack.Example, ...]:
         raise RunError(f"{where}: {error}") from error
 
 
+def _run_skeleton(recipe: Recipe) -> skeleton_files.Skeleton | None:
+    """Load the host program skeleton the recipe's skeleton section names, once per run; None without the section.
+
+    The loader read it already and entered its sha256 at skeleton.sha256
+    (lassi.core.recipe _bind_skeleton); it is read again here, from
+    <assets root>/skeletons/<skeleton.name>, and kept only when it still
+    loads and its sha256 is the resolved recipe's, so every trial's prompts
+    carry the bytes the recipe hash names. Either failure is a RunError
+    naming skeleton.name, raised before any directory exists.
+    """
+    section = recipe.data.get(SKELETON)
+    if section is None:
+        return None
+    where = f"{recipe.path}: {SKELETON}.name {section['name']!r}"
+    try:
+        skeleton = skeleton_files.load_skeleton(skeleton_files.skeleton_dir(section["name"]))
+    except (OSError, ValueError) as error:
+        raise RunError(f"{where}: {error}") from error
+    if skeleton.sha256 != section[SKELETON_SHA256_KEY]:
+        raise RunError(
+            f"{where}: the skeleton's sha256 is now {skeleton.sha256}, not the recipe's {SKELETON}."
+            f"{SKELETON_SHA256_KEY} {section[SKELETON_SHA256_KEY]}; it changed after the recipe loaded, so load the "
+            "recipe again"
+        )
+    return skeleton
+
+
 def resolve_runs_root(option: Path | None, recipe: Recipe) -> Path:
     """Return the runs root: `option`, else $LASSI_RUNS_ROOT, else the recipe's runs_root; absolute, outside the repo.
 
@@ -1816,6 +1855,7 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     _check_retrieval_prompts(recipe, settings)
     _check_lookup(recipe, settings)
     _check_examples(recipe, settings)
+    _check_skeleton(recipe, settings)
     _check_restart(recipe, settings)
 
 
@@ -1938,6 +1978,21 @@ def _check_examples(recipe: Recipe, settings: _Settings) -> None:
             f"prompts, which carry no worked examples; use a template set or remove {EXAMPLES}"
         )
     _check_templates(recipe, settings, f"{EXAMPLES} is set", EXAMPLE_TEMPLATES)
+
+
+def _check_skeleton(recipe: Recipe, settings: _Settings) -> None:
+    """Refuse the skeleton section with a fragment prompt set (OQ-096 (a); lassi.core.stages, the skeleton block).
+
+    Upstream's prompts hold no skeleton, so a fragment set cannot carry it.
+    The block's template is the skeleton's own block.txt, which the loader
+    rendered, so a template set needs no template for it. A recipe without
+    the section is never checked.
+    """
+    if SKELETON in recipe.data and settings.fragments:
+        raise RunError(
+            f"{recipe.path}: {SKELETON} is set, but {settings.prompts!r} is a fragment prompt set, upstream's "
+            f"prompts, which carry no host program skeleton; use a template set or remove {SKELETON}"
+        )
 
 
 def _check_templates(
@@ -2908,6 +2963,7 @@ def _context(run: _Run, backend: Any, direction: Direction, item: str) -> RunCon
         registry=run.registry,
         retrieval=run.retrieval,
         examples=run.examples,
+        skeleton=run.skeleton,
     )
 
 

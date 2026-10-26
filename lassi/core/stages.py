@@ -272,6 +272,20 @@ example carried there is no block. A request that carried examples gets
 one EXAMPLES_CODE note on its Request (examples_note); without the section
 a prompt is byte for byte what it was before.
 
+Host program skeleton (OQ-096, option (a), the owner's answer of
+2026-10-25). With the recipe's skeleton section (lassi.core.recipe, an
+opt-in the loader refuses under faithful: true, for a skeleton that does
+not match its manifest, and for a direction to another language, and the
+runner refuses with a fragment set), the generation prompt, and each
+compile correction when skeleton.prompts lists correct, get the skeleton
+block last, after every other block and so right before the prompt that
+holds the source program: the run's skeleton (RunContext.skeleton,
+lassi.prompts.skeletons, loaded once per run) rendered with its own
+block.txt (block_text). A run-error correction and an oracle mismatch's
+correction get none. A request that carried it gets one SKELETON_CODE note
+on its Request (skeleton_note); without the section a prompt is byte for
+byte what it was before.
+
 A context stage names the Trial.context field it fills in `fills_context`,
 and generate names the fields its fragment prompt joins, when a pack serves
 the target, in `joins_context`; the runner checks that an earlier stage
@@ -439,6 +453,9 @@ from lassi.core.recipe import (
     RETRIEVAL,
     RETRIEVAL_CORRECT,
     RETRIEVAL_GENERATE,
+    SKELETON,
+    SKELETON_CORRECT,
+    SKELETON_GENERATE,
     Recipe,
 )
 from lassi.core.record import (
@@ -468,6 +485,7 @@ from lassi.prompts import render
 from lassi.prompts.examples import Example
 from lassi.prompts.retrieval import SCORE_DIGITS, Index, Passage, query_from_diagnostic
 from lassi.prompts.retrieval import _identifiers as message_identifiers
+from lassi.prompts.skeletons import Skeleton, block_text
 
 # The purpose every bench read here serves: these stages evaluate, they never train (Agent Rule 5).
 PURPOSE = "eval"
@@ -659,6 +677,9 @@ EXAMPLE_PROMPT = "example"
 EXAMPLE_FIELDS = ("name", "files")
 EXAMPLE_TEMPLATES = {EXAMPLES_PROMPT: EXAMPLES_FIELDS, EXAMPLE_PROMPT: EXAMPLE_FIELDS}
 EXAMPLES_CODE = "examples"
+# The code of the note on a request that carried the host program skeleton (OQ-096 (a)); the block's template is the
+# skeleton's own block.txt (lassi.prompts.skeletons), not a template of the prompt set.
+SKELETON_CODE = "skeleton"
 # The line that heads each header part of a context pack's API reference: tools/build_tt_context.py writes it before
 # the declarations of header H (the include line of assets/context/tt-metalium-5280a9cf.head.txt).
 _INCLUDE_LINE = re.compile(r"^// ==== #include <([^<>\n]+)> ====$", re.MULTILINE)
@@ -748,6 +769,8 @@ class RunContext:
     sets retrieval and shared read-only by every trial, else None.
     `examples` is the run's worked examples pack (OQ-083 (b)), in pack
     order, loaded once per run when the recipe sets examples, else empty.
+    `skeleton` is the run's host program skeleton (OQ-096 (a)), loaded
+    once per run when the recipe sets skeleton, else None.
     """
 
     recipe: Recipe
@@ -772,6 +795,7 @@ class RunContext:
     registry: Registry | None = None
     retrieval: Index | None = None
     examples: tuple[Example, ...] = ()
+    skeleton: Skeleton | None = None
 
 
 def executor_for(context: RunContext, language: str) -> Executor:
@@ -1266,6 +1290,7 @@ def with_context_blocks(
     undeclared: Sequence[tuple[str, tuple[str, ...]]] = (),
     core: Sequence[Declaration] = (),
     examples: Sequence[Example] = (),
+    skeleton: Skeleton | None = None,
 ) -> tuple[str, list[Diagnostic]]:
     """Return a template set's `prompt` with its context blocks before it, and the notes its request gets.
 
@@ -1280,7 +1305,9 @@ def with_context_blocks(
     looked-up block (looked_up_block), for which it gets one note
     (looked_up_note), or, for the generation prompt, when `core`
     (core_declarations) holds any, the core block of them (looked_up_block
-    with CORE_API_PROMPT), last, with one core_note.
+    with CORE_API_PROMPT), with one core_note, and last, when `skeleton` is
+    set (carried_skeleton), the skeleton's block (lassi.prompts.skeletons
+    block_text), with one skeleton_note.
     With none, the prompt comes back unchanged with no note. A fragment
     set's prompt is never changed: its own generation prompt joins the
     summary.
@@ -1304,6 +1331,9 @@ def with_context_blocks(
     if core:
         blocks.append(looked_up_block(context.prompts, core, template=CORE_API_PROMPT))
         notes.append(core_note(core))
+    if skeleton is not None:
+        blocks.append(block_text(skeleton))
+        notes.append(skeleton_note(skeleton))
     return with_blocks(blocks, prompt), notes
 
 
@@ -1863,6 +1893,55 @@ def examples_described(context: RunContext, kind: str) -> str:
     return f", with the {section['pack']} worked examples (up to {section['max_chars']} characters) before {where}"
 
 
+def skeleton_on(context: RunContext, kind: str) -> bool:
+    """Return True when the recipe's skeleton section lists the prompt kind `kind` (generate or correct; OQ-096 (a)).
+
+    The section is off when absent (lassi.core.recipe SKELETON); the loader
+    refuses it under faithful: true, and the runner with a fragment set.
+    """
+    section = context.recipe.data.get(SKELETON)
+    return isinstance(section, Mapping) and kind in section["prompts"]
+
+
+def carried_skeleton(context: RunContext, kind: str) -> Skeleton | None:
+    """Return the run's skeleton when the skeleton section lists the prompt kind `kind`, else None.
+
+    Raises ValueError when the section lists it but the RunContext carries
+    no skeleton or the prompt set is a fragment set; the runner refuses both
+    first.
+    """
+    if not skeleton_on(context, kind):
+        return None
+    if context.skeleton is None or context.fragments:
+        raise ValueError(
+            f"{context.recipe.path}: {SKELETON} needs a template prompt set and the run's skeleton, which the "
+            "runner loads once per run; run the recipe with lassi run"
+        )
+    return context.skeleton
+
+
+def skeleton_note(skeleton: Skeleton) -> Diagnostic:
+    """Return the note of a request that carried `skeleton`: code SKELETON_CODE, severity note, stage parse.
+
+    Its message names the skeleton, its sha256, and its host program's
+    size; it rides on the Request, never on an attempt, so it never enters a
+    prompt.
+    """
+    message = (
+        f"the prompt carried the host program skeleton {skeleton.name} (sha256 {skeleton.sha256}, "
+        f"{len(skeleton.host)} characters of {skeleton.language} host program)"
+    )
+    return Diagnostic(stage="parse", severity="note", code=SKELETON_CODE, message=message)
+
+
+def skeleton_described(context: RunContext, kind: str) -> str:
+    """Return what describe() adds when the skeleton section lists the prompt kind `kind`, else ""."""
+    if not skeleton_on(context, kind):
+        return ""
+    where = "the prompt" if kind == SKELETON_GENERATE else "each compile correction prompt"
+    return f", with the {context.recipe.data[SKELETON]['name']} host program skeleton right before {where}"
+
+
 def _harness_build(
     context: RunContext, toolchain: Toolchain, files: Mapping[str, str], workdir: Path, language: str
 ) -> BuildResult:
@@ -2276,7 +2355,8 @@ class GenerateStage:
         worked examples of carried_examples when the examples section lists
         generate, then the passages for generate_query when retrieval lists
         generate, then the declarations of core_declarations when lookup lists
-        generate); with
+        generate, then the skeleton of carried_skeleton when the skeleton
+        section lists generate); with
         the prompt_spaces fix off, each run of spaces in it is cut to one.
         It is kept in the text store and sent as the user message, after the
         system prompt when there is one. With the fence_tag fix on the
@@ -2291,7 +2371,9 @@ class GenerateStage:
         passages = retrieved_passages(context, generate_query(context)) if on else []
         core = core_declarations(context) if lookup_on(context, LOOKUP_GENERATE) else []
         examples = carried_examples(context) if examples_on(context, EXAMPLES_GENERATE) else []
-        prompt, notes = with_context_blocks(context, trial, prompt, passages, core=core, examples=examples)
+        skeleton = carried_skeleton(context, SKELETON_GENERATE)
+        prompt, notes = with_context_blocks(
+            context, trial, prompt, passages, core=core, examples=examples, skeleton=skeleton)
         if not fix_on(context, "prompt_spaces"):
             prompt = fragment_text.collapse_spaces(prompt)
         try:
@@ -2348,9 +2430,10 @@ class GenerateStage:
             reply += ", or unfenced FILE lines when the reply holds none"
         passages = passages_described(self.context, RETRIEVAL_GENERATE)
         examples = examples_described(self.context, EXAMPLES_GENERATE)
+        skeleton = skeleton_described(self.context, SKELETON_GENERATE)
         return (
             f"generate: one {direction.source} to {direction.target} translation from {source}, parsed from "
-            f"{reply}{examples}{passages}{core_described(self.context)}"
+            f"{reply}{examples}{passages}{core_described(self.context)}{skeleton}"
         )
 
 
@@ -2506,6 +2589,7 @@ class CompileLoopStage:
             f"{errors} while an error remains ({limit}{restarts_described(context)})"
             f"{examples_described(context, EXAMPLES_CORRECT)}"
             f"{passages_described(context, RETRIEVAL_CORRECT)}{declarations_described(context)}"
+            f"{skeleton_described(context, SKELETON_CORRECT)}"
         )
 
     @staticmethod
@@ -3062,7 +3146,9 @@ def _corrected(
     lists correct and this is no mismatch, the passages for
     correction_query, then, when lookup lists correct and this is a compile
     correction, the declarations of looked_up_declarations and, with
-    lookup.nearest, the nearest names of undeclared_names).
+    lookup.nearest, the nearest names of undeclared_names, then, when the
+    skeleton section lists correct and this is a compile correction, the
+    skeleton of carried_skeleton).
     With fixes.prompt_newlines off every line feed is removed from it
     before it is stored and sent. The reply is read as generate reads
     attempt 0 (_reply_attempt), and the attempt keeps its diff from the last
@@ -3085,10 +3171,12 @@ def _corrected(
         looked_up = looked_up_declarations(context, previous)
         undeclared = undeclared_names(context, previous)
     examples: list[Example] = []
-    if not (mismatch or run_error) and examples_on(context, EXAMPLES_CORRECT):
-        examples = carried_examples(context)
+    skeleton: Skeleton | None = None
+    if not (mismatch or run_error):
+        examples = carried_examples(context) if examples_on(context, EXAMPLES_CORRECT) else []
+        skeleton = carried_skeleton(context, SKELETON_CORRECT)
     prompt, notes = with_context_blocks(
-        context, trial, prompt, passages, looked_up, undeclared, examples=examples)
+        context, trial, prompt, passages, looked_up, undeclared, examples=examples, skeleton=skeleton)
     if not fix_on(context, "prompt_newlines"):
         prompt = prompt.replace("\n", "")
     try:
