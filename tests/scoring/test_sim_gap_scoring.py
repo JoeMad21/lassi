@@ -30,6 +30,16 @@ The contract these tests fix:
   end at sim-gap score as before.
 - A kernel JIT failure (S1 with jit-stage errors) and a run with UB (S4 with
   a run-stage error) need no new reading: each scores by its stage.
+- Under loop.correct_on_sim_gap (task P17.35; OQ-098, the owner's answer: a
+  gap is built but not verifiable on ttsim, never a fail), a gap attempt is
+  also any attempt with the run-stage note coded sim-gap that run_loop adds
+  (lassi.core.stages gap_note), wherever it stands: df-v0 gives it R null
+  unless a guard violation is recorded on it, and single_turn and
+  multi_turn are null with the gap notes when the R they read is null; the
+  lassi profile gives correct and first_try null with the gap note when the
+  attempt whose output stands carries the note, whatever the end reason.
+  With the key off no attempt carries the note, so every test above, which
+  predates the key, passes unchanged.
 
 This reading is the most conservative one: it computes no reward from a run
 the simulator could not complete. The records are hand-made SYNTHETIC
@@ -65,10 +75,12 @@ from lassi.core.record import (
     RunInfo,
     TextRef,
     Trial,
+    gap_noted,
     make_trial_id,
 )
 from lassi.core.registry import DEFAULT_REGISTRY
-from lassi.scoring.df_v0 import WEIGHTS_FILE, load_weights
+from lassi.core.stages import SIM_GAP_NOTE, gap_note
+from lassi.scoring.df_v0 import GAP_NOTES, WEIGHTS_FILE, load_weights
 
 REPO = Path(__file__).resolve().parents[2]
 LASSI_PROFILE_FILE = REPO / "assets" / "scoring" / "lassi.yaml"
@@ -339,3 +351,120 @@ def test_df_v0_score_attempt_reads_the_attempt_alone() -> None:
     assert df_v0().score_attempt(gap_attempt(0)).scalar == pytest.approx(base("S4"), abs=TOLERANCE), (
         "score_attempt does not see the trial's end reason; score_attempts applies the sim-gap reading"
     )
+
+
+# ---------------------------------------------------------------------------
+# Gap attempts fed back under loop.correct_on_sim_gap: the sim-gap note (task P17.35; OQ-098)
+
+GAP_CLASS = "UnimplementedFunctionality"
+COMPILE_ERROR = Diagnostic(
+    stage="compile", severity="error", code="SYNTHETIC-compile-error", file=TARGET_FILE, line=3, column=1,
+    message="SYNTHETIC build error",
+)
+# The finding a simulator executor reports for the gap: a run-stage error coded with the class, not the note.
+FINDING = Diagnostic(stage="run", severity="error", code=GAP_CLASS, message=f"{GAP_CLASS}: SYNTHETIC construct")
+
+
+def noted_gap_attempt(index: int) -> Attempt:
+    """Return a SYNTHETIC gap attempt as run_loop records it under the key: S4, its finding, and the sim-gap note."""
+    return attempt(index, "S4", [FINDING, gap_note(GAP_CLASS)], ran(GAP_EXIT))
+
+
+def failed_compile(index: int) -> Attempt:
+    """Return a SYNTHETIC attempt whose build failed: S1 with a compile error, never run."""
+    return attempt(index, "S1", [COMPILE_ERROR])
+
+
+def clean_attempt(index: int) -> Attempt:
+    """Return a SYNTHETIC clean run aligned at 1.0: S5."""
+    return dataclasses.replace(attempt(index, "S5", run=ran(0)), alignment=Alignment(per_input=[1.0], mean=1.0))
+
+
+def test_the_note_run_loop_adds_is_what_the_profiles_read() -> None:
+    assert SIM_GAP_NOTE == record_module.SIM_GAP_NOTE == SIM_GAP
+    assert gap_noted(noted_gap_attempt(0)), "the note run_loop writes marks a gap attempt"
+    assert not gap_noted(gap_attempt(0)) and not gap_noted(attempt(0, "S4", [FINDING], ran(GAP_EXIT))), (
+        "with the key off an attempt carries no note, and the simulator's finding is not the note"
+    )
+
+
+def test_a_gap_then_a_failed_compile_at_cap_one() -> None:
+    trial = trial_of([noted_gap_attempt(0), failed_compile(1)], "correction-cap")
+    profile, weights = df_v0(), load_weights(WEIGHTS_FILE)
+    gap, failed = profile.score_attempts(trial)
+    assert gap.scalar is None, "the gap attempt holds no evidence either way, though a later attempt follows it"
+    assert gap.components == profile.score_attempt(trial.attempts[0]).components, "it keeps its own components"
+    assert failed.scalar == pytest.approx(base("S1"), abs=TOLERANCE), "the failed compile is scored as now"
+    score = profile.score(trial)
+    assert score.components["single_turn"] is None and score.notes == {"single_turn": GAP_NOTES["single_turn"]}
+    expected = base("S1") - weights.correction_penalty * 1
+    assert score.components["multi_turn"] == pytest.approx(expected, abs=TOLERANCE)
+    assert score.scalar == pytest.approx(expected, abs=TOLERANCE)
+    values, written, notes = lassi_outcome(trial)
+    assert (values["correct"], values["first_try"]) == (None, None), "the output that stands is the gap run's"
+    assert written["correct"] == written["first_try"] == notes["gap"], written
+
+
+def test_a_gap_then_context_exceeded() -> None:
+    trial = trial_of([noted_gap_attempt(0)], "context-exceeded")
+    profile = df_v0()
+    (only,) = profile.score_attempts(trial)
+    assert only.scalar is None
+    score = profile.score(trial)
+    assert (score.components["single_turn"], score.components["multi_turn"], score.scalar) == (None, None, None)
+    assert dict(score.notes) == dict(GAP_NOTES)
+    assert profile.apply(trial).final.score is None
+    values, written, notes = lassi_outcome(trial)
+    assert (values["correct"], values["first_try"]) == (None, None), values
+    assert written["correct"] == written["first_try"] == notes["gap"], written
+    assert values["compiled"] == 1.0, "the gap attempt built"
+
+
+def test_two_gaps_at_cap_one() -> None:
+    trial = trial_of([noted_gap_attempt(0), noted_gap_attempt(1)], SIM_GAP)
+    profile = df_v0()
+    assert [score.scalar for score in profile.score_attempts(trial)] == [None, None], "both gap attempts have no R"
+    score = profile.score(trial)
+    assert (score.components["single_turn"], score.components["multi_turn"], score.scalar) == (None, None, None)
+    values, written, notes = lassi_outcome(trial)
+    assert values["correct"] is None and written["correct"] == notes["gap"]
+    from lassi.scoring.lassi_profile import count_components
+
+    assert count_components(trial)["cap_hit"] == 0.0, "a gap left at the cap ends at sim-gap, not correction-cap"
+
+
+def test_a_gap_then_a_clean_run() -> None:
+    trial = trial_of([noted_gap_attempt(0), clean_attempt(1)], None)
+    profile, weights = df_v0(), load_weights(WEIGHTS_FILE)
+    gap, clean = profile.score_attempts(trial)
+    assert gap.scalar is None
+    assert clean == profile.score_attempt(trial.attempts[1]), "the clean attempt is scored by its own record"
+    assert clean.scalar == pytest.approx(base("S5") + weights.alignment_weight * 1.0, abs=TOLERANCE)
+    score = profile.score(trial)
+    assert score.components["single_turn"] is None and dict(score.notes) == {"single_turn": GAP_NOTES["single_turn"]}
+    expected = clean.scalar - weights.correction_penalty * 1
+    assert score.scalar == pytest.approx(expected, abs=TOLERANCE)
+    assert score.components["multi_turn"] == pytest.approx(expected, abs=TOLERANCE)
+    values, written, _ = lassi_outcome(trial)
+    assert (values["correct"], values["first_try"]) == (1.0, 0.0), "the clean output stands, after one correction"
+    assert "correct" not in written and "first_try" not in written, written
+
+
+def test_a_failed_run_after_a_gap_stands_as_a_failed_run() -> None:
+    trial = trial_of([noted_gap_attempt(0), ub_attempt(1)], "correction-cap")
+    rs = [score.scalar for score in df_v0().score_attempts(trial)]
+    assert rs[0] is None and rs[1] == pytest.approx(base("S4"), abs=TOLERANCE)
+    values, written, _ = lassi_outcome(trial)
+    assert values["correct"] == 0.0 and "correct" not in written, "the output that stands is the failed run's"
+
+
+def test_a_guard_violation_recorded_on_a_noted_gap_attempt_still_sets_r() -> None:
+    violated = dataclasses.replace(noted_gap_attempt(0), guards=Guards(host_compute=True))
+    trial = trial_of([violated, clean_attempt(1)], None)
+    weights = load_weights(WEIGHTS_FILE)
+    profile = df_v0()
+    assert profile.score_attempts(trial)[0].scalar == pytest.approx(weights.guard_violation, abs=TOLERANCE)
+    score = profile.score(trial)
+    assert score.components["single_turn"] == pytest.approx(weights.guard_violation, abs=TOLERANCE)
+    expected = weights.guard_violation - weights.correction_penalty * 1
+    assert score.scalar == pytest.approx(expected, abs=TOLERANCE) and dict(score.notes) == {}, score

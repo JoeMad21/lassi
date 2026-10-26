@@ -31,9 +31,12 @@ Components of a trial (task P2.7), each a float, or None with a note:
   with its note: a trial with no attempt that ended at the baseline
   (BASELINE_ENDS: baseline-compile, baseline-run, baseline-disagree, or
   sim-gap; the model was never asked); a trial with attempts that ended at
-  sim-gap (the gap note, task P4.6: the output that stands came from the
-  run that stopped at the gap, which is not a model error, whatever its
-  exit status or undefined behavior); a compile-only trial (the target
+  sim-gap, or whose standing attempt carries the run-stage note coded
+  sim-gap, which run_loop adds only under loop.correct_on_sim_gap
+  (lassi.core.record gap_noted; task P17.35, OQ-098), whatever the trial's
+  end reason (the gap note, task P4.6: the output that stands came from a
+  run that stopped at a simulator gap, which is not a model error, whatever
+  its exit status or undefined behavior); a compile-only trial (the target
   reference was not run and no attempt ran), labeled a compile-stage
   reproduction; and a clean standing run the oracle never aligned (a
   recipe that lists no oracle stage, a truncated reference stdout, or,
@@ -57,8 +60,9 @@ Components of a trial (task P2.7), each a float, or None with a note:
   the tiktoken_null note where the notebook raises: a text that holds a
   special-token string or does not decode back from its ids.
 - self_corr: final.corrections. cap_hit: 1.0 when final.end_reason is
-  correction-cap, else 0.0. fence_quirk: the number of fence-quirk
-  diagnostics over all attempts.
+  correction-cap, else 0.0, so 0.0 for a gap left at the cap under
+  loop.correct_on_sim_gap, which ends the trial at sim-gap. fence_quirk:
+  the number of fence-quirk diagnostics over all attempts.
 - compiled: 1.0 when the last attempt reached S4 or S5. compiled_first_try:
   1.0 when compiled is 1.0 and final.corrections is 0. Both are None for a
   trial that ended at the baseline and 0.0 for any other trial with no
@@ -79,7 +83,7 @@ from lassi.bench import Direction, Suite, load_suite
 from lassi.core.capabilities import READS_BENCH_SOURCES
 from lassi.core.fragments import as_text_mode
 from lassi.core.interfaces import Score
-from lassi.core.record import RunInfo, Trial, standing_attempt
+from lassi.core.record import RunInfo, Trial, gap_noted, standing_attempt
 from lassi.core.registry import register
 from lassi.scoring import similarity
 from lassi.scoring.similarity import TokenEncoding, measure
@@ -193,9 +197,12 @@ def clean_run(run: RunInfo) -> bool:
 
     A run that stopped at a simulator gap has no field of its own in
     RunInfo. A gap with no kernel JIT error ends the trial at sim-gap,
-    which correct_value reads from the end reason (GAP_END); a run with a
-    kernel JIT error leaves its attempt at S1, which correct_value never
-    reads as clean, whatever the run's exit status.
+    which correct_value reads from the end reason (GAP_END), or, under
+    loop.correct_on_sim_gap, marks its attempt with the run-stage note
+    coded sim-gap, which correct_value reads on the standing attempt
+    (lassi.core.record gap_noted); a run with a kernel JIT error leaves its
+    attempt at S1, which correct_value never reads as clean, whatever the
+    run's exit status.
     """
     return run.exit_code == 0 and run.hang is False and run.sim_ub is not True
 
@@ -211,6 +218,8 @@ def correct_value(trial: Trial, notes: Mapping[str, str]) -> tuple[float | None,
     standing = standing_attempt(trial)
     if standing is None:
         return (0.0, None) if _ran(trial.reference_run) else (None, notes[COMPILE_ONLY])
+    if gap_noted(standing):
+        return None, notes[GAP]
     if standing.stage_reached not in COMPILED_STAGES or not clean_run(standing.run):
         return 0.0, None
     if standing.alignment.mean is None:

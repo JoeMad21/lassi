@@ -417,6 +417,7 @@ from lassi.core.stages import (
     CONTEXT_PROMPTS,
     CORE_TEMPLATES,
     CORRECT_ON_MISMATCH,
+    CORRECT_ON_SIM_GAP,
     EXAMPLE_TEMPLATES,
     LOOKUP_TEMPLATES,
     NEAREST_TEMPLATES,
@@ -1818,8 +1819,9 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     (_asks_model) comes before it. The prompts are checked by _check_prompts,
     loop.correct_on_mismatch by _check_mismatch, a template set's context by
     _check_template_context, the retrieval section's prompts by
-    _check_retrieval_prompts, the lookup section by _check_lookup, and
-    loop.restart_after by _check_restart.
+    _check_retrieval_prompts, the lookup section by _check_lookup,
+    loop.restart_after by _check_restart, and loop.correct_on_sim_gap by
+    _check_sim_gap.
     """
     entries = [registry.get("Stage", name) for name in recipe.data["stages"]]
     _check_fixes(recipe, entries)
@@ -1857,6 +1859,23 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     _check_examples(recipe, settings)
     _check_skeleton(recipe, settings)
     _check_restart(recipe, settings)
+    _check_sim_gap(recipe, settings)
+
+
+def _check_sim_gap(recipe: Recipe, settings: _Settings) -> None:
+    """Refuse loop.correct_on_sim_gap set true with a fragment prompt set (OQ-098; lassi.core.stages, simulator gaps).
+
+    A gap's correction carries this project's wording (sim_gap_text) in
+    correct.txt, which only a template set holds; a fragment set holds
+    upstream's prompts, whose loop runs on no simulator. A key that is false
+    or absent is never checked.
+    """
+    key = f"loop.{CORRECT_ON_SIM_GAP}"
+    if recipe.data["loop"].get(CORRECT_ON_SIM_GAP) is True and settings.fragments:
+        raise RunError(
+            f"{recipe.path}: {key} is true, but {settings.prompts!r} is a fragment prompt set, upstream's prompts, "
+            f"which hold no simulator-gap correction; use a template set or remove {key}"
+        )
 
 
 def _check_restart(recipe: Recipe, settings: _Settings) -> None:

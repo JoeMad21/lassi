@@ -35,8 +35,8 @@ notes:
   not_aligned: "not computed: the output that stands came from a clean run (exit status 0, no hang, no undefined
     behavior) that the oracle did not align"
   baseline: "not computed: the trial ended at the baseline, before any model call"
-  gap: "not computed: the trial ended at sim-gap, so the output that stands came from a run that stopped at a
-    simulator gap, which is not a model error"
+  gap: "not computed: the output that stands came from a run that stopped at a simulator gap, which is not a model
+    error (the trial ended at sim-gap, or that attempt carries the sim-gap note)"
   no_attempt: "not computed: the trial holds no attempt to compare"
   tiktoken_null: "not computed: a text holds a special-token string or does not decode back from its ids, where the
     notebook raises"

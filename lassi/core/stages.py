@@ -200,7 +200,8 @@ The runner checks either kind before any model is asked.
   simulator gap (sim_gap) in a run with no jit-stage error leaves the
   attempt at S4 with no run-error and ends the trial with `sim-gap`, the
   message naming the gap's class, with no correction, whatever the exit
-  status and even when the run also reported undefined behavior.
+  status and even when the run also reported undefined behavior, unless
+  loop.correct_on_sim_gap is true (Simulator gaps, below).
   The run-error message and the error text name the undefined
   behavior (UB_FINDING), and for a run that hung on an executor that
   declares `simulator` (lassi.core.capabilities SIMULATOR) they carry the
@@ -211,6 +212,33 @@ The runner checks either kind before any model is asked.
   stay among the attempt's diagnostics. The hang text is the ttsim hint
   (circular buffers and semaphores are tt-metal constructs); any executor
   that declares `simulator` gets it.
+
+  Simulator gaps (loop.correct_on_sim_gap; corrects_on_sim_gap; OQ-098,
+  option (a), the owner's answer of 2026-10-25). An opt-in departure from
+  upstream, whose loop runs on no simulator; the loader refuses it under
+  faithful: true, the runner with a fragment set (as run_loop does), and
+  with it off or absent nothing here changes. With it true, an attempt
+  whose run stopped at a gap with no jit-stage error keeps its record as
+  above (S4, Attempt.run as the run gave it, no run-error) and gains one
+  run-stage note, code SIM_GAP_NOTE, naming the class (gap_note): the
+  record's mark of an attempt built but not verifiable on the simulator,
+  never a failed run (lassi.core.record gap_noted reads it). While the cap
+  leaves room, the gap is fed back as a failed run is, through correct.txt
+  with the gap text (sim_gap_text) as its diagnostics: the gap's class;
+  that the simulator cannot run a construct the program uses, which is a
+  limit of the simulator and not necessarily an error in the program; that
+  an equivalent construct the simulator runs should be used if one exists;
+  then the run's findings of that class (gap_findings) and its stderr. The
+  request is recorded under run_loop, and the reply is built, run, and
+  corrected under the same count and cap; a gap left at the cap ends the
+  trial with `sim-gap`, not `correction-cap` (_cap_end): a gap is no error
+  that remained. The profiles read a gap attempt, the last attempt of a
+  trial that ended at sim-gap or any attempt with the note, as holding no
+  evidence either way, wherever it stands (lassi.scoring). It gets a
+  run-error correction's context blocks (the knowledge block and
+  retrieval's passages for the gap text; no examples, lookup, or
+  skeleton), and a gap attempt counts, for loop.restart_after, as a
+  correction that did not reach a clean run.
 
 Context blocks under a template set (with_context_blocks). Each model
 prompt after summarize_context (generate.txt, every correct.txt, and
@@ -300,7 +328,8 @@ references, the attempt its reply became (None for a context request), and
 the reply as kept. A correction is recorded under the loop stage that asked
 for it: compile_loop for a compile error (a kernel JIT failure included),
 run_loop for a failed run or, under loop.correct_on_mismatch, an oracle
-mismatch; a restart under RESTART, whichever loop asked for it. An
+mismatch, or, under loop.correct_on_sim_gap, a simulator gap; a restart
+under RESTART, whichever loop asked for it. An
 attempt's own `invalid-text` warning stays on the attempt; Trial.context
 carries no diagnostics, so a context reply that held a lone surrogate gives
 its request one parse-stage `invalid-text` warning.
@@ -463,6 +492,7 @@ from lassi.core.record import (
     NO_GUARD,
     NO_PROGRAM,
     NOT_BUILT,
+    SIM_GAP_NOTE,
     Attempt,
     Diagnostic,
     EndReason,
@@ -573,6 +603,21 @@ STALE_OUTPUT = "stale-output"
 ORACLE_MISMATCH = "oracle-mismatch"
 # The opt-in key of the loop section (lassi.core.recipe LOOP_OPT_INS) that feeds an oracle mismatch back.
 CORRECT_ON_MISMATCH = "correct_on_mismatch"
+# The opt-in key of the loop section that feeds a simulator gap back (OQ-098). The code of the run-stage note it puts
+# on each attempt whose run stopped at a gap is lassi.core.record SIM_GAP_NOTE, imported above: the record's mark of
+# an attempt built but not verifiable on the simulator, which the score profiles read as holding no evidence either
+# way (lassi.core.record gap_noted) and a report counts apart from failures (plans/runs/rngd-sweep/tabulate.py).
+CORRECT_ON_SIM_GAP = "correct_on_sim_gap"
+# What a simulator gap's correction says around the gap's class (sim_gap_text) [DESIGN]: plainly, that the simulator
+# cannot run the construct, that this is a limit of the simulator and not necessarily of the program, and that an
+# equivalent construct the simulator runs should be used if one exists. GAP_FINDINGS leads the run's findings.
+GAP_HEAD = "the program built, but its run stopped at a simulator gap of class "
+GAP_LIMIT = (
+    ": the simulator cannot run a construct this program uses. This is a limit of the simulator, not necessarily an "
+    "error in the program. If an equivalent construct exists that the simulator runs, use it in place of the one it "
+    "cannot run."
+)
+GAP_FINDINGS = "the simulator reported:"
 # The stage name of a restart's Request and progress events (loop.restart_after, task P17.25): its own, never the
 # name of the loop that asked for it.
 RESTART = "restart"
@@ -838,6 +883,15 @@ def corrects_on_mismatch(context: RunContext) -> bool:
     faithful: true.
     """
     return context.recipe.data.get("loop", {}).get(CORRECT_ON_MISMATCH, False) is True
+
+
+def corrects_on_sim_gap(context: RunContext) -> bool:
+    """Return True only when the recipe sets loop.correct_on_sim_gap true (lassi.core.recipe LOOP_OPT_INS; OQ-098).
+
+    The key is off when absent; the loader refuses it set true under
+    faithful: true, and the runner with a fragment set.
+    """
+    return context.recipe.data.get("loop", {}).get(CORRECT_ON_SIM_GAP, False) is True
 
 
 def restart_after(context: RunContext) -> int | None:
@@ -2724,7 +2778,8 @@ class RunLoopStage:
     `mismatch_prompt_fields` names the template an oracle mismatch's
     correction renders and its fields: a stage that declares it honors
     loop.correct_on_mismatch, and the runner renders it, before any
-    directory exists, only when that key is true.
+    directory exists, only when that key is true. It honors
+    loop.correct_on_sim_gap too (module docstring, Simulator gaps).
     """
 
     name = "run_loop"
@@ -2737,20 +2792,27 @@ class RunLoopStage:
     runs_model_code = True
 
     def __init__(self, *, context: RunContext) -> None:
-        """Keep the trial's run context, the recipe's Oracle when it compares output files, and the mismatch key.
+        """Keep the trial's run context, the recipe's Oracle when it compares output files, and the loop opt-ins.
 
         Raises ValueError when loop.correct_on_mismatch is true but the
-        recipe binds no Oracle that compares output files; the runner
-        refuses such a recipe first.
+        recipe binds no Oracle that compares output files, and when
+        loop.correct_on_sim_gap is true with a fragment prompt set; the
+        runner refuses such a recipe first.
         """
         self.context = context
         self.files_oracle = output_file_oracle(context)
         self.keeps_outputs = self.files_oracle is not None
         self.on_mismatch = corrects_on_mismatch(context)
+        self.on_gap = corrects_on_sim_gap(context)
         if self.on_mismatch and self.files_oracle is None:
             raise ValueError(
                 f"{context.recipe.path}: loop.{CORRECT_ON_MISMATCH} is true, but the recipe binds no Oracle that "
                 f"declares {ALIGNS_OUTPUT_FILES!r}, whose per-output statistics its correction prompt's report reads"
+            )
+        if self.on_gap and context.fragments:
+            raise ValueError(
+                f"{context.recipe.path}: loop.{CORRECT_ON_SIM_GAP} is true, but {context.prompts!r} is a fragment "
+                "prompt set, upstream's prompts, which hold no simulator-gap correction"
             )
 
     def __call__(self, trial: Trial) -> Trial:
@@ -2765,9 +2827,12 @@ class RunLoopStage:
         (_run_last). A clean run ends the loop. A kernel JIT failure leaves
         the attempt at S1, and compile_loop corrects it as a compile error,
         under the same cap. A simulator gap ends the trial with `sim-gap`
-        (_gap_message), with no correction. A failed run with the cap
-        reached ends the trial with `correction-cap`; below it, the
-        execute-error correction is appended and compile_loop builds and
+        (_gap_message), with no correction, unless loop.correct_on_sim_gap
+        is true: then it is read as a failed run is, with the gap text
+        (sim_gap_text), and a gap left at the cap ends the trial with
+        `sim-gap` (_cap_end; module docstring, Simulator gaps). A failed run
+        with the cap reached ends the trial with `correction-cap`; below it,
+        the execute-error correction is appended and compile_loop builds and
         corrects it. Under loop.correct_on_mismatch a clean run is judged
         (_judged), and an oracle mismatch is read as a failed run is, with
         the mismatch prompt (module docstring, Oracle mismatches).
@@ -2797,12 +2862,10 @@ class RunLoopStage:
                 trial, outputs = self._judged(trial)
                 if outputs is None:
                     break
-            elif run.sim_gap is not None:
+            elif run.sim_gap is not None and not self.on_gap:
                 return _ended(trial, SIM_GAP, _gap_message(index, run.sim_gap))
             if cap is not None and index >= cap:
-                left = "a run error" if outputs is None else "an oracle mismatch"
-                message = f"{left} remained after {cap} correction(s), the cap loop.max_corrections sets"
-                return _ended(trial, CORRECTION_CAP, message)
+                return _cap_end(trial, cap, outputs, run.sim_gap)
             corrected = self._correction(trial, run, limits, outputs)
             if corrected.final.end_reason is not None:
                 return corrected
@@ -2813,13 +2876,17 @@ class RunLoopStage:
         """Return `trial` with the correction of its last attempt appended (_corrected), recorded under run_loop.
 
         With `outputs` None the last run failed: the execute-error prompt,
-        whose error text is run_error_text's. Otherwise `outputs` is the
-        oracle mismatch's mismatch_text, sent with MISMATCH_PROMPT.
+        whose error text is run_error_text's, or, for a run that stopped at
+        a simulator gap (read so only under loop.correct_on_sim_gap),
+        sim_gap_text's. Otherwise `outputs` is the oracle mismatch's
+        mismatch_text, sent with MISMATCH_PROMPT.
         """
         context = self.context
         expected = target_files(context)
         if outputs is not None:
             return _corrected(context, trial, self.name, expected, outputs, run_error=True, mismatch=True)
+        if run.sim_gap is not None:
+            return _corrected(context, trial, self.name, expected, sim_gap_text(run), run_error=True)
         errors = run_error_text(run, limits, context.fragments, simulator=declares(context.executor, SIMULATOR))
         return _corrected(context, trial, self.name, expected, errors, run_error=True)
 
@@ -2865,6 +2932,8 @@ class RunLoopStage:
         mismatch = ""
         if self.on_mismatch:
             mismatch = f" and each clean run whose output files fail the oracle (loop.{CORRECT_ON_MISMATCH})"
+        if self.on_gap:
+            mismatch += f" and each run that stopped at a simulator gap (loop.{CORRECT_ON_SIM_GAP})"
         passages = passages_described(context, RETRIEVAL_CORRECT)
         return (
             f"run_loop: run {gate} and correct each failed run{mismatch}, sharing compile_loop's correction count"
@@ -2882,7 +2951,9 @@ class RunLoopStage:
         run (RunResult.diagnostics) and one warning per RunResult flag that
         is set (RUN_FLAGS), and reaches the stage run_stage gives. A failed
         run that is neither a JIT failure (S1) nor a simulator gap stays S4
-        with a `run-error` whose message is _run_status's.
+        with a `run-error` whose message is _run_status's. A simulator gap
+        (S4) gets no run-error; under loop.correct_on_sim_gap it gets the
+        SIM_GAP_NOTE note instead (gap_note).
         """
         context = self.context
         attempt = trial.attempts[-1]
@@ -2902,6 +2973,8 @@ class RunLoopStage:
         if reached == COMPILED and run.sim_gap is None:
             status = _run_status(run, limits, simulator=declares(context.executor, SIMULATOR))
             diagnostics.append(Diagnostic(stage="run", severity="error", code=RUN_ERROR, message=status))
+        elif reached == COMPILED and run.sim_gap is not None and self.on_gap:
+            diagnostics.append(gap_note(run.sim_gap))
         ran = dataclasses.replace(attempt, run=info, profile=profile, diagnostics=diagnostics, stage_reached=reached)
         trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], ran])
         notify(context.observer, ATTEMPT, trial, self.name)
@@ -3078,6 +3151,100 @@ def _gap_message(index: int, gap: str) -> str:
         f"the run of attempt {index} stopped at a simulator gap, {gap}: the simulator cannot run the program, which "
         "is not a model error, so the trial stops with no correction"
     )
+
+
+def _gap_cap_message(index: int, gap: str, cap: int) -> str:
+    """Return the end reason message of a trial whose attempt `index` stopped at the gap `gap` with the cap reached.
+
+    Under loop.correct_on_sim_gap only. It shares _gap_message's opening
+    words, which name the attempt and the gap's class, so a report reads
+    the class from either (plans/runs/rngd-sweep/tabulate.py).
+    """
+    return (
+        f"the run of attempt {index} stopped at a simulator gap, {gap}, after {cap} correction(s), the cap "
+        "loop.max_corrections sets: the program built, but the simulator cannot run it, which is not a model error, "
+        "so the attempt stands as built but not verifiable on the simulator"
+    )
+
+
+def _cap_end(trial: Trial, cap: int, outputs: str | None, gap: str | None) -> Trial:
+    """Return `trial` ended at the cap with its last attempt's run read: a gap, an oracle mismatch, or a run error.
+
+    A run that stopped at the simulator gap `gap` (read so only under
+    loop.correct_on_sim_gap) ends it at SIM_GAP, not CORRECTION_CAP: a gap
+    is not an error that remained, so the lassi profile's cap_hit reads 0,
+    and the profiles read a gap attempt, by that end reason or by its note
+    (lassi.core.record gap_noted), as holding no evidence either way
+    (lassi.scoring). Otherwise it ends at CORRECTION_CAP, naming an oracle
+    mismatch when `outputs` is its report, else a run error.
+    """
+    index = trial.attempts[-1].index
+    if gap is not None:
+        return _ended(trial, SIM_GAP, _gap_cap_message(index, gap, cap))
+    left = "a run error" if outputs is None else "an oracle mismatch"
+    message = f"{left} remained after {cap} correction(s), the cap loop.max_corrections sets"
+    return _ended(trial, CORRECTION_CAP, message)
+
+
+def gap_note(gap: str) -> Diagnostic:
+    """Return the SIM_GAP_NOTE run-stage note of an attempt whose run stopped at the simulator gap `gap` (OQ-098).
+
+    run_loop adds it under loop.correct_on_sim_gap, so the record marks the
+    attempt as built but not verifiable on the simulator, never a failed
+    run, and the score profiles read it (lassi.core.record gap_noted); its
+    message names the class after the words _gap_message opens with, which
+    a report reads.
+    """
+    message = (
+        f"the run stopped at a simulator gap, {gap}: built, but not verifiable on the simulator, which cannot run the "
+        "program; a gap is not a model failure"
+    )
+    return Diagnostic(stage="run", severity="note", code=SIM_GAP_NOTE, message=message)
+
+
+def sim_gap_text(run: RunResult) -> str:
+    """Return the error text of a simulator gap's correction (loop.correct_on_sim_gap; OQ-098) [DESIGN].
+
+    GAP_HEAD, the gap's class (RunResult.sim_gap), and GAP_LIMIT: the
+    simulator cannot run a construct the program uses, which is a limit of
+    the simulator and not necessarily an error in the program, so an
+    equivalent construct the simulator runs should take its place if one
+    exists. Then, after a line feed, GAP_FINDINGS and the run's findings of
+    that class (gap_findings), one per line, when there are any; then, after
+    a line feed, the stderr as run_error_text gives it under a template set,
+    when there is any. It goes into correct.txt as a failed run's text does;
+    the runner refuses the key with a fragment set, whose upstream prompts
+    hold no such correction.
+    """
+    parts = [f"{GAP_HEAD}{run.sim_gap}{GAP_LIMIT}"]
+    findings = gap_findings(run)
+    if findings:
+        parts.append("\n".join([GAP_FINDINGS, *findings]))
+    stderr = fragment_text.as_text_mode(run.stderr)
+    if stderr:
+        parts.append(f"its standard error follows:\n{stderr}")
+    return "\n".join(parts)
+
+
+def gap_findings(run: RunResult) -> list[str]:
+    """Return the messages of the run's findings of its gap's class, each once, in order, within the caps.
+
+    A finding is a run-stage Diagnostic of RunResult.diagnostics whose code
+    is RunResult.sim_gap, as an executor that declares SIMULATOR reports one
+    (lassi.executors.ttsim read_findings); none is read by the executor's
+    name. A repeated message counts once. At most the diagnostics a
+    correction prompt lists (listed_diagnostics) are kept, each on one line,
+    and a last line says how many were left out when any were.
+    """
+    unique: dict[str, Diagnostic] = {}
+    for item in run.diagnostics:
+        if item.stage == "run" and item.code == run.sim_gap:
+            unique.setdefault(item.message, item)
+    listed = listed_diagnostics(list(unique.values()))
+    lines = [" ".join(item.message.splitlines()) for item in listed]
+    if len(listed) < len(unique):
+        lines.append(f"[{len(unique) - len(listed)} more finding(s) not shown]")
+    return lines
 
 
 def _mismatch_error(oracle: OutputFileOracle, failed: Sequence[OutputStats], count: int) -> Diagnostic:

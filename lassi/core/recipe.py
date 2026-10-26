@@ -164,13 +164,19 @@ EXTRACT: dict[str, str] = {
 # Every opt-in key of the loop section beside max_corrections, each a bool but RESTART_AFTER, and what turning it on
 # changes. Like an extract leniency, each is off when absent and the loader materializes none, so a recipe without one
 # keeps its resolved recipe and hash. None is upstream behavior: upstream's loop corrects only compile errors and
-# failed runs, and never asks a fresh generation, so a bool set true, or RESTART_AFTER set at all, is refused under
-# faithful: true (_check_loop), never turned off silently.
+# failed runs, never asks a fresh generation, and runs on no simulator, so a bool set true, or RESTART_AFTER set at
+# all, is refused under faithful: true (_check_loop), never turned off silently.
 LOOP_OPT_INS: dict[str, str] = {
     "correct_on_mismatch": (
         "ask for a correction after a clean run whose output files fail the oracle on the held-out inputs (an output"
         " outside its threshold, or a missing or extra one), from a coarse per-output report (OQ-077), within"
         " loop.max_corrections; off ends the loop at the first clean run, as upstream's loop does"
+    ),
+    "correct_on_sim_gap": (
+        "ask for a correction after a run that stopped at a simulator gap with no kernel JIT error, naming the gap's"
+        " class and saying that the simulator cannot run that construct, a limit of the simulator and not necessarily"
+        " of the program, so an equivalent construct the simulator runs should be used if one exists (OQ-098), within"
+        " loop.max_corrections; off ends the trial at sim-gap right after that attempt, with no correction"
     ),
     "restart_after": (
         "after that many corrections in a row that each failed to reach a clean run, ask for a fresh generation from"
@@ -1473,9 +1479,10 @@ def _check_extract(path: Path, data: Mapping[str, Any]) -> None:
 def _check_loop(path: Path, data: Mapping[str, Any]) -> None:
     """Refuse a LOOP_OPT_INS key under faithful: true, naming it, and a RESTART_AFTER past the correction cap.
 
-    Upstream corrects only compile errors and failed runs, and never asks a
-    fresh generation (Design Principle 4, Agent Rule 4), so under faithful:
-    true a bool key set true, or RESTART_AFTER set at all, is refused. Runs
+    Upstream corrects only compile errors and failed runs, never asks a
+    fresh generation, and runs on no simulator (Design Principle 4, Agent
+    Rule 4), so under faithful: true a bool key set true (correct_on_mismatch,
+    correct_on_sim_gap), or RESTART_AFTER set at all, is refused. Runs
     after the type check, so the loop section maps known names to their
     types. A bool set false, or a key absent, is never refused.
     RESTART_AFTER, an int of at least 1 by then, may not pass the resolved

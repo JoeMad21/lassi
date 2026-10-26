@@ -60,10 +60,16 @@ RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # any model call too: the pair's two references disagree past the tolerance the suite manifest declares for the item.
 # sim-gap (task P4.6) means a run stopped at a simulator gap (RunResult.sim_gap), a program the simulator cannot run:
 # a reference run's gap ends the trial before any model call, and an attempt run's gap ends it right after that
-# attempt, unless the same run reported a kernel JIT error, which is corrected first (lassi.core.stages run_stage).
+# attempt, unless the same run reported a kernel JIT error, which is corrected first (lassi.core.stages run_stage), or
+# the recipe sets loop.correct_on_sim_gap, under which the gap is fed back and only a gap left at the correction cap
+# ends the trial, still at sim-gap (OQ-098).
 # context-exceeded (task P17.4) means the backend refused a model request whose prompt tokens plus max_tokens pass
 # the model's context (lassi.core.interfaces ContextExceeded); nothing was truncated, and every earlier attempt stays.
 # Every code is spelled with hyphens; RunResult.sim_gap is a field, not a code.
+# SIM_GAP_NOTE (task P17.35; OQ-098) is the code of the run-stage note run_loop puts, under loop.correct_on_sim_gap, on
+# each attempt whose run stopped at a simulator gap (lassi.core.stages gap_note; gap_noted reads it). It is spelled as
+# the end code sim-gap, but it is a Diagnostic code, not an end reason.
+SIM_GAP_NOTE = "sim-gap"
 END_REASONS = (
     "baseline-compile",
     "baseline-run",
@@ -963,6 +969,20 @@ def standing_attempt(trial: Trial) -> Attempt | None:
     """
     ran = [attempt for attempt in trial.attempts if attempt.run.stdout_ref is not None]
     return ran[-1] if ran else None
+
+
+def gap_noted(attempt: Attempt) -> bool:
+    """Return True when `attempt` carries a run-stage note coded SIM_GAP_NOTE: its run stopped at a simulator gap.
+
+    run_loop adds that note only under loop.correct_on_sim_gap (OQ-098;
+    lassi.core.stages gap_note), so with the key off or absent no attempt
+    carries it. It is the record's mark of a gap attempt that the trial's
+    end reason does not name, as the score profiles read it (lassi.scoring
+    df_v0 and lassi_profile).
+    """
+    return any(
+        item.stage == "run" and item.severity == "note" and item.code == SIM_GAP_NOTE for item in attempt.diagnostics
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -32,29 +32,35 @@ Readings of the Result Record (task P2.6):
   component, which is also its scalar and final.score, is R_final minus
   correction_penalty x final.corrections, where R_final is the R of the
   last attempt, a stale-output attempt included: each attempt is scored by
-  its own record (a sim-gap attempt's R is None, below). A guard violation
+  its own record (a gap attempt's R is None, below). A guard violation
   on any attempt, the last or an earlier one, puts guard_violation in place
   of R_final, so a later correction never washes a violation out of the
   multi-turn value (task P4.15; OQ-028, part 3, taken under the owner's
   direction of 2026-09-26 and marked for the owner's review); single_turn
   stays attempt 0's R. A trial with no attempts has both None.
 
-The reading of a sim-gap attempt (task P4.6): the gap attempt is the last
-attempt of a trial whose final.end_reason is sim-gap (ended_at_gap), the
-attempt whose run stopped at a simulator gap. A gap is not a model error,
-and the simulator could not complete the run, so the run holds no evidence
-either way: its R is None (not computed), neither a failed S4 run nor a
-clean one, even when its run also reported undefined behavior (the gap
-reading wins, as run_loop ends such a trial at sim-gap). Its components are
-those of its own record, as for any attempt, and a guard violation recorded
-on it (Attempt.guards; df-v0 reads the recorded guards, not the run) still
-sets R = guard_violation. Every earlier attempt is scored by its own record.
+The reading of a sim-gap attempt (task P4.6; task P17.35, OQ-098): a gap
+attempt is one whose run stopped at a simulator gap (gap_attempt): the last
+attempt of a trial whose final.end_reason is sim-gap (ended_at_gap), or any
+attempt that carries the run-stage note coded sim-gap, which run_loop adds
+only under loop.correct_on_sim_gap (lassi.core.record gap_noted), so a gap
+attempt that a later attempt follows is read the same way. A gap is not a
+model error, and the simulator could not complete the run, so the run holds
+no evidence either way: its R is None (not computed), neither a failed S4
+run nor a clean one, even when its run also reported undefined behavior
+(the gap reading wins, as run_loop reads a gap before undefined behavior).
+Its components are those of its own record, as for any attempt, and a
+guard violation recorded on it (Attempt.guards; df-v0 reads the recorded
+guards, not the run) still sets R = guard_violation. Every other attempt is
+scored by its own record.
 single_turn is attempt 0's R, and multi_turn, the scalar, and final.score
 are None when R_final is and no attempt violated a guard; a trial Score
-component left None this way carries a note (GAP_NOTES). A trial that ended at sim-gap with no attempt
-has no score, as any trial with no attempts. A kernel JIT failure (S1) and
-a run with undefined behavior (S4 with a run-error) need no reading of
-their own: each scores by its stage.
+component left None this way carries a note (GAP_NOTES). A trial that ended
+at sim-gap with no attempt has no score, as any trial with no attempts. With
+loop.correct_on_sim_gap off no attempt carries the note, so the reading is
+the end reason's alone. A kernel JIT failure (S1) and a run with undefined
+behavior (S4 with a run-error) need no reading of their own: each scores by
+its stage.
 """
 
 from __future__ import annotations
@@ -71,7 +77,7 @@ import yaml
 
 from lassi.core.capabilities import SCORES_ATTEMPTS
 from lassi.core.interfaces import Score
-from lassi.core.record import GUARD_OUTCOMES, STAGES, Attempt, Guards, ScoreBreakdown, Trial
+from lassi.core.record import GUARD_OUTCOMES, STAGES, Attempt, Guards, ScoreBreakdown, Trial, gap_noted
 from lassi.core.registry import register
 
 # The weights file a recipe's `score: df-v0` reads.
@@ -96,11 +102,11 @@ MULTI_TURN = "multi_turn"
 # The end reason of a trial stopped by a simulator gap (lassi.core.record END_REASONS; task P4.6). The last attempt of
 # such a trial is its gap attempt, the one whose run stopped at the gap.
 SIM_GAP_END = "sim-gap"
-# The notes on the trial Score's components that the gap attempt leaves null.
+# The notes on the trial Score's components that a gap attempt (gap_attempt) leaves null.
 GAP_NOTES = {
-    SINGLE_TURN: "not computed: attempt 0 is the sim-gap attempt, whose run stopped at a simulator gap, not a model "
+    SINGLE_TURN: "not computed: attempt 0 is a sim-gap attempt, whose run stopped at a simulator gap, not a model "
     "error, so its R is not computed",
-    MULTI_TURN: "not computed: the last attempt is the sim-gap attempt, whose run stopped at a simulator gap, not a "
+    MULTI_TURN: "not computed: the last attempt is a sim-gap attempt, whose run stopped at a simulator gap, not a "
     "model error, so R_final is not computed",
 }
 
@@ -193,6 +199,17 @@ def ended_at_gap(trial: Trial) -> bool:
     return bool(trial.attempts) and end is not None and end.code == SIM_GAP_END
 
 
+def gap_attempt(trial: Trial, position: int) -> bool:
+    """Return True when the attempt at `position` in trial.attempts is a gap attempt, its run stopped at a gap.
+
+    That is the last attempt of a trial that ended at sim-gap (ended_at_gap),
+    or any attempt with the run-stage note coded sim-gap (lassi.core.record
+    gap_noted), which only loop.correct_on_sim_gap adds.
+    """
+    last = position == len(trial.attempts) - 1
+    return gap_noted(trial.attempts[position]) or (last and ended_at_gap(trial))
+
+
 @register("ScoreProfile", "df-v0")
 class DfV0Profile:
     """The df-v0 ScoreProfile: R per attempt, and the trial's single-turn and multi-turn values.
@@ -216,8 +233,9 @@ class DfV0Profile:
         """Return one attempt's Score from its record alone: its components and, as the scalar, its R.
 
         It reads the attempt without its trial, so it does not apply the
-        sim-gap reading, which needs the trial's end reason: score_attempts
-        does, and a caller scoring the attempts of a trial uses it.
+        sim-gap reading (gap_attempt), which can need the trial's end
+        reason: score_attempts does, and a caller scoring the attempts of a
+        trial uses it.
         """
         weights = self.weights
         stage = attempt.stage_reached
@@ -242,16 +260,18 @@ class DfV0Profile:
     def score_attempts(self, trial: Trial) -> list[Score]:
         """Return one Score per attempt of `trial`, in attempt order.
 
-        Each attempt is scored by its own record (score_attempt), except
-        the gap attempt of a trial that ended at sim-gap (ended_at_gap): it
-        keeps its components, but its R, the scalar, is None (not computed),
+        Each attempt is scored by its own record (score_attempt), except a
+        gap attempt (gap_attempt: the last attempt of a trial that ended at
+        sim-gap, or any attempt with the sim-gap note): it keeps its
+        components, but its R, the scalar, is None (not computed),
         undefined behavior in its run included, unless a guard violation is
         recorded on it (component guard 1.0), which still sets
         R = guard_violation.
         """
         scores = [self.score_attempt(attempt) for attempt in trial.attempts]
-        if scores and ended_at_gap(trial) and scores[-1].components[GUARD] != 1.0:
-            scores[-1] = Score(components=scores[-1].components, scalar=None)
+        for position, score in enumerate(scores):
+            if gap_attempt(trial, position) and score.components[GUARD] != 1.0:
+                scores[position] = Score(components=score.components, scalar=None)
         return scores
 
     def score(self, trial: Trial) -> Score:
@@ -279,8 +299,8 @@ class DfV0Profile:
         single_turn is attempt 0's R and multi_turn is R_final minus the
         correction penalty, where R_final is guard_violation when any
         attempt's guard component is 1.0 (OQ-028, part 3) and otherwise the
-        last attempt's R. Each is None when the R it reads is None (the gap
-        attempt's), with that component's GAP_NOTES note.
+        last attempt's R. Each is None when the R it reads is None (a gap
+        attempt's, gap_attempt), with that component's GAP_NOTES note.
         """
         if not scores:
             return Score(components={SINGLE_TURN: None, MULTI_TURN: None}, scalar=None)

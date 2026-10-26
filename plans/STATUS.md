@@ -184,4 +184,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.32 | READY | The night window of 2026-10-25: the sweep with the new features on 70B-class models | P17.29,P17.30 |  |
 | P17.33 | DONE | The C++ -> TT host skeleton (opt-in) | P17.29 | skeleton tt-host-skeleton-v0 and the skeleton section; compiles at the pin from clean commit 36f263b (rx 20261025-202808-desktop-8r113ei-detached-36f263b3-2007, results/p17-skeleton-build); bible rev 423 |
 | P17.34 | READY | The next window's sweep (sweep8) | P17.27,P17.33,P17.35 |  |
-| P17.35 | READY | Simulator gaps: reported as not verifiable, and fed back (OQ-098) | - |  |
+| P17.35 | DONE | Simulator gaps: reported as not verifiable, and fed back (OQ-098) | - | loop.correct_on_sim_gap (opt-in): gap attempts noted sim-gap, fed back under the cap, never scored as failures (df-v0 and lassi read the note); tabulate.py lists them as not verifiable on ttsim; bible rev 431 |
