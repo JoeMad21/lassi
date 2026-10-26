@@ -1,0 +1,9 @@
+# The model table of tools/suite.py and plans/runs/suite/run-suite.sh. The first six columns are those of
+# plans/runs/rngd-sweep/run.sh (slug, model, revision, cards, reasoning parser, venv under the scratch root);
+# run-suite.sh hands run.sh one row at a time cut to those six. The seventh is the size in bytes of every file of
+# the revision, which the free-space check of each download needs, or - when it is not known (then nothing is
+# downloaded and run.sh serves the model only from the host's cache). The rows are the night's of 2026-10-25,
+# plans/runs/rngd-sweep/models10.tsv (OQ-087); the sizes are run-night.sh's, the sums of every file in
+# https://huggingface.co/api/models/furiosa-ai/<model>/tree/v2026.4?recursive=1, read 2026-10-25.
+llama33-70b	furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic	v2026.4	4	-	furiosa-venv-2026.4	73775947887
+gpt-oss-120b	furiosa-ai/gpt-oss-120b	v2026.4	4	-	furiosa-venv-2026.4	198607992266

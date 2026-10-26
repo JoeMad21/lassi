@@ -1,0 +1,7 @@
+# The eighth pass of the owner's RNGD sweep, for the next owner window (prepared 2026-10-25 after the owner's "I
+# cannot overstate how important that we get some meaningful results"; OQ-096). tt-pairs-v0 is a development set
+# (OQ-083 (b)); exploratory; every TT program runs on ttsim, a simulator. Inherits sweep7's model, budget, samples
+# (3 per item), and correction cap (8). Every recipe corrects a wrong output and a simulator gap until the cap (OQ-098).
+# Combination tc1: tt -> cpp on tt-host-v1 (P17.27: the cpp toolchain and lassi_io_free statements).
+extends: tc0-maxabs.yaml
+prompts: tt-host-v1

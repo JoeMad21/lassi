@@ -299,7 +299,8 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 ### P17.34 The next window's sweep (sweep8)
 - Added on 2026-10-25: projects/lassi-demo/sweep8 on both night models: cpp -> tt on tt-host-v1 with the worked examples (control), with the skeleton, and with every feature plus the skeleton; tt -> cpp on tt-host-v0 (control) and tt-host-v1 (P17.27). Every recipe corrects a wrong output until the cap (OQ-098), and sets the simulator-gap correction once P17.35 lands.
 - Accept: every sweep8 recipe loads (tests/core/test_faithful_bindings.py), a night script runs them with provenance, and the run's tables come back as development results (OQ-083 (b)).
-- Files: projects/lassi-demo/sweep8/, plans/runs/night/, plans/runs/.
+- Launcher (the owner's direction of 2026-10-26: the full suite launched unattended, with a help option on every command): tools/suite.py (plan, launch, status, wait, stop, pull) and its remote side plans/runs/suite/run-suite.sh, which runs the sweep with run-night.sh's safety steps; launch asks before it starts a job unless --yes, and --silicon is refused.
+- Files: projects/lassi-demo/sweep8/, plans/runs/night/, plans/runs/, tools/suite.py, tests/tools/test_suite.py.
 - Host: Windows; alpha01 in the next owner window. Depends: P17.27, P17.33, P17.35.
 
 ### P17.35 Simulator gaps: reported as not verifiable, and fed back (OQ-098)
@@ -308,6 +309,20 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Accept: an opt-in loop key (refused under faithful: true; off when absent, so earlier recipes keep their hashes) feeds a simulator gap back with its class under the same count and cap, through the template set's run-error correction; the sim-gap attempt keeps its record; a report lists every attempt that hit a gap as built but not verifiable on ttsim, counted apart from failures; tests with fakes.
 - Files: lassi/core/stages.py, lassi/core/recipe.py, plans/runs/rngd-sweep/tabulate.py, tests/core/, docs/BIBLE.md.
 - Host: Windows. Depends: none.
+
+### P17.36 The cpp -> ttkernel path: the model writes ttkernel MLIR, tt-mlir emits the kernels
+- Added on 2026-10-26 (the owner, 2026-10-26: "Get the MLIR lowering done and try GPT-OSS with MLIR lowering to tenstorrent MLIR and emit"; the ttkernel level first, since it needs no pin change). The model writes each kernel an item's tracked TT host program launches as a ttkernel MLIR module; the pinned tt-mlir verifies, lowers to EmitC, and translates it to Metalium kernel C++; the tracked host program builds around it and runs on ttsim.
+- Bible: IR Strategy (the ttkernel row), Level Rules, Toolchain Pins (the joint pin), Benchmark Suites, Project Recipes (Notes), Harness Contract, Agent Rules 2, 5, 6, and 10.
+- Accept: a language ttkernel with the Toolchain ttkernel-ttmetal (tt-mlir's own lit-test commands at 5f396fd6, each tool error a parsed Diagnostic fed back by the correction loop, any model file other than a kernels/**.mlir module refused); the sibling suite tt-pairs-v0-ttkernel with the host program and lassi_io.h as sha256-pinned support; the template set tt-mlir-v0 (the host program shown read-only, never the upstream kernels) with the ttkernel dialect pack and one worked example from tt-mlir's tests, only their manifests tracked; recipes projects/lassi-demo/mlir1/gpt-oss-120b in two tolerance halves; tests with fakes for the tt-mlir tools; and plans/runs/mlir/smoke.sh for alpha01. At the pin a ttkernel kernel gets a circular buffer only from an argument, so until P17.37 the max_abs recipe runs loopback alone.
+- Files: lassi/toolchains/ttkernel_build.py, lassi/bench/registry.py, lassi/core/ (runner, stages, recipe), assets/bench/tt-pairs-v0-ttkernel.yaml, assets/prompts/tt-mlir-v0/, assets/context/ttkernel-5f396fd6/MANIFEST.yaml, assets/examples/ttkernel-examples-5f396fd6/MANIFEST.yaml, tools/build_ttkernel_context.py, projects/lassi-demo/mlir1/, plans/runs/mlir/smoke.sh, tests/, docs/BIBLE.md.
+- Host: Windows; the smoke and the recipes on alpha01 in an owner window. Depends: P17.27.
+
+### P17.37 ttkernel host programs that pass each circular buffer index as an argument
+- Added on 2026-10-26 (P17.36's finding): at tt-mlir 5f396fd6 the only ttkernel ops whose result may be a circular buffer are get_arg_val, get_common_arg_val, and get_compile_time_arg_val (TTKernelOps.td:2756-2800), and the tracked host programs of eltwise_binary, eltwise_sfpu, matmul_single_core, and matmul_multi_core pass no circular buffer index as an argument, so no ttkernel kernel can name their buffers.
+- Bible: Level Rules, Benchmark Suites (tt-pairs-v0-ttkernel), Harness Contract, Agent Rule 5.
+- Accept: for each of those items, a tracked host program for the ttkernel language that appends each kernel's circular buffer indices as compile-time arguments at fixed, documented positions, otherwise identical to the item's host program (a diff test), still building and passing with the upstream kernels on ttsim (an owner window); the sibling manifest names it with its sha256; the tt-mlir-v0 prompt shows it; both mlir1 recipes then hold every item of their half again.
+- Files: assets/bench/tt-pairs-v0/<item>/ttkernel/, assets/bench/tt-pairs-v0-ttkernel.yaml, projects/lassi-demo/mlir1/, tests/.
+- Host: Windows; the ttsim check on alpha01 in an owner window. Depends: P17.36.
 
 ### P17.11 Gate part (a): recipes and the hardware-free evidence
 - Bible: Build Roadmap (P17 row, Gate part (a)), Agent Rules 1, 7, and 10; AGENTS.md Phase Gate and Results.

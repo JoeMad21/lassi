@@ -183,5 +183,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.31 | READY | The development split for tt-pairs-v0 (OQ-083 (b)) | - |  |
 | P17.32 | DONE | The night window of 2026-10-25: the sweep with the new features on 70B-class models | P17.29,P17.30 | night of 2026-10-25 (rx 20261025-170035-night-395c): Llama-3.3-70B 2/60 passed, gpt-oss-120b 16/71 (ttsim; development results); results/night-20261025 |
 | P17.33 | DONE | The C++ -> TT host skeleton (opt-in) | P17.29 | skeleton tt-host-skeleton-v0 and the skeleton section; compiles at the pin from clean commit 36f263b (rx 20261025-202808-desktop-8r113ei-detached-36f263b3-2007, results/p17-skeleton-build); bible rev 423 |
-| P17.34 | READY | The next window's sweep (sweep8) | P17.27,P17.33,P17.35 |  |
+| P17.34 | DONE | The next window's sweep (sweep8) | P17.27,P17.33,P17.35 | sweep8 (20 recipes, OQ-098 loop opt-ins) and the suite launcher tools/suite.py with plans/runs/suite/; audited; first run in the owner window of 2026-10-26 |
 | P17.35 | DONE | Simulator gaps: reported as not verifiable, and fed back (OQ-098) | - | loop.correct_on_sim_gap (opt-in): gap attempts noted sim-gap, fed back under the cap, never scored as failures (df-v0 and lassi read the note); tabulate.py lists them as not verifiable on ttsim; bible rev 431 |
+| P17.36 | READY | The cpp -> ttkernel path: the model writes ttkernel MLIR, tt-mlir emits the kernels | P17.27 | built with fakes; audit next; the smoke runs in the window of 2026-10-26 |
+| P17.37 | READY | ttkernel host programs that pass each circular buffer index as an argument | P17.36 |  |
