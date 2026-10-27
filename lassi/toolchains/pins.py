@@ -6,11 +6,15 @@ skipped. A value is either a double-quoted string, whose quotes are removed,
 or a bare word with no whitespace, quote, or "#"; a trailing comment after
 whitespace is not part of the value. The keys the runner reads:
 
-- NAME and VERSION: the pin's name and version; VERSION is what a Trial's
-  toolchain_pins records.
+- NAME and VERSION: the pin's name and the version of its source.
+- BUILD (optional; task P17.42): the name of a build variant of that source,
+  such as tracy for tt-metal built with ENABLE_TRACY=ON, so that another
+  build of the same source gets its own install and its own record.
+  recorded_version(pin) is VERSION, or <VERSION>-<BUILD> with BUILD, and is
+  what a Trial's toolchain_pins records.
 - PREFIX_NAME: the install directory under the toolchains root
-  ($LASSI_TOOLCHAINS), written <NAME>@<VERSION>, for a toolchain the
-  project installs.
+  ($LASSI_TOOLCHAINS), written <NAME>@<recorded_version>, for a toolchain
+  the project installs.
 - EXECUTABLE: for a host compiler the project does not install (a
   toolchain class with PIN and no PIN_BIN, such as toolchains/gcc.pin),
   its absolute path on the build host, which the runner uses as given; such
@@ -86,6 +90,17 @@ def linked_prefixes(pin: Mapping[str, str]) -> dict[str, str]:
     pin without such keys gives {}.
     """
     return {variable: pin[key] for key, variable in PREFIX_VARIABLES.items() if key in pin}
+
+
+def recorded_version(pin: Mapping[str, str]) -> str:
+    """Return the version a run records for a pin: VERSION, or <VERSION>-<BUILD> when the pin names a build variant.
+
+    For toolchains/tt-metal.pin since task P17.42 this is 5280a9cf-tracy,
+    the part of its PREFIX_NAME after "@"; a pin without BUILD gives its
+    VERSION unchanged.
+    """
+    build = pin.get("BUILD")
+    return f"{pin['VERSION']}-{build}" if build else pin["VERSION"]
 
 
 def prefix_pin_name(prefix: str) -> str:

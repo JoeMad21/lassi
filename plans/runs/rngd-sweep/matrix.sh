@@ -24,7 +24,9 @@ fi
 scratch=${LASSI_SCRATCH:?LASSI_SCRATCH must be set; the gate sets it}
 runs=${LASSI_RUNS_ROOT:?LASSI_RUNS_ROOT must be set; the gate sets it}
 toolchains=${LASSI_TOOLCHAINS:?LASSI_TOOLCHAINS must be set; the gate sets it}
-tree="$toolchains/tt-metal@5280a9cf"
+# The pinned tt-metal install, toolchains/tt-metal.pin's PREFIX_NAME read in a subshell (since task P17.42 the Tracy
+# build of 5280a9cf; the asset builders read only its sources, which are the same).
+tree="$toolchains/$(source toolchains/tt-metal.pin && echo "$PREFIX_NAME")"
 out="$runs/rngd-matrix/$(date +%Y%m%d-%H%M)"
 mkdir -p "$out"
 ts() { date '+%Y-%m-%dT%H:%M:%S%z'; }

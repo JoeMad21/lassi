@@ -14,6 +14,11 @@
   adversary, and direction from the trials' adversary records (task
   P16.6): the confirmed-divergence rate, the invalid-input rejection rate,
   and the contract-finding count, in Markdown and Parquet.
+- lassi.analysis.tt_rates: Tenstorrent rates (task P17.42): an item's
+  analytic work over a silicon run's measured device kernel time, each rate
+  naming its numerator and denominator, a percent of the vendor's peak
+  labelled with its source, and a training run's step summary; none from a
+  simulator (Agent Rule 2).
 """
 
 from lassi.analysis.adversary import (

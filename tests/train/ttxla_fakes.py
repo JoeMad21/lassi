@@ -11,7 +11,9 @@
 - worker_script(mode) returns the text of a fake worker: a Python script
   run with the test interpreter in place of the venv's, which reads the
   job file the trainer wrote, and then, by `mode`: "complete" writes one
-  steps line per step (the second step's loss NaN), a checkpoint directory
+  steps line per step (the second step's loss NaN; task P17.42's step
+  time, token counts, model FLOPs, and compile flag, the first step a
+  compile step), a checkpoint directory
   with SYNTHETIC weight and tokenizer files, and result.json, and exits 0;
   "refuse" writes result.json with status refused and exits 3; "error"
   prints a SYNTHETIC traceback line and exits 1; "crash" exits 139, the
@@ -124,7 +126,12 @@ if mode == "hang":
 with open(job["steps_file"], "w", encoding="ascii") as steps:
     for step in range(1, job["steps"] + 1):
         loss = float("nan") if step == 2 else 1.0 / step
-        steps.write(json.dumps({{"step": step, "loss": loss, "learning_rate": job["learning_rate"]}}) + "\\n")
+        steps.write(json.dumps({{
+            "step": step, "loss": loss, "learning_rate": job["learning_rate"],
+            "step_time_s": 10.0 if step == 1 else 0.5, "tokens": 40, "tokens_computed": 64,
+            "model_flop": 64000, "compiles": 1 if step == 1 else 0,
+            "compile_step": step == 1,
+        }}) + "\\n")
 checkpoint = Path(job["checkpoint"])
 checkpoint.mkdir(parents=True)
 (checkpoint / "adapter_model.safetensors").write_bytes(b"SYNTHETIC weights")
@@ -134,6 +141,7 @@ Path(job["result_file"]).write_text(json.dumps({{
     "status": "complete", "stage": "saved", "message": None, "global_step": job["steps"],
     "train_runtime_s": 1.5, "device": "SYNTHETIC xla:0", "parameters": {{"total": 10, "trainable": 2}},
     "tokens": {{"max_record": 12, "records": [12, 10]}}, "versions": {{"torch": "SYNTHETIC"}}, "notes": [],
+    "model_flops": {{"convention": "palm-model-flops", "flop_per_token": 1000}},
 }}), encoding="ascii")
 '''
 

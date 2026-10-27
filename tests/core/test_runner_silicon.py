@@ -112,7 +112,7 @@ RUNS_PROPOSALS = "runs_proposals"
 SILICON_DEVICE = "SYNTHETIC Tenstorrent Wormhole n300 x 8 (silicon)"
 # A fixture wall time, not a measurement.
 REFERENCE_WALL_S = 1.25
-REAL_SECTION = {"kind": "tt_silicon", "hugepages": PRIVATE_PER_RUN, "reset_filter": True}
+REAL_SECTION = {"kind": "tt_silicon", "hugepages": PRIVATE_PER_RUN, "reset_filter": True, "device_profiler": "off"}
 
 
 @pytest.fixture(autouse=True)
@@ -483,7 +483,9 @@ def test_the_tt_silicon_executor_records_every_card_in_provenance_and_each_trial
     registry = make_registry(log, ("Executor", "tt_silicon_real", on_the_fake_host(module, host.root, log)))
     recipe = write_recipe(tmp_path, "real-started", data({**REAL_SECTION, "kind": "tt_silicon_real"}))
     run_dir = run_recipe(recipe, options(tmp_path, bench, registry, silicon=True))
-    expected = module.TtSiliconExecutor(hugepages=PRIVATE_PER_RUN, reset_filter=True, **seams(host.root)).device()
+    expected = module.TtSiliconExecutor(
+        hugepages=PRIVATE_PER_RUN, reset_filter=True, device_profiler="off", **seams(host.root)
+    ).device()
     written = manifest(run_dir)
     assert written["device"] == expected
     assert expected.startswith("Tenstorrent Wormhole n300 x 8 (silicon)")

@@ -155,7 +155,11 @@ INSTALL_SUMMARY = REPO / "results" / "p4-tt-install" / "summary.md"
 NAME = "ttmetal-host"
 MODULE = "lassi.toolchains.ttmetal_build"
 PIN_NAME = "tt-metal"
-PREFIX = "tt-metal@5280a9cf"
+# The install prefix of toolchains/tt-metal.pin: the Tracy build of 5280a9cf since task P17.42 (BUILD tracy). The
+# HOST_* words below stay the P4.2 build's: no header under tt_metal/api, tt_stl, tt_metal/hostdevcommon/api, or UMD's
+# device/api at the pins names Tracy, so the Tracy build's added definitions and flags change no declaration a host
+# program sees (plans/p17-portable.md, task P17.42).
+PREFIX = "tt-metal@5280a9cf-tracy"
 COMMIT = "5280a9cfb00998fd49667a29523d03aee905c129"
 INSTALL_RECORD = "lassi-install.txt"
 UNFINISHED_RECORD = "lassi-install.unfinished"

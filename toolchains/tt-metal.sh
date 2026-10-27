@@ -10,7 +10,11 @@
 # device.
 # The flags are those of the pin's own ttsim CI build (.github/workflows/ttsim.yaml, pr-gate.yaml, and
 # build-artifact.yaml at COMMIT: build_metal.sh --build-type Release with TOOLCHAIN_FILE, --disable-profiler,
-# and --without-distributed), except the Python bindings, the tests, and ccache, which are off. At the pin none
+# and --without-distributed), except the Python bindings, the tests, and ccache, which are off, and, since task P17.42
+# (the owner's answer of 2026-10-26), Tracy, which is on with its client's TRACY_NO_BROADCAST and
+# TRACY_ONLY_LOCALHOST options (toolchains/tt-metal.pin says where each is read), so the device profiler is compiled
+# in; check_tracy refuses the install record unless the TracyClient object's compile definitions hold the pin's
+# TRACY_DEFINES, and the record's flags line names every setting. At the pin none
 # of those changes a compile flag of the targets built here: the bindings option only adds TT-NN code (outside
 # TT-NN it prints a message, cmake/project_options.cmake:27), the test options only add test directories
 # (CMakeLists.txt:272, tools/CMakeLists.txt:6, tt_metal/CMakeLists.txt:318, tt_stl/CMakeLists.txt:59), and ccache
@@ -524,11 +528,42 @@ check_linked() {
   echo "tt-metal: metal_example_$example was compiled by $CLANG_EXPECT and linked by $LINKER_EXPECT"
 }
 
+# check_tracy: refuse unless the TracyClient object's DEFINES line in the build's build.ninja holds every word of
+# TRACY_DEFINES (Tracy on, no broadcast, the loopback interface only; task P17.42), so a build whose client could
+# listen on every interface or broadcast is never recorded. CMake's Ninja generator writes each object as a `build
+# <object>: <rule> <source>` line followed by its indented variables; the client's object is TracyClient.cpp.o under
+# the TracyClient.dir directory. Reads the file only; nothing is run.
+check_tracy() {
+  local defines word
+  if [ ! -f "$build/build.ninja" ]; then
+    echo "tt-metal: $build/build.ninja is missing, so the TracyClient object's definitions cannot be read" >&2
+    return 1
+  fi
+  defines="$(awk '
+    /^build / { inside = ($0 ~ /\/TracyClient\.dir\/.*TracyClient\.cpp\.o:/) ; next }
+    inside && /^  DEFINES = / { sub(/^  DEFINES = /, ""); print; exit }
+  ' "$build/build.ninja")"
+  if [ -z "$defines" ]; then
+    echo "tt-metal: $build/build.ninja names no TracyClient.cpp.o object with a DEFINES line" >&2
+    return 1
+  fi
+  for word in $TRACY_DEFINES; do
+    case " $defines " in
+      *" $word "*) ;;
+      *)
+        echo "tt-metal: the TracyClient object is compiled without $word (its DEFINES: $defines)" >&2
+        return 1
+        ;;
+    esac
+  done
+  echo "tt-metal: the TracyClient object is compiled with $TRACY_DEFINES"
+}
+
 # verify_install: the checks a kept install must pass: the tree at the pin, its build link, the configured
-# cache, sfpi, the kernel JIT's files, the examples, and their compiler and linker.
+# cache, sfpi, the kernel JIT's files, the examples, their compiler and linker, and the Tracy client's definitions.
 verify_install() {
   verify_tree && [ "$(readlink "$prefix/build" || true)" = "$BUILD_DIR" ] && check_cache && check_sfpi \
-    && check_jit_files && check_examples && check_linked
+    && check_jit_files && check_examples && check_linked && check_tracy
 }
 
 # move_aside <kind>: move whatever is at the prefix to <prefix>.<kind>-<date>, never deleting it (its removal
@@ -641,6 +676,7 @@ build_tree
 check_jit_files
 check_examples
 check_linked
+check_tracy
 # The build changed no tracked file of the pinned tree.
 verify_tree
 

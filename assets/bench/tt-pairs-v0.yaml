@@ -32,6 +32,13 @@ items:
     outputs: [c]  # f32 on both sides: the TT program widens the device's bf16 result exactly
     # absolute 1e-2: the upstream check fails an element whose result differs from the f32 sum by more than 1e-2
     tolerance: {metric: max_abs, threshold: 0.01}
+    # Analytic work (task P17.42; plans/spikes/tt-perf.md, Finding 9): one add per element, and the two bf16 inputs read
+    # and the bf16 sum written once on the device (2 bytes each); a property of the item, never a measurement.
+    work:
+      flop: 65536
+      ops: {add: 65536}
+      bytes: 393216
+      basis: '65536 adds; (2 x 65536 + 65536) bf16 elements x 2 bytes'
     unpack_to_dest: >-
       not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
       buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the
@@ -69,6 +76,13 @@ items:
     # absolute 5e-2, the upstream check: eltwise_sfpu.cpp:147 sets its eps to 5e-2 (rx 20261005-111942-exec-4372);
     # the comment above it says 2e-2, which plans/spikes/p4-ttsim-runtime.md first read (corrected 2026-10-05)
     tolerance: {metric: max_abs, threshold: 0.05}
+    # Analytic work (task P17.42): one exp per element, counted under ops with no FLOP figure, and the bf16 input read
+    # and the bf16 result written once (2 bytes each); never a measurement.
+    work:
+      flop: null
+      ops: {exp: 65536}
+      bytes: 262144
+      basis: '65536 exp evaluations; (65536 + 65536) bf16 elements x 2 bytes'
     unpack_to_dest: >-
       not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
       buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the
@@ -105,6 +119,13 @@ items:
     outputs: [output]  # bf16 on both sides
     # exact equality: upstream requires every element of the copy to equal the input
     tolerance: {metric: max_abs, threshold: 0}
+    # Analytic work (task P17.42): a copy, no floating-point arithmetic, so no FLOP figure; the bf16 input read and the
+    # bf16 output written once (2 bytes each); never a measurement.
+    work:
+      flop: null
+      ops: {}
+      bytes: 204800
+      basis: 'a copy; (51200 + 51200) bf16 elements x 2 bytes'
     unpack_to_dest: >-
       not taken: the example has one data-movement kernel and no compute kernel, so nothing unpacks to dest; the
       host program written here likewise creates one data-movement kernel and no circular buffer, and names no
@@ -135,6 +156,13 @@ items:
     outputs: [c]  # bf16 [640, 640] on both sides
     # PCC above 0.97 against the CPU result, the upstream check; binary_io passes a PCC at or above the threshold
     tolerance: {metric: pcc, threshold: 0.97}
+    # Analytic work (task P17.42): 2MNK FLOPs for M = N = K = 640 (one multiply-add per M N K), the two bf16 inputs read
+    # and the bf16 product written once (2 bytes each); the same for every candidate; never a measurement.
+    work:
+      flop: 524288000
+      ops: {mac: 262144000}
+      bytes: 2457600
+      basis: '2MNK, M = N = K = 640; (3 x 640 x 640) bf16 elements x 2 bytes'
     unpack_to_dest: >-
       not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
       buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the
@@ -173,6 +201,13 @@ items:
     outputs: [c]  # bf16 [640, 640] on both sides
     # PCC above 0.97 against the CPU result, the upstream check; binary_io passes a PCC at or above the threshold
     tolerance: {metric: pcc, threshold: 0.97}
+    # Analytic work (task P17.42): 2MNK FLOPs for M = N = K = 640 (one multiply-add per M N K), the two bf16 inputs read
+    # and the bf16 product written once (2 bytes each); the same for every candidate; never a measurement.
+    work:
+      flop: 524288000
+      ops: {mac: 262144000}
+      bytes: 2457600
+      basis: '2MNK, M = N = K = 640; (3 x 640 x 640) bf16 elements x 2 bytes'
     unpack_to_dest: >-
       not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
       buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the

@@ -49,6 +49,8 @@ from types import ModuleType
 import pytest
 import yaml
 
+from lassi.toolchains.pins import read_pin
+
 REPO = Path(__file__).resolve().parents[2]
 TOOL = REPO / "tools" / "build_tt_context.py"
 PACK = "context/tt-metalium-5280a9cf"
@@ -95,7 +97,8 @@ def pinned_tree() -> Path | None:
     if named and Path(named).is_dir():
         return Path(named)
     toolchains = os.environ.get("LASSI_TOOLCHAINS", "")
-    installed = Path(toolchains) / "tt-metal@5280a9cf" if toolchains else None
+    prefix = read_pin("tt-metal")["PREFIX_NAME"]  # the pinned install (the Tracy build since task P17.42)
+    installed = Path(toolchains) / prefix if toolchains else None
     return installed if installed is not None and installed.is_dir() else None
 
 

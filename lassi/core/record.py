@@ -71,6 +71,9 @@ RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # each attempt whose run stopped at a simulator gap (lassi.core.stages gap_note; gap_noted reads it). It is spelled as
 # the end code sim-gap, but it is a Diagnostic code, not an end reason.
 SIM_GAP_NOTE = "sim-gap"
+# DEVICE_TIMING_NOTE (task P17.42) is the code of the run-stage note an executor gives a run whose device time it was
+# asked for but could not read whole (lassi.executors.tt_profiler): RunInfo.device_timing is then None, never partial.
+DEVICE_TIMING_NOTE = "device-timing"
 END_REASONS = (
     "baseline-compile",
     "baseline-run",
@@ -307,6 +310,76 @@ class Diagnostic:
 
 
 @dataclass(frozen=True, kw_only=True)
+class DeviceProgram:
+    """One program execution as tt-metal's device profiler reported it (task P17.42; cpp_device_perf_report.csv).
+
+    `device_id` is the chip (DEVICE ID), `op_name` the program's name as
+    tt-metal gives it ("" for an unnamed one), `call_count` its GLOBAL CALL
+    COUNT, `cores` its CORE COUNT, `kernel_cycles` the cycles from the first
+    kernel start to the last kernel end over every core and RISC (DEVICE
+    KERNEL END CYCLE minus DEVICE KERNEL START CYCLE), `kernel_ns` tt-metal's
+    DEVICE KERNEL DURATION [ns] (those cycles at the AICLK it read), and
+    `fw_ns` its DEVICE FW DURATION [ns], None when the report left it empty.
+    """
+
+    device_id: int
+    op_name: str
+    call_count: int
+    cores: int
+    kernel_cycles: int
+    kernel_ns: int
+    fw_ns: int | None = None
+
+    def __post_init__(self) -> None:
+        """Check the field types, that every count is at least 0, and cores and kernel_cycles at least 1."""
+        _check_fields(self)
+        for name in ("device_id", "call_count", "kernel_ns"):
+            _check_non_negative("DeviceProgram", name, getattr(self, name))
+        if self.fw_ns is not None:
+            _check_non_negative("DeviceProgram", "fw_ns", self.fw_ns)
+        for name in ("cores", "kernel_cycles"):
+            if getattr(self, name) < 1:
+                _fail("DeviceProgram", name, getattr(self, name), "must be >= 1")
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeviceTiming:
+    """The device time of one silicon run, from tt-metal's device profiler (task P17.42; plans/spikes/tt-perf.md, (A)).
+
+    `source` names the reader ("tt-metal device profiler"), `build` the
+    tt-metal install the run used (the pin's PREFIX_NAME, such as
+    tt-metal@5280a9cf-tracy), `arch` and `aiclk_mhz` the first line of
+    profile_log_device.csv (ARCH and CHIP_FREQ[MHz], the AICLK in MHz that
+    tt-metal read when the device opened), `programs` one DeviceProgram per
+    row of cpp_device_perf_report.csv in file order, at least one, and
+    `self_reported` whether the program that ran may be model-written: its
+    own process writes the files, so a model's program could forge them
+    (the spike, Finding 11). The executor sets it True, and the baseline
+    clears it for an item's tracked reference. A reading is whole or absent:
+    RunInfo.device_timing None means not measured (every ttsim run, every
+    silicon run with device_profiler off, and any shortfall, which a
+    DEVICE_TIMING_NOTE note names).
+    """
+
+    source: str
+    build: str
+    arch: str
+    aiclk_mhz: int
+    programs: list[DeviceProgram]
+    self_reported: bool
+
+    def __post_init__(self) -> None:
+        """Check the field types, the non-empty names, an AICLK of at least 1 MHz, and at least one program."""
+        _check_fields(self)
+        for name in ("source", "build", "arch"):
+            _check_non_empty("DeviceTiming", name, getattr(self, name))
+        if self.aiclk_mhz < 1:
+            _fail("DeviceTiming", "aiclk_mhz", self.aiclk_mhz, "must be >= 1 (a simulated chip reports 0)")
+        if not self.programs:
+            _fail("DeviceTiming", "programs", self.programs, "must hold at least one program")
+
+
+@dataclass(frozen=True, kw_only=True)
 class RunInfo:
     """How one run of the built artifact ended; None means not run or not measured.
 
@@ -329,6 +402,11 @@ class RunInfo:
     aligns_output_files); {} means the run wrote no file, and None means not
     recorded, as under any other oracle or in a trial.json written before
     the field existed.
+
+    `device_timing` (task P17.42) is the device time the executor read for
+    a silicon run (DeviceTiming); None means not measured, as for every
+    ttsim run and in a trial.json written before the field existed. No rate
+    is stored here: lassi.analysis.tt_rates derives them, labelled.
     """
 
     exit_code: int | None = None
@@ -341,6 +419,7 @@ class RunInfo:
     stderr_truncated: bool | None = None
     workdir_incomplete: bool | None = None
     outputs: dict[str, str] | None = None
+    device_timing: DeviceTiming | None = None
 
     def __post_init__(self) -> None:
         """Check the field types, and each output's relative path and sha256; the wall time must be finite."""

@@ -226,7 +226,7 @@ def test_the_loopback_reference_runs_once_on_the_cards(
     cpp_run = NativeExecutor().run(cpp_artifact, cpp_args, LIMITS)
     clean(cpp_run, f"{ITEM} C++ counterpart, native")
 
-    executor = silicon.TtSiliconExecutor(hugepages="private-per-run", reset_filter=True)
+    executor = silicon.TtSiliconExecutor(hugepages="private-per-run", reset_filter=True, device_profiler="off")
     device = executor.device()
     assert "(silicon)" in device and "simulator" not in device.lower(), device
     locks = Path(os.environ["LASSI_SCRATCH"]) / "locks"

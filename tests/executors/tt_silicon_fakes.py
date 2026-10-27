@@ -328,7 +328,7 @@ def build(
 ) -> Any:
     """Return module.TtSiliconExecutor on `host` with every seam faked; `settings` add or replace keywords.
 
-    The defaults are hugepages "private-per-run", reset_filter True, the
+    The defaults are hugepages "private-per-run", reset_filter True, device_profiler "off" (task P17.42), the
     host root, Access and Owners on it, uid OWN_UID, a fresh Clock (also as
     sleep), and a fresh FakeFlock.
     """
@@ -336,6 +336,7 @@ def build(
     values: dict[str, Any] = {
         "hugepages": PRIVATE_PER_RUN,
         "reset_filter": True,
+        "device_profiler": "off",
         "root": host.root,
         "access": Access(host.root) if access is None else access,
         "owner": Owners(host.root) if owners is None else owners,

@@ -20,13 +20,19 @@ since nothing is simulated (Agent Rule 2), nor takes_device, since every
 card is exposed and there is no card key.
 
 Settings (a recipe's executor section, `executor: {kind: tt_silicon,
-hugepages: private-per-run, reset_filter: true}`), each required with no
-default (OQ-075), so nothing picks one silently: `hugepages`, whose one
-value is "private-per-run" (OQ-075 (1b): the run's own directory inside the
-host's 1 GiB hugetlbfs mount), and `reset_filter`, a bool (OQ-075 (4a):
-True makes the sandbox's seccomp filter refuse the driver's reset ioctl).
-An absent value or any other is a ValueError naming the key, raised before
-any host file is read. `harness` is the ttsim executor's.
+hugepages: private-per-run, reset_filter: true, device_profiler: off}`),
+each required with no default (OQ-075), so nothing picks one silently:
+`hugepages`, whose one value is "private-per-run" (OQ-075 (1b): the run's
+own directory inside the host's 1 GiB hugetlbfs mount), `reset_filter`, a
+bool (OQ-075 (4a): True makes the sandbox's seccomp filter refuse the
+driver's reset ioctl), and `device_profiler` (task P17.42), "off" or
+"kernel" (lassi.executors.tt_profiler SETTINGS): "kernel" turns on
+tt-metal's device profiler for the run and reads its device time. An
+absent value or any other is a ValueError naming the key, raised before any
+host file is read; "kernel" is also a ValueError unless toolchains/
+tt-metal.pin builds tt-metal with -DENABLE_TRACY=ON, the only build that
+compiles the profiler (the owner's answer of 2026-10-26: the main pin built
+with Tracy). `harness` is the ttsim executor's.
 
 Construction reads the host under its root from file metadata (lstat,
 access(2), and directory listings) and sysfs or procfs text only: it opens
@@ -147,15 +153,29 @@ lock or directory. Then, in order:
    in the workdir outside RESERVED_DIR, sim_ub and sim_gap left None, and
    the kernel JIT's diagnostics (lassi.executors.ttsim
    read_jit_diagnostics). No line is read as a ttsim finding.
+8. The device time (task P17.42): with device_profiler "kernel", the run's
+   environment also holds lassi.executors.tt_profiler
+   profiler_environment(<workdir>/@tt-silicon/profiler), that directory
+   emptied of an earlier run's files before the run (the profiler appends
+   to a report it finds), and, before anything runs, the tree's
+   lassi-install.txt must name -DENABLE_TRACY=ON on its flags line
+   (SandboxUnavailableError otherwise). After the run, outside the lock,
+   tt_profiler device_timing_reading parses the files into
+   RunResult.device_timing, its build the pin's PREFIX_NAME and
+   self_reported True; a run that did not end cleanly, or any shortfall,
+   gives None and one run-stage note coded device-timing in the
+   diagnostics. With "off" nothing of the profiler's is set or read. The
+   profiler's files lie under RESERVED_DIR, so none is an output file.
 
 device() names "Tenstorrent Wormhole n300 x <N> (silicon)", then each
 card's number, serial, firmware bundle, and ARC firmware in card order, the
 tenstorrent driver's version, and the pinned tt-metal, from what
 construction read, as one line of printable ASCII (any other character
-written "?"); never a simulator. `pins` holds toolchains/tt-metal.pin's
-pairs alone, which the runner records (Agent Rule 10). Wall times are never
-performance: wall_s is the whole sandbox command's time, setup and
-copy-back included.
+written "?"), the tt-metal named by its recorded version (5280a9cf-tracy:
+lassi.toolchains.pins recorded_version); never a simulator. `pins` holds
+toolchains/tt-metal.pin's pairs alone, which the runner records (Agent
+Rule 10). Wall times are never performance: wall_s is the whole sandbox
+command's time, setup and copy-back included.
 
 Known limits (readings, not runs): the sandbox does not isolate the host
 from a silicon run's program, since under the cards' identity IOMMU domain
@@ -183,8 +203,9 @@ from pathlib import Path, PurePosixPath
 from lassi.core.capabilities import SILICON
 from lassi.core.devices import DeviceUnavailable
 from lassi.core.interfaces import Limits, RunResult
+from lassi.core.record import DeviceTiming, Diagnostic
 from lassi.core.registry import register
-from lassi.executors import devices
+from lassi.executors import devices, tt_profiler
 from lassi.executors.native import (
     _TOOLCHAINS_VARIABLE,
     _absolute_variable,
@@ -240,6 +261,10 @@ LOCK_EX, LOCK_NB, LOCK_UN = 2, 4, 8
 RESERVED_DIR = "@tt-silicon"
 CACHE_DIR = "cache"
 LOGS_DIR = "logs"
+# The device profiler's output directory under RESERVED_DIR (task P17.42), and the configure flag a tree must carry
+# for device_profiler kernel: the profiler is compiled only into a Tracy build (tt_metal/llrt/rtoptions.cpp:673-681).
+PROFILER_DIR = "profiler"
+TRACY_FLAG = "-DENABLE_TRACY=ON"
 # The name of a run's hugepage directory starts with this; its pid and random hex follow, so every segment matches
 # the sandbox's device-segment pattern.
 RUN_DIR_PREFIX = "lassi-tt-silicon-"
@@ -443,6 +468,40 @@ def _metal_pin() -> dict[str, str]:
     if missing:
         raise ValueError(f"toolchains/{TT_METAL_PIN}.pin has no {', '.join(missing)}, which this executor reads")
     return pin
+
+
+def _check_profiler(device_profiler: object) -> None:
+    """Raise ValueError naming device_profiler unless it is one of tt_profiler.SETTINGS (task P17.42)."""
+    if not (isinstance(device_profiler, str) and device_profiler in tt_profiler.SETTINGS):
+        raise ValueError(
+            f"device_profiler must be one of {', '.join(tt_profiler.SETTINGS)}: off, or kernel for tt-metal's device "
+            f"profiler on the Tracy build (task P17.42); it has no default; got {device_profiler!r}"
+        )
+
+
+def _check_tracy_pin(pin: dict[str, str]) -> None:
+    """Raise ValueError unless toolchains/tt-metal.pin configures with -DENABLE_TRACY=ON (device_profiler kernel)."""
+    if TRACY_FLAG not in pin.get("CMAKE_FLAGS", "").split():
+        raise ValueError(
+            f"device_profiler kernel needs tt-metal built with {TRACY_FLAG}, the only build with the device profiler "
+            f"(tt_metal/llrt/rtoptions.cpp:673-681 at 5280a9cf), but toolchains/{TT_METAL_PIN}.pin's CMAKE_FLAGS do "
+            "not hold it (ENABLE_TRACY off); set device_profiler off"
+        )
+
+
+def _check_tracy_record(tree: Path) -> None:
+    """Raise SandboxUnavailableError unless the tree's install record names -DENABLE_TRACY=ON on its flags line."""
+    try:
+        lines = (tree / "lassi-install.txt").read_bytes().decode("ascii", errors="replace").splitlines()
+    except OSError:
+        lines = []
+    flags = [line.split() for line in lines if line.startswith("flags ")]
+    if not any(TRACY_FLAG in words for words in flags):
+        raise SandboxUnavailableError(
+            f"the tt-metal tree {tree} is not recorded as built with {TRACY_FLAG} (its lassi-install.txt flags line), "
+            "so it has no device profiler for device_profiler kernel; install the pin with toolchains/tt-metal.sh; "
+            "nothing ran"
+        )
 
 
 def _check_settings(hugepages: object, reset_filter: object) -> None:
@@ -687,8 +746,8 @@ def wait_for_cards(
 class TtSiliconExecutor:
     """Runs a TT host program on every Wormhole card of the host, only inside the sandbox (see the module docstring).
 
-    The config keys are `hugepages` and `reset_filter`, each required with
-    no default, and `harness`. The keyword settings `hidden_roots`,
+    The config keys are `hugepages`, `reset_filter`, and `device_profiler`,
+    each required with no default, and `harness`. The keyword settings `hidden_roots`,
     `toolchains`, and `sandbox` are the ttsim executor's (None means
     $LASSI_SCRATCH and $HOME, $LASSI_TOOLCHAINS, and a Sandbox with the
     default runner). The rest are seams for the tests: `root`, the host
@@ -703,13 +762,14 @@ class TtSiliconExecutor:
 
     name = "tt_silicon"
     capabilities = frozenset({"runs_code", "sandboxed", SILICON})
-    config_keys = frozenset({"hugepages", "reset_filter", "harness"})
+    config_keys = frozenset({"hugepages", "reset_filter", "device_profiler", "harness"})
 
     def __init__(
         self,
         *,
         hugepages: str | None = None,
         reset_filter: bool | None = None,
+        device_profiler: str | None = None,
         harness: str | None = None,
         hidden_roots: Sequence[str] | None = None,
         toolchains: str | None = None,
@@ -729,6 +789,7 @@ class TtSiliconExecutor:
         path (see the module docstring).
         """
         _check_settings(hugepages, reset_filter)
+        _check_profiler(device_profiler)
         if isinstance(hidden_roots, (str, os.PathLike)):
             raise ValueError(f"hidden_roots must be a sequence of paths, got {hidden_roots!r}")
         self.reset_filter: bool = bool(reset_filter)
@@ -741,6 +802,9 @@ class TtSiliconExecutor:
         self.root, self.owner, self.uid = Path(root), owner, uid
         self.clock, self.sleep, self.flock = clock, sleep, flock
         self.pins: dict[str, dict[str, str]] = {TT_METAL_PIN: _metal_pin()}
+        self.device_profiler: str = str(device_profiler)
+        if self.device_profiler == "kernel":
+            _check_tracy_pin(self.pins[TT_METAL_PIN])
         self.scratch: Path = _scratch_root()
         self.locks: Path = self.scratch / LOCKS_DIR
         _refuse_quarantine(self.locks, DeviceUnavailable)
@@ -755,8 +819,8 @@ class TtSiliconExecutor:
 
         For example "Tenstorrent Wormhole n300 x 8 (silicon): card 0 serial
         <s>, firmware bundle <b>, ARC firmware <a>; card 1 ...; tenstorrent
-        driver <v>; tt-metal 5280a9cf": one line of printable ASCII. It
-        reads no file and starts no process.
+        driver <v>; tt-metal 5280a9cf-tracy": one line of printable ASCII.
+        It reads no file and starts no process.
         """
         cards = "; ".join(
             f"card {card.name} serial {card.serial}, firmware bundle {card.bundle}, ARC firmware {card.arc}"
@@ -764,7 +828,7 @@ class TtSiliconExecutor:
         )
         text = (
             f"Tenstorrent Wormhole {CARD_TYPE} x {len(self.cards)} (silicon): {cards}; tenstorrent driver "
-            f"{self.driver}; tt-metal {self.pins[TT_METAL_PIN]['VERSION']}"
+            f"{self.driver}; tt-metal {pin_files.recorded_version(self.pins[TT_METAL_PIN])}"
         )
         return printable(" ".join(text.split()))
 
@@ -792,6 +856,7 @@ class TtSiliconExecutor:
         after = _regular_files(workdir)
         reserved = RESERVED_DIR + "/"
         outputs = {path: after[path] for path in sorted(after) if path not in before and not path.startswith(reserved)}
+        timing, notes = self._timing(workdir, result)
         return RunResult(
             exit_code=result.returncode,
             hang=result.hang,
@@ -802,8 +867,25 @@ class TtSiliconExecutor:
             stdout_truncated=result.stdout_truncated,
             stderr_truncated=result.stderr_truncated,
             workdir_incomplete=result.workdir_incomplete,
-            diagnostics=read_jit_diagnostics(result.stdout, result.stderr, workdir),
+            diagnostics=[*read_jit_diagnostics(result.stdout, result.stderr, workdir), *notes],
+            device_timing=timing,
         )
+
+    def _timing(self, workdir: Path, result: SandboxResult) -> tuple[DeviceTiming | None, list[Diagnostic]]:
+        """Return (RunResult.device_timing, notes): the profiler's reading with device_profiler kernel, else (None, []).
+
+        The reading is tt_profiler device_timing_reading's over the run's
+        profiler directory, its build the pin's PREFIX_NAME; a shortfall is
+        None with one run-stage note.
+        """
+        if self.device_profiler != "kernel":
+            return None, []
+        timing, note = tt_profiler.device_timing_reading(
+            workdir / RESERVED_DIR / PROFILER_DIR, exit_code=result.returncode, hang=result.hang,
+            stderr=result.stderr, build=self.pins[TT_METAL_PIN]["PREFIX_NAME"], stdout=result.stdout,
+            truncated=result.stdout_truncated or result.stderr_truncated,
+        )
+        return timing, [] if note is None else [note]
 
     def _mounts(self) -> _Mounts:
         """Return the run's mounts after checking the pinned tt-metal tree as the ttsim executor checks it.
@@ -831,6 +913,8 @@ class TtSiliconExecutor:
         except ValueError as error:
             message = f"the tt-metal tree {tree} is not the pinned install: {error}; nothing ran"
             raise SandboxUnavailableError(message) from None
+        if self.device_profiler == "kernel":
+            _check_tracy_record(tree)
         roots = _environment_roots() if self.hidden_roots is None else self.hidden_roots
         hidden = (*(_resolved(item) for item in roots), _resolved(self.scratch), runs_root().resolve())
         harness = None if self.harness is None else _resolved(self.harness)
@@ -856,6 +940,8 @@ class TtSiliconExecutor:
         """
         for name in (CACHE_DIR, LOGS_DIR):
             (workdir / RESERVED_DIR / name).mkdir(parents=True, exist_ok=True)
+        if self.device_profiler == "kernel":
+            self._fresh_profiler_dir(workdir / RESERVED_DIR / PROFILER_DIR)
         run_dir = f"{RUN_DIR_PREFIX}{os.getpid()}-{secrets.token_hex(4)}"
         local = _host(self.root, HUGEPAGE_POINT) / run_dir
         local.mkdir(mode=0o700)
@@ -870,6 +956,22 @@ class TtSiliconExecutor:
             if left is not None:
                 endings.append(f"the run's hugepage directory {HUGEPAGE_POINT}/{run_dir} could not be removed: {left}")
                 self._quarantine(endings)
+
+    @staticmethod
+    def _fresh_profiler_dir(directory: Path) -> None:
+        """Make the run's profiler directory empty: an earlier run's files in this workdir are removed first.
+
+        tt-metal appends to a report it finds there, so a stale one would mix
+        two runs; a directory that cannot be emptied is SandboxUnavailableError,
+        raised before the marker is written, so nothing runs.
+        """
+        if os.path.lexists(directory):
+            left = _remove_tree(directory)
+            if left is not None:
+                raise SandboxUnavailableError(
+                    f"the profiler directory {directory} of an earlier run cannot be emptied ({left}); nothing ran"
+                )
+        directory.mkdir(parents=True)
 
     def _sandboxed(self, spec: SandboxSpec, argv: list[str], limits: Limits, endings: list[str]) -> SandboxResult:
         """Run once in the sandbox with the quarantine marker in place, and settle the marker by the ending.
@@ -910,12 +1012,15 @@ class TtSiliconExecutor:
             hugepages=PurePosixPath(HUGEPAGE_POINT) / run_dir,
             reset_filter=self.reset_filter,
         )
+        environment = program_environment(mounts.tree, workdir, limits)
+        if self.device_profiler == "kernel":
+            environment.update(tt_profiler.profiler_environment(workdir / RESERVED_DIR / PROFILER_DIR))
         return SandboxSpec(
             workdir=workdir,
             hidden_roots=mounts.hidden_roots,
             harness=mounts.harness,
             toolchains=mounts.root,
-            environment=program_environment(mounts.tree, workdir, limits),
+            environment=environment,
             devices=exposure,
         )
 

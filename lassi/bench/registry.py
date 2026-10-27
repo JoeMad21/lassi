@@ -82,6 +82,21 @@ Optional keys for hand-written pairs (task P4.13, tt-pairs-v0):
   generate_inputs and stage_inputs read only inputs and seed.
 - per item, `unpack_to_dest`: a non-empty note on the item's unpack_to_dest
   check (ttsim Facts; plans/spikes/p4-ttsim-runtime.md).
+- per item, `work` (task P17.42; plans/spikes/tt-perf.md, (C); the owner's
+  answer of 2026-10-26 to OQ-106, option (a)): the item's
+  analytic useful work, the same for every candidate that solves it and
+  never a count read from a device, exactly `{flop: <int or null>, ops:
+  {<class>: <int>}, bytes: <int>, basis: <note>}`. flop counts the
+  floating-point operations of the computation from its shapes (2MNK for a
+  matmul, one per element for an elementwise add) and is null for work
+  that is no floating-point arithmetic (a copy) or only transcendental
+  (exp), whose count goes under ops; bytes is the fewest bytes the device
+  must move, each input read once and each output written once in the
+  device's format; basis says how they follow from the shapes. Every count
+  is an int of at least 0 (a bool is not one). SuiteItem.work is a Work, or
+  None for an item without the key; load_suite refuses another key, a
+  missing key, a bad count, and an empty basis, naming `work`.
+  lassi.analysis.tt_rates divides it by a measured silicon time only.
 
 A tracked suite (task P16.8): a manifest may leave out `repo` and
 `commit` together, for a suite written wholly in this repository, such as
@@ -137,7 +152,11 @@ _OUTPUT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,246}")
 _REPO = Path(__file__).resolve().parents[2]
 # The root tracked paths are read under: this repository (tests point it elsewhere).
 TRACKED_ROOT = _REPO
-_ITEM_KEYS = {"run_args", "passfail", "support", "tolerance", "inputs", "outputs", "seed", "unpack_to_dest", "contract"}
+_ITEM_KEYS = {
+    "run_args", "passfail", "support", "tolerance", "inputs", "outputs", "seed", "unpack_to_dest", "contract", "work",
+}
+# The keys of an item's `work` (task P17.42), each required.
+_WORK_KEYS = {"flop", "ops", "bytes", "basis"}
 _HELD_OUT = ("inputs", "outputs", "seed")
 
 
@@ -196,6 +215,23 @@ class LanguageSources:
 
 
 @dataclass(frozen=True)
+class Work:
+    """An item's analytic useful work (task P17.42): its FLOP count, named operation counts, bytes, and their basis.
+
+    `flop` is None for work that is no floating-point arithmetic or only
+    transcendental; `ops` maps an operation class (add, mac, exp) to its
+    count; `bytes` is the fewest bytes the device moves; `basis` says how the
+    counts follow from the item's shapes. A property of the item, never a
+    measurement (see the module docstring).
+    """
+
+    flop: int | None
+    ops: Mapping[str, int]
+    bytes: int
+    basis: str
+
+
+@dataclass(frozen=True)
 class SuiteItem:
     """One bench item: its name, split, sources per language, run arguments, and its optional keys.
 
@@ -205,8 +241,9 @@ class SuiteItem:
     `tolerance` is the tolerance its two references must meet (None when the
     manifest declares none). `inputs`, `outputs`, and `seed` are its
     held-out inputs (empty and None when it declares none),
-    `unpack_to_dest` its unpack_to_dest note, and `contract` its input
-    contract (lassi.harness InputContract; None without held-out inputs).
+    `unpack_to_dest` its unpack_to_dest note, `contract` its input
+    contract (lassi.harness InputContract; None without held-out inputs),
+    and `work` its analytic work (Work; None when the manifest declares none).
     """
 
     name: str
@@ -221,6 +258,7 @@ class SuiteItem:
     seed: int | None = None
     unpack_to_dest: str | None = None
     contract: InputContract | None = None
+    work: Work | None = None
 
 
 def _held_message(suite: str, name: str, split: str, purpose: str) -> str:
@@ -548,7 +586,30 @@ def _item(name: Any, spec: Any, where: str) -> SuiteItem:
         seed=seed,
         unpack_to_dest=note,
         contract=contract,
+        work=_work(spec["work"], f"{where}.work") if "work" in spec else None,
     )
+
+
+def _work_count(value: Any, where: str) -> int:
+    """Return a work count: an int of at least 0 (a bool is not one); ValueError naming `where` otherwise."""
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{where} must be an int of at least 0, got {value!r}")
+    return value
+
+
+def _work(value: Any, where: str) -> Work:
+    """Check an item's `work` (exactly flop, ops, bytes, and basis) and return it as a Work."""
+    _keys(value, _WORK_KEYS, where)
+    flop = None if value["flop"] is None else _work_count(value["flop"], f"{where}.flop")
+    ops = value["ops"]
+    if not isinstance(ops, dict) or not all(isinstance(name, str) and _NAME.fullmatch(name) for name in ops):
+        raise ValueError(f"{where}.ops must map operation names to counts, got {ops!r}")
+    counts = {name: _work_count(count, f"{where}.ops.{name}") for name, count in ops.items()}
+    basis = value["basis"]
+    if not isinstance(basis, str) or not basis.strip():
+        raise ValueError(f"{where}.basis must be a non-empty note on how the counts follow from the shapes")
+    return Work(flop=flop, ops=MappingProxyType(counts), bytes=_work_count(value["bytes"], f"{where}.bytes"),
+                basis=basis.strip())
 
 
 def _item_support(support: Any, languages: Mapping[str, LanguageSources], where: str) -> dict[str, str]:

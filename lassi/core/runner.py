@@ -450,7 +450,7 @@ from lassi.scoring.run_scoring import (
 )
 from lassi.scoring.score_run import ScoreError
 from lassi.toolchains import EnvRunner
-from lassi.toolchains.pins import linked_prefixes, prefix_pin_name, read_pin
+from lassi.toolchains.pins import linked_prefixes, prefix_pin_name, read_pin, recorded_version
 
 REPO = Path(__file__).resolve().parents[2]
 # Where suite manifests live: bench.suite names <BENCH_DIR>/<suite>.yaml.
@@ -2934,14 +2934,19 @@ def _check_shared_pins(recipe: Recipe, toolchains: Sequence[BuiltToolchain], exe
 
 
 def _pin_versions(pin_maps: Iterable[Mapping[str, Mapping[str, str]]]) -> ToolchainPins:
-    """Return the VERSION of every pin the given pin maps hold (pin name -> pairs), under its ToolchainPins field."""
+    """Return the recorded version of every pin the given pin maps hold (pin name -> pairs), under its field.
+
+    The recorded version is VERSION, or <VERSION>-<BUILD> for a pin that names
+    a build variant (lassi.toolchains.pins recorded_version; task P17.42), so
+    a trial on the Tracy build of tt-metal records 5280a9cf-tracy.
+    """
     versions: dict[str, str] = {}
     for pins in pin_maps:
         for pin_name, pin in pins.items():
             field = pin_name.replace("-", "_")
             if field not in TOOLCHAIN_PIN_NAMES:
                 raise RunError(f"the pin {pin_name!r} has no Trial toolchain_pins field; fields: {TOOLCHAIN_PIN_NAMES}")
-            versions[field] = pin["VERSION"]
+            versions[field] = recorded_version(pin)
     return ToolchainPins(**versions)
 
 

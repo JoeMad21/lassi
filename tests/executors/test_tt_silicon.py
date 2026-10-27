@@ -184,11 +184,12 @@ from lassi.toolchains import pins as pins_module
 LIMITS = Limits(wall_s=2.5, memory_mb=256, cpus=2)
 INPUTS = ["--size", "8"]
 CAPABILITIES = frozenset({"runs_code", "sandboxed", "silicon"})
-CONFIG_KEYS = frozenset({"hugepages", "reset_filter", "harness"})
+# device_profiler, off or kernel, joined the settings with task P17.42 (tests/executors/test_tt_silicon_timing.py).
+CONFIG_KEYS = frozenset({"hugepages", "reset_filter", "device_profiler", "harness"})
 KEYWORDS = frozenset(
     {
-        "hugepages", "reset_filter", "harness", "hidden_roots", "toolchains", "sandbox", "root", "access", "owner",
-        "uid", "clock", "sleep", "flock",
+        "hugepages", "reset_filter", "device_profiler", "harness", "hidden_roots", "toolchains", "sandbox", "root",
+        "access", "owner", "uid", "clock", "sleep", "flock",
     }
 )  # fmt: skip
 MISSING = object()
@@ -523,7 +524,7 @@ def test_hugepages_takes_only_private_per_run_before_any_host_file_is_read(
 ) -> None:
     empty = tmp_path / "empty"
     access, owners = Access(empty), Owners(empty)
-    settings: dict[str, Any] = {"reset_filter": True}
+    settings: dict[str, Any] = {"reset_filter": True, "device_profiler": "off"}
     if value is not MISSING:
         settings["hugepages"] = value
     with pytest.raises(ValueError) as caught:
@@ -543,7 +544,7 @@ def test_reset_filter_must_be_a_bool_before_any_host_file_is_read(
 ) -> None:
     empty = tmp_path / "empty"
     access = Access(empty)
-    settings: dict[str, Any] = {"hugepages": PRIVATE_PER_RUN}
+    settings: dict[str, Any] = {"hugepages": PRIVATE_PER_RUN, "device_profiler": "off"}
     if value is not MISSING:
         settings["reset_filter"] = value
     with pytest.raises(ValueError) as caught:

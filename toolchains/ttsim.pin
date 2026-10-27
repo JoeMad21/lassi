@@ -14,8 +14,12 @@ SHA256=7b10aa05a5297c4a28f274e39526bfe6c69373661d1b4d4e47c4257e44b79507  # GitHu
 # ending in .so (device/simulation/simulation_chip.cpp). The job also renames the library libttsim.so; any .so
 # name works, so the release name stays, as the bible's ttsim row writes it.
 SOC_DESCRIPTOR=soc_descriptor.yaml
-# Copied from the pinned tt-metal tree: the PREFIX_NAME of toolchains/tt-metal.pin and the path in that tree.
-TT_METAL_FROM=tt-metal@5280a9cf
+# Copied from the pinned tt-metal tree: the PREFIX_NAME of toolchains/tt-metal.pin and the path in that tree. Since
+# task P17.42 that is the Tracy build of the same commit, whose descriptor is the same file (its sha256 below), so the
+# install at ttsim@v1.3.4 stays good for the ttsim executor, which checks both files by sha256. Its install record names
+# the tree it was copied from, so a rerun of ttsim.sh would move it aside and copy the same two files again; nothing
+# needs that rerun.
+TT_METAL_FROM=tt-metal@5280a9cf-tracy
 SOC_DESCRIPTOR_FROM=tt_metal/soc_descriptors/wormhole_b0_80_arch.yaml
 SOC_DESCRIPTOR_SHA256=24fd3dfae80435a7d9113e255d6d6af9cdf83f6ae3b1c385e1d48a24795ccf49  # 3125 bytes, git blob ff4e5576b1b5eab137c4ae25996f6bedd2c9ad24
 # PROJECTED, not measured: the two files and the record, under 200 KiB; the bound in KiB for the space check.

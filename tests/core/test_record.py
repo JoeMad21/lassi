@@ -146,10 +146,12 @@ NESTED_RECORDS = {
     "Divergence": ["Divergence"],
     "ContractFinding": ["ContractFinding"],
     "AgentLog": ["AgentLog"],
+    "DeviceTiming": ["DeviceTiming"],
+    "DeviceProgram": ["DeviceProgram"],
 }
 # The top-level blocks of the bible's Result Record yaml block, in order, and the record class of each. The
 # adversary stage's three blocks (task P16.5) follow DeviceRecord; Trial names its record as AdversaryRecord, whose
-# agent_log names the last block, AgentLog (task P16.4).
+# agent_log names AgentLog (task P16.4). RunInfo.device_timing's two blocks come last (task P17.42).
 BIBLE_BLOCKS = (
     "Trial",
     "Request",
@@ -162,6 +164,8 @@ BIBLE_BLOCKS = (
     "Divergence",
     "ContractFinding",
     "AgentLog",
+    "DeviceTiming",
+    "DeviceProgram",
 )
 
 CORE_MODULES = ("lassi.core.record", "lassi.core.store", "lassi.core.trial_md", "lassi.core.parquet")
@@ -170,6 +174,8 @@ FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 RECORD_CLASSES: tuple[type, ...] = (
     record.TextRef,
     record.Diagnostic,
+    record.DeviceProgram,
+    record.DeviceTiming,
     record.RunInfo,
     record.Alignment,
     record.Profile,
@@ -1533,6 +1539,7 @@ def test_minimal_attempt_to_dict_exact() -> None:
             "stderr_truncated": None,
             "workdir_incomplete": None,
             "outputs": None,
+            "device_timing": None,
         },
         "alignment": {"per_input": [], "mean": None, "outputs": None},
         "profile": {"runtime_s": None, "avg_power_w": None, "energy_j": None},

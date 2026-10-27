@@ -501,6 +501,7 @@ from lassi.core.recipe import (
     Recipe,
 )
 from lassi.core.record import (
+    DEVICE_TIMING_NOTE,
     GUARD_NOT_CHECKED,
     NO_GUARD,
     NO_PROGRAM,
@@ -1040,7 +1041,7 @@ def reference_limits(context: RunContext) -> Limits:
     return Limits(wall_s=REFERENCE_WALL_S, memory_mb=memory_mb, cpus=REFERENCE_CPUS)
 
 
-def _run_info(context: RunContext, run: RunResult, keep_outputs: bool = False) -> RunInfo:
+def _run_info(context: RunContext, run: RunResult, keep_outputs: bool = False, reference: bool = False) -> RunInfo:
     """Return the RunInfo of a run that happened: exit code, hang flag, UB, wall time, stdout in the store, run flags.
 
     Each RunResult flag (RUN_FLAGS) is copied as a bool, so a run whose
@@ -1048,15 +1049,26 @@ def _run_info(context: RunContext, run: RunResult, keep_outputs: bool = False) -
     the executor reported it: True, False, or None when it did not check.
     With `keep_outputs`, every output file's bytes go into the binary store
     beside the text store and RunInfo.outputs maps each file to its sha256;
-    otherwise outputs stays None (not recorded).
+    otherwise outputs stays None (not recorded). The executor's device
+    timing (task P17.42) is kept as read, with self_reported False for a
+    `reference` run, the item's tracked program, and True otherwise: an
+    attempt's program is model-written, and its process wrote the files.
     """
     flags = {flag: bool(getattr(run, flag)) for flag in RUN_FLAGS}
     stdout_ref = context.store.put(run.stdout)
     outputs = _kept_outputs(context, run) if keep_outputs else None
+    timing = run.device_timing
+    if timing is not None:
+        timing = dataclasses.replace(timing, self_reported=not reference)
     return RunInfo(
         exit_code=run.exit_code, hang=run.hang, sim_ub=run.sim_ub, wall_s=run.wall_s, stdout_ref=stdout_ref,
-        outputs=outputs, **flags,
+        outputs=outputs, **flags, device_timing=timing,
     )
+
+
+def _timing_notes(run: RunResult) -> list[Diagnostic]:
+    """Return the run's DEVICE_TIMING_NOTE notes: why a silicon run's device time was asked for but not recorded."""
+    return [item for item in run.diagnostics if item.stage == "run" and item.code == DEVICE_TIMING_NOTE]
 
 
 def _kept_outputs(context: RunContext, run: RunResult) -> dict[str, str]:
@@ -2353,6 +2365,9 @@ class BaselineStage:
         The target's run is kept in Trial.reference_run (_run_info, with its
         output files in the binary store when that Oracle is bound), a failed
         one included; the source reference's files are read but not stored.
+        A note that the target's device time was not recorded (a silicon
+        run's DEVICE_TIMING_NOTE, task P17.42) goes to
+        Trial.baseline_diagnostics, which no attempt carries.
         A language whose manifest entry names a `reference` language (task
         P17.36; lassi.bench Suite.reference_language) has that language's
         program as its reference, built with that language's toolchain and
@@ -2374,9 +2389,10 @@ class BaselineStage:
         args = stage_inputs(item, result.artifact.parent)
         run = executor.run(result.artifact, args, reference_limits(context))
         target = language == context.direction.target
-        info = _run_info(context, run, keep_outputs=target and self.files_oracle is not None)
+        info = _run_info(context, run, keep_outputs=target and self.files_oracle is not None, reference=True)
         if target:
-            trial = dataclasses.replace(trial, reference_run=info)
+            notes = [*trial.baseline_diagnostics, *_timing_notes(run)]
+            trial = dataclasses.replace(trial, reference_run=info, baseline_diagnostics=notes)
         end = _reference_run_end(run, language)
         if end is not None:
             return _ended(trial, *end), run

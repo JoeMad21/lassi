@@ -367,6 +367,10 @@ def test_environment_names_are_exactly_the_compile_program_ttsim_and_gpu_names(s
     # holds only with a device exposure (tests/executors/test_sandbox.py). Nothing else does.
     expected = {"PATH", "LANG", "LC_ALL", "TMPDIR", "OMP_NUM_THREADS", *PREFIX_VARIABLES.values(), *TTSIM_NAMES}
     expected |= set(GPU_NAMES)
+    # Task P17.42: the device profiler's four names, which a spec holds only with a Tenstorrent exposure
+    # (tests/executors/test_tt_silicon_timing.py).
+    expected |= {"TT_METAL_DEVICE_PROFILER", "TT_METAL_PROFILER_CPP_POST_PROCESS",
+                 "TT_METAL_PROFILER_DISABLE_PUSH_TO_TRACY", "TT_METAL_PROFILER_DIR"}
     assert sandbox.ENVIRONMENT_NAMES == frozenset(expected), sorted(sandbox.ENVIRONMENT_NAMES ^ expected)
 
 

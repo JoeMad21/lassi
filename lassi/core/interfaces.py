@@ -58,7 +58,7 @@ from lassi.harness.lassi_io import LassiArray
 if TYPE_CHECKING:
     from lassi.bench.registry import SuiteItem, TrainView
     from lassi.core.devices import FrameworkBuild
-    from lassi.core.record import Attempt, DeviceRecord, Diagnostic, Profile, Trial
+    from lassi.core.record import Attempt, DeviceRecord, DeviceTiming, Diagnostic, Profile, Trial
 
 
 @dataclass(frozen=True)
@@ -134,6 +134,11 @@ class RunResult:
     run, and is None otherwise. `diagnostics` holds what the executor parsed
     from the run, kernel JIT messages among them with stage "jit"; the
     stages read these fields, never the executor's name (lassi.core.stages).
+
+    `device_timing` (task P17.42) is the device time a silicon executor read
+    from the run (lassi.core.record DeviceTiming), whole or None: None when
+    it was not asked for or could not be read, the second case with a
+    run-stage note in `diagnostics` saying why.
     """
 
     exit_code: int | None
@@ -148,6 +153,7 @@ class RunResult:
     sim_ub: bool | None = None
     sim_gap: str | None = None
     diagnostics: list[Diagnostic] = field(default_factory=list)
+    device_timing: DeviceTiming | None = None
 
 
 @dataclass(frozen=True)

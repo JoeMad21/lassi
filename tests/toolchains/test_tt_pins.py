@@ -40,7 +40,7 @@ from pathlib import Path
 
 import pytest
 
-from lassi.toolchains.pins import prefix_pin_name, read_pin
+from lassi.toolchains.pins import prefix_pin_name, read_pin, recorded_version
 
 REPO = Path(__file__).resolve().parents[2]
 TOOLCHAINS = REPO / "toolchains"
@@ -108,7 +108,8 @@ def test_pin_parses_and_names_its_prefix(name: str) -> None:
     for key in ("NAME", "VERSION", "URL", "PREFIX_NAME", "INSTALL_KIB"):
         assert pin.get(key), f"{name}.pin lacks {key}"
     assert pin["NAME"] == name
-    assert pin["PREFIX_NAME"] == f"{name}@{pin['VERSION']}"
+    # <NAME>@<VERSION>, or <NAME>@<VERSION>-<BUILD> for a build variant of the same source (task P17.42).
+    assert pin["PREFIX_NAME"] == f"{name}@{recorded_version(pin)}"
     assert prefix_pin_name(pin["PREFIX_NAME"]) == name
     assert pin["URL"].startswith("https://github.com/tenstorrent/")
     assert pin["INSTALL_KIB"].isdigit() and int(pin["INSTALL_KIB"]) > 0
@@ -118,6 +119,11 @@ def test_tt_metal_pin_holds_the_joint_pin_commit_and_submodules() -> None:
     pin = read_pin("tt-metal")
     assert pin["COMMIT"] == TT_METAL_COMMIT
     assert pin["VERSION"] == TT_METAL_COMMIT[:8]
+    # Task P17.42 (the owner, 2026-10-26: "Tracy should definitely get done"): the same commit built with Tracy, under
+    # a new prefix, so the earlier install at tt-metal@5280a9cf is neither replaced nor removed on alpha01.
+    assert pin["BUILD"] == "tracy"
+    assert pin["PREFIX_NAME"] == "tt-metal@5280a9cf-tracy"
+    assert recorded_version(pin) == "5280a9cf-tracy", "a trial records the build with the commit"
     assert pin["URL"] == "https://github.com/tenstorrent/tt-metal.git"
     entries = pin["SUBMODULES"].split()
     assert dict(entry.split(":") for entry in entries) == SUBMODULES
@@ -180,20 +186,38 @@ CHANGED = {
     "TTNN_BUILD_TESTS": "OFF",
     "ENABLE_CCACHE": "FALSE",
 }
+# Task P17.42 (the owner's answer of 2026-10-26: the main pin built with Tracy, for the device profiler): Tracy on, its
+# client built to send no UDP broadcast and to listen on the loopback interface only. At tracy 0aaefbb6,
+# CMakeLists.txt:55-63 turns each option into a PUBLIC compile definition of TracyClient, :70 is
+# TRACY_ONLY_LOCALHOST and :71 TRACY_NO_BROADCAST; a -D on the configure line makes the cache entry before
+# option() runs, which keeps it. tt-metal's cmake/tracy.cmake:6-10 turns ENABLE_TRACY into TRACY_ENABLE.
+TRACY = {
+    "ENABLE_TRACY": "ON",
+    "TRACY_NO_BROADCAST": "ON",
+    "TRACY_ONLY_LOCALHOST": "ON",
+    "TRACY_NO_CRASH_HANDLER": "ON",
+}
 
 
-def test_tt_metal_pin_keeps_the_ci_configuration_but_what_is_built() -> None:
+def test_tt_metal_pin_keeps_the_ci_configuration_but_what_is_built_and_tracy() -> None:
     pin = read_pin("tt-metal")
     settings = cmake_settings(pin["CMAKE_FLAGS"])
     # The pinned sfpi 7.25.0 is fetched into the tree (the option's default, as in CI); the host's /opt sfpi
     # is another version.
-    expected = {**CI_SETTINGS, **CHANGED, "TT_USE_SYSTEM_SFPI": "OFF"}
+    expected = {**CI_SETTINGS, **CHANGED, **TRACY, "TT_USE_SYSTEM_SFPI": "OFF"}
     assert settings == expected
     # The script sets the paths itself, in the tree; the pin never names them, and nothing is installed.
     for key in ("CMAKE_INSTALL_PREFIX", "CPM_SOURCE_CACHE", "CMAKE_TOOLCHAIN_FILE", "CMAKE_MAKE_PROGRAM"):
         assert key not in settings
     assert pin["TOOLCHAIN_FILE"] == "cmake/x86_64-linux-clang-20-libstdcpp-toolchain.cmake"
     assert pin["BUILD_DIR"] == "build_Release"
+
+
+def test_tt_metal_pin_names_the_definitions_tracys_client_must_carry() -> None:
+    # check_tracy reads them from the TracyClient object's DEFINES line in build.ninja after the build.
+    assert read_pin("tt-metal")["TRACY_DEFINES"].split() == [
+        "-DTRACY_ENABLE", "-DTRACY_NO_BROADCAST", "-DTRACY_ONLY_LOCALHOST", "-DTRACY_NO_CRASH_HANDLER",
+    ]
 
 
 def test_tt_metal_pin_builds_the_runtime_the_jit_files_and_the_examples_only() -> None:
@@ -359,6 +383,7 @@ def test_tt_metal_script_checks_then_fetches_builds_verifies_and_records_in_orde
             "check_jit_files\n",
             "check_examples\n",
             "check_linked\n",
+            "check_tracy\n",
             "verify_tree\n",
             'check_root_fs "$marker" /tmp /var/tmp',
             'mv -T "$prefix/$unfinished_name" "$prefix/$record_name"',
@@ -619,6 +644,55 @@ def test_check_cache_refuses_a_setting_the_pin_does_not_record(tmp_path: Path, c
     result = run_functions("tt-metal", ("local_settings", "check_cache"), body, tmp_path)
     assert result.returncode != 0
     assert key in result.stderr
+
+
+# A SYNTHETIC build.ninja: the TracyClient object's block, as CMake's Ninja generator writes one, then another target.
+TRACY_OBJECT = (
+    "build tt_metal/third_party/tracy/CMakeFiles/TracyClient.dir/public/TracyClient.cpp.o: "
+    "CXX_COMPILER__TracyClient_unscanned_Release /t/tt_metal/third_party/tracy/public/TracyClient.cpp\n"
+    "  DEFINES = {defines}\n"
+    "  FLAGS = -O3 -DNDEBUG\n"
+    "build tt_metal/CMakeFiles/tt_metal.dir/x.cpp.o: CXX_COMPILER__tt_metal_unscanned_Release /t/x.cpp\n"
+    "  DEFINES = -DTRACY_ENABLE -DTRACY_NO_BROADCAST -DTRACY_ONLY_LOCALHOST -DTRACY_NO_CRASH_HANDLER\n"
+)
+
+
+def tracy_body(ninja: str | None) -> str:
+    """Return a probe body with a SYNTHETIC build.ninja (none when None) and the pinned TRACY_DEFINES."""
+    body = f"build=$PWD/b\nmkdir -p b\nTRACY_DEFINES='{read_pin('tt-metal')['TRACY_DEFINES']}'\n"
+    if ninja is not None:
+        body += "cat >b/build.ninja <<'NINJA'\n" + ninja + "NINJA\n"
+    return body + "check_tracy\n"
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("defines", "passes"),
+    [
+        ("-DTRACY_ENABLE -DTRACY_IMPORTS -DTRACY_NO_BROADCAST -DTRACY_ONLY_LOCALHOST -DTRACY_NO_CRASH_HANDLER "
+         "-DTRACY_TIMER_FALLBACK", True),
+        ("-DTRACY_ENABLE -DTRACY_IMPORTS -DTRACY_ONLY_LOCALHOST -DTRACY_TIMER_FALLBACK", False),
+        ("-DTRACY_ENABLE -DTRACY_IMPORTS -DTRACY_NO_BROADCAST -DTRACY_TIMER_FALLBACK", False),
+        ("-DTRACY_IMPORTS -DTRACY_NO_BROADCAST -DTRACY_ONLY_LOCALHOST -DTRACY_TIMER_FALLBACK", False),
+        ("-DTRACY_ENABLE -DTRACY_NO_BROADCAST_X -DTRACY_ONLY_LOCALHOST", False),
+    ],
+    ids=["all-three", "broadcast-left-on", "listens-everywhere", "tracy-off", "lookalike"],
+)
+def test_check_tracy_needs_every_pinned_definition_on_the_tracy_client(
+    tmp_path: Path, defines: str, passes: bool
+) -> None:
+    body = tracy_body(TRACY_OBJECT.format(defines=defines))
+    result = run_functions("tt-metal", ("check_tracy",), body, tmp_path)
+    assert (result.returncode == 0) == passes, result.stdout + result.stderr
+    if not passes:
+        assert "TracyClient" in result.stderr
+
+
+@needs_bash
+def test_check_tracy_refuses_a_build_without_the_tracy_client(tmp_path: Path) -> None:
+    for ninja in (None, "build other.o: CXX x.cpp\n  DEFINES = -DTRACY_ENABLE -DTRACY_NO_BROADCAST\n"):
+        result = run_functions("tt-metal", ("check_tracy",), tracy_body(ninja), tmp_path)
+        assert result.returncode != 0 and "TracyClient" in result.stderr, result.stderr
 
 
 def sfpi_body(banner: str, archive: bytes | None) -> str:

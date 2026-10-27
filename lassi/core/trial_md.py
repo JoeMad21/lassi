@@ -14,7 +14,12 @@ per RunInfo field, the run flags (stdout_truncated, stderr_truncated,
 workdir_incomplete) included: true or false when recorded, PLACEHOLDER when
 not. Their outputs row shows the count of recorded output files
 (RunInfo.outputs), PLACEHOLDER when not recorded, and a table after it lists
-each file with its sha256 in the binary store.
+each file with its sha256 in the binary store. A device_timing row (task
+P17.42) follows only for a run whose device time was measured: its program
+count, its kernel nanoseconds and cycles summed over the programs, the
+AICLK, the build, and "self-reported" for a model-written program's; not
+measured (None) adds nothing, so a page renders as before. No rate is shown
+(lassi.analysis.tt_rates derives them).
 
 Simulator wall times (task P4.6): rendered with `simulator` (the trial's
 target-language executor declares the simulator capability, which the
@@ -97,6 +102,7 @@ from lassi.core.record import (
     Attempt,
     Context,
     DeviceRecord,
+    DeviceTiming,
     Diagnostic,
     EndReason,
     Guards,
@@ -273,9 +279,26 @@ def _pins_blocks(trial: Trial) -> list[str]:
     return ["## Toolchain pins\n", _table(("Toolchain", "Pin"), rows)]
 
 
+def _timing_cell(timing: DeviceTiming | None) -> str:
+    """Format RunInfo.device_timing: its programs, kernel time and cycles, AICLK, and build; PLACEHOLDER when None."""
+    if timing is None:
+        return PLACEHOLDER
+    total_ns = sum(program.kernel_ns for program in timing.programs)
+    cycles = sum(program.kernel_cycles for program in timing.programs)
+    text = (
+        f"{len(timing.programs)} program(s): {total_ns} ns device kernel time, {cycles} cycles at AICLK "
+        f"{timing.aiclk_mhz} MHz ({timing.source}, {timing.build})"
+    )
+    return f"{text}, self-reported" if timing.self_reported else text
+
+
 def _run_rows(run: RunInfo, simulator: bool) -> list[tuple[str, str]]:
-    """Return a run's table rows (_field_rows); with `simulator`, the wall_s row's name is SIMULATOR_WALL_S."""
-    rows = _field_rows(run)
+    """Return a run's table rows (_field_rows); with `simulator`, the wall_s row's name is SIMULATOR_WALL_S.
+
+    The device_timing row is there only when the device time was measured.
+    """
+    rows = [(name, _timing_cell(run.device_timing) if name == "device_timing" else value)
+            for name, value in _field_rows(run) if name != "device_timing" or run.device_timing is not None]
     if not simulator:
         return rows
     return [(SIMULATOR_WALL_S if name == "wall_s" else name, value) for name, value in rows]

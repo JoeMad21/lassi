@@ -41,16 +41,30 @@ In order, writing each stage's name to the job's stage file:
    sequence padded to max_length (one static shape): zero the gradients,
    the forward pass, the cross-entropy over the shifted completion tokens,
    the backward pass, a sync, torch's AdamW step, a sync, then one JSON
-   line in the steps file (step, loss, learning_rate, label_tokens,
-   elapsed_s; a non-finite loss written as NaN, which the trainer records
-   as null). No interim checkpoint.
+   line in the steps file (step_line: step, loss, learning_rate,
+   label_tokens, elapsed_s; a non-finite loss written as NaN, which the
+   trainer records as null). No interim checkpoint. Task P17.42 (the
+   owner's answer of 2026-10-26 to OQ-106,
+   option (a)) adds to each line: step_time_s, the host's high-resolution
+   monotonic time (time.perf_counter) from the step's start to after its
+   second sync (torch_xla.sync with wait, so the step's graphs have run on
+   the card); tokens, the batch's
+   non-pad tokens; tokens_computed, batch_size x the sequence the card runs
+   (max_length plus any virtual tokens); model_flop, the PaLM model FLOPs
+   of those tokens (model_flops); compiles, the graph compiles the step
+   added by the backend's compile counter (torch_xla's CompileTime metric;
+   None without one); and compile_step, true when it compiled, or, without
+   a counter, for the first COMPILE_RULE_STEPS steps by rule. No profiler
+   runs in training: the environment the trainer builds names none, and the
+   worker has no network.
 6. saved: the model back on the CPU, saved with its tokenizer into the
    checkpoint directory in safetensors (the adapter for lora and
    prompt_tuning, the full weights otherwise).
 
 Then result.json: status complete, global_step, train_runtime_s, the
-device, the parameter counts, the token counts, the optimizer's settings,
-the framework versions, and notes. A refusal writes status refused and its
+device, the parameter counts, the token counts, model_flops (the
+convention, its formula, and its parts; task P17.42), the optimizer's
+settings, the framework versions, and notes. A refusal writes status refused and its
 message and exits 3 (REFUSED); a failure writes status failed and exits 1
 with its traceback. Nothing here is retried; the trainer reads the ending.
 """
@@ -64,6 +78,7 @@ import socket
 import sys
 import time
 import traceback
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -82,6 +97,17 @@ REQUIRED: dict[str, type | tuple[type, ...]] = {
 # The one network setting: the worker runs in its own empty network namespace (lassi.train.ttxla_trainer).
 NETWORK_NONE = "none"
 OPTIONAL: dict[str, type | tuple[type, ...]] = {"lora_r": int, "virtual_tokens": int, "compile_options": dict}
+# Task P17.42: without a compile counter, the first steps are flagged as compile steps by rule (the first step
+# compiles the forward and backward graphs, the second the optimizer's once its state exists).
+COMPILE_RULE_STEPS = 2
+# The model FLOP convention every step's model_flop follows (PaLM, arXiv:2204.02311, Appendix B; Kaplan et al. 2020).
+PALM_CONVENTION = "palm-model-flops"
+PALM_FORMULA = (
+    "PaLM model FLOPs per token (arXiv:2204.02311, Appendix B): 6 per trained matmul weight (forward, input gradient, "
+    "weight gradient), 4 per frozen matmul weight (no weight gradient), plus 12 x layers x heads x head_dim x sequence "
+    "for the attention matmuls, which hold no weights; the matmul weights are those of every Linear module, the output "
+    "projection included and the embedding lookup excluded; recompute (gradient checkpointing) is not counted"
+)
 # The distributions whose versions result.json records.
 VERSIONED = ("torch", "torch-xla", "pjrt-plugin-tt", "jax", "transformers", "peft", "accelerate", "tokenizers",
              "safetensors", "numpy")
@@ -254,6 +280,78 @@ def load_model(transformers: Any, peft: Any, torch: Any, job: dict[str, Any], to
     return model.to(getattr(torch, job["dtype"]))
 
 
+def palm_flop_per_token(frozen: int, trained: int, layers: int, heads: int, head_dim: int, sequence: int) -> int:
+    """Return PaLM's model FLOPs per token (PALM_FORMULA): 6 per trained weight, 4 per frozen one, 12LHQT."""
+    return 6 * trained + 4 * frozen + 12 * layers * heads * head_dim * sequence
+
+
+def matmul_weights(model: Any, linear: type) -> tuple[int, int]:
+    """Return (frozen, trained) element counts of the weights of every `linear` module in `model`, each counted once."""
+    seen: set[int] = set()
+    frozen = trained = 0
+    for module in model.modules():
+        weight = getattr(module, "weight", None) if isinstance(module, linear) else None
+        if weight is None or id(weight) in seen:
+            continue
+        seen.add(id(weight))
+        if weight.requires_grad:
+            trained += weight.numel()
+        else:
+            frozen += weight.numel()
+    return frozen, trained
+
+
+def attention_shape(config: Any) -> tuple[int, int, int]:
+    """Return (layers, heads, head_dim) from a transformers config; head_dim is hidden_size // heads when unset."""
+    layers, heads = int(config.num_hidden_layers), int(config.num_attention_heads)
+    head_dim = getattr(config, "head_dim", None) or int(config.hidden_size) // heads
+    return layers, heads, int(head_dim)
+
+
+def model_flops(model: Any, config: Any, job: dict[str, Any], linear: type) -> dict[str, Any]:
+    """Return result.json's model_flops: the convention, its formula, its parts, and the FLOPs per token run."""
+    sequence = job["max_length"] + (job.get("virtual_tokens") or 0)
+    frozen, trained = matmul_weights(model, linear)
+    layers, heads, head_dim = attention_shape(config)
+    return {
+        "convention": PALM_CONVENTION, "formula": PALM_FORMULA, "frozen_weights": frozen, "trained_weights": trained,
+        "layers": layers, "heads": heads, "head_dim": head_dim, "sequence": sequence,
+        "flop_per_token": palm_flop_per_token(frozen, trained, layers, heads, head_dim, sequence),
+    }
+
+
+def compile_counter(job: dict[str, Any]) -> Callable[[], int | None]:
+    """Return a function giving the backend's graph compiles so far: 0 on the CPU, None when it cannot be read."""
+    if job["backend"] != "xla":
+        return lambda: 0
+    try:
+        import torch_xla.debug.metrics as metrics
+    except ImportError:
+        return lambda: None
+
+    def count() -> int | None:
+        try:
+            data = metrics.metric_data("CompileTime")
+        except Exception:
+            return None
+        return 0 if data is None else int(data[0])
+
+    return count
+
+
+def step_line(
+    *, step: int, loss: float, learning_rate: float, label_tokens: int, elapsed_s: float, step_time_s: float,
+    tokens: int, tokens_computed: int, flop_per_token: int, compiles: int | None,
+) -> dict[str, Any]:
+    """Return one steps.jsonl line (the module docstring, step 5); compile_step by count, else by rule."""
+    compile_step = compiles > 0 if compiles is not None else step <= COMPILE_RULE_STEPS
+    return {
+        "step": step, "loss": loss, "learning_rate": learning_rate, "label_tokens": label_tokens,
+        "elapsed_s": elapsed_s, "step_time_s": step_time_s, "tokens": tokens, "tokens_computed": tokens_computed,
+        "model_flop": flop_per_token * tokens_computed, "compiles": compiles, "compile_step": compile_step,
+    }
+
+
 def device_backend(torch: Any, job: dict[str, Any]) -> tuple[Any, Any]:
     """Return (device, sync) of the job's backend: the TT device through torch_xla, or the CPU."""
     if job["backend"] == "cpu":
@@ -266,16 +364,18 @@ def device_backend(torch: Any, job: dict[str, Any]) -> tuple[Any, Any]:
 
 
 def train_steps(torch: Any, job: dict[str, Any], model: Any, runner: Any, batches: list[Any], device: Any,
-                sync: Any) -> tuple[Any, float]:
+                sync: Any, flop_per_token: int) -> tuple[Any, float]:
     """Run the job's steps (the module docstring, step 5); return the optimizer and the seconds they took."""
     trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
     optimizer = torch.optim.AdamW(trainable, lr=job["learning_rate"])
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
     virtual = job.get("virtual_tokens") or 0
+    count = compile_counter(job)
     model.train()
     start = time.monotonic()
     with open(job["steps_file"], "w", encoding="ascii") as steps_out:
         for step, (ids, mask, labels) in enumerate(batches, start=1):
+            begin, before = time.perf_counter(), count()
             optimizer.zero_grad()
             logits = runner(input_ids=ids.to(device), attention_mask=mask.to(device)).logits
             if virtual:
@@ -287,9 +387,14 @@ def train_steps(torch: Any, job: dict[str, Any], model: Any, runner: Any, batche
             sync()
             optimizer.step()
             sync()
-            line = {"step": step, "loss": float(loss.item()), "learning_rate": job["learning_rate"],
-                    "label_tokens": int((labels[:, 1:] != IGNORE_INDEX).sum()),
-                    "elapsed_s": round(time.monotonic() - start, 3)}
+            seconds, after = time.perf_counter() - begin, count()
+            line = step_line(
+                step=step, loss=float(loss.item()), learning_rate=job["learning_rate"],
+                label_tokens=int((labels[:, 1:] != IGNORE_INDEX).sum()), elapsed_s=round(time.monotonic() - start, 3),
+                step_time_s=round(seconds, 6), tokens=int(mask.sum()),
+                tokens_computed=int(ids.numel()) + virtual * int(ids.shape[0]), flop_per_token=flop_per_token,
+                compiles=None if before is None or after is None else after - before,
+            )
             steps_out.write(json.dumps(line) + "\n")
             steps_out.flush()
             stage(job, f"step {step}")
@@ -336,6 +441,8 @@ def run(job: dict[str, Any]) -> dict[str, Any]:
     encoded = encode_all(tokenizer, job, notes)
     stage(job, "encoded")
     model = load_model(transformers, peft, torch, job, tokenizer)
+    base = model.get_base_model() if hasattr(model, "get_base_model") else model
+    flops = model_flops(model, base.config, job, torch.nn.Linear)
     batches = batch_tensors(torch, job, encoded, pad_id)
     stage(job, "loaded")
     stage(job, "device")
@@ -344,7 +451,7 @@ def run(job: dict[str, Any]) -> dict[str, Any]:
     options = job.get("compile_options")
     runner = torch.compile(model, backend="tt", options=options) if job["backend"] == "xla" else model
     stage(job, "training")
-    optimizer, seconds = train_steps(torch, job, model, runner, batches, device, sync)
+    optimizer, seconds = train_steps(torch, job, model, runner, batches, device, sync, flops["flop_per_token"])
     stage(job, "saving")
     model.to("cpu")
     model.save_pretrained(job["checkpoint"], safe_serialization=True)
@@ -359,6 +466,7 @@ def run(job: dict[str, Any]) -> dict[str, Any]:
                        "trainable": sum(p.numel() for p in model.parameters() if p.requires_grad)},
         "tokens": {"max_record": max(lengths), "records": lengths,
                    "label_tokens": [sum(label != IGNORE_INDEX for label in labels) for _, labels in encoded]},
+        "model_flops": flops,
         "optimizer": {"name": "torch.optim.AdamW", **{key: _plain(value) for key, value in optimizer.defaults.items()
                                                       if key in ("lr", "betas", "eps", "weight_decay")}},
         "versions": versions(), "notes": notes,

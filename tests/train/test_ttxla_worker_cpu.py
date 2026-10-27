@@ -13,8 +13,10 @@ The worker is run as on the card, a script under an interpreter with
 backend set to cpu, which only this test writes. These tests fix: each of
 full, lora, and prompt_tuning exits 0 and leaves its checkpoint (the full
 weights or the adapter, and the tokenizer), one steps line per step with a
-finite loss, and result.json (status complete, global_step, the token
-counts, the parameter counts, the framework versions); a record longer
+finite loss, and, since task P17.42, its step time, token counts, PaLM
+model FLOPs, and no compile, and result.json (status complete,
+global_step, the token counts, the parameter counts, model_flops, the
+framework versions); a record longer
 than trainer.max_length exits 3 with status refused naming the record
 before any step; chat_format on a base whose tokenizer has no chat
 template is refused the same way. Losses here are SYNTHETIC: random
@@ -118,6 +120,18 @@ def test_each_weight_mode_trains_and_saves_on_the_cpu(
     if weights != "full":
         assert result["parameters"]["trainable"] < result["parameters"]["total"], "the base stays frozen"
     assert result["versions"]["torch"] and result["versions"]["transformers"]
+    # Task P17.42: each step's time, token counts, and PaLM model FLOPs; the CPU backend compiles nothing.
+    flops = result["model_flops"]
+    sequence = CONFIG["max_length"] + (settings.get("virtual_tokens") or 0)
+    assert flops["convention"] == "palm-model-flops" and flops["sequence"] == sequence
+    # A soft prompt is an embedding, no matmul weight; LoRA's adapters are Linear modules.
+    assert (flops["trained_weights"] > 0) == (weights != "prompt_tuning")
+    assert (flops["frozen_weights"] > 0) == (weights != "full")
+    for line in lines:
+        assert line["step_time_s"] > 0 and 0 < line["tokens"] <= line["tokens_computed"]
+        assert line["tokens_computed"] == CONFIG["batch_size"] * sequence
+        assert line["model_flop"] == flops["flop_per_token"] * line["tokens_computed"]
+        assert (line["compiles"], line["compile_step"]) == (0, False)
 
 
 def test_a_record_longer_than_max_length_is_refused_before_any_step(env: Path, tmp_path: Path) -> None:

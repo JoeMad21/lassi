@@ -47,7 +47,11 @@ from the caller's environment. The kernel JIT's cache stays in the workdir,
 so no run touches a shared cache (PHASE-NOTES P4, the collision rule). The
 working directory is the workdir, where the JIT finds a kernel at the path
 the program names. output_files are the regular files new after the run,
-as native gives them, but none under @ttsim.
+as native gives them, but none under @ttsim. It never sets tt-metal's
+device profiler (lassi.executors.sandbox TT_PROFILER_NAMES, which the
+sandbox refuses without a Tenstorrent exposure; task P17.42): ttsim gives
+no device time, since UMD advances its clock only on host reads and
+reports its AICLK as 0, so no rate comes from a ttsim run (Agent Rule 2).
 
 What the executor reads from a run (task P4.6's RunResult fields):
 
@@ -596,13 +600,14 @@ class TtsimExecutor:
         """Return the device, one line of printable ASCII from the pins alone; no process, no sandbox.
 
         For example "ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on
-        the host CPU, with tt-metal 5280a9cf: a simulator, not silicon"
-        (ttsim.pin VERSION and LIBRARY, tt-metal.pin VERSION; Agent Rule 2).
+        the host CPU, with tt-metal 5280a9cf-tracy: a simulator, not silicon"
+        (ttsim.pin VERSION and LIBRARY, tt-metal.pin's recorded version,
+        VERSION with its BUILD since task P17.42; Agent Rule 2).
         """
         ttsim, metal = self.pins[TTSIM_PIN], self.pins[TT_METAL_PIN]
         text = (
             f"ttsim {ttsim['VERSION']} ({ttsim['LIBRARY']}, a virtual Wormhole) on the host CPU, "
-            f"with tt-metal {metal['VERSION']}: a simulator, not silicon"
+            f"with tt-metal {pin_files.recorded_version(metal)}: a simulator, not silicon"
         )
         return printable(" ".join(text.split()))
 

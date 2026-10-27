@@ -116,7 +116,7 @@ from lassi.prompts import render
 from lassi.toolchains import CommandResult, EnvRunner, NvccSm80, NvcppCc80
 from lassi.toolchains import pins as pins_module
 from lassi.toolchains._base import OUTPUT_CAP_BYTES
-from lassi.toolchains.pins import read_pin
+from lassi.toolchains.pins import read_pin, recorded_version
 
 REPO = Path(__file__).resolve().parents[2]
 SMOKE = REPO / "tests" / "fixtures" / "recipes" / "p0-smoke.yaml"
@@ -2294,7 +2294,7 @@ def test_every_default_toolchain_declares_a_pin_the_runner_can_read() -> None:
             shapes.add("host")
             continue
         assert callable(check_tree), name
-        assert pin["PREFIX_NAME"] == f"{pin['NAME']}@{pin['VERSION']}", f"{name}: the tree is the pin's install"
+        assert pin["PREFIX_NAME"] == f"{pin['NAME']}@{recorded_version(pin)}", f"{name}: the tree is the pin's install"
         assert "tree" in inspect.signature(factory).parameters, f"{name}: the runner passes the tree as tree="
         shapes.add("tree")
     assert shapes == {"installed", "host", "tree"}

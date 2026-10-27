@@ -81,8 +81,11 @@ The ending is read as the tt_silicon executor reads a program's
   otherwise, with the tokenizer); this module then writes its records
   through lassi.train.checkpoint: recipe.resolved.yaml, checkpoint.json
   (with this trainer's own record: method, weights, base_model as
-  lassi.train.bases records it, peft, the settings, global_step, and the
-  worker's result), and steps.jsonl, each non-finite value null and named;
+  lassi.train.bases records it, peft, the settings, global_step, the
+  worker's result, and performance, lassi.analysis.tt_rates
+  training_summary over the steps without a compile and the worker's
+  model_flops, naming the card: task P17.42), and steps.jsonl, each
+  non-finite value null and named;
 - status 3, a refusal the worker wrote (a record longer than max_length, a
   chat format without a template): WorkerRefusal, a ValueError;
 - any other status from 1 to 127: WorkerError, a RuntimeError naming the
@@ -106,6 +109,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from lassi.analysis.tt_rates import training_summary
 from lassi.core.capabilities import TAKES_DEVICE
 from lassi.core.devices import FrameworkBuild, parse_device
 from lassi.core.interfaces import TrainData, TrainJob, TrainResult
@@ -496,12 +500,14 @@ class TtxlaTrainer:
             raise WorkerError(f"the ttxla worker reported global_step {step!r} and left {checkpoint} "
                               f"{'present' if checkpoint.is_dir() else 'missing'}; trainer.steps is {self.steps}")
         steps = [json.loads(line) for line in _lines(Path(payload["steps_file"]))]
-        own = self._trainer_records(job.recipe, result)
+        own = self._trainer_records(job.recipe, result, steps)
         records.write_records(job, checkpoint, own)
         records.write_steps(checkpoint, steps)
         return TrainResult(steps=self.steps, checkpoints=(name,))
 
-    def _trainer_records(self, recipe: Mapping[str, Any], result: Mapping[str, Any]) -> dict[str, Any]:
+    def _trainer_records(
+        self, recipe: Mapping[str, Any], result: Mapping[str, Any], steps: Sequence[Mapping[str, Any]]
+    ) -> dict[str, Any]:
         """Return this trainer's own checkpoint record (the module docstring)."""
         hf_home = os.environ["HF_HOME"]
         base = bases.check_base(bases.parse_base(recipe["base_model"]), hf_home)
@@ -521,6 +527,9 @@ class TtxlaTrainer:
             },
             "global_step": result.get("global_step"),
             "worker": records.finite_record(worker),
+            "performance": training_summary(
+                steps, result.get("model_flops"), f"tenstorrent card {self.card} ({result.get('device')})"
+            ),
         }
 
 

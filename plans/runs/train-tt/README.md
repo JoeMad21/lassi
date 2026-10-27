@@ -25,8 +25,9 @@ since the wheel's Tracy client listens on TCP 8086 to 8105 and broadcasts on UDP
    uv run tools/train_tt.py wait <id>
    ```
 
-   It needs the tt-metal install at the pin (`$LASSI_TOOLCHAINS/tt-metal@5280a9cf`), whose sfpi 7.25.0 it links into
-   the wheel. Launch runs the same script first anyway: it keeps a checked install and installs a missing one.
+   It needs the tt-metal install at the pin (`$LASSI_TOOLCHAINS/tt-metal@5280a9cf-tracy` since task P17.42, the
+   Tracy build of the same commit; plans/runs/tracy/verify.sh says how to install and check it first), whose sfpi
+   7.25.0 it links into the wheel. Launch runs the same script first anyway: it keeps a checked install and installs a missing one.
 3. From a clean, pushed commit (a clean worktree of it keeps other work out of the job), look at the plan:
 
    ```

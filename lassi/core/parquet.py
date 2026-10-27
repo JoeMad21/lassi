@@ -22,7 +22,9 @@ after the run's outputs_ref columns, null where not recorded. RunInfo.outputs
 (task P4.4) follows them as the string column reference_run_outputs or
 run_outputs: the file -> sha256 mapping as JSON text with sorted keys, as
 the files and score_components columns hold theirs, null where not
-recorded. The attempts table's guards_host_compute_not_checked (task
+recorded. RunInfo.device_timing (task P17.42) follows as the string column
+reference_run_device_timing or run_device_timing: the DeviceTiming as JSON
+text with sorted keys, null where not measured. The attempts table's guards_host_compute_not_checked (task
 P17.14), a string column right after guards_oracle_access, holds the
 attempt's Guards.host_compute_not_checked code, null where none is recorded.
 
@@ -135,6 +137,7 @@ SCHEMAS = {
             ("reference_run_stderr_truncated", _BOOL),
             ("reference_run_workdir_incomplete", _BOOL),
             ("reference_run_outputs", _STRING),
+            ("reference_run_device_timing", _STRING),
             ("context_knowledge_summary", _STRING),
             ("context_source_description", _STRING),
             ("final_stage_reached", _STRING),
@@ -170,6 +173,7 @@ SCHEMAS = {
             ("run_stderr_truncated", _BOOL),
             ("run_workdir_incomplete", _BOOL),
             ("run_outputs", _STRING),
+            ("run_device_timing", _STRING),
             ("alignment_per_input", _DOUBLE_LIST),
             ("alignment_mean", _DOUBLE),
             ("profile_runtime_s", _DOUBLE),
@@ -295,13 +299,17 @@ def _ref_columns(prefix: str, ref: TextRef | None) -> dict[str, str | None]:
 
 
 def _flag_and_output_columns(prefix: str, run: RunInfo) -> dict[str, bool | str | None]:
-    """Return the run flag columns of a RunInfo, `<prefix>_<flag>`, then `<prefix>_outputs`; null where not recorded.
+    """Return a RunInfo's run flag columns, `<prefix>_<flag>`, then `<prefix>_outputs` and `<prefix>_device_timing`.
 
-    The outputs column holds RunInfo.outputs as JSON text with sorted keys.
+    The outputs column holds RunInfo.outputs as JSON text with sorted keys,
+    and the device_timing column the DeviceTiming the same way (task
+    P17.42); each is null where not recorded.
     """
     columns: dict[str, bool | str | None] = {f"{prefix}_{flag}": getattr(run, flag) for flag in RUN_FLAG_NAMES}
     outputs = None if run.outputs is None else json.dumps(run.outputs, sort_keys=True, ensure_ascii=True)
     columns[f"{prefix}_outputs"] = outputs
+    timing = run.device_timing
+    columns[f"{prefix}_device_timing"] = None if timing is None else _json_cell(dataclasses.asdict(timing))
     return columns
 
 

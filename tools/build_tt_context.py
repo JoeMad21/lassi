@@ -6,7 +6,8 @@ Usage:
 
 `--tree` is tt-metal at commit 5280a9cfb00998fd49667a29523d03aee905c129
 (toolchains/tt-metal.pin): the installed tree on the build host
-($LASSI_TOOLCHAINS/tt-metal@5280a9cf), or a directory of files fetched from
+($LASSI_TOOLCHAINS/<the pin's PREFIX_NAME>, tt-metal@5280a9cf-tracy since
+task P17.42), or a directory of files fetched from
 GitHub at exactly that commit, each at its tree path
 (https://raw.githubusercontent.com/tenstorrent/tt-metal/<commit>/<path>). It
 must hold every file SOURCES names, every Tier A kernel

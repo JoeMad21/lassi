@@ -8,7 +8,10 @@ produces. P4.4 also adds the columns reference_run_outputs and
 run_outputs; these fixtures record no output files, statistics, or
 baseline notes, so those columns are null and output_stats has no rows
 here (tests/core/test_output_stats_views.py and
-tests/core/test_binary_io_runs.py cover them). No fixture here has an
+tests/core/test_binary_io_runs.py cover them). P17.42 adds the columns
+reference_run_device_timing and run_device_timing after them, RunInfo's
+DeviceTiming as JSON text with sorted keys, null where not measured, as in
+every fixture here; tests/core/test_record_device_timing.py covers a set one. No fixture here has an
 adversary record, so the adversary table has no rows here
 (tests/core/test_adversary_record.py covers it).
 Parquet mirrors the JSON records and never replaces them (bible Design
@@ -94,6 +97,7 @@ REFERENCE_RUN_COLUMNS = (
     "reference_run_stderr_truncated",
     "reference_run_workdir_incomplete",
     "reference_run_outputs",
+    "reference_run_device_timing",
 )
 END_REASON_COLUMNS = ("final_end_reason_code", "final_end_reason_message")
 TRIAL_COLUMNS = (
@@ -153,6 +157,7 @@ ATTEMPT_COLUMNS = (
     "run_stderr_truncated",
     "run_workdir_incomplete",
     "run_outputs",
+    "run_device_timing",
     "alignment_per_input",
     "alignment_mean",
     "profile_runtime_s",
@@ -683,6 +688,7 @@ def expected_attempt_rows_a_omp_entropy() -> list[dict[str, Any]]:
         "run_stderr_truncated": None,
         "run_workdir_incomplete": None,
         "run_outputs": None,
+        "run_device_timing": None,
     }
     unset_profile = {"profile_runtime_s": None, "profile_avg_power_w": None, "profile_energy_j": None}
     first = {
@@ -851,6 +857,7 @@ def expected_trial_row_b_omp_filled() -> dict[str, Any]:
         "reference_run_stderr_truncated": False,
         "reference_run_workdir_incomplete": False,
         "reference_run_outputs": None,
+        "reference_run_device_timing": None,
         "context_knowledge_summary": "knowledge b\n",
         "context_source_description": "source b\n",
         "final_stage_reached": "S4",
@@ -889,6 +896,7 @@ def expected_attempt_row_b_omp_filled_0() -> dict[str, Any]:
         "run_stderr_truncated": True,
         "run_workdir_incomplete": False,
         "run_outputs": None,
+        "run_device_timing": None,
         "alignment_per_input": [0.5],
         "alignment_mean": 0.625,
         "profile_runtime_s": 0.25,
@@ -928,6 +936,7 @@ def expected_attempt_row_b_omp_filled_1() -> dict[str, Any]:
         "run_stderr_truncated": False,
         "run_workdir_incomplete": True,
         "run_outputs": None,
+        "run_device_timing": None,
         "alignment_per_input": [0.75, 0.25],
         "alignment_mean": 0.5,
         "profile_runtime_s": 0.5,

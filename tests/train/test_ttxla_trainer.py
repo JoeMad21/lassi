@@ -437,6 +437,15 @@ def test_a_complete_worker_leaves_the_checkpoint_with_its_records(
     assert own["base_model"]["name"] == FIXTURE_BASE and own["worker"]["device"] == "SYNTHETIC xla:0"
     assert own["settings"]["max_length"] == 64 and own["settings"]["timeout_s"] == 600
     assert own["settings"]["network"] == "none"
+    # Task P17.42: the summary over the steps without a compile (the fake's first step is one), naming the card.
+    assert [line["compile_step"] for line in lines] == [True, False, False]
+    performance = own["performance"]
+    assert performance["steps_counted"] == 2 and performance["steps_left_out"] == [1]
+    assert math.isclose(performance["median_step_time_s"], 0.5) and math.isclose(performance["tokens_per_s"], 80.0)
+    assert math.isclose(performance["model_flop_per_s"], 128_000.0)
+    assert performance["convention"] == "palm-model-flops"
+    assert performance["device"] == "tenstorrent card 0 (SYNTHETIC xla:0)"
+    assert own["worker"]["model_flops"]["flop_per_token"] == 1000
     assert (checkpoint / "recipe.resolved.yaml").read_text(encoding="ascii") == "SYNTHETIC: recipe\n"
     seen = fakes.seen(job.out_dir / "worker")
     assert seen["argv"] == [str(script), str(job.out_dir / "worker" / "job.json")]

@@ -57,6 +57,7 @@ from lassi.core.registry import DEFAULT_REGISTRY
 from lassi.core.runner import RunError
 from lassi.prompts import assets as prompt_assets
 from lassi.prompts import load_recipe_assets
+from lassi.toolchains.pins import read_pin
 
 REPO = Path(__file__).resolve().parents[2]
 PACK_NAME = "tt-metalium-5280a9cf"
@@ -127,7 +128,8 @@ def pinned_tree() -> Path | None:
     if named and Path(named).is_dir():
         return Path(named)
     toolchains = os.environ.get("LASSI_TOOLCHAINS", "")
-    installed = Path(toolchains) / "tt-metal@5280a9cf" if toolchains else None
+    prefix = read_pin("tt-metal")["PREFIX_NAME"]  # the pinned install (the Tracy build since task P17.42)
+    installed = Path(toolchains) / prefix if toolchains else None
     return installed if installed is not None and installed.is_dir() else None
 
 
