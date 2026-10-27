@@ -83,6 +83,26 @@ before. The two manifests differ only in limit_bytes and in the
 reference's sources, sha256, and cut_by_limit; both are tracked, and both
 packs' fragments are gitignored.
 
+The kernels pack (task P17.39; the owner's direction of 2026-10-26).
+`--kernels` builds a pack for the C++ -> TT arm in which the model writes
+the kernels too, serving the language ttkh (KH_LANGUAGE), under KH_NAME
+unless `--name` gives another: metalium_guide.ttkh, the guide by the
+default rule but with no section left out (KH_GUIDE_LEFT_OUT, so the
+compute kernel sections stay, without their code blocks and images, and
+KH_GUIDE_DANGLING drops the sentences that point at them); host_api.ttkh,
+the fuller pack's reference by the same rules and inputs, filled with the
+guide to `--limit-bytes` (default FULL_LIMIT_BYTES); and kernel_api.ttkh,
+the declarations only, with no comment and no conditional preprocessor
+line (kernel_declarations), of every header under KERNEL_API_DIR at the pin
+(KERNEL_SOURCES), first the kernel headers KERNEL_TEMPLATE_FILE (tt-kh-v0's
+generate.txt) includes, in its order (kernel_roots, read at build time),
+then the rest in path order (kernel_order), each whole header kept while
+the fragment fits KERNEL_LIMIT_BYTES (fit_kernels). Each kernel part starts
+with KERNEL_HEAD_FILE's include line naming the header as a kernel includes
+it (`api/...`), so the declaration lookup reads it as it reads a host part.
+The manifest records the language, the sum of the two limits, and every
+header either fill cut. Every fragment passes the Agent Rule 5 check below.
+
 Agent Rule 5. No source is a programming example (the Tier A items are
 tt-metal's programming examples loopback, eltwise_binary, eltwise_sfpu,
 matmul_single_core, and matmul_multi_core). Before writing, every fragment
@@ -199,6 +219,33 @@ GUIDE_DANGLING = {
 # The host API: the include root and the directory the tt-metalium includes resolve in.
 INCLUDE_ROOT = "tt_metal/api/"
 API_DIR = f"{INCLUDE_ROOT}tt-metalium/"
+# The kernels pack (the docstring's "The kernels pack"; task P17.39): its default name, the language it serves, its
+# guide rule (no section left out, so the compute kernel sections stay, less the sentences that point at the code
+# blocks and the image they drop), and the kernel API: the include root a kernel's "api/..." names resolve in, the
+# directory whose headers the fragment holds, its own head file and template (the first sources of
+# kernel_api.ttkh), and its own byte limit, a fill beside the host part's.
+KH_NAME = f"{PACK_NAME}-kh"
+KH_LANGUAGE = "ttkh"
+KH_GUIDE_LEFT_OUT: tuple[str, ...] = ()
+KH_GUIDE_DANGLING = {
+    **GUIDE_DANGLING,
+    "### Register control and Data Flow within the Compute Kernels": (
+        "The diagram below shows the register layout and data flow for the SFPU and FPU units:",
+        "For instance, adding two tiles together using the FPU requires the following steps:",
+    ),
+}
+KERNEL_KEY = f"kernel_api.{KH_LANGUAGE}"
+KERNEL_INCLUDE_ROOT = "tt_metal/hw/inc/"
+KERNEL_API_DIR = f"{KERNEL_INCLUDE_ROOT}api/"
+KERNEL_HEAD_FILE = REPO / "assets" / "context" / "tt-kernel-api-5280a9cf.head.txt"
+KERNEL_HEAD_SOURCE = KERNEL_HEAD_FILE.relative_to(REPO).as_posix()
+KERNEL_TEMPLATE_FILE = REPO / "assets" / "prompts" / "tt-kh-v0" / "generate.txt"
+KERNEL_TEMPLATE_SOURCE = KERNEL_TEMPLATE_FILE.relative_to(REPO).as_posix()
+KERNEL_LIMIT_BYTES = 128 * 1024
+# A kernel header the template includes: a quoted "api/....h" name.
+_KERNEL_INCLUDE = re.compile(r'"(api/[A-Za-z0-9_./-]+\.h)"')
+# A conditional preprocessor line, which kernel_declarations leaves out: its arms are both kept as code.
+_CONDITIONAL = re.compile(r"^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|elifdef|elifndef|else|endif|error|warning)\b")
 # The generate template of the prompt set tt-host-v0, what the prompt already shows the model. Its tt-metalium
 # includes are ROOTS (a test checks it), and the names it uses that a header of the walk defines are read from it
 # at build time (prompt_names), so neither list is chosen by hand, and the rule adds nothing learned from a Tier A
@@ -279,6 +326,185 @@ SOURCES = {
     f"{API_DIR}memory_pin.hpp": "db6e6a33e04e6e50c14cc9797a292e8c35b9c6a0b40160be2bb48792e6b953c9",
     f"{API_DIR}experimental/fabric/mesh_graph_descriptor.hpp":
         "cb24f651040a0101b9151229f7efa144fe84b6fc53cb91e03293e4341393454d",
+}
+# The sha256 of every header under KERNEL_API_DIR at PIN, the sources of kernel_api.ttkh (task P17.39), read from the
+# files at the commit on GitHub on 2026-10-26, each checked against its git blob sha1 first; in path order.
+KERNEL_SOURCES = {
+    f"{KERNEL_API_DIR}alignment.h": "4b42b9e90248283265d65273d38ce723681addee5dfe67ed19ebeb6ef9989890",
+    f"{KERNEL_API_DIR}compile_time_args.h": "005a8da4e3db30a9b72bd49c85436a99f01734e9d6debccdb04827aac3b6358b",
+    f"{KERNEL_API_DIR}compute/add_int_sfpu.h": "0689731a820cdf3abd01c51cda73f7ceda223299e60d43252255bb832cd93188",
+    f"{KERNEL_API_DIR}compute/bcast.h": "94d3e42fe7de338527e6c384685d11fb434fd2df4cb7e7a723d491e0d76068fe",
+    f"{KERNEL_API_DIR}compute/binary_bitwise_sfpu.h":
+        "18dd491fca9db220bd50ec9d222d23f06c3596b69f284737d6390c64a8720e4f",
+    f"{KERNEL_API_DIR}compute/binary_comp.h": "9ffb5cc651b28ce6bd3dfb2b102fd797665992b6318d801dc3c5d7fd839cfd8c",
+    f"{KERNEL_API_DIR}compute/binary_fmod.h": "62ed33a2f5ed85cfd9665fc5608fd401485bb4d7081f2edc2601eafb5c1baddf",
+    f"{KERNEL_API_DIR}compute/binary_max_min.h": "0bf331b2864db4c76bf4790e4d5b767ae8927b3d4d97c144711c862194a93756",
+    f"{KERNEL_API_DIR}compute/binary_shift.h": "1f0d37ff0d4e12679b7dc1781d7f4670f942c600dac297a95b5d3981b0f42c72",
+    f"{KERNEL_API_DIR}compute/blank.h": "be8239e8352664aeb6f8e0e9e93b148429382aff8c7abbbd5b260ab520ac2e33",
+    f"{KERNEL_API_DIR}compute/cb_api.h": "9b10fca50ce1dc3c4d0f0e5d9299b3a5885ad1193eac0491fc4ad7efb2136ce9",
+    f"{KERNEL_API_DIR}compute/common.h": "12586e1ca7efd19e5ed75b67b0ef904e7e3cc8c53fd64a8898ada6ead9afbc6f",
+    f"{KERNEL_API_DIR}compute/common_globals.h": "f958061bba6714a36556f863dbba4156c571a01167ccb2f0f1ae237c6cde49ae",
+    f"{KERNEL_API_DIR}compute/compute_kernel_api.h": "71585966c57740248361f7fc892f164c7206e4c26d344b4bd290d03b20fba9e6",
+    f"{KERNEL_API_DIR}compute/compute_kernel_hw_startup.h":
+        "95c7f703f5a6278acdd6532e1bc081f457d30507545e1884c2533c10afc14472",
+    f"{KERNEL_API_DIR}compute/copy_dest_values.h": "dd39d7cb9fbee78fab10c06723f1f3df84ea483089d1b87abafec9de30324cd5",
+    f"{KERNEL_API_DIR}compute/cumsum.h": "f37f438e3e4fc696d084d46121e0bc32ae285ce0fa2702aac0fc72532fd4e460",
+    f"{KERNEL_API_DIR}compute/div_int32_floor.h": "d4227c8ba983fe47c6ce0239fb636da1eaba8dfbf5c5d437cfa17093747e209f",
+    f"{KERNEL_API_DIR}compute/div_int32_sfpu.h": "a279471e3cbe3953c73335da6ec52ad1e332e8244abbb48dde22d25669a0f3d6",
+    f"{KERNEL_API_DIR}compute/eltwise_binary.h": "febe3ca491101f406c902bdef6d23e36d51054516a1921261e8145fce2c7fcf6",
+    f"{KERNEL_API_DIR}compute/eltwise_binary_sfpu.h":
+        "8621bba70510a93540201789cf8882a39a59fbe0b0cd893e7e328b11b630d8d2",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/activations.h":
+        "20c5db3a8121c96e94dd045c2333a0676ac20c34eb26654da7b528fec11e7d2c",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/addcdiv.h":
+        "9c6f35c5312c66dccdc11df3c6e9286b6569b7c9cb6a4eeed44d90e86eb28d9c",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/addcmul.h":
+        "ba4b2ca7fc2c51faabcaf94ef59afd147e4dbc4b2a6e8297e389e2d5662e80f2",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/binop_with_scalar.h":
+        "cdf4c146eae58c3a1a74dd56ce015b5472d598151e37697ace6bcbb2894ac046",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/bitwise_and.h":
+        "306c1a551f3e5d60db46ed30dfd6047d0a5b772a1858dd14f988ecb7236f237d",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/bitwise_not.h":
+        "b745d7688c659e2cccafbf06c67d7daff75bbb16f06357f7a62f0e9271126292",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/bitwise_or.h":
+        "3bbc0a83dac675743ff86afad6339a8d75c526d11f17cdc6b6bd027310418c0e",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/bitwise_xor.h":
+        "1c7aa7f95529da7f16a8ba33c3875d85b755d066bbbef9485ec4ca76cbeb1048",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/cbrt.h": "37338746ce5a1c82c556bc9cb830c44abb110e27469c83c64faeadfcbf456505",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/clamp.h":
+        "51b0fde4da031b1a9efc8b54199b75fec569ae45d80da57712b054967eb35ea4",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/comp.h": "1de02a4dbb634fdfb30d5f18d0fec27fff6359cc53c14af51b946806ce992665",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/dropout.h":
+        "ba9ab3d39c488ec9b3744ebd97be102311124ee3a23c097753985417f604baf3",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/eltwise_unary.h":
+        "ceda828a4fe47789cc43eb5812a9058229ba5107dc529873ef502b11742feaf8",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/elu.h": "7d63e775c365df96cbf599703fb31caa09b5152c386ad93faeb1b9fcaf67297f",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/erf_erfc.h":
+        "2041cdf379899d22aea262bd5b92a9fed6ea896fa387d31c16532b1fb349d0c8",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/erfinv.h":
+        "93c03cf8db52ac620f757c2bfecfeaf0039e0779cfcec9079e4da464f4ff23c1",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/exp.h": "0391d2948577c01304b545e88d66112886094ccb776a6841d2110d1998efd8ab",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/fill.h": "5daa2cc9a0252ef4ee930b5b1ce96c221e0d2c249e4ee4d4597eec7956fd3750",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/fmod.h": "80b19c126ddac63425470bd06c8da5e40a5e944daf5e61f64d252b3c141095f4",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/gelu.h": "3cd3060c1d7b29bc362181abb0127b2daaf37ffe9059257ab002641fdb8785d6",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/hardmish.h":
+        "49e5f145255abe983afd223498a7c9891acb9da6fd191670b16f68aef118e5d7",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/hardtanh.h":
+        "8f07d0529c5be9e37de6e410b7c82d3aa8cd53324f56b049a94291642c1d1acc",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/i0.h": "cd823c036053fad3ccb8c7e45e9b04f63d9e6513dc5cfe38c5377769d18cc545",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/i1.h": "37d4c77cb0f8c67cf433dcd39e76048a5bfdc387a1c9cc0e345ebf6441bab177",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/identity.h":
+        "5c489143accd6ced901d7cc224f694dbb61d8bc6f5246aff66a39e90502aa04e",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/isinf_isnan.h":
+        "d702f3f99dcf643c3537657e46ba820419157a3693e9494cf70cc75682271d24",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/left_shift.h":
+        "f3d5d60a6c68b579ceb9ea68367fcafbb69ca9150a173335277650d67b4e3513",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/lerp.h": "65f1b5234f92ddcbc1e176011385008285d42e0e99a4492f29159aa813da24e9",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/log1p.h":
+        "8aa8763b1d0c0395f340997c3136584103929e507e611a259df7b89608fc4a26",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/logical_not_noti.h":
+        "2a4af16babcf9180270e3ce097b3840d2ca21037e4ab4c253d93ff3ce9ec2055",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/negative.h":
+        "b8144eb2c1d48843fdd054b7cea1cb88ff8f1f782803d39642bf1013c9ae8cff",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/prelu.h":
+        "9bece7215bafe451d6e7b3735e7e1f1abd0a9cb1d6e8adb68e1643ed3e8721ce",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/rand.h": "f45a9ca394ac6b9ba9bcbf2c3e0caefbfaa6b3601382821990fe3467166a8b19",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/rdiv.h": "715affafb195fb9bfb22fa258d23d7e466f03600263ec769cca1f09317582490",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/recip.h":
+        "91bcd90cd77764025f963467ed939af216ee36167f86386f317b23dcc664ff41",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/relu.h": "96cbe08d563ca6b0e08abfe3c27c291b6e00f42090be93d4ed25fbc54adb9026",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/remainder.h":
+        "b464c79e376cdb6c88a8b508bf1829efe337aba8176f838ff2dc60bae3464dc7",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/reverseops.h":
+        "8b1e5a8ed9d39f37e847cdb909c88fd44079a7f24a397f96f1ba27722d7ebe13",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/right_shift.h":
+        "3f6031120fd6637071f2e4374334eb99cf89535f8d42969882602eb74d411421",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/rounding.h":
+        "7febb5eba458da62279eb0fdf8a71b48a6bae49887af68a6a47d40b6a7ddab23",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/rpow.h": "39daa36f4f85c9cd8508141c1e2e0666ab5b76058b80ee3854c8abd225a440bc",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/rsqrt.h":
+        "6823f87668c8c52ae7d2c141e90eb2d7b32ef62c8415dca3ec5899938b95bf3f",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/rsub.h": "be763488a234620d1b508680d538b7ef7255c1f725baaeac47bb77f4d1b6e6b8",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/selu.h": "65ee2fa906c98578580bb59c23fd3a81b8ba10f196e9f8b2b21cae069015cd42",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/sfpu_int_sum.h":
+        "8298b54beff7d4e8c5e47c064e94895b9de23bd41b935bee30eb96758fab6b4a",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/sfpu_split_includes.h":
+        "b851261ba0757d255f56f0771f45bf6d6a509f8d5f5fad4e2fdf80211aa2d9b5",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/softplus.h":
+        "d1923976d089020270949f69f067447a1365ca86d9ba1586b745ea9b49beccd4",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/sqrt.h": "8fc2571c3c0a3f94c44310636a6a6e7ddb6a87868292c31771c4b85533f2e4a6",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/threshold.h":
+        "3a1b3b4599efce6a2a630d6795a28b284ca508efddac6a4a6589cc4fb99beb61",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/trigonometry.h":
+        "06b66cffdbbcc6c683c62e8b43a7bcff02d4160634823ffc7fb97da490faef50",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/typecast.h":
+        "454a0f9c1432b68615e12d5e4b1d286c34cb351669c6f80bc9c1ae09b40096e5",
+    f"{KERNEL_API_DIR}compute/eltwise_unary/where.h":
+        "3dac21e28916787eff32a5b1080b3356acb8e91e6326c61c1495e314c1d8a471",
+    f"{KERNEL_API_DIR}compute/ema.h": "a542922bdd6a1d6ab53091ea831dd1a7c644199961bd5fed8b961ad3d24fec78",
+    f"{KERNEL_API_DIR}compute/experimental/mul_reduce_scalar.h":
+        "3f67e20b2aa11673a41a0cf4cfd16230d45a9989c768ae4acfa3d411e0eac136",
+    f"{KERNEL_API_DIR}compute/experimental/pack_custom.h":
+        "9677e48316552b5e6b05cefcb4f98157332146128185d954d0b38234ccde70f1",
+    f"{KERNEL_API_DIR}compute/gcd.h": "f7164d9514560a6686599ccc612bc8d75c151f9924612822554ae3fb289e943b",
+    f"{KERNEL_API_DIR}compute/layernorm.h": "d93f7074d9c3e4e0c9ce5bb01d72bcb5c17e5882af1c6be12bb618ad4fd58c7d",
+    f"{KERNEL_API_DIR}compute/lcm.h": "da623470724393165557c1edc802a1baa59dc98a11378ebeb9200a757f1da035",
+    f"{KERNEL_API_DIR}compute/logsigmoid.h": "c78fc37a1126afc70ca9d8e7e0722a87b9904d93107646dde6670a6582a53b64",
+    f"{KERNEL_API_DIR}compute/mask.h": "c3404384a50f5e6f13251f9d6ab3ade2e876bea20b928700058777e4d93a8a08",
+    f"{KERNEL_API_DIR}compute/matmul.h": "934b13dce56cbb1ccbeaddb31fdfe0aa0dc2dd63d02ddcfa75bd6a87d25171ce",
+    f"{KERNEL_API_DIR}compute/mul_int_sfpu.h": "4ad8789091ecee2c360916f850e48e99cc1327688ed0b0cf5ca0e431402c9db5",
+    f"{KERNEL_API_DIR}compute/pack.h": "9773edb86973a4692da7f93e798beacfb129e892c443cc66fc990640bfa22519",
+    f"{KERNEL_API_DIR}compute/pack_untilize.h": "06de815923830d10bf69f3e97b21254113640fc34ae46997259a0d17e63421a5",
+    f"{KERNEL_API_DIR}compute/quantization.h": "c678aa8c1bd3255b221e54f5e111b1a8db16f12774348ef6343fca88524b887b",
+    f"{KERNEL_API_DIR}compute/reconfig_data_format.h":
+        "a9b29fb2ca01fc1b4d1316e7db17d7d9c1eb4b514bf42216338d16ffc7890700",
+    f"{KERNEL_API_DIR}compute/reduce.h": "b451b41f834066493ddc6b50563925b8de8347eb12ea87199dbcbb10d7cc3957",
+    f"{KERNEL_API_DIR}compute/reduce_custom.h": "bed0888a86a2f84a587312e9990bb24ea3c33e5fb25e38838ddc3231bc773a57",
+    f"{KERNEL_API_DIR}compute/reg_api.h": "44ecc17eb26f494da3fd6fd61ec7cf926a91b46ace9db9c9b80abe531584fe8a",
+    f"{KERNEL_API_DIR}compute/remainder_int32.h": "a012612073349fea073b6a20095752d683ad45eac34a17c47635e62a0434bf8a",
+    f"{KERNEL_API_DIR}compute/reshuffle.h": "49d53a6a8e8e056089c8790979bd98d7c131515d6901b802138168f5a908b6b8",
+    f"{KERNEL_API_DIR}compute/sentinel/compute_kernel_sentinel.h":
+        "d940bba18b3250b2502260b830f569baafdff3fd53ff50ebc0a94bbf66d6e2fe",
+    f"{KERNEL_API_DIR}compute/sentinel/sentinel_core.h":
+        "40d1c0b4eee2614f13f5e96e52ee77e48cd0f1e5bf5acff1ba5ebedf0787192a",
+    f"{KERNEL_API_DIR}compute/sentinel/testing_spy.h":
+        "acb9387260cf3261c4015fa657243ba0aa782ee3898675d4897c6820c429aef5",
+    f"{KERNEL_API_DIR}compute/softmax.h": "fe0475fb080dbf89b372939adae851b0294c2785f1e5b0448f515a0cd2a465dc",
+    f"{KERNEL_API_DIR}compute/sub_int_sfpu.h": "a3b5b39dbf8acbd46993d3513ec01ac3d2377a35eac20e2bdf50fa6d50c57669",
+    f"{KERNEL_API_DIR}compute/tile_move_copy.h": "409f3a0634c9f9790e9781f2a19f732377308f6f5a911d66a8f5aaeaa012cb32",
+    f"{KERNEL_API_DIR}compute/tilize.h": "f393f34cf3b68c4b5789ad2f44a02a5316f2863157335cb7e0680cf91ce2b8ef",
+    f"{KERNEL_API_DIR}compute/transpose_wh.h": "dc28c7c6d7e985673475db838425458acd6f567b103b2f3d8e822c872c61e96a",
+    f"{KERNEL_API_DIR}compute/transpose_wh_dest.h": "cd928409e6bc39a0e388eab47f84e989fd59d2fd7aa83acfac3e9a871c85c736",
+    f"{KERNEL_API_DIR}compute/untilize.h": "979e413e846f130a9afe094330f4b4f1c162a3202d6c0f6158abcb618644f144",
+    f"{KERNEL_API_DIR}compute/welford.h": "518e480c55ff587ff27470062de29654a5691803d24ec65ae58e9be361a632ac",
+    f"{KERNEL_API_DIR}compute/xlogy.h": "83825e302c3f70dcaa4727a5b5b472f8d491ef9d72e8622f1b6c70b21fcd55bc",
+    f"{KERNEL_API_DIR}dataflow/dataflow_api.h": "d2ba306bceb9e7b2fcc23d7c309fcedc6c3782df2cf5b0d5c0cc8ae8106f9c66",
+    f"{KERNEL_API_DIR}debug/assert.h": "b9f83badbd4be1e7dd149e5031c822abd01b2c116c36fd289123d20f9741dee6",
+    f"{KERNEL_API_DIR}debug/dprint.h": "cccf79ef383a54fddaf61b68bc4a0add4160d8ec017fc7f2a27f6cb5343644f0",
+    f"{KERNEL_API_DIR}debug/dprint_pages.h": "8f7216347a715389b7287f7037487dfc32be449c78c5dc41b8c00a3207cc518f",
+    f"{KERNEL_API_DIR}debug/dprint_tensix.h": "394af436703af2eac3d2d1315bf4bc2f787fc0d8e70dd54f0ba68ba5e878c382",
+    f"{KERNEL_API_DIR}debug/dprint_tensix_pack.h": "6f4851a945db42ec1fe3313a1bf259303142869dc008fcd1920b0768a2056b84",
+    f"{KERNEL_API_DIR}debug/dprint_tensix_unpack.h": "6e1f9203a73b0df6133afc96024ba2a9800955ec6fd7b6a9594ce7a411ceb0ca",
+    f"{KERNEL_API_DIR}debug/dprint_tile.h": "9a70072cdfe712fb6f6fcaff553de98bf3c1d347e24d9c9eb74df6ee8e272096",
+    f"{KERNEL_API_DIR}debug/eth_link_status.h": "f6268b5abb2eb6fc16ed99ecdc321ac2ab36863c01edb4469701548963dd9486",
+    f"{KERNEL_API_DIR}debug/noc_logging.h": "50e342f2fdea04a074942bd846789a05471301293e5f9980ea5886edfcb8b802",
+    f"{KERNEL_API_DIR}debug/pause.h": "e93ded2f03f582959c09d51dce587f1eaad09d7db158eb8f81a86e483ec12ed2",
+    f"{KERNEL_API_DIR}debug/ring_buffer.h": "b0d12a7615ea3dd6ed5a4c147094cd525070e04f3c4fe101656b1b9d6aeb364e",
+    f"{KERNEL_API_DIR}debug/timing_perturbation.h": "a2152590485cbe337ee8c34eaae7fcfe925f62b61cc81056491ff1e1330f6f28",
+    f"{KERNEL_API_DIR}debug/waypoint.h": "f1c1e4d1aaec770281265a87219449acc5fb767009a09be8a101819989d50cdd",
+    f"{KERNEL_API_DIR}numeric/bfloat16.h": "e9ecb115b153182bb9717f2d2b79372be8d703dbc5654cd794b0ae05c402ae81",
+    f"{KERNEL_API_DIR}numeric/float32.h": "6950429e19550087c1ff1f59365960fa2170075c635efa607e95ced0f2fc7c7f",
+    f"{KERNEL_API_DIR}numeric/int32.h": "8ba06fd0051ad1519d0780c0a0c06501a947082b5c6bc7c417b932896fa889d6",
+    f"{KERNEL_API_DIR}remote_circular_buffer.h": "980ae608f92615b3c2546080e39078f02f84ee5717a69af06e71f2d901067fd5",
+    f"{KERNEL_API_DIR}socket_api.h": "d819d2f40a200e3246ff79ed57fdfd4b8c3cbbee83e204de24cc87d7c44f0933",
+    f"{KERNEL_API_DIR}tensor/page.h": "8a4f21ffe49821eed3ccdda04123295320d8fe6338211607dcccb7abf7643d0f",
+    f"{KERNEL_API_DIR}tensor/pages_address_iterator.h":
+        "80c74f508049a091834be1678e4f7defae41b78c0bda87a511d2d729932c0d38",
+    f"{KERNEL_API_DIR}tensor/shard_pages_address_iterator.h":
+        "496ed296cf5d15a5702a5b6c5d9ce04ff2314fb8fafcd0bbba7ad6be65f2576f",
+    f"{KERNEL_API_DIR}tensor/tensor_accessor.h": "55a13e3172cd6d098ae2462806874bb0379e9d0bc372221aeed53fcfdd5d2cf5",
+    f"{KERNEL_API_DIR}tensor/tensor_accessor_args.h":
+        "2c8a248e4c6e3d56967e3bb8566930f46587cd144253914c7d88a6ff62a256c5",
 }
 
 HEADER = (
@@ -881,6 +1107,66 @@ def fit_reference(
     return _reference(head, kept), tuple(skipped)
 
 
+# ---------------------------------------------------------------- the kernel API (the kernels pack, task P17.39)
+
+
+def kernel_roots(template: str) -> list[str]:
+    """Return KERNEL_INCLUDE_ROOT + each quoted "api/....h" include `template` names, in order of first mention."""
+    return [KERNEL_INCLUDE_ROOT + name for name in dict.fromkeys(_KERNEL_INCLUDE.findall(template))]
+
+
+def kernel_order(paths: Sequence[str], roots: Sequence[str]) -> list[str]:
+    """Return the fill order of the kernel headers `paths`: the `roots` in their order, then the rest by path."""
+    first = list(dict.fromkeys(roots))
+    return [*first, *sorted(path for path in paths if path not in first)]
+
+
+def kernel_declarations(text: str) -> str:
+    """Return a kernel header's declarations without comments (declarations) and without conditional directives.
+
+    Both arms of an #if stay as code (the reader does not evaluate them),
+    so the #if, #ifdef, #ifndef, #elif, #else, #endif, #error, and #warning
+    lines are left out; a #define stays, since a kernel may call a macro.
+    """
+    lines = declarations(text, comments=False).split("\n")
+    return _tidy("\n".join(line for line in lines if not _CONDITIONAL.match(line)))
+
+
+def kernel_part(path: str, text: str, head: Head) -> str:
+    """Return one kernel header's part: its include line, as a kernel includes it (api/...), and its declarations."""
+    return f"{head.line(path[len(KERNEL_INCLUDE_ROOT):])}\n\n{kernel_declarations(text)}"
+
+
+def _kernel_reference(head: Head, kept: Sequence[tuple[str, str]]) -> Fragment:
+    """Return the kernel reference fragment of the kept (path, part) pairs: the head's preamble, then each part."""
+    return Fragment(KERNEL_KEY, (KERNEL_HEAD_SOURCE, KERNEL_TEMPLATE_SOURCE, *(path for path, _ in kept)),
+                    "\n".join([head.preamble, *(part for _, part in kept)]))
+
+
+def fit_kernels(
+    headers: Sequence[tuple[str, str]], head: Head, limit: int = KERNEL_LIMIT_BYTES, keep: int = 1,
+) -> tuple[Fragment, tuple[str, ...]]:
+    """Return the kernel reference that fills `limit` bytes in the order of `headers`, and the paths it skipped.
+
+    The rule is fit_reference's on this fragment alone: the first `keep`
+    headers (the roots) are always kept, and each later header is kept
+    whole while the fragment still fits and skipped otherwise. Raises
+    Refusal when the roots alone pass the limit.
+    """
+    parts = [(path, kernel_part(path, text, head)) for path, text in headers]
+    size = len(_kernel_reference(head, parts[:keep]).text.encode("utf-8"))
+    if size > limit:
+        raise Refusal(f"the kernel roots {[path for path, _ in parts[:keep]]} make a {size}-byte kernel reference, "
+                      f"over the {limit}-byte limit")
+    kept, skipped = list(parts[:keep]), []
+    for path, part in parts[keep:]:
+        if len(_kernel_reference(head, [*kept, (path, part)]).text.encode("utf-8")) <= limit:
+            kept.append((path, part))
+        else:
+            skipped.append(path)
+    return _kernel_reference(head, kept), tuple(skipped)
+
+
 # ---------------------------------------------------------------- the guide
 
 
@@ -1133,11 +1419,15 @@ def check_pin_file() -> None:
                       f"{PIN}; update PIN and SOURCES for the new pin")
 
 
-def read_sources(tree: Path) -> dict[str, str]:
-    """Return {path: text} of every source in `tree`; raise Refusal naming each file missing or off the pin."""
+def read_sources(tree: Path, table: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Return {path: text} of every source in `tree`; raise Refusal naming each file missing or off the pin.
+
+    `table` maps each source to its sha256 at the pin: SOURCES unless given
+    (KERNEL_SOURCES for the kernels pack).
+    """
     texts: dict[str, str] = {}
     problems = []
-    for path, digest in SOURCES.items():
+    for path, digest in (SOURCES if table is None else table).items():
         file = tree / path
         if not file.is_file():
             problems.append(f"{path} is missing")
@@ -1163,12 +1453,13 @@ def headers_of(sources: Mapping[str, str]) -> list[str]:
 
 @dataclass(frozen=True)
 class Pack:
-    """A built pack: its fragments, the sha256 of this repository's own sources, its limit, and what that skipped."""
+    """A built pack: its fragments, its own sources' sha256, its limit, what that skipped, and its language."""
 
     fragments: tuple[Fragment, ...]
     own: Mapping[str, str]
     cut: tuple[str, ...]
     limit: int = LIMIT_BYTES
+    language: str = LANGUAGE
 
 
 def read_template(path: Path = TEMPLATE_FILE) -> tuple[str, str]:
@@ -1202,16 +1493,55 @@ def build(
     return Pack(fragments, {HEAD_SOURCE: head.sha256, TEMPLATE_SOURCE: template_sha256}, cut, limit)
 
 
+def _rekeyed(fragment: Fragment, key: str) -> Fragment:
+    """Return `fragment` under another manifest key, its sources and text unchanged."""
+    return Fragment(key, fragment.sources, fragment.text)
+
+
+def build_kernels(tree: Path, limit: int = FULL_LIMIT_BYTES) -> Pack:
+    """Return the kernels pack (the docstring's "The kernels pack") built from `tree`, checked by check_pack.
+
+    The guide and the host reference fill `limit` bytes by build's rules
+    and inputs, the guide keeping its compute kernel sections; the kernel
+    reference fills KERNEL_LIMIT_BYTES on its own (fit_kernels). The pack's
+    limit is the sum, and its cut lists both fills' skipped headers.
+    """
+    check_pin_file()
+    sources = read_sources(tree)
+    kernels = read_sources(tree, KERNEL_SOURCES)
+    head, kernel_head = read_head(HEAD_FILE), read_head(KERNEL_HEAD_FILE)
+    template, template_sha256 = read_template(TEMPLATE_FILE)
+    kernel_template, kernel_template_sha256 = read_template(KERNEL_TEMPLATE_FILE)
+    text = guide_text(sources[GUIDE], left_out=KH_GUIDE_LEFT_OUT, dangling=KH_GUIDE_DANGLING)
+    guide = Fragment(f"metalium_guide.{KH_LANGUAGE}", (GUIDE,), text)
+    declared = declared_headers(sources, headers_of(sources))
+    order, _ = walk_order(declared, names=prompt_names(template, declared))
+    reference, cut = fit_reference(guide, [(path, sources[path]) for path in order], head, limit, keep=len(ROOTS))
+    roots = kernel_roots(kernel_template)
+    unknown = [path for path in roots if path not in kernels]
+    if unknown:
+        raise Refusal(f"{KERNEL_TEMPLATE_SOURCE} includes {unknown}, which KERNEL_SOURCES does not record")
+    headers = [(path, kernels[path]) for path in kernel_order(list(kernels), roots)]
+    kernel, kernel_cut = fit_kernels(headers, kernel_head, KERNEL_LIMIT_BYTES, keep=len(roots))
+    fragments = (guide, _rekeyed(reference, f"host_api.{KH_LANGUAGE}"), kernel)
+    total = limit + KERNEL_LIMIT_BYTES
+    check_pack(fragments, tier_a_references(tree), total)
+    own = {HEAD_SOURCE: head.sha256, TEMPLATE_SOURCE: template_sha256, KERNEL_HEAD_SOURCE: kernel_head.sha256,
+           KERNEL_TEMPLATE_SOURCE: kernel_template_sha256}
+    return Pack(fragments, own, (*cut, *kernel_cut), total, KH_LANGUAGE)
+
+
 def manifest_text(
     fragments: Sequence[Fragment], hashes: Mapping[str, str], cut: Sequence[str] = (), limit: int = LIMIT_BYTES,
+    language: str = LANGUAGE,
 ) -> str:
-    """Return MANIFEST.yaml: the header, the pin and `limit`, each entry's key, sources, and sha256, and the cut."""
+    """Return MANIFEST.yaml: the header, the pin, `language`, `limit`, each entry's sources and sha256, and the cut."""
     entries = [{
         "key": fragment.key,
         "sources": [{"path": path, "sha256": hashes[path]} for path in fragment.sources],
         "sha256": hashlib.sha256(fragment.text.encode("utf-8")).hexdigest(),
     } for fragment in fragments]
-    document = {"generator": GENERATOR, "repo": REPO_URL, "commit": PIN, "language": LANGUAGE,
+    document = {"generator": GENERATOR, "repo": REPO_URL, "commit": PIN, "language": language,
                 "limit_bytes": limit, "entries": entries, "cut_by_limit": list(cut)}
     return HEADER + yaml.safe_dump(document, sort_keys=False, default_flow_style=False, width=120)
 
@@ -1236,8 +1566,8 @@ def write_pack(out: Path, pack: Pack, name: str = PACK_NAME) -> Path:
     tree = out / pack_tree(name)
     tree.mkdir(parents=True, exist_ok=True)
     files = {f"{fragment.key}.txt": fragment.text.encode("utf-8") for fragment in pack.fragments}
-    hashes = {**SOURCES, **pack.own}
-    files[MANIFEST] = manifest_text(pack.fragments, hashes, pack.cut, pack.limit).encode("ascii")
+    hashes = {**SOURCES, **KERNEL_SOURCES, **pack.own}
+    files[MANIFEST] = manifest_text(pack.fragments, hashes, pack.cut, pack.limit, pack.language).encode("ascii")
     for name, data in files.items():
         path = tree / name
         if not (path.is_file() and path.read_bytes() == data):
@@ -1250,17 +1580,25 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate the tt-metalium context pack from tt-metal at the pin.")
     parser.add_argument("--tree", type=Path, required=True, help="tt-metal at the pin: an install or fetched files")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="assets root to write the pack under")
-    parser.add_argument("--name", default=PACK_NAME, help=f"the pack's name (default {PACK_NAME}; or {FULL_NAME})")
-    parser.add_argument("--limit-bytes", type=int, default=LIMIT_BYTES,
-                        help=f"the whole pack's byte limit (default {LIMIT_BYTES}; {FULL_LIMIT_BYTES} for {FULL_NAME})")
+    parser.add_argument("--name", help=f"the pack's name (default {PACK_NAME}, or {KH_NAME} with --kernels; or "
+                                       f"{FULL_NAME})")
+    parser.add_argument("--limit-bytes", type=int,
+                        help=f"the whole pack's byte limit (default {LIMIT_BYTES}; {FULL_LIMIT_BYTES} for "
+                             f"{FULL_NAME}); with --kernels the guide and host part's (default {FULL_LIMIT_BYTES})")
+    parser.add_argument("--kernels", action="store_true",
+                        help=f"build the kernels pack for {KH_LANGUAGE}: the guide, the host API, and the kernel API "
+                             "(task P17.39)")
     args = parser.parse_args(argv)
+    name = args.name if args.name is not None else (KH_NAME if args.kernels else PACK_NAME)
+    limit = args.limit_bytes if args.limit_bytes is not None else (
+        FULL_LIMIT_BYTES if args.kernels else LIMIT_BYTES)
     try:
-        check_options(args.name, args.limit_bytes)
-        pack = build(args.tree, limit=args.limit_bytes)
+        check_options(name, limit)
+        pack = build_kernels(args.tree, limit=limit) if args.kernels else build(args.tree, limit=limit)
     except Refusal as refusal:
         print(f"build_tt_context: refused: {refusal}", file=sys.stderr)
         return 1
-    tree = write_pack(args.out, pack, args.name)
+    tree = write_pack(args.out, pack, name)
     sizes = ", ".join(f"{fragment.key} {len(fragment.text.encode('utf-8'))} bytes" for fragment in pack.fragments)
     print(f"{tree.as_posix()}: {sizes}; the pack {pack_size(pack.fragments)} of {pack.limit} bytes; "
           f"{len(pack.cut)} headers cut by the limit")

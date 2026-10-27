@@ -1,0 +1,6 @@
+# The ninth pass of the owner's RNGD sweep (task P17.39): C++ -> TT where the model writes the host program and every
+# kernel (tt-pairs-v0-kh, a development set, OQ-083 (b)). Exploratory; every TT program runs on ttsim, a simulator.
+# Combination kh-exsk: kh-ex plus the item-agnostic skeletons tt-kh-skeleton-v0 (OQ-096 (a)), the host skeleton that
+# built at the pin and a reader, a compute, and a writer kernel skeleton, at generation and compile corrections.
+extends: kh-ex-pcc.yaml
+skeleton: {name: tt-kh-skeleton-v0, prompts: [generate, correct]}  # OQ-096 (a): item-agnostic

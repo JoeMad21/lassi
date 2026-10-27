@@ -1,0 +1,86 @@
+Translate the program below from $source_language to $target_language.
+
+The language ids mean:
+- cpp: a C++ program for the host CPU, built by g++ 12 with -O3 -fopenmp, with no tt-metal header or
+  library on its path: it uses the C++ standard library, OpenMP, and "lassi_io.h", and does any bf16
+  conversion, tiling, and tile math itself.
+- ttkh: a whole tt-metal program for tt-metal commit 5280a9cf: a host program in C++20, built by
+  clang++-20, and every device kernel it launches, which you write too. The host program opens the
+  device, creates the buffers, the program, the circular buffers, and the kernels, moves the inputs to
+  the device, runs the program, reads the results back, closes the device, and writes the outputs. The
+  kernels run on the device and compute every output value; the host program never does.
+
+Both kinds of program take the same arguments: the input files, then the output files, in the order the
+source program takes them. Both read inputs and write outputs only through the harness header:
+  #include "lassi_io.h"
+  lassi_io_array x = {};  lassi_io_read(path, &x)  ...  lassi_io_free(&x);
+  lassi_io_write(path, name, dtype, rank, dims, data)
+lassi_io_read and lassi_io_write return 0 on success. Each output must keep the array name, dtype code
+(such as LASSI_IO_BF16 or LASSI_IO_F32), and shape the source program writes. A bf16 value is the upper
+16 bits of the f32 of the same value. The harness provides lassi_io.h; never return it.
+lassi_io_free zeroes the array it frees, so write each output before freeing an input whose dims it uses.
+
+The host program uses tt-metal calls such as these, after the includes <tt-metalium/host_api.hpp>,
+<tt-metalium/distributed.hpp>, and <tt-metalium/tensor_accessor_args.hpp> and using namespace tt::tt_metal;
+- distributed::MeshDevice::create_unit_mesh(0), then device->mesh_command_queue();
+- distributed::MeshBuffer::create(ReplicatedBufferConfig{.size}, DeviceLocalBufferConfig{.page_size,
+  .buffer_type}, device.get()), both configs in distributed::, with BufferType::DRAM, or BufferType::L1
+  for a kernel's scratch;
+- distributed::EnqueueWriteMeshBuffer(queue, buffer, host_vector, false);
+- CreateProgram(); for circular buffers, CircularBufferConfig with tt::DataFormat::Float16_b and
+  CreateCircularBuffer, tt::CBIndex::c_0 and c_1 for inputs and c_16 for the output;
+- TensorAccessorArgs(*buffer).append_to(compile_args);
+- CreateKernel(program, "<kernel path>", core, DataMovementConfig{...}) for readers and writers, and
+  CreateKernel(program, "<kernel path>", core, ComputeConfig{...}) for compute; SetRuntimeArgs(program,
+  kernel, core, args), whose args are buffer addresses (buffer->address()) and counts; a single-core
+  program uses CoreCoord core = {0, 0};
+- distributed::MeshWorkload workload; workload.add_program(distributed::MeshCoordinateRange(device->shape()),
+  std::move(program)); distributed::EnqueueMeshWorkload(queue, workload, false); distributed::Finish(queue);
+- distributed::EnqueueReadMeshBuffer(queue, host_vector, buffer, true); device->close().
+Device data is bf16 in 32x32 tiles: one tile is a 2048-byte page of a buffer and of a circular buffer. A
+matmul's kernels work on tiles, so its host program tilizes the inputs with tilize_nfaces and untilizes
+the output with untilize_nfaces (<tt-metalium/tilize_utils.hpp>).
+
+The kernels. A kernel is a C++ file under a directory named kernels. The host program never compiles
+one: the harness writes it at its path, and tt-metal compiles it for the device when the program first
+launches it, so CreateKernel names it by exactly that path. Every kernel's entry point is
+void kernel_main(), a compute kernel's too (at this commit there is no MAIN macro in a namespace). Kernel
+headers are included as "api/...": "api/dataflow/dataflow_api.h" in a data movement kernel, and
+"api/compute/common.h", "api/compute/tile_move_copy.h", and each operation's header under api/compute/
+(such as "api/compute/eltwise_unary/eltwise_unary.h" and the SFPU functions beside it, or
+"api/compute/matmul.h") in a compute kernel; the older paths without api/ do not exist at this commit.
+A kernel reads its runtime args with get_arg_val<uint32_t>(i), in the order SetRuntimeArgs passes them,
+and its compile args with get_compile_time_arg_val(i). A buffer's accessor is
+TensorAccessor(TensorAccessorArgs<offset>(), address, page_size), where offset is the compile arg at which
+the host's TensorAccessorArgs(*buffer).append_to(compile_args) began: TensorAccessorArgs<0>() for the
+first, and args.next_compile_time_args_offset() for the one after args.
+Circular buffers connect the kernels on a core. Each has an index (tt::CBIndex::c_0 to c_31) and a
+depth in tiles, both set by the host program; a producer calls cb_reserve_back(cb, n), writes at
+get_write_ptr(cb) (or packs), and calls cb_push_back(cb, n); a consumer calls cb_wait_front(cb, n),
+reads at get_read_ptr(cb) (or unpacks), and calls cb_pop_front(cb, n). Every page one kernel pushes,
+another must pop, or the program hangs. The three kinds of kernel:
+- a reader, a data movement kernel (DataMovementConfig on RISCV_1), which moves input tiles from DRAM
+  into circular buffers: per tile, cb_reserve_back, noc_async_read_page(tile, accessor,
+  get_write_ptr(cb)), noc_async_read_barrier(), cb_push_back;
+- a compute kernel (ComputeConfig), which per tile waits for its inputs, calls tile_regs_acquire(),
+  computes into the dst registers (copy_tile(cb, 0, dst) then an SFPU function on dst, or a binary or
+  matmul tile call), calls tile_regs_commit() and tile_regs_wait(), reserves its output, calls
+  pack_tile(dst, out_cb), pushes it, pops its inputs, and calls tile_regs_release(); each operation's
+  init call (such as init_sfpu(in_cb, out_cb) and copy_tile_init(in_cb)) comes before the loop;
+- a writer, a data movement kernel (DataMovementConfig on RISCV_0), which moves output tiles from a
+  circular buffer to DRAM: per tile, cb_wait_front, noc_async_write_page(tile, accessor,
+  get_read_ptr(cb)), noc_async_write_barrier(), cb_pop_front.
+
+The $source_language program to translate follows, each file in a fenced code block whose first line is
+// FILE: <path>
+
+$source_files
+Write the complete $target_language program as these files: $target_files.
+The first is the host program; each file under a kernels directory is a kernel, which the host program
+launches by exactly that path in CreateKernel. Write every file, each kernel included, and keep the
+program's behavior and output unchanged.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

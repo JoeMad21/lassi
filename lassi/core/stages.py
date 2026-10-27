@@ -2019,13 +2019,14 @@ def carried_skeleton(context: RunContext, kind: str) -> Skeleton | None:
 def skeleton_note(skeleton: Skeleton) -> Diagnostic:
     """Return the note of a request that carried `skeleton`: code SKELETON_CODE, severity note, stage parse.
 
-    Its message names the skeleton, its sha256, and its host program's
-    size; it rides on the Request, never on an attempt, so it never enters a
-    prompt.
+    Its message names the skeleton, its sha256, its host program's size,
+    and, for a skeleton with kernel skeletons (task P17.39), how many; it
+    rides on the Request, never on an attempt, so it never enters a prompt.
     """
+    kernels = f", and {len(skeleton.kernels)} kernel skeletons" if skeleton.kernels else ""
     message = (
         f"the prompt carried the host program skeleton {skeleton.name} (sha256 {skeleton.sha256}, "
-        f"{len(skeleton.host)} characters of {skeleton.language} host program)"
+        f"{len(skeleton.host)} characters of {skeleton.language} host program{kernels})"
     )
     return Diagnostic(stage="parse", severity="note", code=SKELETON_CODE, message=message)
 

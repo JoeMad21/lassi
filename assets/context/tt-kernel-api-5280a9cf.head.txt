@@ -1,0 +1,9 @@
+# TT-Metalium kernel API reference (tt-metal 5280a9cf)
+
+Declarations only, without comments, at tt-metal commit 5280a9cf: the device kernel headers under
+tt_metal/hw/inc/api, first those the tt-kh-v0 generate prompt includes and then the others in path order, as
+many as fit the pack's size limit (a header that does not fit whole is left out). Function bodies, conditional
+preprocessor lines, and deprecated declarations are left out too. A kernel includes each header by the path its
+part names, as "api/..."; every kernel's entry point is void kernel_main(), a compute kernel's too. Each part
+starts with the include line that declares it.
+// ==== #include <{include}> ====

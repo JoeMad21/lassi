@@ -1,0 +1,37 @@
+# The spec of tt-kh-examples-v0, the worked examples a C++ -> TT prompt carries when the model writes the host program
+# and every kernel it launches (task P17.39; the owner's direction of 2026-10-26). tt-pairs-v0 is a development set
+# (OQ-083 (b)). tt-examples-v0 holds data movement kernels only; this pack adds tt-metal's hello-world compute and
+# data movement examples at the pinned commit, which show a compute kernel's entry point and include and a data
+# movement kernel that fills a circular buffer from DRAM, beside tt-examples-v0's two examples.
+#
+# tools/build_tt_examples.py builds the pack with --spec naming this file, from the pinned tree (an install at
+# $LASSI_TOOLCHAINS/<PREFIX_NAME>, or a directory `build_tt_examples.py fetch --spec <this file>` filled from GitHub,
+# each file checked against its git blob sha1) and writes MANIFEST.yaml beside this file. Only this spec and the
+# manifest are tracked; the fragments hold tt-metal's text and are gitignored. A recipe carries the examples with
+# its `examples` section (lassi.core.recipe EXAMPLES).
+#
+# Each entry is an example directory under the data set's root, with every code file under it, in the order a prompt
+# shows them: the host program first, then its kernels, sorted. The examples are carried whole in this order, so the
+# two short hello-world examples come first. Agent Rule 5: each directory is in the include list of the data set
+# below (never in its exclude list, which holds the five Tier A items and their duplicates), and the data set's
+# rules 3 and 4 hold for every file (the tool refuses a hit).
+pack: tt-kh-examples-v0
+pin: tt-metal
+dataset: assets/train/tt-train-v0/dataset.yaml
+examples:
+  - directory: hello_world_compute_kernel
+    files:
+      - hello_world_compute_kernel.cpp
+      - kernels/compute/void_compute_kernel.cpp
+  - directory: hello_world_datatypes_kernel
+    files:
+      - hello_world_datatypes_kernel.cpp
+      - kernels/dataflow/float_dataflow_kernel.cpp
+  - directory: add_2_integers_in_riscv
+    files:
+      - add_2_integers_in_riscv.cpp
+      - kernels/reader_writer_add_in_riscv.cpp
+  - directory: shard_data_rm
+    files:
+      - shard_data_rm.cpp
+      - kernels/reader_sharded_rm.cpp

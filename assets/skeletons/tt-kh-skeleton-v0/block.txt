@@ -1,0 +1,28 @@
+Start the ttkh program from these skeletons: a host program, then a reader, a compute, and a writer kernel. The
+host program builds as written against tt-metal commit 5280a9cf, and every kernel call has the form the pinned
+kernel headers declare. They solve no task; what this program needs goes in their blanks.
+
+- Keep every API call and its form exactly as the skeletons write it: the host program's includes, using
+  namespace tt::tt_metal;, the distributed:: names, the helpers tiles_for, to_bf16, make_buffer, make_cb, and
+  write_output, and each config struct's fields in the same order; each kernel's includes ("api/..."), its
+  void kernel_main(), and its argument, circular buffer, NoC, and tile calls.
+- Change only the code from a line // BLANK <name>: <what to fill> to its line // END BLANK <name>. Fill each
+  blank for this program, and add more inputs, outputs, buffers, circular buffers, kernels, or runtime args by
+  repeating the calls that blank already makes, through the same helpers. You may keep or drop the BLANK lines.
+- Keep one named lassi_io_array variable per input (in0, in1, ...), never an array or struct of them.
+- Write every kernel yourself, at the path the prompt lists, never at the skeletons' placeholder paths; the host
+  program's BLANK kernels comment says the harness provides each kernel, but here you write them. Launch each
+  kernel by exactly that path, and pass its compile and runtime args in the order it reads them.
+- Every circular buffer page one kernel pushes, another must pop, and each kernel's tile count must match.
+- Write every output with write_output (lassi_io_write) before any lassi_io_free.
+
+When you correct a program, first bring each call back to the form the skeletons write.
+
+The host program skeleton:
+
+```cpp
+$skeleton```
+
+The kernel skeletons, each at its placeholder path:
+
+$kernels

@@ -1,0 +1,31 @@
+# The manifest of tt-kh-skeleton-v0, the item-agnostic skeletons of the C++ -> TT arm in which the model writes the
+# host program and every kernel it launches (task P17.39; OQ-096, option (a), the owner's answer of 2026-10-25,
+# "Item-agnostic only"). host.cpp is tt-host-skeleton-v0's host.cpp byte for byte, the host skeleton that compiled and
+# linked at the pin from a clean commit (results/p17-skeleton-build/); the three kernel skeletons, at the paths its
+# CreateKernel calls name, are written by hand from the pinned kernel headers (tt_metal/hw/inc/api at the commit) and
+# tt-metal's documentation outside the five tt-pairs-v0 items, never from an item's program, and are unverified at the
+# pin until a run on ttsim launches them. A run recipe carries the skeleton with its skeleton section (lassi.core.recipe
+# SKELETON); lassi.prompts.skeletons reads it only when every file matches this manifest. language is the target
+# language of every direction that carries it; pin and commit name the toolchain pin its calls are written for.
+# sha256 is the sha256 of the lines '<sha256>  <path>' of the files in order.
+skeleton: tt-kh-skeleton-v0
+language: ttkh
+pin: tt-metal
+commit: 5280a9cfb00998fd49667a29523d03aee905c129
+files:
+- path: host.cpp
+  sha256: 5756f7dab5783acf29886a846fe644aa50bd33962fe1bd2135d02e88e0917515
+  bytes: 10614
+- path: block.txt
+  sha256: db5665d0b84403cffc357bf033d01d8e6f91baa77262c3e310d71769a8529876
+  bytes: 1859
+- path: kernels/dataflow/reader.cpp
+  sha256: 85da8e7d693cddf04675dae5dbfa0e03f6731db4070c0a39ebf021a0b2b6baa9
+  bytes: 1925
+- path: kernels/compute/compute.cpp
+  sha256: 9432ef3c3327df88593bd65bb9cd3cb2f062e0be6925877b1d9c1c3627fc85bb
+  bytes: 2008
+- path: kernels/dataflow/writer.cpp
+  sha256: f7eb8e62ce467d80a4d0ddabbeee803f9319d562c4fba50274d53afc44c8e640
+  bytes: 1807
+sha256: 01598e8b4dcaabd146cde63c17e16e628180ce51bfb4688a1382c2acd809cfe2

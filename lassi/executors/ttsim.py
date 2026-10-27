@@ -65,9 +65,13 @@ What the executor reads from a run (task P4.6's RunResult fields):
   its first blank line, becomes a Diagnostic(stage "jit") with the severity
   as printed (fatal error as error), the file relative to the workdir when
   it lies inside it and as printed otherwise, the line, the column, and a
-  trailing ` [-W...]` option as the code. Both streams are read, and the
-  same diagnostic in both counts once. A line of that form outside such a
-  log is not read. The host aborts (status 134); the stages read the
+  trailing ` [-W...]` option as the code. A log that holds no error line
+  of that form (a link error, say) becomes one Diagnostic(stage "jit",
+  severity "error", code JIT_BUILD_FAILED) naming the processor and holding
+  the log's lines, at most JIT_LOG_BYTES_CAP bytes (task P17.39), so every
+  failed kernel build is a kernel JIT failure. Both streams are read, and
+  the same diagnostic in both counts once. A line of that form outside such
+  a log is not read. The host aborts (status 134); the stages read the
   diagnostics, not the status.
 - Hang and Watcher (OQ-037 option (b); Harness Contract). When the sandbox
   reports a hang, the program runs once more with TT_METAL_WATCHER=1 added
@@ -167,7 +171,12 @@ GAP_CLASSES = frozenset(
 _FINDING = re.compile(r"\[[0-9]{1,20}\] ERROR: (?P<cls>[A-Za-z_][A-Za-z0-9_]{0,127}): ")
 # The JIT's failed kernel build, "<processor> build failed. Log: <first log line>" (fixture jit-error: "brisc build
 # failed. Log: In file included from ../kernel_includes.hpp:1,").
-_BUILD_FAILED = re.compile(r"[A-Za-z0-9_]{1,64} build failed\. Log:(?P<rest>.*)")
+_BUILD_FAILED = re.compile(r"(?P<processor>[A-Za-z0-9_]{1,64}) build failed\. Log:(?P<rest>.*)")
+# The code of the one jit-stage error a failed kernel build gets when its log holds no compiler error line (a link
+# error, say; task P17.39), and that error's cap in bytes (all ASCII), cut on a line boundary: enough for a few
+# linker lines, well under the correction prompt's DIAGNOSTIC_BYTES_CAP (lassi.core.stages).
+JIT_BUILD_FAILED = "kernel-build-failed"
+JIT_LOG_BYTES_CAP = 2048
 # A Watcher dump's first and last lines: "Dump #128 at 130.156s" and "Dump #128 completed at 130.168s".
 _DUMP_START = re.compile(r"Dump #(?P<number>[0-9]{1,20}) at ")
 _DUMP_END = re.compile(r"Dump #(?P<number>[0-9]{1,20}) completed at ")
@@ -309,27 +318,45 @@ def read_findings(stdout: str) -> tuple[list[Diagnostic], bool, str | None]:
     return diagnostics, sim_ub, sim_gap
 
 
-def _build_logs(stream: str) -> list[str]:
-    """Return each kernel build log in `stream`: from a "<processor> build failed. Log:" line to its first blank line.
+def _build_logs(stream: str) -> list[tuple[str, str]]:
+    """Return each kernel build log in `stream` as (processor, log): a "<processor> build failed. Log:" line to a blank.
 
-    The text after "Log:" on the opening line is the log's first line.
+    The log runs to its first blank line, and the text after "Log:" on the
+    opening line is its first line.
     """
-    logs: list[str] = []
+    logs: list[tuple[str, str]] = []
     current: list[str] | None = None
+    processor = ""
     for line in stream.split("\n"):
         header = _BUILD_FAILED.search(line)
         if header is not None:
             if current is not None:
-                logs.append("\n".join(current))
-            current = [header["rest"].strip()]
+                logs.append((processor, "\n".join(current)))
+            processor, current = header["processor"], [header["rest"].strip()]
         elif current is not None and not line.strip():
-            logs.append("\n".join(current))
+            logs.append((processor, "\n".join(current)))
             current = None
         elif current is not None:
             current.append(line)
     if current is not None:
-        logs.append("\n".join(current))
+        logs.append((processor, "\n".join(current)))
     return logs
+
+
+def build_failed_error(processor: str, log: str) -> Diagnostic:
+    """Return the jit-stage error of a failed kernel build whose log holds no compiler error line (task P17.39).
+
+    Its code is JIT_BUILD_FAILED and it has no file; the message names the
+    processor and gives the log's non-blank lines, stripped and joined by
+    " | ", in printable ASCII, at most JIT_LOG_BYTES_CAP bytes: past that,
+    only the first lines that fit, then "... <count> more lines left out".
+    """
+    head = printable(f"{processor} kernel build failed, and its log holds no compiler error line: ")
+    lines = [printable(line.strip()) for line in log.split("\n") if line.strip()]
+    message = head + " | ".join(lines)
+    if len(message) > JIT_LOG_BYTES_CAP:
+        message = _capped(head, lines, JIT_LOG_BYTES_CAP, " | ")
+    return Diagnostic(stage="jit", severity="error", code=JIT_BUILD_FAILED, message=message)
 
 
 def _in_workdir(file: str, workdir: Path) -> str:
@@ -348,16 +375,22 @@ def read_jit_diagnostics(stdout: str, stderr: str, workdir: Path) -> list[Diagno
     severity as printed with fatal error as error, a trailing ` [-W...]`
     option as the code, and column 0 as none. The file is made relative to
     the resolved `workdir` when it lies inside it (_in_workdir). Code,
-    file, and message keep printable ASCII only. stdout's logs come first; a
-    Diagnostic equal to one already found is left out.
+    file, and message keep printable ASCII only. A log that gives no error
+    this way gives one build_failed_error after its other lines (task
+    P17.39). stdout's logs come first; a Diagnostic equal to one already
+    found is left out.
     """
     found: list[Diagnostic] = []
     for stream in (stdout, stderr):
-        for log in _build_logs(stream):
+        for processor, log in _build_logs(stream):
+            parsed = []
             for item in parse_stderr(log, NO_FILES, (GCC,)):
                 file = None if item.file is None else printable(_in_workdir(item.file, workdir))
                 code = None if item.code is None else printable(item.code)
-                diagnostic = replace(item, stage="jit", code=code, file=file, message=printable(item.message))
+                parsed.append(replace(item, stage="jit", code=code, file=file, message=printable(item.message)))
+            if not any(item.severity == "error" for item in parsed):
+                parsed.append(build_failed_error(processor, log))
+            for diagnostic in parsed:
                 if diagnostic not in found:
                     found.append(diagnostic)
     return found
@@ -430,19 +463,19 @@ def watcher_note(log: str) -> Diagnostic | None:
 
 
 def _left_out(count: int) -> str:
-    """Return the part of a capped Watcher note that says how many kept lines it leaves out."""
+    """Return the part of a capped message (a Watcher note, a build log) that says how many lines it leaves out."""
     return f"... {count} more lines left out"
 
 
-def _capped(head: str, lines: Sequence[str]) -> str:
-    """Return `head` and the first `lines` that fit in WATCHER_BYTES_CAP with the left-out count, joined by "; "."""
+def _capped(head: str, lines: Sequence[str], cap: int = WATCHER_BYTES_CAP, joiner: str = "; ") -> str:
+    """Return `head` and the first `lines` that fit in `cap` with the left-out count, joined by `joiner`."""
     used, shown = len(head), 0
     while shown < len(lines):
-        more = used + len(lines[shown]) + 2
-        if more + len(_left_out(len(lines) - shown - 1)) > WATCHER_BYTES_CAP:
+        more = used + len(lines[shown]) + len(joiner)
+        if more + len(_left_out(len(lines) - shown - 1)) > cap:
             break
         used, shown = more, shown + 1
-    return head + "; ".join([*lines[:shown], _left_out(len(lines) - shown)])
+    return head + joiner.join([*lines[:shown], _left_out(len(lines) - shown)])
 
 
 def _read_tail(path: Path, size: int) -> str | None:

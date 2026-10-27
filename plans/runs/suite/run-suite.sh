@@ -203,6 +203,18 @@ build_asset() {  # build_asset <need>: 0 when the asset built and its manifest e
     retrieval:tt-metal-docs)
       uv run tools/build_tt_rag.py build --tree "$tree" > "$out/rag.log" 2>&1 \
         && git diff --quiet HEAD -- assets/rag && uv run tools/build_tt_rag.py check --tree "$tree" >> "$out/rag.log" 2>&1 ;;
+    examples:tt-kh-examples-v0)
+      # The cpp -> ttkh recipes (task P17.39), every one of which carries these examples: their suite's sources under
+      # $LASSI_SCRATCH/bench (the tt reference program's upstream kernels), then the examples by their own spec.
+      local spec=assets/examples/tt-kh-examples-v0/spec.yaml
+      uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-kh.yaml > "$out/kh-bench.log" 2>&1 \
+        && uv run tools/build_tt_examples.py build --tree "$tree" --spec "$spec" > "$out/kh-examples.log" 2>&1 \
+        && git diff --quiet HEAD -- assets/examples \
+        && uv run tools/build_tt_examples.py check --spec "$spec" >> "$out/kh-examples.log" 2>&1 ;;
+    context:tt-metalium-5280a9cf-kh)
+      # The kernels pack of the cpp -> ttkh recipes (task P17.39): the guide, the host API, and the kernel API.
+      uv run tools/build_tt_context.py --tree "$tree" --kernels > "$out/context-kh.log" 2>&1 \
+        && git diff --quiet HEAD -- assets/context ;;
     context:ttkernel-5f396fd6|examples:ttkernel-examples-5f396fd6)
       # The cpp -> ttkernel recipes (task P17.36): their suite's sources under $LASSI_SCRATCH/bench, then both packs
       # from the tt-mlir sources at the pin that toolchains/tt-mlir.sh installed (one build writes both).

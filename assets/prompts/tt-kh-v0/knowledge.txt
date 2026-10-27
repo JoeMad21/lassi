@@ -1,0 +1,4 @@
+Earlier you summarized the TT-Metalium API reference of tt-metal commit 5280a9cf. Your summary follows;
+use it where it helps with the task after it.
+
+$knowledge_summary

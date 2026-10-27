@@ -1,0 +1,37 @@
+# The ninth pass of the owner's RNGD sweep (task P17.39), the owner's direction of 2026-10-26: "I want to start
+# having the model write kernels as well as host side code." C++ -> TT on tt-pairs-v0-kh, where the model writes the
+# whole TT-Metalium program, the host program and every kernel it launches (the ttkh language); the reference is the
+# item's tt program (the tracked host program with the upstream kernels) on ttsim, and the oracle judges a candidate
+# against it within the references' own agreement, as sweep8 judges cpp -> tt. tt-pairs-v0 is a development set
+# (OQ-083 (b)). Exploratory; every TT program runs on ttsim, a simulator.
+# gpt-oss-120b with sweep8's model settings (reasoning effort medium, a budget of 32768 tokens, timeout 3600 s;
+# OQ-080, OQ-087), restated here since sweep8's chain carries the adversary stage, whose reference build reads no
+# reference language, so this pass leaves it out (tests/core/test_sweep9_recipes.py checks the settings are
+# sweep8's). 3 samples, a correction cap of 8, and the mismatch report and simulator-gap feedback on (OQ-098).
+# Combination kh-ex: the tt-kh-v0 prompts with the worked examples tt-kh-examples-v0 (tt-metal's examples at the pin
+# outside the Tier A items, a compute kernel among them) at generation and each compile correction; the pcc half (the two matmuls).
+# Before the run: `uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-kh.yaml` and
+# `uv run tools/build_tt_examples.py build --tree <tree> --spec assets/examples/tt-kh-examples-v0/spec.yaml`
+# (plans/runs/suite/run-suite.sh does both).
+extends: ../../tier-a-rngd-pcc.yaml  # the half's items, baseline_both, ttsim for TT, native for C++, from_baseline
+model:
+  id: furiosa-ai/gpt-oss-120b
+  timeout_s: 3600
+llm:
+  sampling:
+    max_tokens: 32768
+    reasoning_effort: medium
+extract:
+  unfenced_file_lines: true  # as sweep8 has it (sweep2 on)
+bench:
+  suite: tt-pairs-v0-kh  # tt-pairs-v0's items with a ttkh language: the host program and its kernels
+directions: [{source: cpp, target: ttkh}]
+prompts: tt-kh-v0  # the host program and every kernel as FILE blocks; never an item's kernels (Agent Rule 5)
+toolchain:
+  ttkh: ttmetal-host  # compiles the host program; writes each kernel uncompiled at its path for the kernel JIT
+executor:
+  ttkh: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # candidates run in the sandbox on ttsim, a simulator
+examples: {pack: tt-kh-examples-v0, max_chars: 32000, prompts: [generate, correct]}  # tools/build_tt_examples.py
+stages: [baseline, generate, compile_loop, run_loop, oracle]
+trials: {n: 3}
+loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true}

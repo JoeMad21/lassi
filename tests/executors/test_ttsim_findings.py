@@ -332,6 +332,49 @@ def test_jit_lines_keep_their_printed_severity_and_order(
     assert "unused variable 'v'" in found[0].message and "'y' was not declared in this scope" in found[1].message
 
 
+def test_a_failed_kernel_build_with_no_compiler_error_line_is_one_jit_error(
+    ttsim: ModuleType, install: FakeInstall, runs_root: Path
+) -> None:
+    # Task P17.39: a kernel build that failed with no `<path>:<line>:<column>: error:` line in its log (a link error,
+    # say) is still a kernel JIT failure, so the attempt is corrected as a compile error, not read as a run failure.
+    # SYNTHETIC log in the JIT's "<processor> build failed. Log:" form; the same log in stderr counts once.
+    log = (
+        "trisc2 build failed. Log: SYNTHETIC kernels/compute/k.cpp:(.text+0x10): undefined reference to `helper()'\n"
+        "SYNTHETIC collect2: error: ld returned 1 exit status\n"
+        "\n"
+    )
+    result = run_stdout(ttsim, install, runs_root, "SYNTHETIC host output\n" + log, stderr=log, returncode=134)
+    (diagnostic,) = jit_diagnostics(result)
+    assert (diagnostic.severity, diagnostic.code, diagnostic.file) == ("error", ttsim.JIT_BUILD_FAILED, None)
+    assert diagnostic.message.startswith("trisc2 kernel build failed")
+    assert "undefined reference to `helper()'" in diagnostic.message and "collect2" in diagnostic.message
+    assert stages.run_stage(result) == stages.PARSED, "a kernel JIT failure leaves the attempt at S1"
+
+
+def test_a_failed_kernel_build_with_a_compiler_error_line_gets_no_extra_jit_error(
+    ttsim: ModuleType, install: FakeInstall, runs_root: Path
+) -> None:
+    stdout = (
+        "brisc build failed. Log: In file included from SYNTHETIC_includes.hpp:1,\n"
+        "/SYNTHETIC/outside/kernels/k.cpp:4:5: error: 'y' was not declared in this scope\n"
+        "\n"
+    )
+    result = run_stdout(ttsim, install, runs_root, stdout, returncode=134)
+    assert [item.code for item in jit_diagnostics(result)] == [None], "the compiler's own error line is the report"
+
+
+def test_a_long_failed_kernel_build_log_is_capped_on_a_line_boundary(
+    ttsim: ModuleType, install: FakeInstall, runs_root: Path
+) -> None:
+    lines = [f"SYNTHETIC link line {index:04d} undefined reference to `helper_{index}()'" for index in range(400)]
+    stdout = "ncrisc build failed. Log: " + "\n".join(lines) + "\n\n"
+    result = run_stdout(ttsim, install, runs_root, stdout, returncode=134)
+    (diagnostic,) = jit_diagnostics(result)
+    assert len(diagnostic.message.encode("ascii")) <= ttsim.JIT_LOG_BYTES_CAP
+    assert lines[0] in diagnostic.message and lines[-1] not in diagnostic.message
+    assert diagnostic.message.endswith("more lines left out")
+
+
 def test_a_compiler_style_line_outside_a_build_failed_log_is_not_a_jit_diagnostic(
     ttsim: ModuleType, install: FakeInstall, runs_root: Path
 ) -> None:
