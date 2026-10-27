@@ -195,7 +195,6 @@ TRACY = {
     "ENABLE_TRACY": "ON",
     "TRACY_NO_BROADCAST": "ON",
     "TRACY_ONLY_LOCALHOST": "ON",
-    "TRACY_NO_CRASH_HANDLER": "ON",
 }
 
 
@@ -216,7 +215,7 @@ def test_tt_metal_pin_keeps_the_ci_configuration_but_what_is_built_and_tracy() -
 def test_tt_metal_pin_names_the_definitions_tracys_client_must_carry() -> None:
     # check_tracy reads them from the TracyClient object's DEFINES line in build.ninja after the build.
     assert read_pin("tt-metal")["TRACY_DEFINES"].split() == [
-        "-DTRACY_ENABLE", "-DTRACY_NO_BROADCAST", "-DTRACY_ONLY_LOCALHOST", "-DTRACY_NO_CRASH_HANDLER",
+        "-DTRACY_ENABLE", "-DTRACY_NO_BROADCAST", "-DTRACY_ONLY_LOCALHOST",
     ]
 
 
@@ -653,7 +652,7 @@ TRACY_OBJECT = (
     "  DEFINES = {defines}\n"
     "  FLAGS = -O3 -DNDEBUG\n"
     "build tt_metal/CMakeFiles/tt_metal.dir/x.cpp.o: CXX_COMPILER__tt_metal_unscanned_Release /t/x.cpp\n"
-    "  DEFINES = -DTRACY_ENABLE -DTRACY_NO_BROADCAST -DTRACY_ONLY_LOCALHOST -DTRACY_NO_CRASH_HANDLER\n"
+    "  DEFINES = -DTRACY_ENABLE -DTRACY_NO_BROADCAST -DTRACY_ONLY_LOCALHOST\n"
 )
 
 
@@ -669,8 +668,7 @@ def tracy_body(ninja: str | None) -> str:
 @pytest.mark.parametrize(
     ("defines", "passes"),
     [
-        ("-DTRACY_ENABLE -DTRACY_IMPORTS -DTRACY_NO_BROADCAST -DTRACY_ONLY_LOCALHOST -DTRACY_NO_CRASH_HANDLER "
-         "-DTRACY_TIMER_FALLBACK", True),
+        ("-DTRACY_ENABLE -DTRACY_IMPORTS -DTRACY_NO_BROADCAST -DTRACY_ONLY_LOCALHOST -DTRACY_TIMER_FALLBACK", True),
         ("-DTRACY_ENABLE -DTRACY_IMPORTS -DTRACY_ONLY_LOCALHOST -DTRACY_TIMER_FALLBACK", False),
         ("-DTRACY_ENABLE -DTRACY_IMPORTS -DTRACY_NO_BROADCAST -DTRACY_TIMER_FALLBACK", False),
         ("-DTRACY_IMPORTS -DTRACY_NO_BROADCAST -DTRACY_ONLY_LOCALHOST -DTRACY_TIMER_FALLBACK", False),

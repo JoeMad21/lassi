@@ -31,7 +31,7 @@
 #     tt-xla wheel's library (Finding 10);
 #   5 INFO: the gate example's build line in the new build.ninja beside the pin's HOST_* words, which keep the P4.2
 #     line (toolchains/tt-metal.pin says why); the expected extra words are -DTRACY_ENABLE, -DTRACY_NO_BROADCAST,
-#     -DTRACY_ONLY_LOCALHOST, -DTRACY_NO_CRASH_HANDLER, -fno-omit-frame-pointer, and -rdynamic;
+#     -DTRACY_ONLY_LOCALHOST, -fno-omit-frame-pointer, and -rdynamic;
 #   6 the five tt-pairs-v0 references build against the new tree and pass on ttsim as before:
 #     LASSI_REQUIRE_SANDBOX=1 uv run pytest -q -m remote tests/bench/test_tt_pairs_remote.py, so a program that loads
 #     the Tracy client inside the sandbox's empty network namespace still runs (its listener then cannot bind).
@@ -76,7 +76,7 @@ pin = read_pin("tt-metal")
 check_install_record(tree, pin)
 check_cpm_sources(tree)
 flags = [line.split() for line in (tree / "lassi-install.txt").read_text().splitlines() if line.startswith("flags ")]
-wanted = ("-DENABLE_TRACY=ON", "-DTRACY_NO_BROADCAST=ON", "-DTRACY_ONLY_LOCALHOST=ON", "-DTRACY_NO_CRASH_HANDLER=ON")
+wanted = ("-DENABLE_TRACY=ON", "-DTRACY_NO_BROADCAST=ON", "-DTRACY_ONLY_LOCALHOST=ON")
 missing = [word for word in wanted if not any(word in words for words in flags)]
 sys.exit(f"the flags line lacks {missing}" if missing else 0)
 ' "$tree" 2>&1)"; then
@@ -87,7 +87,7 @@ fi
 
 # 2. The configured cache.
 cache_ok=1
-for key in ENABLE_TRACY TRACY_NO_BROADCAST TRACY_ONLY_LOCALHOST TRACY_NO_CRASH_HANDLER; do
+for key in ENABLE_TRACY TRACY_NO_BROADCAST TRACY_ONLY_LOCALHOST; do
   value="$(grep -E "^${key}:[A-Z]+=" "$build/CMakeCache.txt" 2>/dev/null | cut -d= -f2-)"
   echo "verify: CMakeCache $key=$value"
   [ "$value" = ON ] || cache_ok=0
@@ -149,7 +149,7 @@ awk -v target="$example" '
 echo "verify: pin HOST_DEFINES = $(metal_pin HOST_DEFINES)"
 echo "verify: pin HOST_FLAGS = $(metal_pin HOST_FLAGS)"
 echo "verify: pin HOST_LINK_FLAGS = $(metal_pin HOST_LINK_FLAGS)"
-report "5 host-line" INFO "compare the lines above; any difference beyond the six expected words is a finding"
+report "5 host-line" INFO "compare the lines above; any difference beyond the five expected words is a finding"
 
 # 6. The five tt-pairs-v0 references on ttsim against the new tree.
 if LASSI_REQUIRE_SANDBOX=1 uv run pytest -q -m remote tests/bench/test_tt_pairs_remote.py; then

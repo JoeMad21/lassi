@@ -44,12 +44,15 @@ CPM_SHA256=c8cdc32c03816538ce22781ed72964dc864b2a34a310d3b7104812a5ca2d835d  # 4
 # here, and none of them depends on it (inferred: no CMake file of the top level, tt_metal, or tt_stl at the pin
 # names it).
 TOOLCHAIN_FILE=cmake/x86_64-linux-clang-20-libstdcpp-toolchain.cmake
-CMAKE_FLAGS="-G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TRACY=ON -DTRACY_NO_BROADCAST=ON -DTRACY_ONLY_LOCALHOST=ON -DTRACY_NO_CRASH_HANDLER=ON -DENABLE_DISTRIBUTED=OFF -DWITH_PYTHON_BINDINGS=OFF -DBUILD_PROGRAMMING_EXAMPLES=ON -DTT_METAL_BUILD_TESTS=OFF -DTTNN_BUILD_TESTS=OFF -DTT_UNITY_BUILDS=ON -DTT_ENABLE_LIGHT_METAL_TRACE=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF -DENABLE_FAKE_KERNELS_TARGET=OFF -DENABLE_CCACHE=FALSE -DTT_USE_SYSTEM_SFPI=OFF"
+CMAKE_FLAGS="-G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TRACY=ON -DTRACY_NO_BROADCAST=ON -DTRACY_ONLY_LOCALHOST=ON -DENABLE_DISTRIBUTED=OFF -DWITH_PYTHON_BINDINGS=OFF -DBUILD_PROGRAMMING_EXAMPLES=ON -DTT_METAL_BUILD_TESTS=OFF -DTTNN_BUILD_TESTS=OFF -DTT_UNITY_BUILDS=ON -DTT_ENABLE_LIGHT_METAL_TRACE=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF -DENABLE_FAKE_KERNELS_TARGET=OFF -DENABLE_CCACHE=FALSE -DTT_USE_SYSTEM_SFPI=OFF"
 # The compile definitions the TracyClient object must carry in the built tree's build.ninja (check_tracy in
 # tt-metal.sh refuses the install record otherwise): Tracy on, no broadcast, the loopback interface only.
-TRACY_DEFINES="-DTRACY_ENABLE -DTRACY_NO_BROADCAST -DTRACY_ONLY_LOCALHOST -DTRACY_NO_CRASH_HANDLER"
-# TRACY_NO_CRASH_HANDLER=ON keeps Tracy's signal handlers (SEGV, ABRT, ILL, FPE, BUS, PIPE) out of every program,
-# so a failing program, a candidate on ttsim among them, ends with the same status and signal as before the flip.
+TRACY_DEFINES="-DTRACY_ENABLE -DTRACY_NO_BROADCAST -DTRACY_ONLY_LOCALHOST"
+# TRACY_NO_CRASH_HANDLER is not set: at tracy 0aaefbb6 it leaves TracyProfiler.hpp:1006's m_prevSignal unused,
+# which the build's -Werror refuses under clang-20 (-Wunused-private-field; rx
+# 20261026-192000-p1742-tt-metal-tracy-fa59). So Tracy's crash handlers (SEGV, ABRT, ILL, FPE, BUS, PIPE) are in
+# every program built against this tree, a change from the P4.2 tree whose effect on how a failing program ends
+# is not yet verified.
 # Built instead of all or install: tt_metal (tt_metal/CMakeLists.txt:3), hw_toolchain (tt_metal/hw/
 # CMakeLists.txt:483), and metal_example_<name> for EXAMPLES. TT-NN is configured but not built.
 TARGETS="tt_metal hw_toolchain"
@@ -88,7 +91,7 @@ EXPECT_VERSION="Ubuntu clang version 20.1.8 (++20250708082409+6fb913d3e2ec-1~exp
 # 2026-09-26, for review later), so a warning in a host program stays a warning. The link names the tree's
 # libraries by path and an rpath naming their directories, so a program needs no loader variable.
 # Since task P17.42 these keep the P4.2 build's line (ENABLE_TRACY=OFF). In the Tracy build the example's line also
-# carries TracyClient's PUBLIC definitions -DTRACY_ENABLE, -DTRACY_NO_BROADCAST, -DTRACY_ONLY_LOCALHOST, and -DTRACY_NO_CRASH_HANDLER, its PUBLIC
+# carries TracyClient's PUBLIC definitions -DTRACY_ENABLE, -DTRACY_NO_BROADCAST, and -DTRACY_ONLY_LOCALHOST, its PUBLIC
 # compile option -fno-omit-frame-pointer, and its PUBLIC link option -rdynamic (cmake/tracy.cmake:37-49), PROJECTED from
 # the CMake files until plans/runs/tracy/verify.sh prints that line. They change no declaration a host program sees: no
 # header under tt_metal/api, tt_stl, or tt_metal/hostdevcommon/api at 5280a9cf, nor under UMD's device/api at 0450f1be,
