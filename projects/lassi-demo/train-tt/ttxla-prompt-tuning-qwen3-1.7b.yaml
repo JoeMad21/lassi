@@ -1,0 +1,44 @@
+# Prompt tuning on Qwen3-1.7B on a Wormhole card, last in the window's sequence (task P17.38; OQ-076: frozen weights;
+# OQ-100 (a) with (s2); OQ-102 (3a)): every base weight frozen and a soft prompt of 32 embeddings trained (PEFT prompt
+# tuning, initialized at random), on tt-train-v0 through the tt-xla wheel on card 0 (the ttxla trainer). PEFT's
+# prompt tuning was not tested upstream on this stack (plans/spikes/tt-training.md, Finding 1, the summary table), so
+# a failure here is a finding. A prompt-tuned model is served in process only (bible Weight Modes). Every number below
+# is PROJECTED: arithmetic, or a workstation reading logged in the spike or in plans/spikes/own-model.md, never a
+# measurement of a run.
+#
+# Before the run, once, in the window: uv run --extra cpu tools/prepare_train.py <this file> downloads the base into
+# $HF_HOME/hub (about 4.08 GB, the same snapshot as the LoRA recipe on this base); the launcher's remote script does
+# it before the sequence.
+#
+# Data (PROJECTED, a workstation count with the Qwen3 tokenizer): tt-train-v0's 8 records, the longest 3,058 tokens in
+# the chat format; max_length 3,072 counts the record's tokens, and the 32 virtual tokens make 3,104 positions on the
+# card. A longer record is refused before any step.
+#
+# Arithmetic (PROJECTED). Parameters N = 1,720.6M; the soft prompt is 32 x 2,048 = 65.5K trained parameters.
+# - Memory, one chip of 12 GiB: the frozen base in bf16 3.44 GB, the soft prompt's state negligible, the logits and
+#   their gradient about 1.9 GB, and with per-block recompute 6.3 to 10.5 GB in all (the spike's table, as for LoRA on
+#   this base), against 20.3 to 24.0 GB without; so gradient checkpointing is on.
+# - Compute per step (3,104 positions): the frozen base costs forward, recompute, and backward for the activations,
+#   about 6N per position, 3.2e13 FLOP, and attention about 6.6e12: about 3.9e13 FLOP. 16 steps are 6.2e14 FLOP: about
+#   10 minutes at a sustained 1 TFLOP/s, 52 at 0.2.
+# - Time: with the compile, 20 to 40 minutes by the spike's estimate, 30 to 90 minutes in all; timeout_s 5400 (90
+#   minutes) ends it as a hang past that.
+base_model: Qwen/Qwen3-1.7B@70d244cc86ccca08cf5af4e1e306ecf908b1ad5e  # a HEAD request read X-Repo-Commit equal to it
+method: sft  # the only method on silicon: RL rewards never execute there (Agent Rule 9)
+weights: prompt_tuning
+trainer:
+  kind: ttxla
+  device: {kind: tenstorrent, indices: [0]}  # card 0 of the host (/dev/tenstorrent/0); one card per run
+  steps: 16  # two passes over the 8 records, one record a step
+  seed: 7
+  batch_size: 1
+  learning_rate: 0.01  # a soft prompt trains at a far higher rate than weights; nothing here is tuned
+  virtual_tokens: 32  # the soft prompt's length, initialized at random (PEFT's PromptTuningInit RANDOM)
+  max_length: 3072  # every record padded to it; a longer record is refused, never cut
+  timeout_s: 5400  # the worker's wall limit; past it the run is a hang, the card quarantined
+  network: none  # the worker runs in its own empty network namespace: the wheel's Tracy client listens and
+  # broadcasts from library load (plans/spikes/tt-perf.md); no default
+  gradient_checkpointing: true  # recompute per block, without which the memory above does not fit one chip
+  chat_format: true  # the tokenizer's chat template, the format hf_local serves in
+data:
+  corpus: tt-train-v0  # assets/train/tt-train-v0/manifest.json; records under $LASSI_SCRATCH/train-data

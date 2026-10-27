@@ -731,7 +731,7 @@ def rocm_device_record(**changes: Any) -> Any:
 
 
 def test_device_kinds_match_bible() -> None:
-    assert record.DEVICE_KINDS == ("cpu", "cuda", "rocm")
+    assert record.DEVICE_KINDS == ("cpu", "cuda", "rocm", "tenstorrent")
     assert record.DEVICE_KINDS == bible_choices("DeviceRecord", "kind")
 
 

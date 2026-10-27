@@ -11,7 +11,9 @@ The contract these tests fix (lassi.core.runner and lassi.cli):
 
 - RunOptions gains `silicon`, a bool that defaults to False. Only the
   command line sets it: `lassi run <recipe> --silicon`. No other command
-  takes the flag, no environment variable stands in for it, and a recipe
+  takes the flag but `lassi train` (task P17.38, OQ-100 (a): a training
+  run on a card; tests/train/test_train_silicon_guard.py), no environment
+  variable stands in for it, and a recipe
   cannot set it: a `silicon` key at the top level or in an executor section
   is refused at load as an unknown key.
 - The runner reads capabilities, never names (Agent Rule 3). An executor
@@ -517,8 +519,9 @@ def test_the_command_line_passes_the_flag_to_the_runner(
     assert passed.silicon is given, "only the flag sets it; no variable stands in for it"
 
 
-@pytest.mark.parametrize("command", [["train", "train.yaml"], ["score", "run-dir", "--profile", "lassi"]])
+@pytest.mark.parametrize("command", [["score", "run-dir", "--profile", "lassi"], ["corpus", "summary", "dir"]])
 def test_no_other_command_takes_the_flag(command: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    # `lassi train` takes it too since task P17.38 (OQ-100 (a)): tests/train/test_train_silicon_guard.py.
     with pytest.raises(SystemExit) as exit_:
         cli.main(["--graphics", "off", *command, "--silicon"])
     assert exit_.value.code == 2

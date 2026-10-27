@@ -70,7 +70,11 @@ lock or directory. Then, in order:
    release is passed over, since the close drops the lock, so it hides
    neither the result nor an exception), and the kernel drops a dead
    process's lock; the file stays in place, since removing it would let
-   two processes lock two files. The scratch root is always one of the
+   two processes lock two files. A training run started with
+   `lassi train --silicon` takes the same lock for its whole length
+   (card_lock; task P17.38, OQ-100 (a)), polls with wait_for_cards, and
+   honours and writes the same quarantine marker, so a training run and a
+   silicon run never overlap. The scratch root is always one of the
    hidden roots, so no program sees the lock or a marker. The default
    flock is fcntl.flock, imported only when a lock is taken, so this module
    imports on Windows; LOCK_EX, LOCK_NB, and LOCK_UN are Linux's
@@ -171,7 +175,7 @@ import shutil
 import stat
 import time
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import AbstractContextManager, contextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -592,6 +596,93 @@ def _release(fd: int, flock: Callable[[int, int], object]) -> None:
         os.close(fd)
 
 
+@contextmanager
+def card_lock(locks: Path, flock: Callable[[int, int], object] | None = None) -> Iterator[None]:
+    """Hold the one lock of every card, `locks`/LOCK_FILE, for the block (OQ-075 (2a)).
+
+    The executor's runs and `lassi train --silicon` (task P17.38) share it.
+    The file is opened without truncation and taken with LOCK_EX | LOCK_NB,
+    never a wait: another holder is SandboxUnavailableError naming the file
+    and the pid that holder wrote there (or that it cannot be read), and the
+    descriptor is closed whether or not that read works. Once taken, this
+    process's pid is written there; on the way out the pid is cleared and the
+    lock released, on every path (_release). `flock` None means fcntl.flock,
+    imported only now.
+    """
+    flock = _kernel_flock() if flock is None else flock
+    locks.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = locks / LOCK_FILE
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
+    try:
+        flock(fd, LOCK_EX | LOCK_NB)
+    except BlockingIOError:
+        try:
+            holder = _recorded_pid(fd)
+        finally:
+            os.close(fd)
+        if holder is None:
+            pid = "the pid it wrote there cannot be read"
+        else:
+            pid = f"pid {holder}, as it wrote there" if holder else "it wrote no pid there"
+        raise SandboxUnavailableError(
+            f"the tt_silicon lock {path} is held by another process ({pid}): one silicon program runs at a time "
+            "(OQ-075 (2a); Agent Rule 9); nothing ran"
+        ) from None
+    except BaseException:
+        os.close(fd)
+        raise
+    try:
+        os.ftruncate(fd, 0)
+        os.write(fd, f"{os.getpid()}\n".encode("ascii"))
+        yield
+    finally:
+        _release(fd, flock)
+
+
+def busy_reasons(root: Path, uid: int, needed: int, owner: Callable[[Path], int]) -> list[str]:
+    """Return why the cards under `root` are busy now: another account's hugepage file or UMD lock, or few pages.
+
+    `owner` gives a path's uid (lstat's); a directory, a link, and this
+    account's own files do not count, and fewer than `needed` free 1 GiB
+    pages does.
+    """
+    found: list[str] = []
+    for directory, prefix in ((HUGEPAGE_POINT, ""), (SHM, UMD_LOCK_PREFIX)):
+        for path in devices._entries(_host(root, directory)):
+            if not path.name.startswith(prefix) or path.is_symlink() or not path.is_file():
+                continue
+            holder = owner(path)
+            if holder != uid:
+                found.append(f"{directory}/{path.name} belongs to another account (uid {holder})")
+    free = _count(_host(root, f"{POOL_DIR}/free_hugepages"))
+    if free is None or free < needed:
+        read = "nothing" if free is None else str(free)
+        found.append(f"{POOL_DIR}/free_hugepages reads {read}, fewer than the {needed} 1 GiB pages the cards need")
+    return found
+
+
+def wait_for_cards(
+    root: Path, uid: int, needed: int, owner: Callable[[Path], int], clock: Callable[[], float],
+    sleep: Callable[[float], None],
+) -> None:
+    """Wait until no other account holds the cards, checking every POLL_INTERVAL_S for at most POLL_LIMIT_S.
+
+    Cards that stay busy are SandboxUnavailableError naming each reason
+    (busy_reasons); nothing is claimed or marked (OQ-075 (5)).
+    """
+    start = clock()
+    while True:
+        busy = busy_reasons(root, uid, needed, owner)
+        if not busy:
+            return
+        left = POLL_LIMIT_S - (clock() - start)
+        if left <= 0:
+            raise SandboxUnavailableError(
+                f"the Tenstorrent cards stayed busy for {POLL_LIMIT_S} s: {'; '.join(busy)}; nothing ran"
+            )
+        sleep(min(POLL_INTERVAL_S, left))
+
+
 @register("Executor", "tt_silicon")
 class TtSiliconExecutor:
     """Runs a TT host program on every Wormhole card of the host, only inside the sandbox (see the module docstring).
@@ -745,80 +836,14 @@ class TtSiliconExecutor:
         harness = None if self.harness is None else _resolved(self.harness)
         return _Mounts(hidden_roots=hidden, harness=harness, root=root, tree=tree)
 
-    @contextmanager
-    def _lock(self) -> Iterator[None]:
-        """Hold the one lock of every card for the block (OQ-075 (2a)); SandboxUnavailableError when another holds it.
-
-        The file is opened without truncation and taken with LOCK_EX |
-        LOCK_NB; the holder's pid is read back for the refusal, and the
-        descriptor is closed whether or not that read works. Once taken,
-        this process's pid is written there; on the way out the pid is
-        cleared and the lock released, on every path (_release).
-        """
-        flock = _kernel_flock() if self.flock is None else self.flock
-        self.locks.mkdir(mode=0o700, parents=True, exist_ok=True)
-        path = self.locks / LOCK_FILE
-        fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
-        try:
-            flock(fd, LOCK_EX | LOCK_NB)
-        except BlockingIOError:
-            try:
-                holder = _recorded_pid(fd)
-            finally:
-                os.close(fd)
-            if holder is None:
-                pid = "the pid it wrote there cannot be read"
-            else:
-                pid = f"pid {holder}, as it wrote there" if holder else "it wrote no pid there"
-            raise SandboxUnavailableError(
-                f"the tt_silicon lock {path} is held by another process ({pid}): one silicon program runs at a time "
-                "(OQ-075 (2a); Agent Rule 9); nothing ran"
-            ) from None
-        except BaseException:
-            os.close(fd)
-            raise
-        try:
-            os.ftruncate(fd, 0)
-            os.write(fd, f"{os.getpid()}\n".encode("ascii"))
-            yield
-        finally:
-            _release(fd, flock)
+    def _lock(self) -> AbstractContextManager[None]:
+        """Return the one lock of every card (card_lock under $LASSI_SCRATCH/locks, with this executor's flock)."""
+        return card_lock(self.locks, self.flock)
 
     def _poll(self) -> None:
-        """Wait until no other account holds the cards, checking every POLL_INTERVAL_S for at most POLL_LIMIT_S.
-
-        Cards that stay busy are SandboxUnavailableError naming each reason
-        (_busy); nothing is claimed or marked.
-        """
+        """Wait until no other account holds every card of the host (wait_for_cards, with this executor's seams)."""
         uid = os.getuid() if self.uid is None else self.uid
-        needed = PAGES_PER_CARD * len(self.cards)
-        start = self.clock()
-        while True:
-            busy = self._busy(uid, needed)
-            if not busy:
-                return
-            left = POLL_LIMIT_S - (self.clock() - start)
-            if left <= 0:
-                raise SandboxUnavailableError(
-                    f"the Tenstorrent cards stayed busy for {POLL_LIMIT_S} s: {'; '.join(busy)}; nothing ran"
-                )
-            self.sleep(min(POLL_INTERVAL_S, left))
-
-    def _busy(self, uid: int, needed: int) -> list[str]:
-        """Return why the cards are busy now: another account's hugepage file or UMD lock, or too few free pages."""
-        found: list[str] = []
-        for directory, prefix in ((HUGEPAGE_POINT, ""), (SHM, UMD_LOCK_PREFIX)):
-            for path in devices._entries(_host(self.root, directory)):
-                if not path.name.startswith(prefix) or path.is_symlink() or not path.is_file():
-                    continue
-                holder = self.owner(path)
-                if holder != uid:
-                    found.append(f"{directory}/{path.name} belongs to another account (uid {holder})")
-        free = _count(_host(self.root, f"{POOL_DIR}/free_hugepages"))
-        if free is None or free < needed:
-            read = "nothing" if free is None else str(free)
-            found.append(f"{POOL_DIR}/free_hugepages reads {read}, fewer than the {needed} 1 GiB pages the cards need")
-        return found
+        wait_for_cards(self.root, uid, PAGES_PER_CARD * len(self.cards), self.owner, self.clock, self.sleep)
 
     def _placed(self, mounts: _Mounts, workdir: Path, argv: list[str], limits: Limits) -> SandboxResult:
         """Make the run's hugepage directory, run `argv` once in the sandbox under the marker, and clean up.

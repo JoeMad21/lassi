@@ -1181,6 +1181,48 @@ Options:
 Recommendation: (a), with OQ-078 (a) first; (b) for the first windows until pacing and the fault stop have run clean. Training is unaffected either way: RL rewards still never execute on silicon.
 Answer:
 
+## OQ-100 Training On The Wormhole Cards: Agent Rule 9 And The Training Host
+State: ANSWERED
+Kind: policy
+Blocks: the Tenstorrent training tasks (to be planned from plans/spikes/tt-training.md); training in the window of 2026-10-27, 04:00 to 12:00 EDT
+Evidence: plans/spikes/tt-training.md (Plain answer; Findings 3 and 4); docs/BIBLE.md, Agent Rules 6 and 9 and Training Module (Compute, the Training host and recipes bullet; Safeguards); plans/spikes/tt-silicon-executor.md, Finding 1; OQ-075 (2a), (3a), (6a); OQ-078; OQ-084; OQ-085
+Question: You asked on 2026-10-26 to train the smaller models on the Tenstorrent cards by the window of 2026-10-27. Agent Rule 9 says "silicon runs are evaluation runs a human starts", and the bible puts training on alpha01's CPU only, so a training run on a card needs your decision and a rule change first. A training run would be trusted code (the upstream training stack and LASSI's trainer, never model output, so Agent Rule 6 and OQ-078 do not apply), sft only (no reward, so RL never touches silicon), one process holding one card under the tt_silicon executor's lock for its whole length. Each process start makes UMD open every card's node for a device-info read, and a hung card needs a reset no agent can do (no SMI tool on the host, and the gate refuses its name). OQ-085, alpha01 going down during the last CPU training, is still open. May training run on the cards, and how is it started?
+Options:
+- (a) Amend Agent Rule 9 to: "Tenstorrent silicon: one placement at a time, never looped device opens (they have taken alpha01's network down twice). RL rewards never execute on silicon; silicon runs are evaluation runs, or training runs of tracked code, that a human starts." Training on a card then takes `lassi train --silicon` (a flag no recipe can set and no unattended session passes), one card per run, the executor's lock, no automatic retry, and the quarantine of OQ-075 (3a) after a hang, kill, or crash. Consequence: a rule change in the bible, AGENTS.md, and the master copy, with a Decision Log entry.
+- (b) As (a), but for the window of 2026-10-27 only, as an exploratory exception recorded here; the rule text stays.
+- (c) Keep the rule: training stays on alpha01's CPU once OQ-085 is answered, and the cards stay evaluation-only.
+- And under (a) or (b): (s1) one human start per training run; or (s2) one human start for a sequence of runs, each its own process, spaced, the sequence stopping at the first failure or hang.
+Recommendation: (a) with (s2): one placement at a time and no looped opens still hold, a person still starts the work, and a window can run the techniques you asked for in turn. Please also answer OQ-085 before any training on alpha01.
+Answer: (a), with (s2). The owner, in the working session of 2026-10-26 at about 18:00 EDT: "Yes, approved on both fronts.", answering the request for OQ-100 with the recommendation (a) (training runs of tracked code on the cards, started by the owner) and a window plan whose sequence of runs stops at the first failure or hang.
+To apply: Agent Rule 9 amended as option (a) words it, in docs/BIBLE.md, AGENTS.md, and the master copy, with task P17.38; RL rewards still never execute on silicon.
+
+## OQ-101 The Tenstorrent Training Stack And Its Pins
+State: ANSWERED
+Kind: decision
+Blocks: the Tenstorrent training tasks; toolchains/tt-xla.pin and toolchains/tt-train.sh (new)
+Evidence: plans/spikes/tt-training.md, Findings 1 and 2 (the wheel's metadata, sha256 fbbe6241...; tt-xla's training test list at ff3a67dd; tt-blacksmith at 002ebe47 and pull requests 463 and 464; tt-train at 5280a9cf)
+Question: Which stack trains on the cards? Both are built on the project's tt-metal pin, 5280a9cf. Neither has trained a Qwen base at tt-train-v0's 3,058-token records upstream.
+Options:
+- (a) tt-xla: the prebuilt wheel pjrt-plugin-tt 0.9.0.dev20260223001148 (121,492,577 bytes), whose metadata names tt-metal 5280a9cf and tt-mlir c7b8bd77 (7 commits before LASSI's tt-mlir pin), in its own venv under $LASSI_TOOLCHAINS with Python 3.11, torch 2.9.0, torch-xla 2.9.0+git061c1e7, transformers 4.57.1, and peft; it bundles TT-NN, so nothing is built from source. The Hugging Face Qwen code runs as written, so all three bases and the scratch model load correctly; LoRA and prompt tuning through PEFT, full weights through plain PyTorch. Consequence: new pins beside LASSI's Python 3.10 environment, and a worker process in that venv; the JIT must be given the pinned sfpi 7.25.0 instead of the host's 7.48.0; upstream trained Qwen this way at 128 tokens with LoRA, and its own training list marks the bases' full training as known failures (Qwen3-1.7B out of DRAM).
+- (b) tt-train (ttml): built from the pinned tree with TT-NN, the Python bindings, and tt-train, as one CPU job (PROJECTED 30 to 90 minutes and 5 to 10 GB); its own Llama and GPT-2 models, tested on N300 upstream, with per-block recompute and fused loss and attention kernels. Consequence: none of the three Qwen bases loads correctly without new model code, LoRA is an unwired layer, and a converter is needed to serve its checkpoints; a Llama-architecture model of our own from scratch (the 77M config without q/k norms, Qwen3 tokenizer) is native.
+- (c) Both: (a) for the window of 2026-10-27, (b) afterwards for the own-model goal.
+- (d) Neither until a later pin.
+Recommendation: (c): (a) is the only stack that can load the three bases correctly without a build before Tuesday, and (b) is the pin's own framework and the better fit for a model of our own.
+Answer: (c). The owner, in the working session of 2026-10-26: "Go with recommendations for both QQ's."
+To apply: the tt-xla wheel for the window of 2026-10-27 (task P17.38); tt-train later, for the own-model goal.
+
+## OQ-102 Before The Window Of 2026-10-27: Sequence Length
+State: ANSWERED
+Kind: access
+Blocks: the training runs of the window of 2026-10-27
+Evidence: plans/spikes/tt-training.md, Findings 2 to 4; the install runs as one CPU-only job before the window under the owner's direction of 2026-10-26 ("If they don't require the hardware accelerators, you can build them now."), after the free space is read with rx doctor (the owner removed about 73 GB of orphan model blobs on 2026-10-26)
+Question: tt-train-v0's longest record is 3,058 tokens and no record is ever cut; upstream trained Qwen at 128 tokens, and at 3,072 a chip needs recompute (PROJECTED), which is unproven on this stack. What if tt-train-v0 does not compile or fit?
+Options:
+- (3a) Run the smoke recipe on the synthetic fixture first, then tt-train-v0, and report any tt-train-v0 failure as found. (3b) Also allow a tt-train-v1 corpus that splits each record by file, built and audited like tt-train-v0 (Agent Rule 5), as a later task. (3c) tt-train-v0 only.
+Recommendation: (3a), with (3b) as a later task if 3,072 tokens fails.
+Answer: (3a). The owner, in the working session of 2026-10-26: "Go with recommendations for both QQ's."
+To apply: the smoke recipe on the synthetic fixture first, then tt-train-v0, any failure reported as found (task P17.38); (3b) stays a later task if 3,072 tokens fails.
+
 ## OQ-103 How A ttkernel Kernel Gets Its Circular Buffers
 State: OPEN
 Kind: decision
@@ -1207,3 +1249,46 @@ Options:
 Recommendation: scope (a), splits (a), copy or fetch (a): no new toolchain or install, nothing that cannot be undone, and no upstream text in the repository, as for every other suite.
 Answer: The owner, in the working session of 2026-10-26: scope "histo, ig, triangle: C++ <-> OpenMP"; "Benchmark items for testing" (splits unassigned); "Fetch only, pinned by sha256".
 Applied: 2026-10-26. Task P17.40 adds the suite bale-v0 (assets/bench/bale-v0.yaml) with the three items unassigned, the upstream serial C files named by path and sha256 and fetched, never tracked, and the recipes projects/lassi-demo/bale1.
+
+## OQ-105 How LASSI Gets Device Time On The Cards
+State: ANSWERED
+Kind: decision
+Blocks: P17.42 (device timing on silicon runs)
+Evidence: plans/spikes/tt-perf.md (the pinned tt-metal is built with ENABLE_TRACY=OFF, so its device profiler aborts a program that asks for it; a Tracy-enabled build of the same commit records per-core cycles and per-program kernel time)
+Question: How should LASSI get device kernel time and cycles for runs on the Wormhole cards?
+Options:
+- (a) A second install, tt-metal at the same commit built with Tracy on (no broadcast, localhost only), used only by silicon runs the owner starts; the main pin unchanged.
+- (b) Flip the main pin: the one pinned tt-metal rebuilt with Tracy on (no broadcast, localhost only), in a new install folder; every run, ttsim's included, then uses it.
+- (c) No device profiler: process wall time, JIT compile time, and sysfs clocks, power, and temperature only.
+- (d) Timers inside the tracked reference programs.
+Recommendation: (a), which keeps every earlier run's tree unchanged.
+Answer: (b). The owner, in the working session of 2026-10-26: "Flip the main pin"; later: "we're gonna need Tracey eventually. It's not like it breaks tt-sim."
+To apply: task P17.42 (the pin, the install, the device-timing reading); the five references are checked on ttsim with the new tree before any run uses it.
+
+## OQ-106 FLOPs, The Vendor Peak, And Rates
+State: ANSWERED
+Kind: decision
+Blocks: P17.42 (work counts and rates)
+Evidence: plans/spikes/tt-perf.md (no FLOP counter exists on Wormhole; the FPU and SFPU counters report busy cycles, not operations)
+Question: How should LASSI count FLOPs and report rates?
+Options:
+- (a) Analytic useful work from each item's shapes (for example 2MNK for a matmul), rates only over measured silicon time naming that time, percent of the vendor's peak shown and labelled, PaLM's model-FLOP formula for training; never a rate from ttsim.
+- (b) As (a) without percent of peak.
+- (c) Times and tokens per second only.
+Recommendation: (a).
+Answer: (a). The owner, in the working session of 2026-10-26: "Analytic work, rates on silicon only (Recommended)".
+To apply: task P17.42.
+
+## OQ-107 Network Containment For Training With The tt-xla Wheel
+State: CLOSED
+Kind: policy
+Blocks: P17.38 (training on the cards)
+Evidence: plans/spikes/tt-perf.md (the wheel's libtt_metal.so is Tracy-enabled; from the wheel's strings and Tracy's source, the client starts at library load, listens on TCP 8086 to 8105 on every interface, and broadcasts on UDP every 3 s; inferred, not observed)
+Question: How should training processes that load the wheel be contained on alpha01's shared network?
+Options:
+- (a) No network: each training process in its own empty network namespace, with the model hub offline.
+- (b) Tracy's localhost-only option: no listener on the network, but the UDP broadcast still goes out.
+- (c) No containment.
+Recommendation: (a).
+Answer: (a). The owner, in the working session of 2026-10-26: "No network for training (Recommended)".
+Applied: 2026-10-26. Task P17.38: trainer.network none, required with no default; the worker runs under `unshare --user --map-root-user --net` and refuses to touch a card while it sees any interface but the loopback; provenance.json records the setting.

@@ -4,7 +4,7 @@
     lassi [--graphics on|off] score <run dir> --profile NAME [--profile NAME ...] [--score-id ID]
           [--bench-root P] [--runs-root P]
     lassi [--graphics on|off] settings graphics [on|off]
-    lassi [--graphics on|off] train <train.yaml> [--runs-root P] [--train-id ID]
+    lassi [--graphics on|off] train <train.yaml> [--runs-root P] [--train-id ID] [--silicon]
     lassi [--graphics on|off] corpus summary <dir>
 
 Every command first decides terminal graphics (lassi.present.settings,
@@ -37,9 +37,9 @@ refuses any executor that declares `silicon` (the tt_silicon executor),
 since silicon runs are evaluation runs a human starts (Agent Rule 9); with
 it the runner still refuses one beside a reward stage, and, until OQ-078
 is answered, beside a stage that runs model-generated code or an
-adversary's proposals. Only this command takes it: no recipe key and no
-environment variable stands in for it, and an unattended session never
-passes it. With graphics on it also shows the live inference table on stderr
+adversary's proposals. Only this command and `lassi train` (below) take
+it: no recipe key and no environment variable stands in for it, and an
+unattended session never passes it. With graphics on it also shows the live inference table on stderr
 (lassi.present.live): the runner gets a LiveTable as its progress observer
 (RunOptions.observer), as wide as stderr's terminal and one line less than
 its height (COLUMNS and LINES when they are set to whole numbers above 0;
@@ -85,7 +85,15 @@ both before any directory exists, or when the Trainer returns a result
 outside its contract (RunError), which leaves provenance.json failed. An
 error the Trainer raises also leaves it failed and propagates, as a
 component's does under `lassi run`. With graphics on it prints the banner
-and nothing more: no live table, since the training table is P7's.
+and nothing more: no live table, since the training table is P7's. Its
+flag --silicon is the human start of a training run on a Tenstorrent card
+(task P17.38; Agent Rule 9 as OQ-100 (a) amends it): it sets
+TrainOptions.silicon, without which a train recipe whose trainer.device is
+a card is refused before any directory exists; the run then holds the
+cards' lock and quarantine marker as a silicon run does
+(lassi.train.silicon). As for `lassi run`, no recipe key and no
+environment variable stands in for it, and an unattended session never
+passes it.
 
 `lassi corpus summary <dir>` (task P5.11) reads the corpus tables that
 lassi.corpus writes under <dir> (corpus/, verification/, and pairs/) and
@@ -175,6 +183,11 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("recipe", type=Path, help="the train recipe file to run")
     train.add_argument("--runs-root", type=Path, help="the runs root (default: $LASSI_RUNS_ROOT, then the recipe's)")
     train.add_argument("--train-id", help="the train directory's name (default: the UTC start time, YYYYMMDD-HHMMSS)")
+    train.add_argument(
+        "--silicon", action="store_true",
+        help="start a training run on a Tenstorrent card: a human's start, which no recipe can set (Agent Rule 9, "
+        "OQ-100; default: off)",
+    )
     corpus = commands.add_parser("corpus", help="read the corpus tables lassi.corpus writes")
     actions = corpus.add_subparsers(dest="corpus_action", required=True, metavar="action")
     summary = actions.add_parser("summary", help="count the records of the corpus tables under a directory")
@@ -315,7 +328,7 @@ def _positive(text: str | None, default: int) -> int:
 def _train(args: argparse.Namespace) -> int:
     """Run `lassi train` and return 0, or 2 with `lassi train: <message>` on stderr; it prints plain lines only."""
     try:
-        run_training(args.recipe, TrainOptions(runs_root=args.runs_root, train_id=args.train_id))
+        run_training(args.recipe, TrainOptions(runs_root=args.runs_root, train_id=args.train_id, silicon=args.silicon))
     except (RecipeError, RunError) as error:
         print(f"lassi {args.command}: {error}", file=sys.stderr)
         return 2

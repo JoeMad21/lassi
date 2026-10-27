@@ -238,7 +238,7 @@ def fake_trainer(
         "__doc__": f"Fake Trainer {name} for the lassi train tests.",
         "name": name,
         "capabilities": frozenset({TAKES_DEVICE} if takes_device else set()),
-        "config_keys": frozenset({"steps", "refuse", "reject", "fail", "checkpoint", "create", "forbidden"}),
+        "config_keys": frozenset({"steps", "refuse", "reject", "fail", "checkpoint", "create", "forbidden", "network"}),
         "methods": methods,
         "weight_modes": weight_modes,
         "data_sources": data_sources,

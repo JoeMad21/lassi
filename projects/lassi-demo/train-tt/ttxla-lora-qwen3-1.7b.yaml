@@ -1,0 +1,42 @@
+# LoRA on Qwen3-1.7B on a Wormhole card, fourth in the window's sequence (task P17.38; OQ-076: LoRA; OQ-100 (a) with
+# (s2); OQ-102 (3a)), on tt-train-v0 through the tt-xla wheel on card 0 (the ttxla trainer). Full training of this
+# base does not fit one chip (about 13.8 GB of state against 12 GiB; tt-xla's own list marks it out of DRAM;
+# plans/spikes/tt-training.md, Plain answer), so the frozen base with an adapter is the one way to train it on a
+# chip. Every number below is PROJECTED: arithmetic, or a workstation reading logged in the spike or in
+# plans/spikes/own-model.md, never a measurement of a run.
+#
+# Before the run, once, in the window: uv run --extra cpu tools/prepare_train.py <this file> downloads the base into
+# $HF_HOME/hub (about 4.08 GB at this revision, PROJECTED: the Hub's X-Linked-Size headers, read on the workstation);
+# the launcher's remote script does it before the sequence.
+#
+# Data (PROJECTED, a workstation count with the Qwen3 tokenizer): tt-train-v0's 8 records, the longest 3,058 tokens in
+# the chat format; max_length 3,072. A longer record is refused before any step.
+#
+# Arithmetic (PROJECTED). Parameters N = 1,720.6M (a workstation count on the meta device). LoRA r 16 on every linear
+# layer but the output layer is 16 x 38,912 = 622.6K a layer, 17.4M over 28 layers (1.0 percent of N).
+# - Memory, one chip of 12 GiB: the frozen base in bf16 3.44 GB, the adapter's weights, gradients, and moments about
+#   0.3 GB, the logits and their gradient about 1.9 GB, and with per-block recompute 6.3 to 10.5 GB in all (the spike's
+#   table), against 20.3 to 24.0 GB without; so gradient checkpointing is on, and the high end leaves little room.
+# - Compute per step (one record padded to 3,072): 6N per position is 3.2e13 FLOP and attention about 6.5e12: about
+#   3.8e13 FLOP. 16 steps are 6.1e14 FLOP: about 10 minutes at a sustained 1 TFLOP/s, 51 at 0.2.
+# - Time: with the compile, 20 to 40 minutes by the spike's estimate, 30 to 90 minutes in all; timeout_s 5400 (90
+#   minutes) ends it as a hang past that.
+base_model: Qwen/Qwen3-1.7B@70d244cc86ccca08cf5af4e1e306ecf908b1ad5e  # a HEAD request read X-Repo-Commit equal to it
+method: sft  # the only method on silicon: RL rewards never execute there (Agent Rule 9)
+weights: lora
+lora: {r: 16, targets: all-linear}  # every linear layer but the output layer
+trainer:
+  kind: ttxla
+  device: {kind: tenstorrent, indices: [0]}  # card 0 of the host (/dev/tenstorrent/0); one card per run
+  steps: 16  # two passes over the 8 records, one record a step
+  seed: 7
+  batch_size: 1
+  learning_rate: 0.0002  # LoRA wants a rate well above full fine-tuning's (bible Weight Modes, Basis)
+  max_length: 3072  # every sequence padded to it; a longer record is refused, never cut
+  timeout_s: 5400  # the worker's wall limit; past it the run is a hang, the card quarantined
+  network: none  # the worker runs in its own empty network namespace: the wheel's Tracy client listens and
+  # broadcasts from library load (plans/spikes/tt-perf.md); no default
+  gradient_checkpointing: true  # recompute per block, without which the memory above does not fit one chip
+  chat_format: true  # the tokenizer's chat template, the format hf_local serves in
+data:
+  corpus: tt-train-v0  # assets/train/tt-train-v0/manifest.json; records under $LASSI_SCRATCH/train-data

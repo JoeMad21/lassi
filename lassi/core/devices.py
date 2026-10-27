@@ -78,7 +78,10 @@ class HostFacts:
     count is the number of devices of the kind the host has (None only when
     the host reports no count), name the device's name, memory_bytes its
     memory, driver the driver version, and runtime the device runtime's
-    version.
+    version. For a kind whose devices are numbered nodes (tenstorrent; task
+    P17.38), by_index maps the number of each device this user can use to
+    its description, and refused the number of each other device to why it
+    cannot be used; both are None for every other kind.
     """
 
     count: int | None
@@ -86,6 +89,8 @@ class HostFacts:
     memory_bytes: int | None
     driver: str | None
     runtime: str | None
+    by_index: Mapping[int, str] | None = None
+    refused: Mapping[int, str] | None = None
 
 
 class DeviceProbe(Protocol):
@@ -106,14 +111,19 @@ class DeviceProbe(Protocol):
 
 # The probes by kind that the runner uses when RunOptions.probes is None; lassi.executors registers its host probes.
 DEFAULT_PROBES: dict[str, DeviceProbe] = {}
+# The kind of a Tenstorrent card, and the framework builds that can reach one: the tt-xla wheel's distribution
+# (toolchains/tt-xla.pin; task P17.38).
+TENSTORRENT = "tenstorrent"
+TENSTORRENT_FRAMEWORKS = ("pjrt-plugin-tt",)
 
 
 def parse_device(value: Any, path: str) -> DeviceSpec:
     """Return the DeviceSpec of the device section `value` found at the dotted recipe path `path`.
 
     The section is a mapping with a required kind, one of DEVICE_KINDS as
-    written (no case folding), and indices: for cuda and rocm a non-empty
-    list of distinct integers of at least 0 (a bool is not one), kept in the
+    written (no case folding), and indices: for cuda, rocm, and tenstorrent
+    a non-empty list of distinct integers of at least 0 (a bool is not one;
+    for tenstorrent the cards' /dev/tenstorrent numbers), kept in the
     order written; for cpu no indices key at all. Any other key, and a value
     that is not a mapping, is refused. Every refusal is a DeviceSectionError
     naming the dotted key.
@@ -165,25 +175,29 @@ def probe_device(
     In order: the kind needs a probe in `probes`; the framework build must fit
     the kind before any probe runs (cuda needs a CUDA build without HIP; rocm
     a HIP build, since ROCm PyTorch reaches its GPUs through the cuda device
-    type; cpu fits any build, and None means no framework); the probe runs;
-    and every index must be below the host's count (a count of None refuses
-    any index). The record's runtime is None for cpu, and for a GPU kind the
-    build's CUDA or HIP version, or the probe's runtime without a framework.
+    type; tenstorrent one of TENSTORRENT_FRAMEWORKS; cpu fits any build, and
+    None means no framework); the probe runs; and every index must be below
+    the host's count (a count of None refuses any index), or, when the probe
+    gives by_index, be one of its keys, the record's name then joining their
+    descriptions in the order written. The record's runtime is None for cpu
+    and tenstorrent, and for a GPU kind the build's CUDA or HIP version, or
+    the probe's runtime without a framework.
     """
     probe = probes.get(spec.kind)
     if probe is None:
         raise DeviceUnavailable(f"no {spec.kind} device probe is registered, so this host cannot provide one")
     _check_framework(spec.kind, framework)
     facts = probe.probe()
-    for index in spec.indices:
-        if facts.count is None or index >= facts.count:
-            count = "an unknown number of" if facts.count is None else str(facts.count)
-            raise DeviceUnavailable(f"index {index} is not among this host's {count} {spec.kind} device(s)")
+    if facts.by_index is None:
+        _check_counted(spec, facts)
+        name = facts.name
+    else:
+        name = _indexed_name(spec, facts)
     return DeviceRecord(
         key=key,
         kind=spec.kind,
         indices=list(spec.indices),
-        name=facts.name,
+        name=name,
         count=facts.count,
         memory_bytes=facts.memory_bytes,
         driver=facts.driver,
@@ -193,11 +207,41 @@ def probe_device(
     )
 
 
+def _check_counted(spec: DeviceSpec, facts: HostFacts) -> None:
+    """Raise DeviceUnavailable for an index at or past the host's count of the kind (any index when it is None)."""
+    for index in spec.indices:
+        if facts.count is None or index >= facts.count:
+            count = "an unknown number of" if facts.count is None else str(facts.count)
+            raise DeviceUnavailable(f"index {index} is not among this host's {count} {spec.kind} device(s)")
+
+
+def _indexed_name(spec: DeviceSpec, facts: HostFacts) -> str:
+    """Return the descriptions of the named devices joined by "; ", or raise DeviceUnavailable for one not usable.
+
+    A device the probe refused is refused with the probe's reason; one it
+    does not know with the numbers it can use.
+    """
+    usable = facts.by_index or {}
+    refused = facts.refused or {}
+    for index in spec.indices:
+        if index in usable:
+            continue
+        if index in refused:
+            raise DeviceUnavailable(f"{spec.kind} device {index} cannot be used: {refused[index]}")
+        known = ", ".join(str(number) for number in sorted(usable)) or "none"
+        raise DeviceUnavailable(f"index {index} is not among this host's usable {spec.kind} devices ({known})")
+    return "; ".join(usable[index] for index in spec.indices)
+
+
 def _check_framework(kind: str, framework: FrameworkBuild | None) -> None:
     """Raise DeviceUnavailable when the framework build cannot reach a device of `kind`."""
     if framework is None or kind == "cpu":
         return
     label = f"{framework.name} {framework.version}"
+    if kind == TENSTORRENT and framework.name not in TENSTORRENT_FRAMEWORKS:
+        raise DeviceUnavailable(
+            f"{label} cannot reach a tenstorrent device; only {', '.join(TENSTORRENT_FRAMEWORKS)} builds can"
+        )
     if kind == "rocm" and framework.hip is None:
         raise DeviceUnavailable(f"{label} is not a HIP build, so it cannot reach a rocm device")
     if kind == "cuda" and (framework.cuda is None or framework.hip is not None):
@@ -205,8 +249,8 @@ def _check_framework(kind: str, framework: FrameworkBuild | None) -> None:
 
 
 def _runtime(kind: str, framework: FrameworkBuild | None, facts: HostFacts) -> str | None:
-    """Return the device runtime a record names: None for cpu, else the build's version or the probe's."""
-    if kind == "cpu":
+    """Return the device runtime a record names: None for cpu and tenstorrent, else the build's or the probe's."""
+    if kind in ("cpu", TENSTORRENT):
         return None
     if framework is None:
         return facts.runtime

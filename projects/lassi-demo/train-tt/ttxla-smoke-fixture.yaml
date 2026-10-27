@@ -1,0 +1,39 @@
+# The smoke on a Wormhole card, first in the window's sequence (task P17.38; OQ-100 (a) with (s2); OQ-102 (3a): the
+# smoke on the synthetic fixture first, then tt-train-v0): full training of the SYNTHETIC fixture model on the four
+# SYNTHETIC sft records, through the tt-xla wheel on card 0 (the ttxla trainer; plans/spikes/tt-training.md,
+# Finding 3). It shows the whole path works on silicon (the venv, the PJRT client on one card, torch.compile's tt
+# backend, a backward pass, the optimizer, the save) before any real base; its losses mean nothing, the weights being
+# random and the data four lines. If tt-train-v0's recipes fail later, this one still says where the card stands.
+# Every number below is PROJECTED: arithmetic, never a measurement of a run.
+#
+# Run it only as a human's start, with `uv run lassi --graphics off train <this file> --silicon` (the owner's
+# launcher, tools/train_tt.py, does that in the window's sequence). Nothing is downloaded: the fixture is tracked.
+#
+# Arithmetic (PROJECTED). The fixture (tests/fixtures/train/tiny-causal-lm): a Qwen2-style config with a 258-entry
+# byte vocabulary, hidden 16, 2 layers, 2 query heads and 1 key-value head of 8, untied embeddings: about 13 thousand
+# parameters. Each record is under 40 byte tokens, padded to max_length 64.
+# - Memory: weights, gradients, and AdamW moments in bf16, about 8 bytes a parameter: under 1 MB on a chip with 12 GiB
+#   of DRAM; activations at 64 tokens are kilobytes. The runtime's own buffers dominate.
+# - Time: 8 steps of a few MFLOP each take well under a second of compute; the time is tt-mlir's compile of the
+#   forward and backward graphs and the first device program loads, 20 to 40 minutes by the spike's estimate (Finding 3,
+#   the window's timeline), not read from any run. timeout_s 2700 (45 minutes) ends it as a hang past that.
+# - The fixture's head size of 8 and hidden size of 16 are below the 32 of a Tenstorrent tile; whether tt-mlir pads
+#   them is not known until this runs, and a failure here is a finding, reported as such.
+base_model: fixture:tiny-causal-lm  # tests/fixtures/train/tiny-causal-lm: config and tokenizer, random weights
+method: sft  # the only method on silicon: RL rewards never execute there (Agent Rule 9)
+weights: full
+trainer:
+  kind: ttxla
+  device: {kind: tenstorrent, indices: [0]}  # card 0 of the host (/dev/tenstorrent/0); one card per run
+  steps: 8  # two passes over the four records, one record a step
+  seed: 7  # with the config, it fixes the initial weights
+  batch_size: 1
+  learning_rate: 0.001
+  max_length: 64  # every sequence padded to it; a longer record is refused, never cut
+  timeout_s: 2700  # the worker's wall limit; past it the run is a hang, the card quarantined
+  network: none  # the worker runs in its own empty network namespace: the wheel's Tracy client listens and
+  # broadcasts from library load (plans/spikes/tt-perf.md); no default
+  gradient_checkpointing: false
+  chat_format: false  # the fixture's tokenizer has no chat template
+data:
+  synthetic: sft-smoke.jsonl  # tests/fixtures/train/sft-smoke.jsonl, four SYNTHETIC records

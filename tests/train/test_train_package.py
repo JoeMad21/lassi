@@ -11,17 +11,20 @@ The contract these tests fix:
 
 - lassi.train, lassi.train.run, and lassi.train.data exist, and so do
   lassi.train.trl_trainer, lassi.train.checkpoint, and
-  lassi.train.fixture_reward (task P17.9). Importing lassi.train and
-  lassi.cli succeeds in a fresh interpreter in which every framework import
-  fails (torch, transformers, trl, peft, accelerate, datasets,
-  huggingface_hub), loading none of them, and registers exactly one
-  Trainer, trl (lassi.train.trl_trainer); importing lassi.cli imports
+  lassi.train.fixture_reward (task P17.9), and lassi.train.silicon,
+  lassi.train.ttxla_trainer, and lassi.train.ttxla_worker (task P17.38).
+  Importing lassi.train and lassi.cli succeeds in a fresh interpreter in
+  which every framework import fails (torch, transformers, trl, peft,
+  accelerate, datasets, huggingface_hub, torch_xla), loading none of them,
+  and registers exactly two Trainers, trl (lassi.train.trl_trainer) and
+  ttxla (lassi.train.ttxla_trainer); importing lassi.cli imports
   lassi.train, so a trainer that lassi.train registers is registered for
   `lassi train`.
 - Every module under lassi/train/ imports only the standard library and
   lassi at module level; inside a function it may import only those
-  framework packages (a trainer's framework, as P17.9 adds), never another
-  third-party package.
+  framework packages (a trainer's framework, as P17.9 adds, and torch_xla,
+  which the ttxla worker imports in the tt-xla venv, task P17.38), never
+  another third-party package.
 - Every module is documented, typed (public functions and methods), plain
   ASCII with LF, starts with `from __future__ import annotations`, and
   names no project.
@@ -45,14 +48,16 @@ from train_fakes import REPO
 TRAIN_DIR = REPO / "lassi" / "train"
 NAMED_MODULES = (
     "lassi.train", "lassi.train.run", "lassi.train.data", "lassi.train.trl_trainer", "lassi.train.checkpoint",
-    "lassi.train.fixture_reward",
+    "lassi.train.fixture_reward", "lassi.train.silicon", "lassi.train.ttxla_trainer", "lassi.train.ttxla_worker",
 )
 FOUND_MODULES = tuple(
     "lassi.train" if path.stem == "__init__" else f"lassi.train.{path.stem}" for path in sorted(TRAIN_DIR.glob("*.py"))
 )
 TRAIN_MODULES = tuple(dict.fromkeys(NAMED_MODULES + FOUND_MODULES))
 # The framework packages a trainer may import inside its functions, and only there.
-FRAMEWORK_IMPORTS = frozenset({"torch", "transformers", "trl", "peft", "accelerate", "datasets", "huggingface_hub"})
+FRAMEWORK_IMPORTS = frozenset(
+    {"torch", "transformers", "trl", "peft", "accelerate", "datasets", "huggingface_hub", "torch_xla"}
+)
 PROJECT_NAMES = ("lassi-repro", "lassi-ee", "lassi-df", "hecbench", "qwen", "wizardcoder", "a100", "mi300x", "gpt-oss")
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 
@@ -175,7 +180,7 @@ def test_lassi_train_and_cli_import_with_every_framework_blocked() -> None:
         report["modules"]
     ), report["modules"]
     assert report["interfaces"][-1] == "Trainer", report["interfaces"]
-    assert report["trainers"] == ["trl"], "lassi.train registers the trl Trainer without a framework (task P17.9)"
+    assert report["trainers"] == ["trl", "ttxla"], "lassi.train registers its Trainers without a framework"
 
 
 def test_lassi_cli_imports_lassi_train() -> None:

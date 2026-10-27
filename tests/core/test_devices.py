@@ -145,8 +145,9 @@ def spec(devices: ModuleType, kind: str, indices: tuple[int, ...] = ()) -> Any:
 # parse_device: one shape, every refusal naming the key
 
 
-def test_device_kinds_are_cpu_cuda_and_rocm() -> None:
-    assert getattr(record, "DEVICE_KINDS", None) == ("cpu", "cuda", "rocm")
+def test_device_kinds_are_cpu_cuda_rocm_and_tenstorrent() -> None:
+    # tenstorrent joined with task P17.38: a Wormhole card, named by its /dev/tenstorrent number.
+    assert getattr(record, "DEVICE_KINDS", None) == ("cpu", "cuda", "rocm", "tenstorrent")
 
 
 def test_device_section_error_is_a_value_error(devices: ModuleType) -> None:
@@ -360,6 +361,82 @@ def test_probe_device_keeps_unknown_facts_unknown(devices: ModuleType) -> None:
     hip = build(devices, HIP_BUILD)
     built = devices.probe_device("model.device", spec(devices, "rocm", (0,)), hip, {"rocm": probe})
     assert (built.name, built.memory_bytes, built.driver) == (None, None, None), "None means not read, never a guess"
+
+
+# ---------------------------------------------------------------------------
+# The tenstorrent kind (task P17.38): cards named by number, each index checked against the probe's cards
+
+# The framework a tenstorrent device needs: the tt-xla wheel's distribution (toolchains/tt-xla.pin), SYNTHETIC version.
+TT_BUILD = ("pjrt-plugin-tt", "0.0.0.dev-synthetic", None, None)
+CARD_ZERO = "SYNTHETIC n300 card 0: serial S0"
+CARD_TWO = "SYNTHETIC n300 card 2: serial S2"
+
+
+def tt_facts(devices: ModuleType, **changes: Any) -> Any:
+    """Return SYNTHETIC tenstorrent HostFacts: three nodes (0, 2, 5), cards 0 and 2 usable, 5 refused."""
+    values: dict[str, Any] = {
+        "count": 3,
+        "name": None,
+        "memory_bytes": None,
+        "driver": SYNTHETIC_DRIVER,
+        "runtime": None,
+        "by_index": {0: CARD_ZERO, 2: CARD_TWO},
+        "refused": {5: "SYNTHETIC: card 5's node refuses this user"},
+    }
+    values.update(changes)
+    return devices.HostFacts(**values)
+
+
+def test_host_facts_by_index_and_refused_default_to_none(devices: ModuleType) -> None:
+    plain = facts(devices)
+    assert (plain.by_index, plain.refused) == (None, None), "every other kind's probe is unchanged"
+
+
+def test_parse_device_takes_tenstorrent_with_card_numbers(devices: ModuleType) -> None:
+    parsed = devices.parse_device({"kind": "tenstorrent", "indices": [0]}, "trainer.device")
+    assert (parsed.kind, parsed.indices) == ("tenstorrent", (0,))
+    assert "trainer.device.indices" in refusal(devices, {"kind": "tenstorrent"}, "trainer.device")
+
+
+def test_probe_device_names_each_tenstorrent_card_it_was_given(devices: ModuleType) -> None:
+    probe = FakeProbe("tenstorrent", answer=tt_facts(devices))
+    tt = build(devices, TT_BUILD)
+    built = devices.probe_device("trainer.device", spec(devices, "tenstorrent", (2, 0)), tt, {"tenstorrent": probe})
+    assert (built.kind, built.indices, built.count, built.driver) == ("tenstorrent", [2, 0], 3, SYNTHETIC_DRIVER)
+    assert built.name == f"{CARD_TWO}; {CARD_ZERO}", "the named cards in the order written"
+    assert built.runtime is None and built.memory_bytes is None
+    assert (built.framework, built.framework_version) == TT_BUILD[:2]
+
+
+def test_probe_device_takes_a_tenstorrent_number_past_the_count_when_the_probe_has_it(devices: ModuleType) -> None:
+    # Node numbers need not be 0..count-1: the probe's cards decide, never the count.
+    probe = FakeProbe("tenstorrent", answer=tt_facts(devices, count=1, by_index={4: "SYNTHETIC card 4"}, refused={}))
+    built = devices.probe_device("trainer.device", spec(devices, "tenstorrent", (4,)), None, {"tenstorrent": probe})
+    assert built.name == "SYNTHETIC card 4"
+
+
+def test_probe_device_refuses_a_tenstorrent_card_the_probe_refused_naming_why(devices: ModuleType) -> None:
+    probe = FakeProbe("tenstorrent", answer=tt_facts(devices))
+    with pytest.raises(devices.DeviceUnavailable) as info:
+        devices.probe_device("trainer.device", spec(devices, "tenstorrent", (5,)), None, {"tenstorrent": probe})
+    assert "card 5's node refuses this user" in str(info.value)
+    with pytest.raises(devices.DeviceUnavailable) as missing:
+        devices.probe_device("trainer.device", spec(devices, "tenstorrent", (7,)), None, {"tenstorrent": probe})
+    message = str(missing.value)
+    assert "7" in message and "0, 2" in message, f"the message names the index and the usable cards: {message}"
+
+
+@pytest.mark.parametrize("values", [CPU_BUILD, CUDA_BUILD, HIP_BUILD], ids=["cpu-build", "cuda-build", "hip-build"])
+def test_probe_device_refuses_tenstorrent_with_another_framework_before_probing(
+    devices: ModuleType, values: tuple[str, str, str | None, str | None]
+) -> None:
+    probe = FakeProbe("tenstorrent", answer=tt_facts(devices))
+    with pytest.raises(devices.DeviceUnavailable) as info:
+        devices.probe_device(
+            "trainer.device", spec(devices, "tenstorrent", (0,)), build(devices, values), {"tenstorrent": probe}
+        )
+    assert "pjrt-plugin-tt" in str(info.value)
+    assert probe.calls == [], "the framework build is checked before any probe runs"
 
 
 # ---------------------------------------------------------------------------

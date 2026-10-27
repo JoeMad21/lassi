@@ -224,7 +224,7 @@ def test_trl_is_registered_with_its_declarations() -> None:
     assert frozenset(cls.config_keys) == CONFIG_KEYS
     assert isinstance(vars(cls)["framework"], staticmethod)
     assert callable(getattr(cls, "check", None)) and callable(getattr(cls, "train", None))
-    assert DEFAULT_REGISTRY.names("Trainer") == [TRAINER]
+    assert TRAINER in DEFAULT_REGISTRY.names("Trainer"), "ttxla joins it since task P17.38"
 
 
 def test_framework_without_torch_names_trl_and_the_extra(monkeypatch: pytest.MonkeyPatch) -> None:

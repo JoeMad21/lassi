@@ -48,8 +48,9 @@ TOOLCHAIN_PIN_NAMES = (
     "gcc",
     "hipcc",
 )
-# The device kinds a device section may name and a DeviceRecord records (task P17.2; lassi.core.devices).
-DEVICE_KINDS = ("cpu", "cuda", "rocm")
+# The device kinds a device section may name and a DeviceRecord records (task P17.2; lassi.core.devices); tenstorrent
+# is a Wormhole card named by its /dev/tenstorrent number (task P17.38).
+DEVICE_KINDS = ("cpu", "cuda", "rocm", "tenstorrent")
 # The run flags RunInfo records, named as the RunResult flags they copy, in field order.
 RUN_FLAG_NAMES = ("stdout_truncated", "stderr_truncated", "workdir_incomplete")
 # The fixed codes of Final.end_reason: why a trial ended early. baseline-compile and baseline-run end a trial
@@ -556,7 +557,8 @@ class DeviceRecord:
 
     `key` is the section's recipe path (such as model.device), `kind` one of
     DEVICE_KINDS, and `indices` the indices as written ([] exactly for cpu,
-    otherwise distinct integers of at least 0). name, count, memory_bytes,
+    otherwise distinct integers of at least 0; for tenstorrent the cards'
+    /dev/tenstorrent numbers, task P17.38). name, count, memory_bytes,
     driver, and runtime are what the host probe read and the framework build
     gave; framework and framework_version name the framework the component
     runs on. None means not read, never a guess. A known count is at least 1,

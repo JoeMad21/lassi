@@ -1,0 +1,43 @@
+# Full training of the 77M scratch model on a Wormhole card, fifth in the window's sequence (task P17.38; OQ-076: full
+# model training and a model of our own; OQ-100 (a) with (s2); OQ-102 (3a)): every weight of the Qwen3-style model of
+# assets/train/scratch/qwen3-77m, built with random weights under the seed, trained on tt-train-v0 through the tt-xla
+# wheel on card 0 (the ttxla trainer). The one full-weights recipe of the window: full training of the 0.5B and 0.6B
+# bases is a known failure in tt-xla's own training list at this wheel, and Qwen3-1.7B does not fit a chip
+# (plans/spikes/tt-training.md, Plain answer). It is a pipeline baseline, not a useful model (13,027 tokens a pass;
+# plans/spikes/own-model.md). Every number below is PROJECTED: arithmetic, never a measurement of a run.
+#
+# Before the run, once, in the window: uv run --extra cpu tools/prepare_train.py <this file> downloads only the
+# tokenizer tokenizer-pin.json pins (Qwen/Qwen3-0.6B at c1899de, about 11 MB, PROJECTED); the launcher's remote script
+# does it before the sequence.
+#
+# Data (PROJECTED, a workstation count with the Qwen3 tokenizer): tt-train-v0's 8 records, the longest 3,058 tokens in
+# the chat format; max_length 3,072 (the config's max_position_embeddings is 4,096).
+#
+# Arithmetic (PROJECTED). Parameters N = 77.2M: embedding 151,936 x 384 = 58.3M (tied) + 12 layers x 1.57M; every
+# dimension a multiple of 32.
+# - Memory, one chip of 12 GiB: weights, gradients, and torch AdamW's two moments, all bf16 (8 bytes a parameter;
+#   AdamW keeps its moments in the parameters' dtype) 0.62 GB, the logits and their gradient about 1.9 GB, and every
+#   activation kept: 4.4 to 8.1 GB in all without recompute (the spike's table), which fits, so gradient
+#   checkpointing stays off.
+# - Compute per step (one record padded to 3,072): 6N per position is 1.4e12 FLOP and attention about 0.35e12: about
+#   1.8e12 FLOP. 64 steps are 1.1e14 FLOP: about 2 minutes at a sustained 1 TFLOP/s, 9 at 0.2.
+# - Time: with the compile of a 12-layer graph, 15 to 40 minutes (the spike's estimate, scaled down; not read from
+#   any run), 20 to 50 minutes in all; timeout_s 3600 (60 minutes) ends it as a hang past that.
+base_model: scratch:qwen3-77m  # assets/train/scratch/qwen3-77m/: config.json and tokenizer-pin.json
+method: sft  # the only method on silicon: RL rewards never execute there (Agent Rule 9)
+weights: full  # a scratch base trains full weights only
+trainer:
+  kind: ttxla
+  device: {kind: tenstorrent, indices: [0]}  # card 0 of the host (/dev/tenstorrent/0); one card per run
+  steps: 64  # eight passes over the 8 records, one record a step
+  seed: 7  # with the config, it fixes the initial weights
+  batch_size: 1
+  learning_rate: 0.0005  # a common rate for a small model trained from scratch; nothing here is tuned
+  max_length: 3072  # every sequence padded to it; a longer record is refused, never cut
+  timeout_s: 3600  # the worker's wall limit; past it the run is a hang, the card quarantined
+  network: none  # the worker runs in its own empty network namespace: the wheel's Tracy client listens and
+  # broadcasts from library load (plans/spikes/tt-perf.md); no default
+  gradient_checkpointing: false  # the memory above fits one chip without recompute
+  chat_format: true  # the Qwen3 tokenizer's chat template, as hf_local serves with
+data:
+  corpus: tt-train-v0  # assets/train/tt-train-v0/manifest.json; records under $LASSI_SCRATCH/train-data

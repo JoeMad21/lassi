@@ -2,8 +2,21 @@
 
 Device files are read only in lassi/executors and lassi/profilers (Design
 Principle 9), so the probes the runner uses by default live here. Importing
-lassi.executors registers CpuProbe, RocmProbe, and CudaProbe in
-lassi.core.devices.DEFAULT_PROBES by kind.
+lassi.executors registers CpuProbe, RocmProbe, CudaProbe, and
+TenstorrentProbe (task P17.38) in lassi.core.devices.DEFAULT_PROBES by kind.
+
+- tenstorrent: the all-digit names in /dev/tenstorrent are the cards'
+  numbers, the indices a section names (the by-id links skipped, as UMD
+  skips them). A card is usable when its node exists and access(2) allows
+  read and write, and its class directory /sys/class/tenstorrent/
+  tenstorrent!<n> gives tt_card_type, tt_serial, tt_fw_bundle_ver, and
+  tt_arc_fw_ver, the files the tt_silicon executor records; the PCI address
+  is device/uevent's PCI_SLOT_NAME. The probe gives each usable card's
+  description by number and why each other card is not usable
+  (lassi.core.devices HostFacts by_index and refused), and the driver
+  /sys/module/tenstorrent/version holds. These are the paths the tt_silicon
+  executor reads on the build host's cards (plans/spikes/
+  tt-silicon-executor.md).
 
 Each probe is built with a host root (default "/") and reads only under it:
 file metadata (lstat, access(2) for read and write, which opens nothing, and
@@ -307,5 +320,120 @@ def check_gpu_nodes(
     return tuple(chosen)
 
 
-for _probe in (CpuProbe(), RocmProbe(), CudaProbe()):
+# The Tenstorrent paths under the root (task P17.38), as the tt_silicon executor reads them: the numbered card nodes,
+# each card's class directory, and the driver's version.
+_TT_NODES = ("dev", "tenstorrent")
+_TT_CLASS = ("sys", "class", "tenstorrent")
+_TT_DRIVER = ("sys", "module", "tenstorrent", "version")
+# The class attributes every card must give, as the tt_silicon executor requires them; the record names each.
+_TT_ATTRIBUTES = ("tt_card_type", "tt_serial", "tt_fw_bundle_ver", "tt_arc_fw_ver")
+
+
+@dataclass(frozen=True)
+class TenstorrentCard:
+    """One Tenstorrent card as its class directory gives it: number, type, serial, firmware, and PCI address."""
+
+    number: int
+    card_type: str
+    serial: str
+    bundle: str
+    arc: str
+    address: str | None
+
+    def describe(self) -> str:
+        """Return the card in one line: type, number, serial, firmware bundle, and ARC firmware."""
+        return (
+            f"Tenstorrent {self.card_type} card {self.number}: serial {self.serial}, firmware bundle {self.bundle}, "
+            f"ARC firmware {self.arc}"
+        )
+
+
+@dataclass(frozen=True)
+class TenstorrentInventory:
+    """The host's numbered card nodes, the usable cards by number, why each other one is not, and the driver."""
+
+    numbers: tuple[int, ...]
+    cards: dict[int, TenstorrentCard]
+    refused: dict[int, str]
+    driver: str | None
+
+
+def _clean(text: str | None) -> str:
+    """Return sysfs text with its whitespace collapsed, printable ASCII only ("?" for anything else)."""
+    collapsed = " ".join((text or "").split())
+    return "".join(char if " " <= char <= "~" else "?" for char in collapsed)
+
+
+def _tt_card(root: Path, number: int, access: Callable[[Path], bool]) -> TenstorrentCard | str:
+    """Return card `number` read from its node's metadata and class directory, or why it cannot be used.
+
+    The node must exist (lstat) and allow read and write (`access`, which
+    opens nothing); the class directory must give every _TT_ATTRIBUTES file,
+    non-empty. The PCI address is the PCI_SLOT_NAME of device/uevent, None
+    when not read.
+    """
+    node = root.joinpath(*_TT_NODES, str(number))
+    if not os.path.lexists(node):
+        return f"/dev/tenstorrent/{number} does not exist on this host"
+    if not access(node):
+        return f"/dev/tenstorrent/{number} exists, but this user may not read and write it"
+    directory = root.joinpath(*_TT_CLASS, f"tenstorrent!{number}")
+    values = {name: _clean(_read_text(directory / name)) for name in _TT_ATTRIBUTES}
+    missing = [name for name, value in values.items() if not value]
+    if missing:
+        return f"/sys/class/tenstorrent/tenstorrent!{number} gives no {', '.join(missing)}"
+    address = _fields(directory / "device" / "uevent", "=").get("PCI_SLOT_NAME") or None
+    return TenstorrentCard(number, values["tt_card_type"], values["tt_serial"], values["tt_fw_bundle_ver"],
+                           values["tt_arc_fw_ver"], _clean(address) or None)
+
+
+def tenstorrent_inventory(root: Path, access: Callable[[Path], bool]) -> TenstorrentInventory:
+    """Return the host's Tenstorrent cards under `root`, read from file metadata and sysfs text only.
+
+    The numbered nodes are the all-digit names in /dev/tenstorrent (the by-id
+    links skipped), in numeric order. DeviceUnavailable, naming the host
+    path, when /dev/tenstorrent is missing or holds no numbered node. No node
+    is opened and no process starts (OQ-002).
+    """
+    directory = root.joinpath(*_TT_NODES)
+    if not directory.is_dir():
+        raise DeviceUnavailable("/dev/tenstorrent does not exist on this host, so there is no Tenstorrent card")
+    numbers = sorted(int(path.name) for path in _entries(directory) if path.name.isascii() and path.name.isdigit())
+    if not numbers:
+        raise DeviceUnavailable("/dev/tenstorrent holds no numbered card node on this host")
+    cards: dict[int, TenstorrentCard] = {}
+    refused: dict[int, str] = {}
+    for number in numbers:
+        found = _tt_card(root, number, access)
+        if isinstance(found, str):
+            refused[number] = found
+        else:
+            cards[number] = found
+    driver = _clean(_read_text(root.joinpath(*_TT_DRIVER))) or None
+    return TenstorrentInventory(numbers=tuple(numbers), cards=cards, refused=refused, driver=driver)
+
+
+@dataclass(frozen=True, kw_only=True)
+class TenstorrentProbe:
+    """The tenstorrent probe (task P17.38): each card by its /dev/tenstorrent number, from sysfs and metadata only."""
+
+    root: Path = HOST_ROOT
+    access: Callable[[Path], bool] = _accessible
+    kind: str = field(default="tenstorrent", init=False)
+
+    def probe(self) -> HostFacts:
+        """Return the count of numbered nodes, each usable card's description, the refused ones, and the driver.
+
+        name, memory_bytes, and runtime are None: the card's memory is not
+        read from sysfs, and the runtime is the framework's own build.
+        """
+        inventory = tenstorrent_inventory(self.root, self.access)
+        return HostFacts(
+            count=len(inventory.numbers), name=None, memory_bytes=None, driver=inventory.driver, runtime=None,
+            by_index={number: card.describe() for number, card in inventory.cards.items()},
+            refused=dict(inventory.refused),
+        )
+
+
+for _probe in (CpuProbe(), RocmProbe(), CudaProbe(), TenstorrentProbe()):
     register_probe(_probe)

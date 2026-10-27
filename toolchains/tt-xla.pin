@@ -1,0 +1,55 @@
+# tt-xla pin (task P17.38; bible Toolchain Pins and Training Module, Compute; plans/spikes/tt-training.md, Finding 1c
+# and Finding 3, step 1; OQ-101 (a) for the window of 2026-10-27). Shell-sourced by toolchains/tt-xla.sh, which makes
+# a venv at $LASSI_TOOLCHAINS/$PREFIX_NAME, and read by lassi.train.ttxla_trainer (the venv, its interpreter, and the
+# wheel's metadata). The prefix is an install once it holds lassi-install.txt. Every value was read from upstream on
+# the workstation on 2026-10-26 (the spike's Commands 3 and 4; the package indexes' sha256 fragments; HEAD requests
+# for the sizes; python-build-standalone's SHA256SUMS); nothing ran on the build host. A change is a pin change, a
+# Decision Log entry (Agent Rule 10).
+NAME=tt-xla
+# The tt-xla wheel pjrt-plugin-tt, the nightly whose metadata names LASSI's tt-metal commit (Summary: commit=,
+# tt-mlir-commit=, tt-metal-commit=; the spike, Command 4). PREFIX_NAME is <NAME>@<VERSION> (lassi/toolchains/pins.py).
+VERSION=0.9.0.dev20260223001148
+PREFIX_NAME=tt-xla@0.9.0.dev20260223001148
+WHEEL_URL=https://pypi.eng.aws.tenstorrent.com/pjrt-plugin-tt/pjrt_plugin_tt-0.9.0.dev20260223001148-cp311-cp311-linux_x86_64.whl
+WHEEL_SHA256=fbbe6241869e9646633604b213903b9795f9dc2f9192f875a569799689b0c4db
+WHEEL_SIZE=121492577
+TT_XLA_COMMIT=ff3a67dde32ad3311258674bd3fa260e11a20e98
+# tt-mlir c7b8bd77 is 7 commits before LASSI's tt-mlir pin 5f396fd6, with the same tt-metal (the spike, Command 3).
+TT_MLIR_COMMIT=c7b8bd7784307cce46577bca1c2d33fdab31fccc
+# toolchains/tt-metal.pin's COMMIT and PREFIX_NAME: the install whose runtime/sfpi the script links into the wheel.
+TT_METAL_COMMIT=5280a9cfb00998fd49667a29523d03aee905c129
+METAL_PREFIX_NAME=tt-metal@5280a9cf
+# The sfpi the wheel's tt_metal/sfpi-version names (7.25.0, the same txz sha256 as toolchains/tt-metal.pin). The wheel
+# carries no sfpi, and the pinned tt-metal looks under <runtime root>/runtime/sfpi, then /opt/tenstorrent/sfpi, the
+# build host's 7.48.0 (metal tt_metal/jit_build/build.cpp:140-154; the spike, Finding 1c), so the script links the
+# pinned install's runtime/sfpi into the wheel's runtime directory and checks its compiler's version.
+SFPI_VERSION=7.25.0
+SFPI_SHA256=6a8883c448df537d9661e239e67721b1ba2a4d0e8ea7a573070d2f6c6d015093
+# torch and torch-xla as the wheel's Requires-Dist names them, by URL (the PyTorch CPU index, and Tenstorrent's
+# build of torch-xla); their sha256 values match the indexes' fragments read on 2026-10-26.
+TORCH_URL=https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp311-cp311-manylinux_2_28_x86_64.whl
+TORCH_SHA256=add3e93ecc1eeaa6853f6a973ce60ffb3cb14ed2e80f5055e139b09385dce0a7
+TORCH_SIZE=184462550
+TORCH_XLA_URL=https://pypi.eng.aws.tenstorrent.com/torch-xla/torch_xla-2.9.0%2Bgit061c1e7-cp311-cp311-linux_x86_64.whl
+TORCH_XLA_SHA256=2868985b007b4ea591a86fd3fc0388b4717c221aff68dbe6ef4ef773eb146f74
+TORCH_XLA_SIZE=107174326
+# CPython 3.11 (the wheel's Requires-Python is >=3.11, <3.12) from python-build-standalone, the build uv 0.12.17
+# installs for cpython-3.11.16-linux-x86_64-gnu (`uv python list 3.11 --only-downloads`), fetched by URL and checked
+# here, so the install does not depend on the build host's uv version. Its archive unpacks to python/.
+PYTHON_VERSION=3.11.16
+PYTHON_MINOR=3.11
+PYTHON_URL=https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.11.16%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz
+PYTHON_SHA256=64427febea27864d136db46c8efe968eb6fa5ca2813ce1dca4bb95aec31cb2e4
+PYTHON_SIZE=30778779
+# The venv's packages, each pinned by version and sha256 (the file's header says how it was generated), and the
+# index the ones not fetched above come from.
+PYTHON_REQUIREMENTS=tt-xla-requirements.txt
+INDEX_URL=https://pypi.org/simple
+# The layout, relative to the prefix: the interpreter, the venv, the three fetched wheels, and the other downloads.
+PYTHON_DIR=python
+VENV_DIR=venv
+WHEELS_DIR=wheels
+DOWNLOADS_DIR=downloads
+# Space, PROJECTED (the spike, Finding 1c: 2.5 to 4 GB installed; the 0.41 GB of fetched wheels and the 31 MB
+# interpreter archive kept beside it), upper end rounded up: 5 GiB in KiB, which the space check plans for.
+INSTALL_KIB=5242880

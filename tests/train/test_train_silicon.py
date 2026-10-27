@@ -1,16 +1,16 @@
-"""Tests that training never reaches Tenstorrent silicon (task P17.16).
+"""Tests that no reward of a training run reaches Tenstorrent silicon (task P17.16).
 
-Bible: Agent Rule 9 ("RL rewards never execute on silicon; silicon runs are
-evaluation runs a human starts"); Training Module, Safeguards ("Rewards
-execute on ttsim or native only, inside the sandbox; never on Tenstorrent
-silicon"); OQ-075 (6a), approved: training methods and reward stages refuse
-tt_silicon outright; plans/p17-portable.md, task P17.16, Human start.
+Bible: Agent Rule 9 ("RL rewards never execute on silicon"); Training
+Module, Safeguards ("Rewards execute on ttsim or native only, inside the
+sandbox; never on Tenstorrent silicon"); OQ-075 (6a), approved: training
+methods and reward stages refuse tt_silicon outright; plans/p17-portable.md,
+task P17.16, Human start.
 
 The contract these tests fix (lassi.train.run):
 
-- `lassi train` takes no --silicon flag (tests/core/test_runner_silicon.py)
-  and TrainOptions has no silicon field (tests/train/test_train_run.py pins
-  its fields), so no train run carries the human start.
+- Since task P17.38 (OQ-100 (a)) `lassi train --silicon` starts an sft
+  training run of tracked code on a card (tests/train/
+  test_train_silicon_guard.py); the human start never covers a reward.
 - A train recipe whose reward.executor names an Executor that declares
   `silicon` (lassi.core.capabilities SILICON; the real tt_silicon executor,
   or any other that declares it) is refused before any directory exists and

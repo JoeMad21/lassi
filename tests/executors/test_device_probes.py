@@ -338,13 +338,75 @@ def test_default_probes_cover_every_kind(probes: ModuleType, core: ModuleType) -
     import lassi.executors  # noqa: F401  (importing the package registers the probes)
 
     registered = core.DEFAULT_PROBES
-    assert sorted(registered) == ["cpu", "cuda", "rocm"]
+    assert sorted(registered) == ["cpu", "cuda", "rocm", "tenstorrent"]
     assert isinstance(registered["cpu"], probes.CpuProbe)
     assert isinstance(registered["rocm"], probes.RocmProbe)
     assert isinstance(registered["cuda"], probes.CudaProbe)
+    assert isinstance(registered["tenstorrent"], probes.TenstorrentProbe)
     assert all(probe.kind == kind for kind, probe in registered.items())
 
 
 def test_the_default_probes_look_under_the_host_root(probes: ModuleType) -> None:
-    for probe in (probes.CpuProbe(), probes.RocmProbe(), probes.CudaProbe()):
+    for probe in (probes.CpuProbe(), probes.RocmProbe(), probes.CudaProbe(), probes.TenstorrentProbe()):
         assert Path(probe.root) == Path("/"), type(probe).__name__
+
+
+# ---------------------------------------------------------------------------
+# The tenstorrent probe (task P17.38): sysfs and file metadata only, each card by its /dev/tenstorrent number
+
+
+def tt_host(root: Path, cards: tuple[int, ...] = (0, 1, 2)) -> Any:
+    """Write the tt_silicon tests' SYNTHETIC Wormhole host tree (tt_silicon_fakes.write_host) for `cards`."""
+    import tt_silicon_fakes
+
+    return tt_silicon_fakes.write_host(root, cards)
+
+
+def test_tenstorrent_probe_names_each_usable_card_and_reads_the_driver(probes: ModuleType, tmp_path: Path) -> None:
+    import tt_silicon_fakes as fakes
+
+    tt_host(tmp_path / "host")
+    found = probes.TenstorrentProbe(root=tmp_path / "host", access=Access(allow=True)).probe()
+    assert (found.count, found.driver, found.name, found.memory_bytes, found.runtime) == (3, fakes.DRIVER, None, None,
+                                                                                          None)
+    assert sorted(found.by_index) == [0, 1, 2] and found.refused == {}
+    text = found.by_index[1]
+    for part in ("n300", "card 1", fakes.serial(1), fakes.bundle(1), fakes.arc(1)):
+        assert part in text, f"{part!r} is not in {text!r}"
+
+
+def test_tenstorrent_probe_refuses_a_host_without_cards(probes: ModuleType, core: ModuleType, tmp_path: Path) -> None:
+    message = refusal(core, probes.TenstorrentProbe(root=tmp_path / "empty", access=Access(allow=True)))
+    assert "/dev/tenstorrent" in message and str(tmp_path) not in message, "the host path, never the joined one"
+    write_files(tmp_path / "bare", {"dev/tenstorrent/by-id/wormhole-SYNTHETIC0": ""})
+    assert "numbered" in refusal(core, probes.TenstorrentProbe(root=tmp_path / "bare", access=Access(allow=True)))
+
+
+def test_tenstorrent_probe_leaves_out_a_card_it_cannot_use_naming_why(probes: ModuleType, tmp_path: Path) -> None:
+    host = tt_host(tmp_path / "host")
+    (host.class_dir(2) / "tt_serial").write_bytes(b"")
+    found = probes.TenstorrentProbe(root=host.root, access=lambda path: Path(path).name != "1").probe()
+    assert sorted(found.by_index) == [0], found.by_index
+    assert "/dev/tenstorrent/1" in found.refused[1] and "read and write" in found.refused[1]
+    assert "tt_serial" in found.refused[2]
+    assert found.count == 3, "count is every numbered node, usable or not"
+
+
+def test_tenstorrent_probe_opens_no_device_node(
+    probes: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = tt_host(tmp_path / "host")
+    opened = guard_opens(monkeypatch, host.root)
+    probes.TenstorrentProbe(root=host.root, access=Access(allow=True)).probe()
+    nodes = os.path.join(os.path.normcase(os.path.abspath(host.root)), "dev")
+    assert not [path for path in opened if path.startswith(nodes + os.sep)], opened
+
+
+def test_tenstorrent_inventory_gives_each_card_with_its_pci_address(probes: ModuleType, tmp_path: Path) -> None:
+    import tt_silicon_fakes as fakes
+
+    host = tt_host(tmp_path / "host", (0, 3))
+    inventory = probes.tenstorrent_inventory(host.root, Access(allow=True))
+    assert inventory.numbers == (0, 3)
+    card = inventory.cards[3]
+    assert (card.number, card.card_type, card.serial, card.address) == (3, "n300", fakes.serial(3), fakes.address(3))

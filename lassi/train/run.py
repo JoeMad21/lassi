@@ -8,9 +8,15 @@ load_train_recipe) and, before any directory exists, refuses:
   naming it and Agent Rule 9, first, so the refusal stands once the reward
   is carried out: RL rewards never execute on silicon (Agent Rule 9;
   Training Module, Safeguards). The registry entry is read, never the name,
-  and nothing is built; `lassi train` takes no human start (--silicon);
+  and nothing is built;
 - a key this layer does not carry out yet (NOT_CARRIED_OUT), naming every
   one the recipe sets, in that order;
+- a trainer.device on silicon (lassi.train.silicon SILICON_KINDS, a
+  Tenstorrent card; task P17.38) without TrainOptions.silicon, the human
+  start only `lassi train --silicon` sets, with a method other than sft
+  (naming Agent Rule 9 as OQ-100 (a) amends it), or without
+  trainer.network none (the worker in its own empty network namespace;
+  plans/spikes/tt-perf.md);
 - a runs root or train directory outside the run tree's location rules
   (lassi.core.runner resolve_runs_root, run_id_for, check_location; Agent
   Rule 7) and a train directory that exists;
@@ -20,12 +26,23 @@ load_train_recipe) and, before any directory exists, refuses:
   path as lassi run; never a fallback);
 - a Trainer whose framework() is missing, raises, or returns anything but a
   FrameworkBuild, or whose packages declaration is not a collection of
-  distribution names (Agent Rule 10);
+  distribution names (Agent Rule 10); a Trainer that declares
+  package_paths(), a staticmethod returning the site-packages directories
+  of the environment it trains in (the ttxla trainer's own venv), has its
+  packages' versions read there by path, never from LASSI's environment,
+  and one whose package_paths() raises is refused;
 - a Trainer that refuses its settings when built as factory(**config);
 - a Trainer without a callable check(), or whose check(recipe, data),
   called with the resolved recipe mapping and the TrainData, raises
   ValueError for a recipe key, value, or record it does not carry out
   (task P17.9).
+
+For a silicon device, once those refusals have passed and still before any
+directory exists, the run takes the cards' lock, refuses while a quarantine
+marker exists, and polls the cards (lassi.train.silicon CardGuard, sharing
+the tt_silicon executor's lock and marker; OQ-075), each refusal a
+RunError, and holds the lock until provenance.json's last write; train() is
+then called under the quarantine marker, which its ending settles.
 
 It then creates <runs root>/train/<train id>/ exclusively and writes
 recipe.resolved.yaml and provenance.json (status running) as ASCII with LF,
@@ -49,13 +66,15 @@ import dataclasses
 import importlib.metadata
 import platform
 from collections.abc import Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
-from lassi.core.capabilities import SILICON
-from lassi.core.devices import DEFAULT_PROBES, DeviceProbe, FrameworkBuild, device_driver
+from lassi.core.capabilities import DEVICE_KEY, SILICON
+from lassi.core.devices import DEFAULT_PROBES, DeviceProbe, FrameworkBuild, device_driver, parse_device
 from lassi.core.digest import tree_sha256
 from lassi.core.interfaces import TrainData, TrainJob, TrainResult
 from lassi.core.recipe import Recipe, load_train_recipe, resolved_yaml, train_data_source
@@ -72,6 +91,7 @@ from lassi.core.runner import (
     run_id_for,
 )
 from lassi.train import data as train_data
+from lassi.train import silicon as silicon_guard
 
 # Train recipe keys no Trainer carries out yet; a recipe that sets one is refused, never trained without it: the
 # episode and the executing reward (P7, P8), the adversary (P16), and export (P7). lora and rollout pass to the
@@ -108,6 +128,11 @@ class TrainOptions:
     - corpus_manifests: where data.corpus's tracked manifest directory is;
       None means lassi.train.data.CORPUS_DIR. The held-out suite a corpus
       manifest names is read from suites_dir.
+    - silicon: the human start of a training run on a card (task P17.38;
+      OQ-100 (a)); only `lassi train --silicon` sets it, never a recipe or
+      a variable. False refuses a silicon trainer.device.
+    - silicon_host: the host seams of the card guard
+      (lassi.train.silicon SiliconHost); None means the real host.
     """
 
     runs_root: Path | None = None
@@ -119,6 +144,8 @@ class TrainOptions:
     synthetic_dir: Path | None = None
     corpus_root: Path | None = None
     corpus_manifests: Path | None = None
+    silicon: bool = False
+    silicon_host: silicon_guard.SiliconHost | None = None
 
 
 # The options run_training uses when none are given: every field falls back as TrainOptions says.
@@ -150,6 +177,21 @@ def run_training(path: Path, options: TrainOptions = _DEFAULT_OPTIONS) -> Path:
     RunError; either leaves provenance.json with status failed.
     """
     training = _prepare(Path(path), options, datetime.now(timezone.utc))
+    guard = silicon_guard.card_guard(
+        training.device, training.train_dir.name, training.recipe.bindings[0].name, options.silicon_host
+    )
+    with nullcontext() if guard is None else guard.held():
+        _train_in_dir(training, guard)
+    print(f"train directory: {training.train_dir}", flush=True)
+    return training.train_dir
+
+
+def _train_in_dir(training: _Training, guard: silicon_guard.CardGuard | None) -> None:
+    """Create the train directory, write its records, run train() once (under the guard's marker), and close it.
+
+    provenance.json is rewritten complete with the steps, the checkpoints,
+    and their digests, or failed when anything after the first write raises.
+    """
     train_dir = training.train_dir
     recipe_yaml = resolved_yaml(training.recipe)
     manifest = _provenance(training)
@@ -168,15 +210,15 @@ def run_training(path: Path, options: TrainOptions = _DEFAULT_OPTIONS) -> Path:
             provenance=copy.deepcopy(manifest),
             out_dir=out_dir,
         )
-        steps, checkpoints = _checked_result(training.recipe, training.trainer.train(job), out_dir)
+        call = partial(training.trainer.train, job)
+        result = call() if guard is None else guard.run(call)
+        steps, checkpoints = _checked_result(training.recipe, result, out_dir)
         pins = _checkpoint_pins(training.recipe, out_dir, checkpoints)
     except BaseException:
         _write(train_dir / PROVENANCE_JSON, json_text(_final(manifest, FAILED)))
         raise
     final = {**_final(manifest, COMPLETE), "steps": steps, "checkpoints": list(checkpoints), "checkpoint_sha256": pins}
     _write(train_dir / PROVENANCE_JSON, json_text(final))
-    print(f"train directory: {train_dir}", flush=True)
-    return train_dir
 
 
 def _prepare(path: Path, options: TrainOptions, started: datetime) -> _Training:
@@ -189,6 +231,7 @@ def _prepare(path: Path, options: TrainOptions, started: datetime) -> _Training:
     recipe = load_train_recipe(path, roots=options.roots, registry=registry)
     _check_reward_executor(recipe, registry)
     _check_carried_out(recipe)
+    _check_silicon_start(recipe, options.silicon)
     runs_root = resolve_runs_root(options.runs_root, recipe)
     train_dir = runs_root / TRAIN_DIR / run_id_for(options.train_id, started)
     check_location(train_dir, f"the train directory {train_dir}")
@@ -238,6 +281,20 @@ def _check_reward_executor(recipe: Recipe, registry: Registry) -> None:
             f"{recipe.path}: reward.executor names Executor {name!r}, which runs programs on silicon; RL rewards "
             "never execute on silicon (Agent Rule 9; Training Module, Safeguards), so name ttsim or native"
         )
+
+
+def _check_silicon_start(recipe: Recipe, silicon: bool) -> None:
+    """Refuse a silicon trainer.device without the human start, or with a method other than sft (Agent Rule 9).
+
+    The device section was checked at load (parse_device); a binding without
+    one is left to the device probe's refusals.
+    """
+    section = recipe.bindings[0].config.get(DEVICE_KEY)
+    if not isinstance(section, Mapping):
+        return
+    spec = parse_device(dict(section), "trainer.device")
+    network = recipe.bindings[0].config.get("network")
+    silicon_guard.check_start(str(recipe.path), spec.kind, recipe.data.get("method"), network, silicon)
 
 
 def _check_carried_out(recipe: Recipe) -> None:
@@ -300,7 +357,8 @@ def _packages(recipe: Recipe, entry: Entry) -> dict[str, str | None]:
     """Return each declared package's installed version, None when it is not installed; RunError when malformed.
 
     The versions come from the installed distributions' metadata
-    (importlib.metadata), so no package is imported.
+    (importlib.metadata), so no package is imported: LASSI's own environment,
+    or the directories the Trainer's package_paths() names (task P17.38).
     """
     declared = getattr(entry.factory, "packages", None)
     is_collection = isinstance(declared, (list, tuple))
@@ -309,13 +367,34 @@ def _packages(recipe: Recipe, entry: Entry) -> dict[str, str | None]:
             f"{recipe.path}: {_who(entry)} declares packages as {declared!r}; it must be a list or tuple of "
             "distribution names, whose installed versions are its framework pins (Agent Rule 10)"
         )
-    versions: dict[str, str | None] = {}
-    for name in declared:
+    paths = _package_paths(recipe, entry)
+    return {name: _version(name, paths) for name in declared}
+
+
+def _package_paths(recipe: Recipe, entry: Entry) -> list[str] | None:
+    """Return the directories a Trainer's package_paths() names, or None to read LASSI's own environment."""
+    method = getattr(entry.factory, "package_paths", None)
+    if method is None:
+        return None
+    try:
+        paths = [str(path) for path in method()]
+    except Exception as error:
+        raise RunError(
+            f"{recipe.path}: {_who(entry)} could not name the environment its framework pins are read from: "
+            f"{type(error).__name__}: {error}"
+        ) from None
+    return paths
+
+
+def _version(name: str, paths: list[str] | None) -> str | None:
+    """Return distribution `name`'s version from LASSI's environment or from `paths`, None when not installed."""
+    if paths is None:
         try:
-            versions[name] = importlib.metadata.version(name)
+            return importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
-            versions[name] = None
-    return versions
+            return None
+    found = next(iter(importlib.metadata.distributions(name=name, path=paths)), None)
+    return None if found is None else found.version
 
 
 def _build(recipe: Recipe, binding: Binding, entry: Entry) -> Any:
@@ -394,8 +473,10 @@ def _provenance(training: _Training) -> dict[str, Any]:
 
     Its status is "running", and finished_utc, steps, checkpoints, and
     checkpoint_sha256 (each checkpoint's content digest, lassi.core.digest
-    tree_sha256) are null until a complete run closes it. device_records
-    holds the one DeviceRecord of trainer.device and driver its driver
+    tree_sha256) are null until a complete run closes it. network is
+    trainer.network as written, null when the trainer section names none (a
+    silicon run must name none; task P17.38). device_records holds the one
+    DeviceRecord of trainer.device and driver its driver
     (lassi.core.devices device_driver).
     framework_pins holds the FrameworkBuild and each declared package's
     version (null when not installed); data holds the split hash.
@@ -414,6 +495,7 @@ def _provenance(training: _Training) -> dict[str, Any]:
         "platform": platform.platform(),
         "python": platform.python_version(),
         "trainer": recipe.bindings[0].name,
+        "network": recipe.bindings[0].config.get("network"),
         "device_records": [dataclasses.asdict(training.device)],
         "driver": device_driver([training.device]),
         "framework_pins": copy.deepcopy(dict(training.framework_pins)),
