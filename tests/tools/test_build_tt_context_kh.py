@@ -57,7 +57,7 @@ KH_PACK = f"context/{KH_NAME}"
 FULL_PACK = "context/tt-metalium-5280a9cf-full"
 MANIFEST = "MANIFEST.yaml"
 KERNEL_TEMPLATE = REPO / "assets" / "prompts" / "tt-kh-v0" / "generate.txt"
-KERNEL_HEAD = REPO / "assets" / "context" / "tt-kernel-api-5280a9cf.head.txt"
+KERNEL_HEAD = REPO / "assets" / "context" / "tt-metalium-5280a9cf-kh.head.txt"
 KEYS = ["metalium_guide.ttkh", "host_api.ttkh", "kernel_api.ttkh"]
 # The kernel headers tt-kh-v0's generate.txt includes, in its order (the template's quoted "api/..." names).
 ROOTS = ["api/dataflow/dataflow_api.h", "api/compute/common.h", "api/compute/tile_move_copy.h",

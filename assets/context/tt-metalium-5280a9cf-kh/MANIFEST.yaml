@@ -128,7 +128,7 @@ entries:
   sha256: cd3a4eab48b69584f9c63ad7726a7708ff0cdaf43ab4db160c2715d25e9b4c53
 - key: kernel_api.ttkh
   sources:
-  - path: assets/context/tt-kernel-api-5280a9cf.head.txt
+  - path: assets/context/tt-metalium-5280a9cf-kh.head.txt
     sha256: 6fe5acdbe1f2384d2092e0106a9393b62befd02817d66df055f90574ce735a42
   - path: assets/prompts/tt-kh-v0/generate.txt
     sha256: cb6b4b715d879032e0c28490ff85f7e5c9e113ad4619a65c326ed172d80cf6b7
