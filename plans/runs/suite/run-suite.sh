@@ -239,6 +239,16 @@ for need in "${needs[@]}"; do
   fi
 done
 
+# bale-v0's pinned upstream files (task P17.40), fetched by commit and checked by sha256 under $LASSI_SCRATCH/bench;
+# without them the bale1 recipes are refused by the runner before any directory exists.
+if printf '%s\n' "${sweeps[@]}" | grep -q 'projects/lassi-demo/bale1'; then
+  if uv run tools/fetch_bench.py assets/bench/bale-v0.yaml > "$out/fetch-bale-v0.log" 2>&1; then
+    echo "$(ts) bale-v0 sources fetched and checked"
+  else
+    echo "$(ts) bale-v0 sources did not fetch; the bale1 recipes will be refused"; tail -3 "$out/fetch-bale-v0.log"
+  fi
+fi
+
 # 5. The sweep: run.sh once per model and recipe directory, one model served at a time.
 calls=()
 for slug in "${slugs[@]}"; do

@@ -10,7 +10,8 @@ unchanged"; "every tt-pairs-v0 item's held-out inputs pass its contract").
 - DIGESTS holds the sha256 of every file generate_inputs writes for every
   item, of every manifest under assets/bench/, that declares held-out
   inputs. tt-pairs-v0's were recorded at commit 9793777, before any P16.1
-  change, and adv-seeded-v0's when the suite was added (task P16.8), each by
+  change, adv-seeded-v0's when the suite was added (task P16.8), and
+  bale-v0's when that suite was added (task P17.40), each by
   loading each manifest with load_suite and running
   generate_inputs(item.inputs, item.seed, <a temporary directory>). They are
   known-answer values of the generator, not measurements. lassi-hecbench-10
@@ -59,6 +60,14 @@ DIGESTS = {
     ("adv-seeded-v0", "prefix_sum", "x"): "5ec454cf1992433075c7253e7141f77d9212eb246b7d83bb56b0e97f1ea7416f",
     ("adv-seeded-v0", "scale_i64", "x"): "1789264892c2376a62bf82c58174ad7d5e46de9747f9ebb3c7d4e885882dc463",
     ("adv-seeded-v0", "signed_root", "x"): "efc14187fdfe04ce8532f297e17eae3670b84c30e1660493471e5bcd96af5bec",
+    # bale-v0 (task P17.40), recorded when the suite was added, the same way.
+    ("bale-v0", "histo", "table_size"): "72c7b485c395de5e7870a64297d8522de4e3efb1a831220be3e199232ff8858d",
+    ("bale-v0", "histo", "index"): "3e64996a2e86e42d63b501571531444f118814d1978e06b2dd8ae65284d23708",
+    ("bale-v0", "ig", "table"): "4b37dc3b82356edb418dcdc25c6a21914391023fdaa2bb845ec9a08b50dc394a",
+    ("bale-v0", "ig", "index"): "a7ebbc50c79479011fb541648fcbfa2aa6fe28148ab06ea177c02c236eafe11b",
+    ("bale-v0", "triangle", "num_vertices"): "71bfa507b1eb86befe242cf42ca98b8cf247ff19e0d5052fdd2a818968114ec8",
+    ("bale-v0", "triangle", "edge_u"): "b3821383ae49846e59086b56c6541093d0376b8455d75895302c4f9499a82c0d",
+    ("bale-v0", "triangle", "edge_v"): "a9b4928c3e9ea18e311bc0387d9f44e332684dd16e4ab85171030745bdb63e36",
 }
 # tt-pairs-v0-ttkernel (task P17.36) and tt-pairs-v0-kh (task P17.39) hold tt-pairs-v0's items with the same inputs
 # and seeds, so their files are tt-pairs-v0's, byte for byte (tests/bench/test_ttkernel_suite.py and
@@ -69,7 +78,9 @@ DIGESTS.update({
     for (suite, item, name), digest in list(DIGESTS.items())
     if suite == "tt-pairs-v0"
 })
-RECORDED_SUITES = ("adv-seeded-v0", "lassi-hecbench-10", "tt-pairs-v0", "tt-pairs-v0-ttkernel", "tt-pairs-v0-kh")
+RECORDED_SUITES = (
+    "adv-seeded-v0", "bale-v0", "lassi-hecbench-10", "tt-pairs-v0", "tt-pairs-v0-ttkernel", "tt-pairs-v0-kh",
+)
 
 
 def harness() -> ModuleType:

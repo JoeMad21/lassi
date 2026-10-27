@@ -5,7 +5,7 @@ Diagnostic records (severity, code, file, line, column, message, stage). The
 compiler's raw stderr is kept as an attachment, the file STDERR_ATTACHMENT in
 the workdir, and never consumed downstream.
 
-Importing this package registers seven presets in
+Importing this package registers eight presets in
 lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
 
 - "nvcc-sm80" (nvcc.NvccSm80): CUDA with nvcc for sm_80.
@@ -15,6 +15,10 @@ lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
   proxy; never in faithful recipes, never a source of runtime numbers.
 - "gcc-native" (gcc.GccNative): C++ for the host CPU with the host g++ and
   the native row's flags (-O3 -fopenmp).
+- "gcc-openmp" (gcc.GccOpenMP): gcc-native's build for an OpenMP C++ target
+  language, plus the static OpenMP-construct tag (lassi.toolchains.openmp_tag;
+  capability static_tags): a program with no OpenMP construct is tagged,
+  never failed.
 - "ttmetal-host" (ttmetal_build.TtMetalHost): a TT host program with the
   host clang++-20 against the pinned tt-metal tree, with the pinned build's
   flags; kernel sources are placed for the kernel JIT, never compiled.
@@ -36,7 +40,7 @@ and a clean environment, factory(executable=<toolchains root>/<PREFIX_NAME>/
 <PIN_BIN>, runner=SandboxedCompileRunner(...)), so every compile runs in
 the sandbox (lassi.executors.sandbox, P0.20), and records the pin and that
 path (Agent Rule 10); the toolchains root is $LASSI_TOOLCHAINS. A preset
-with PIN and no PIN_BIN (gcc-native, ttmetal-host, hipcc-gfx942) uses a
+with PIN and no PIN_BIN (gcc-native, gcc-openmp, ttmetal-host, hipcc-gfx942) uses a
 host compiler the project does not install: the executable is the pin's
 EXECUTABLE, an absolute path, as given. One that also defines check_tree
 (ttmetal-host) builds against the pin's installed tree, which the runner
@@ -69,7 +73,7 @@ from lassi.toolchains._base import (
     capped_runner,
     subprocess_runner,
 )
-from lassi.toolchains.gcc import GccNative
+from lassi.toolchains.gcc import GccNative, GccOpenMP
 from lassi.toolchains.hipcc import HipccGfx942
 from lassi.toolchains.nvcc import NvccSm80, NvccToolchain
 from lassi.toolchains.nvcpp import NvcppCc80, NvcppToolchain
@@ -83,6 +87,7 @@ __all__ = [
     "CommandRunner",
     "EnvRunner",
     "GccNative",
+    "GccOpenMP",
     "HipccGfx942",
     "NvccSm80",
     "NvccToolchain",

@@ -1,0 +1,30 @@
+Translate the program below from $source_language to $target_language.
+
+The language ids mean:
+- cpp: a serial C++17 program for the host CPU, built by g++ 12 with -O3 -fopenmp. It runs on one thread and
+  holds no OpenMP construct.
+- omp: a C++17 program for the host CPU that runs its main computation in parallel with OpenMP, built by
+  g++ 12 with -O3 -fopenmp and run with OMP_NUM_THREADS set to the CPUs it is given. It shares work among
+  threads with OpenMP directives such as #pragma omp parallel for, and keeps threads from racing on shared
+  data with atomic updates, reductions, or private copies, so its outputs equal a serial run's.
+
+Both kinds of program take the same arguments: the input files, then the output files, in the order the
+source program takes them. Both read inputs and write outputs only through the harness header:
+  #include "lassi_io.h"
+  lassi_io_array x = {};  lassi_io_read(path, &x)  ...  lassi_io_free(&x);
+  lassi_io_write(path, name, dtype, rank, dims, data)
+lassi_io_read and lassi_io_write return 0 on success. Each output must keep the array name, dtype code
+(such as LASSI_IO_I64 or LASSI_IO_F32), and shape the source program writes, and its values must match
+the source program's. The harness provides lassi_io.h; never return it.
+
+The $source_language program to translate follows, each file in a fenced code block whose first line is
+// FILE: <path>
+
+$source_files
+Write the complete $target_language program as these files: $target_files.
+Keep the program's behavior and output unchanged.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

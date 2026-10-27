@@ -264,7 +264,11 @@ PROXY_CAPABILITIES = frozenset({"openmp_multicore"})
 # tells it apart, and its module (lassi/toolchains/gcc.py) lies outside this task. A capability declared there, read
 # here in place of the name, is the follow-up.
 NOT_UPSTREAM_TOOLCHAINS: Mapping[str, str] = MappingProxyType(
-    {"gcc-native": "a host g++ -fopenmp build upstream never used"}
+    {
+        "gcc-native": "a host g++ -fopenmp build upstream never used",
+        # gcc-native's build with the OpenMP-construct tag (task P17.40): as gcc-native, not upstream's.
+        "gcc-openmp": "a host g++ -fopenmp build upstream never used",
+    }
 )
 # Toolchain capabilities of a build whose programs upstream ran on a GPU: `openmp_offload` builds OpenMP target
 # regions for GPU offload (-mp=gpu). A recipe with faithful: true may not pair such a toolchain with an executor that

@@ -100,7 +100,12 @@ The runner checks either kind before any model is asked.
   when the target toolchain declares no guard (it wins over the rest);
   a build with no program sets `no-program` (or keeps no-guard); and a
   build with one takes the reading's: `guard-not-checked` for a null
-  reading, None for a true or false one. No prompt reads it.
+  reading, None for a true or false one. No prompt reads it. Then the
+  target toolchain, when it declares static_tags (task P17.40; found by
+  capability), reads the same files and its tags (the OpenMP-construct
+  tag of gcc-openmp) follow the reading's diagnostics: parse-stage
+  warnings or notes with "guard-" codes, so they never enter a prompt,
+  change no stage or guard, and ask for no correction.
 - run_loop continues compile_loop's loop (it runs compile_loop first, which
   changes nothing when compile_loop already ran) and, when the executor runs
   programs (capability `runs_code`), runs each compiling attempt from its
@@ -454,11 +459,13 @@ from lassi.core.capabilities import (
     GUARD_CODE_PREFIX,
     HOST_COMPUTE_GUARD,
     SIMULATOR,
+    STATIC_TAGS,
     SUPPORTS_POWER,
     WATCHER_CODE,
     OutputFileOracle,
     declares,
     host_compute_reading,
+    static_tags,
     unload_before_run,
 )
 from lassi.core.files import parse_file_blocks, render_file_blocks
@@ -2699,6 +2706,8 @@ class CompileLoopStage:
         builder = "no bound toolchain" if toolchain is None else _toolchain_name(toolchain)
         if toolchain is not None and declares(toolchain, HOST_COMPUTE_GUARD):
             builder += f" ({HOST_COMPUTE_GUARD} after each build)"
+        if toolchain is not None and declares(toolchain, STATIC_TAGS):
+            builder += f" ({STATIC_TAGS} after each build)"
         source = f"the {context.prompts} fragments" if context.fragments else f"{context.prompts}/correct.txt"
         errors = "parsed diagnostics" if fix_on(context, "parsed_diagnostics") else "the raw compiler stderr"
         return (
@@ -2758,7 +2767,7 @@ class CompileLoopStage:
             stage_reached=COMPILED if result.artifact is not None else attempt.stage_reached,
         )
         if result.artifact is not None:
-            built = self._guarded(built)
+            built = self._tagged(self._guarded(built))
         else:
             built = _with_reason(built, NO_PROGRAM if _target_guarded(self.context) else NO_GUARD)
         trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], built])
@@ -2788,6 +2797,22 @@ class CompileLoopStage:
         reason = GUARD_NOT_CHECKED if reading.host_compute is None else None
         guards = dataclasses.replace(attempt.guards, host_compute=reading.host_compute, host_compute_not_checked=reason)
         return dataclasses.replace(attempt, guards=guards, diagnostics=[*attempt.diagnostics, *reading.diagnostics])
+
+    def _tagged(self, attempt: Attempt) -> Attempt:
+        """Return `attempt` with the target toolchain's static tags after its diagnostics (task P17.40).
+
+        The toolchain is found by capability (static_tags), never by name, and
+        is given the attempt's files and the item's support files for the
+        target language. Tags change no stage and no guard, and a tag outside
+        the guard contract raises ValueError, which stops the run before the
+        attempt is recorded.
+        """
+        context = self.context
+        toolchain = _toolchain(context, context.direction.target)
+        if not declares(toolchain, STATIC_TAGS):
+            return attempt
+        tags = static_tags(toolchain, attempt.files, _support_files(context, context.direction.target))
+        return dataclasses.replace(attempt, diagnostics=[*attempt.diagnostics, *tags]) if tags else attempt
 
     def _build(self, files: Mapping[str, str], workdir: Path) -> BuildResult:
         """Build `files` in `workdir`; a file name the filesystem refuses becomes an "unwritable" error.

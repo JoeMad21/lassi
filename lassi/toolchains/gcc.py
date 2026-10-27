@@ -1,4 +1,4 @@
-"""The host g++ toolchain adapter, registered as Toolchain "gcc-native" (bible Component Interfaces, Toolchain).
+"""The host g++ toolchain adapters: Toolchains "gcc-native" and "gcc-openmp" (bible Component Interfaces, Toolchain).
 
 GccNative compiles C++ for the host CPU with one g++ command carrying the
 native row's flags (bible Execution Backends), in this order:
@@ -14,6 +14,16 @@ runner takes the pin's EXPECT_VERSION-checked EXECUTABLE as the compiler
 instead of a path under the toolchains root (lassi.core.runner
 build_toolchain). It declares `diagnostics` and `emits_warnings`, and no
 offload capability: OpenMP here runs on the host.
+
+GccOpenMP, registered as "gcc-openmp" (task P17.40), is the same build, pin,
+flags, and command line for a target language that is meant to be OpenMP
+C++ on the host CPU, plus the capability static_tags
+(lassi.core.capabilities): its static_tags(files, harness) is the
+OpenMP-construct tag (lassi.toolchains.openmp_tag read_openmp_tags), which
+compile_loop appends to an attempt that holds no OpenMP construct, tagged
+and never failed (bible Harness Contract). A recipe binds it to the OpenMP
+language and gcc-native to the serial one, since toolchain bindings carry
+no config.
 
 parse_diagnostics reads GCC's stderr, with the patterns shared with the
 other adapters (lassi.toolchains._stderr) and one of its own:
@@ -46,6 +56,7 @@ import dataclasses
 import re
 from collections.abc import Mapping, Sequence
 
+from lassi.core.capabilities import STATIC_TAGS
 from lassi.core.record import Diagnostic
 from lassi.core.registry import register
 from lassi.toolchains._base import OUTPUT, CommandRunner, CompilerToolchain
@@ -59,6 +70,7 @@ from lassi.toolchains._stderr import (
     fold_built_column,
     parse_stderr,
 )
+from lassi.toolchains.openmp_tag import read_openmp_tags
 
 # The native row's flags (bible Execution Backends), in order; toolchains/gcc.pin records the same FLAGS.
 NATIVE_FLAGS = ("-O3", "-fopenmp")
@@ -123,3 +135,17 @@ class GccNative(CompilerToolchain):
     def parse(self, stderr: str, files: Mapping[str, str]) -> list[Diagnostic]:
         """Return the Diagnostics in g++'s `stderr` (see parse_diagnostics)."""
         return parse_diagnostics(stderr, files)
+
+
+@register("Toolchain", "gcc-openmp")
+class GccOpenMP(GccNative):
+    """GccNative's build for an OpenMP C++ target, plus the OpenMP-construct tag (task P17.40; module docstring)."""
+
+    name = "gcc-openmp"
+    capabilities = GccNative.capabilities | {STATIC_TAGS}
+
+    @staticmethod
+    def static_tags(files: Mapping[str, str], harness: Mapping[str, str]) -> tuple[Diagnostic, ...]:
+        """Return the OpenMP-construct tags of the model's `files`; the harness files are never read."""
+        del harness
+        return read_openmp_tags(files)

@@ -1193,3 +1193,17 @@ Options:
 - (c) Leave the four items out of the ttkernel arm. Consequence: the arm tests loopback only.
 Recommendation: (a): it is small, keeps the same trusted host program with arguments added, and lets the MLIR path run on every item soon; (b) can replace it later.
 Answer:
+
+## OQ-104 bale: Which Apps And Directions First, Their Splits, And Copy Or Fetch
+State: CLOSED
+Kind: decision
+Blocks: P17.40
+Evidence: plans/spikes/bale.md (sections 7 and 12; bale pinned at github.com/jdevinney/bale 1b8f673b56645b2bd74a8af6213462bbc9d559fe)
+Question: The owner asked on 2026-10-26 to add bale to the benchmark data. bale's own programs cannot be references as written (they generate their own inputs, write no result file, and their parallel versions need a multi-process launcher), so each item is a program written here on the lassi_io harness that follows bale's serial C kernel. Which apps and directions first, how are their splits assigned, and is bale's text copied or fetched?
+Options:
+- Scope: (a) histo, ig, and triangle in C++ <-> OpenMP C++ on the host, with a tag on an omp candidate that has no OpenMP construct; (b) all nine serial apps, after a property oracle for toposort and randperm; (c) a pilot of histo and ig; (d) bale's parallel models as references.
+- Splits: (a) every item unassigned until the owner assigns them (training, prompt tuning, and harvest refused); (b) assign now by app; (c) all eval; (d) all train; (e) a development set, as OQ-083 (b) made tt-pairs-v0.
+- Copy or fetch: (a) fetch only, each upstream serial C file named by path and sha256, no bale text tracked; (b) copy the kernel functions with IDA's notice; (c) vendor the serial C directory.
+Recommendation: scope (a), splits (a), copy or fetch (a): no new toolchain or install, nothing that cannot be undone, and no upstream text in the repository, as for every other suite.
+Answer: The owner, in the working session of 2026-10-26: scope "histo, ig, triangle: C++ <-> OpenMP"; "Benchmark items for testing" (splits unassigned); "Fetch only, pinned by sha256".
+Applied: 2026-10-26. Task P17.40 adds the suite bale-v0 (assets/bench/bale-v0.yaml) with the three items unassigned, the upstream serial C files named by path and sha256 and fetched, never tracked, and the recipes projects/lassi-demo/bale1.

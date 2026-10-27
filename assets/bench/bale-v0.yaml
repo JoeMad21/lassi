@@ -1,0 +1,130 @@
+# bale-v0 (bible Benchmark Suites; task P17.40; plans/spikes/bale.md): three apps of bale, re-hosted on the LASSI
+# harness, as the owner asked on 2026-10-26 ("I want to add the BALE benchmark (not really a benchmark but you get the
+# idea) into the dataset") and answered the spike's questions: scope (a), histo, ig, and triangle in serial C++ <->
+# OpenMP C++ on the host CPU; every item unassigned until the owner assigns it (training, prompt tuning, and harvest refused); fetch only, no
+# bale text tracked. bale is github.com/jdevinney/bale ("bale is not a collection of benchmarks", README.md:15) under
+# the Institute for Defense Analyses' BSD-3-Clause-style license with a DFARS clause (its LICENSE; Copyright (c) 2020,
+# Institute for Defense Analyses).
+# Each item pairs two programs written here and tracked under assets/bench/bale-v0/<item>/: cpp/<item>.cpp, a serial
+# C++ program that follows the generic serial kernel of bale's src/other_serial/C/<item>.c, and omp/<item>.cpp, the
+# same computation with OpenMP on the host CPU. Both read their held-out inputs and write their outputs through
+# lassi_io.h and are built by the pinned host g++ (toolchains/gcc.pin, g++-12 -O3 -fopenmp): cpp by gcc-native, and
+# omp by gcc-openmp, the same build plus the OpenMP-construct tag (bible Harness Contract). No bale text is tracked:
+# each language names bale's serial C file of its app as the support file upstream/<item>.c, by its path at the pin
+# and its sha256 (read from the blobs at the pin, plans/spikes/bale.md section 3), which tools/fetch_bench.py fetches
+# into $LASSI_SCRATCH/bench and checks; gcc-native never compiles a .c file, and no prompt shows it.
+# Deviations from bale, recorded rather than hidden (Agent Rule 4): the inputs are drawn by generate_inputs from each
+# item's seed, not by bale's Knuth generator (knuth_rng_double_2019.h is not used); the outputs are lassi_io files,
+# where bale keeps its results in memory and reports to stderr; triangle's graph is built from drawn pairs by the
+# programs here, not by bale's Erdos-Renyi generator; ig's table is drawn, where bale fills it with minus each index.
+# The spike's sketch shared a graph header, bale_graph.h, between triangle's programs; here each program builds its
+# graph itself, so the whole computation is in the program a model reads (a harness header's text is never shown).
+# Per item: split unassigned until the owner assigns it (unassigned, not OQ-083 (b)'s development set: evaluation runs read it, never
+# training, prompt tuning, or corpus harvest; Agent Rule 5); seed, inputs (at most 2**20 elements each), and outputs
+# give the program's arguments, the input files in input order and then the output files (lassi.bench.registry
+# program_args); tolerance is exact (max_abs 0), as bale's own checks are exact for these apps, and every output is
+# i64, which binary_io compares exactly anyway. No item declares a contract, so each item's contract is its held-out
+# spec: a constant scalar (table_size, num_vertices) cannot be widened, since a contract cannot relate inputs.
+suite: bale-v0
+repo: https://github.com/jdevinney/bale.git
+# master at the spike's reading, committed 2022-06-26 ("typo"); every source file dates from bale 3.0's first commit
+# (2020-10-23). The repository has no tags or releases.
+commit: 1b8f673b56645b2bd74a8af6213462bbc9d559fe
+items:
+  histo:
+    split: unassigned
+    seed: 4101
+    # counts[index[i]] += 1 over every update: the generic serial loop of bale's histo (src/other_serial/C/histo.c,
+    # histo_generic). bale draws index with its Knuth generator; here generate_inputs draws it. Sizes are bale's
+    # defaults, 2**20 bins and 100000 updates (default_app_opts.h:13-14). table_size is a constant scalar, since a
+    # contract cannot bound index by another input. The omp program adds atomically (bale's AGP analog).
+    inputs:
+      - {name: table_size, dtype: i64, shape: [], dist: integers, lo: 1048576, hi: 1048577}
+      - {name: index, dtype: i64, shape: [100000], dist: integers, lo: 0, hi: 1048576}
+    outputs: [counts]  # i64 [1048576] on both sides
+    tolerance: {metric: max_abs, threshold: 0}  # exact: bale's check requires every count to return to 0
+    languages:
+      cpp:
+        dir: assets/bench/bale-v0/histo/cpp
+        tracked: true
+        files: [histo.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/histo.c:
+            upstream: src/other_serial/C/histo.c
+            sha256: 8391f5a020ff67d6d3bcb55558bec37b3a97ee4f6176d8cbc7d605dd53c3ccf2
+      omp:
+        dir: assets/bench/bale-v0/histo/omp
+        tracked: true
+        files: [histo.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/histo.c:
+            upstream: src/other_serial/C/histo.c
+            sha256: 8391f5a020ff67d6d3bcb55558bec37b3a97ee4f6176d8cbc7d605dd53c3ccf2
+  ig:
+    split: unassigned
+    seed: 4102
+    # tgt[i] = table[index[i]]: the generic serial gather of bale's ig (src/other_serial/C/ig.c, ig_generic). bale
+    # fills table with minus each index so that its check is tgt[i] == -index[i]; here table is drawn too, so a
+    # candidate that returns -index cannot pass. Sizes are bale's defaults (default_app_opts.h:16-17); table holds
+    # 2**20 elements, the cap per input.
+    inputs:
+      - {name: table, dtype: i64, shape: [1048576], dist: integers, lo: -1099511627776, hi: 1099511627776}
+      - {name: index, dtype: i64, shape: [100000], dist: integers, lo: 0, hi: 1048576}
+    outputs: [tgt]  # i64 [100000] on both sides
+    tolerance: {metric: max_abs, threshold: 0}  # exact: bale's check compares every gathered value
+    languages:
+      cpp:
+        dir: assets/bench/bale-v0/ig/cpp
+        tracked: true
+        files: [ig.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/ig.c:
+            upstream: src/other_serial/C/ig.c
+            sha256: 2cb08618a08eddb9979ca27c5cb5b259325ca34d766eae34f0a9ef961c2144d0
+      omp:
+        dir: assets/bench/bale-v0/ig/omp
+        tracked: true
+        files: [ig.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/ig.c:
+            upstream: src/other_serial/C/ig.c
+            sha256: 2cb08618a08eddb9979ca27c5cb5b259325ca34d766eae34f0a9ef961c2144d0
+  triangle:
+    split: unassigned
+    seed: 4103
+    # The triangles of an undirected graph: for each nonzero (i, j) of its strictly lower-triangular adjacency L, the
+    # number of columns rows i and j of L share, found by one merge over the two sorted rows; the generic kernel of
+    # bale's triangle (src/other_serial/C/triangle.c, triangles_matrix, called on (L, L)), which needs sorted rows.
+    # bale builds L with its Erdos-Renyi generator; here each program builds it from the drawn pairs: a pair with
+    # u == v is dropped, the rest are stored as (max, min), repeats dropped, rows sorted. 50000 vertices, bale's default
+    # (default_app_opts.h:27), and 500000 pairs, about bale's 10 nonzeros per row of L (std_options.c:105); about 1333
+    # triangles expected for such a graph (PROJECTED, n^3 p^3 / 6 with n p = 20).
+    inputs:
+      - {name: num_vertices, dtype: i64, shape: [], dist: integers, lo: 50000, hi: 50001}
+      - {name: edge_u, dtype: i64, shape: [500000], dist: integers, lo: 0, hi: 50000}
+      - {name: edge_v, dtype: i64, shape: [500000], dist: integers, lo: 0, hi: 50000}
+    outputs: [triangles]  # an i64 scalar (shape []) on both sides
+    tolerance: {metric: max_abs, threshold: 0}  # exact: a count
+    languages:
+      cpp:
+        dir: assets/bench/bale-v0/triangle/cpp
+        tracked: true
+        files: [triangle.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/triangle.c:
+            upstream: src/other_serial/C/triangle.c
+            sha256: 07b3d5ba0858fb0667a75b6044e5e7c14741b0c45600582881d7815886a4237f
+      omp:
+        dir: assets/bench/bale-v0/triangle/omp
+        tracked: true
+        files: [triangle.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/triangle.c:
+            upstream: src/other_serial/C/triangle.c
+            sha256: 07b3d5ba0858fb0667a75b6044e5e7c14741b0c45600582881d7815886a4237f

@@ -1,0 +1,49 @@
+# The first bale-v0 pass (task P17.40; the owner, 2026-10-26: "I want to add the BALE benchmark (not really a
+# benchmark but you get the idea) into the dataset", and the answers to plans/spikes/bale.md: scope (a), every item
+# unassigned, fetch only). omp -> cpp: the model turns each OpenMP C++ program of bale-v0 (histo, ig, triangle) into
+# a serial C++ program for the host CPU. every bale-v0 item is unassigned until the owner
+# assigns it (not OQ-083 (b)'s development set: training, prompt tuning, and harvest are refused), so no result
+# here is a held-out evaluation (Agent Rule 5).
+# Both languages build with the pinned host g++ (toolchains/gcc.pin: g++-12 -O3 -fopenmp): cpp with gcc-native, omp
+# with gcc-openmp, which also tags, never fails, an omp candidate that holds no OpenMP construct (code
+# guard-openmp-none in the attempt's diagnostics, never in a prompt; bible Harness Contract); in this direction the
+# candidates are cpp, so none is tagged, and an OpenMP program returned unchanged passes (gcc-native builds
+# with -fopenmp; a known case, not checked). Every program runs in the sandbox on the host CPU (the native executor).
+# Both references are built and run first and must agree exactly (fixes.baseline_both under each item's max_abs 0),
+# and a candidate's outputs must equal the cpp reference's exactly (binary_io max_abs 0; every output is i64).
+# gpt-oss-120b with sweep8's model settings (reasoning effort medium, a budget of 32768 tokens, timeout 3600 s;
+# OQ-080, OQ-087), 3 samples per item, a correction cap of 8, and a wrong output corrected until the cap
+# (loop.correct_on_mismatch). No adversary stage: the fuzzer has not been tried on these items.
+# Times are PROJECTED, none measured: 9 trials, each at most 9 model requests of at most 3600 s; sweep7's 10
+# gpt-oss-120b recipes, 9 trials or fewer each, ran side by side for about two hours (plans/runs/2026-10-25-night.md),
+# so this recipe and cpp-to-omp side by side are PROJECTED to take one to two hours, and every reference run well
+# under the 30 s floor of each attempt's wall limit.
+# Before the run, on the build host: `uv run tools/fetch_bench.py assets/bench/bale-v0.yaml` (bale's three serial C
+# files, by path and sha256 at the pin, into $LASSI_SCRATCH/bench; support files that are never compiled or shown).
+extends: base  # projects/base.yaml: sampling, runs root, sandbox, and report choices
+faithful: false  # nothing here reproduces an upstream run
+model:
+  backend: openai_compat  # furiosa-llm's OpenAI-compatible server, as sweep8 binds it
+  id: furiosa-ai/gpt-oss-120b  # served at revision v2026.4 on 4 RNGD cards (plans/runs/suite/models.tsv)
+  timeout_s: 3600
+llm:
+  sampling:
+    max_tokens: 32768  # OQ-080's budget, the reasoning counted in it
+    reasoning_effort: medium
+extract:
+  unfenced_file_lines: true  # as sweep8 on
+bench:
+  suite: bale-v0  # assets/bench/bale-v0.yaml
+  split: unassigned  # every bale-v0 item, unassigned until the owner assigns it
+directions: [{source: omp, target: cpp}]
+prompts: cpu-omp-v0  # assets/prompts/cpu-omp-v0/: the serial C++ and host OpenMP C++ template set
+toolchain:
+  cpp: gcc-native  # the pinned host g++ with the native row's flags
+  omp: gcc-openmp  # the same build, plus the OpenMP-construct tag
+executor: {kind: native}  # every reference and candidate runs in the sandbox on the host CPU
+fixes:
+  baseline_both: true  # build and run both references, which must agree under the item's tolerance
+stages: [baseline, generate, compile_loop, run_loop, oracle]
+oracle: {kind: binary_io, metric: max_abs, threshold: 0}  # exact
+trials: {n: 3}
+loop: {max_corrections: 8, correct_on_mismatch: true}

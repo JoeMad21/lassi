@@ -85,6 +85,13 @@ GUARD_CODE_PREFIX = "guard-"
 # A guard reads program text and never fails an attempt: its diagnostics are parse-stage warnings or notes.
 GUARD_STAGE = "parse"
 GUARD_SEVERITIES = frozenset({"warning", "note"})
+# The capability of a Toolchain that tags a built program by reading its text (task P17.40; the Harness Contract's
+# OpenMP-construct tag): it provides static_tags(files, harness) (StaticTagger). compile_loop asks the target
+# language's toolchain for its tags after every build that gave a program, by this capability, never by the
+# toolchain's name, and appends them to the attempt's diagnostics. A tag keeps the guard contract: a parse-stage
+# warning or note whose code starts with GUARD_CODE_PREFIX, so it never enters a correction prompt, changes no stage,
+# and asks for no correction; it sets no guard outcome.
+STATIC_TAGS = "static_tags"
 
 # The capability of a component that takes a device section (task P17.2; lassi.core.devices): its recipe section
 # must hold the key DEVICE_KEY, a mapping {kind, indices} that lassi.core.devices.parse_device reads at load, and
@@ -221,15 +228,53 @@ def host_compute_reading(
 
 def _reading_problem(reading: object) -> str | None:
     """Return why `reading` is outside the guard contract (see host_compute_reading), or None when it is inside."""
-    from lassi.core.record import Diagnostic  # lassi.core.record imports this module through lassi.core.interfaces
-
     if not isinstance(reading, HostComputeReading):
         return f"is a {type(reading).__name__}, not a HostComputeReading"
     if not (reading.host_compute is None or isinstance(reading.host_compute, bool)):
         return f"has host_compute {reading.host_compute!r}, not True, False, or None"
     if not isinstance(reading.diagnostics, tuple):
         return f"has diagnostics of type {type(reading.diagnostics).__name__}, not a tuple"
-    for item in reading.diagnostics:
+    return _diagnostics_problem(reading.diagnostics)
+
+
+class StaticTagger(Protocol):
+    """A Toolchain that declares STATIC_TAGS."""
+
+    def static_tags(self, files: Mapping[str, str], harness: Mapping[str, str]) -> tuple[Diagnostic, ...]:
+        """Return the tags of the program built from `files` (the model's) and `harness` (the support files)."""
+        ...
+
+
+def static_tags(toolchain: object, files: Mapping[str, str], harness: Mapping[str, str]) -> tuple[Diagnostic, ...]:
+    """Return `toolchain`'s static tags when it declares STATIC_TAGS, else () (task P17.40).
+
+    The method of a toolchain that does not declare the capability is never
+    called. A ValueError naming the toolchain (its `name`, else its class
+    name) and the capability refuses a declared capability without a
+    callable static_tags, and tags outside the guard contract: not a tuple,
+    or an item that is not a Diagnostic, has a stage other than GUARD_STAGE,
+    a severity outside GUARD_SEVERITIES, or a code that is not a str
+    starting with GUARD_CODE_PREFIX. So a tag can never add an error, change
+    a stage, or start a correction.
+    """
+    if not declares(toolchain, STATIC_TAGS):
+        return ()
+    name = getattr(toolchain, "name", type(toolchain).__name__)
+    method = getattr(toolchain, STATIC_TAGS, None)
+    if not callable(method):
+        raise ValueError(f"Toolchain {name!r} declares {STATIC_TAGS!r} but has no callable {STATIC_TAGS}()")
+    tags = method(files, harness)
+    problem = f"are a {type(tags).__name__}, not a tuple" if not isinstance(tags, tuple) else _diagnostics_problem(tags)
+    if problem is not None:
+        raise ValueError(f"Toolchain {name!r} declares {STATIC_TAGS!r}, but its tags {problem}")
+    return cast("tuple[Diagnostic, ...]", tags)
+
+
+def _diagnostics_problem(diagnostics: tuple[object, ...]) -> str | None:
+    """Return why a guard's or a tagger's diagnostics break the guard contract, or None when they keep it."""
+    from lassi.core.record import Diagnostic  # lassi.core.record imports this module through lassi.core.interfaces
+
+    for item in diagnostics:
         if not isinstance(item, Diagnostic):
             return f"holds a {type(item).__name__} among its diagnostics, not a Diagnostic"
         if item.stage != GUARD_STAGE or item.severity not in GUARD_SEVERITIES:

@@ -1,0 +1,24 @@
+Your $target_language program failed. The files from your last answer are below, each in a
+fenced code block whose first line is // FILE: <path>. If there are none, your answer held no usable
+file block.
+
+$files
+What went wrong follows. Each problem the build reported is listed one per line (severity,
+file:line:column, [code], message). A failed run is one sentence on how the program ended, then the
+standard error it wrote, if any.
+$diagnostics
+
+Remember what the language ids mean:
+- cpp: a serial C++17 program for the host CPU, built by g++ 12 with -O3 -fopenmp. It runs on one thread and
+  holds no OpenMP construct.
+- omp: a C++17 program for the host CPU that runs its main computation in parallel with OpenMP, built by
+  g++ 12 with -O3 -fopenmp and run with OMP_NUM_THREADS set to the CPUs it is given.
+Both kinds of program read inputs and write outputs only through "lassi_io.h", with the input files and
+then the output files as arguments. The harness provides lassi_io.h; never return it.
+
+Fix every error and return the complete corrected $target_language program as these files: $target_files.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.
