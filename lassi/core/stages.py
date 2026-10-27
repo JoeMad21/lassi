@@ -71,8 +71,10 @@ The runner checks either kind before any model is asked.
   filled with the source files and the item's kernels (kernel_files) in
   FILE blocks, the target's trusted host program (host_files, task P17.36;
   correct.txt and the mismatch template get it too), and the source
-  lowered to MLIR (source_mlir, "" until a frontend is bound), as the only
-  message; with a fragment set it sends the
+  lowered to MLIR (source_mlir: under the recipe's source_mlir section,
+  task P17.41, the item's compute-only C unit lowered by the run's
+  lowering toolchain, rendered with SOURCE_MLIR_PROMPT, lowered_source;
+  else ""), as the only message; with a fragment set it sends the
   direction's system prompt and the generation prompt
   (lassi.core.fragments.generation_prompt), the source read as text mode
   reads it.
@@ -251,6 +253,21 @@ The runner checks either kind before any model is asked.
   skeleton), and a gap attempt counts, for loop.restart_after, as a
   correction that did not reach a clean run.
 
+  Addressing gaps (loop.coord_gap_as_error; task P17.41). An opt-in the
+  loader refuses under faithful: true and the runner with a fragment set;
+  with it off or absent nothing here changes. ttsim stops a kernel that
+  addresses a NOC coordinate mapping to no tile it simulates with the
+  finding `UnimplementedFunctionality: coord_to_tile: coord (<x>,<y>)`,
+  a gap by class, though the cause is the kernel's addressing (every built
+  ttkernel attempt of the window run of 2026-10-26 read DRAM at (0, 0);
+  plans/spikes/mlir-issues.md). With it true, a run that stopped at a gap
+  whose findings hold that finding (coord_finding) is a failed run: S4
+  with a run-error (addressing_message), no gap note, corrected through
+  correct.txt with addressing_text (the coordinate, an addressing error
+  and not a simulator limit, the bank rule for DRAM, the findings, and the
+  stderr) under the one count and cap, and left at the cap it ends the
+  trial at correction-cap. A gap of any other finding stays a gap.
+
 Context blocks under a template set (with_context_blocks). Each model
 prompt after summarize_context (generate.txt, every correct.txt, and
 MISMATCH_PROMPT) gets, before it, the knowledge block, KNOWLEDGE_PROMPT
@@ -286,7 +303,18 @@ generation prompt gets a core block, CORE_API_PROMPT in words that name no
 error, holding every declaration of the header parts lookup.core names, in
 pack order, each skipped whole past lookup.max_chars (core_declarations). A run-error correction and an oracle
 mismatch's correction get none, and with nothing carried there is no
-block. Each block goes
+block. With the recipe's dialect_lookup section (task P17.41;
+lassi.core.recipe DIALECT_LOOKUP, an opt-in the loader refuses under
+faithful: true and the runner refuses with a fragment set, a template set
+that cannot render DIALECT_TEMPLATES, or a definitions tree that does not
+load), a compile correction whose listed errors include errors of an MLIR
+tool's parse and verify step (VERIFY_STAGE) gets the dialect block after
+the looked-up block: for each name those errors give or point at
+(verify_names), the pinned dialect's exact definition of it, then for
+each name the dialect lacks its nearest names, then the definitions of
+those nearest names, each definition skipped whole past
+dialect_lookup.max_chars (dialect_feedback, dialect_block), with one
+DIALECT_CODE note on its Request (dialect_note). Each block goes
 before the prompt without its trailing line feeds, one blank line apart
 (with_blocks), and a request that carried passages gets one
 RETRIEVED_CODE note on its Request (retrieved_note), one that carried
@@ -446,6 +474,7 @@ import dataclasses
 import difflib
 import errno
 import functools
+import hashlib
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -483,6 +512,9 @@ from lassi.core.interfaces import (
 )
 from lassi.core.progress import ATTEMPT, REQUEST_SENT, Observer, notify
 from lassi.core.recipe import (
+    DIALECT_LOOKUP,
+    DIALECT_NEAREST,
+    DIALECT_NEAREST_DEFAULT,
     EXAMPLES,
     EXAMPLES_CORRECT,
     EXAMPLES_GENERATE,
@@ -498,6 +530,7 @@ from lassi.core.recipe import (
     SKELETON,
     SKELETON_CORRECT,
     SKELETON_GENERATE,
+    SOURCE_MLIR,
     Recipe,
 )
 from lassi.core.record import (
@@ -526,6 +559,7 @@ from lassi.core.store import BlobStore, TextStore
 from lassi.core.tolerance import STAT_FIELDS, within
 from lassi.executors.workdir import build_dir, fresh_build_dir
 from lassi.prompts import render
+from lassi.prompts.dialect_defs import DialectDefs, error_names, line_names, nearest_names
 from lassi.prompts.examples import Example
 from lassi.prompts.retrieval import SCORE_DIGITS, Index, Passage, query_from_diagnostic
 from lassi.prompts.retrieval import _identifiers as message_identifiers
@@ -632,6 +666,22 @@ GAP_LIMIT = (
     "cannot run."
 )
 GAP_FINDINGS = "the simulator reported:"
+# The opt-in key of the loop section that reads ttsim's coord_to_tile gap as an addressing error (task P17.41), and
+# the finding it reads: `UnimplementedFunctionality: coord_to_tile: coord (<x>,<y>)`, which ttsim reported for every
+# built ttkernel attempt of the window run of 2026-10-26, each of which addressed DRAM at the NOC coordinate (0, 0),
+# a coordinate that maps to no tile ttsim simulates (plans/spikes/mlir-issues.md, Half 1, finding 2). It is read by
+# its class and function in the finding's message (lassi.executors.ttsim read_findings writes `<class>: <function>:
+# <message>`), never by the executor's name. ADDRESSING_HEAD and ADDRESSING_TAIL are the words of its correction
+# [DESIGN]: an addressing error in the kernel, not a limit of the simulator, with the bank rule for DRAM.
+COORD_GAP_AS_ERROR = "coord_gap_as_error"
+COORD_GAP_CLASS = "UnimplementedFunctionality"
+_COORD_FINDING = re.compile(r"UnimplementedFunctionality: coord_to_tile: coord (?P<coord>\([0-9]{1,6}, ?[0-9]{1,6}\))")
+ADDRESSING_HEAD = "the program built, but its run stopped when a kernel addressed the NOC coordinate "
+ADDRESSING_TAIL = (
+    ", which is no tile of the simulated device: an addressing error in the kernel, not a limit of the simulator. "
+    "Address a DRAM buffer through its bank, never by a NOC coordinate: a NOC coordinate names a tile of the grid, "
+    "such as a core whose L1 it reaches."
+)
 # The stage name of a restart's Request and progress events (loop.restart_after, task P17.25): its own, never the
 # name of the loop that asked for it.
 RESTART = "restart"
@@ -684,6 +734,16 @@ GENERATE_FIELDS = (
     "source_language", "target_language", "source_files", "target_files", "kernel_files", "host_files", "source_mlir"
 )
 CORRECT_FIELDS = ("target_language", "files", "diagnostics", "target_files", "kernel_files", "host_files")
+# The template of the generation prompt's source_mlir field (task P17.41; the recipe's source_mlir section), with its
+# fields: the compute unit's tracked path, its function, the level, and the module. The runner renders it when the
+# recipe sets source_mlir. SOURCE_MLIR_CODE is the code of the note or warning on the generation request, FRONTEND_DIR
+# the directory under the trial's where the lowering runs, and _MLIR_OP an op name the note counts by dialect.
+SOURCE_MLIR_PROMPT = "source_mlir"
+SOURCE_MLIR_FIELDS = ("path", "function", "level", "mlir")
+SOURCE_MLIR_TEMPLATES = {SOURCE_MLIR_PROMPT: SOURCE_MLIR_FIELDS}
+SOURCE_MLIR_CODE = "source-mlir"
+FRONTEND_DIR = "frontend"
+_MLIR_OP = re.compile(r"(?<![\w.%#!^@])(affine|scf|memref|arith|math|func|llvm|linalg|cf|polygeist)\.[a-z_]+")
 # The template of an oracle mismatch's correction (loop.correct_on_mismatch) and its fields: `outputs` is the
 # Oracle's coarse per-output report (mismatch_text), in place of correct.txt's diagnostics.
 MISMATCH_PROMPT = "correct_mismatch"
@@ -729,6 +789,24 @@ CORE_API_PROMPT = "core_api"
 CORE_TEMPLATES = {CORE_API_PROMPT: LOOKED_UP_FIELDS}
 NEAREST_JOINER = ", "
 NEAREST_MIN_RATIO = 0.75
+# The templates of the dialect definitions block (task P17.41; the recipe's dialect_lookup section), with their
+# fields: the block, whose `definitions` are its entries one blank line apart; one definition, its name and its exact
+# text; and one name the dialect lacks, with its nearest names joined by NEAREST_JOINER. The runner renders all three
+# when the recipe sets dialect_lookup. DIALECT_CODE is the code of the note on a request that carried the block.
+DIALECT_PROMPT = "dialect_lookup"
+DIALECT_FIELDS = ("definitions",)
+DEFINITION_PROMPT = "dialect_definition"
+DEFINITION_FIELDS = ("name", "text")
+UNKNOWN_PROMPT = "dialect_unknown"
+UNKNOWN_FIELDS = ("name", "candidates")
+DIALECT_TEMPLATES = {
+    DIALECT_PROMPT: DIALECT_FIELDS, DEFINITION_PROMPT: DEFINITION_FIELDS, UNKNOWN_PROMPT: UNKNOWN_FIELDS,
+}
+DIALECT_CODE = "dialect-lookup"
+# The Diagnostic stage of an MLIR tool's parse and verify step, whose errors the dialect block reads (the stage
+# lassi.toolchains.ttkernel_build gives ttmlir-opt's first command, VERIFY_STAGE; Design Principle 8 keeps core from
+# importing it, so change the two together).
+VERIFY_STAGE = "verify"
 # The templates of the examples block (OQ-083 (b)), with their fields: the block, whose `examples` are the entries one
 # blank line apart, and one example, its name and its files as FILE blocks. The runner renders both when the recipe
 # sets examples. EXAMPLES_CODE is the code of the note on a request that carried examples.
@@ -835,7 +913,11 @@ class RunContext:
     `examples` is the run's worked examples pack (OQ-083 (b)), in pack
     order, loaded once per run when the recipe sets examples, else empty.
     `skeleton` is the run's host program skeleton (OQ-096 (a)), loaded
-    once per run when the recipe sets skeleton, else None.
+    once per run when the recipe sets skeleton, else None. `dialect` is
+    the run's dialect definitions (task P17.41; lassi.prompts.dialect_defs),
+    loaded once per run when the recipe sets dialect_lookup, else None.
+    `frontend` is the run's lowering toolchain (task P17.41), built once per
+    run when the recipe sets source_mlir, else None (lowered_source).
     """
 
     recipe: Recipe
@@ -861,6 +943,8 @@ class RunContext:
     retrieval: Index | None = None
     examples: tuple[Example, ...] = ()
     skeleton: Skeleton | None = None
+    dialect: DialectDefs | None = None
+    frontend: Toolchain | None = None
 
 
 def executor_for(context: RunContext, language: str) -> Executor:
@@ -912,6 +996,15 @@ def corrects_on_sim_gap(context: RunContext) -> bool:
     faithful: true, and the runner with a fragment set.
     """
     return context.recipe.data.get("loop", {}).get(CORRECT_ON_SIM_GAP, False) is True
+
+
+def coord_gap_as_error(context: RunContext) -> bool:
+    """Return True only when the recipe sets loop.coord_gap_as_error true (LOOP_OPT_INS; task P17.41).
+
+    The key is off when absent; the loader refuses it set true under
+    faithful: true, and the runner with a fragment set.
+    """
+    return context.recipe.data.get("loop", {}).get(COORD_GAP_AS_ERROR, False) is True
 
 
 def restart_after(context: RunContext) -> int | None:
@@ -1309,15 +1402,86 @@ def host_files(context: RunContext) -> str:
     return render_file_blocks(hosts) if hosts else ""
 
 
-def source_mlir(context: RunContext) -> str:
-    """Return the template field source_mlir: the source lowered to MLIR by a frontend, or "" (task P17.36).
+@dataclass(frozen=True)
+class LoweredSource:
+    """The generation prompt's source_mlir field (task P17.41) and the notes its Request gets.
 
-    No frontend is bound to a run yet (the C and C++ frontend, cgeist, is
-    task P5.7), so the field is always "" for now; a template places it on
-    a line of its own, which then stays blank.
+    `text` is SOURCE_MLIR_PROMPT rendered with the lowered module, or ""
+    when the recipe sets no source_mlir section or the lowering gave none;
+    `notes` are the SOURCE_MLIR_CODE note or warning and the lowering
+    toolchain's diagnostics.
     """
-    del context
-    return ""
+
+    text: str = ""
+    notes: tuple[Diagnostic, ...] = ()
+
+
+def lowered_source(context: RunContext, trial: Trial) -> LoweredSource:
+    """Return the item's compute unit lowered by the run's lowering toolchain, as the prompt shows it (P17.41).
+
+    With no lowering toolchain (RunContext.frontend; no source_mlir
+    section) the field is "" with no note, as before. Otherwise the
+    toolchain lowers the unit (lassi.bench Suite.compute_source: its file,
+    text, and function) in a fresh <trial>/frontend/build; the module fills
+    SOURCE_MLIR_PROMPT with the unit's path, the function, the level, and
+    the module, with one SOURCE_MLIR_CODE note (_lowered_note). A unit that
+    cannot be read, a lowering that gave no module, or a module past
+    source_mlir.max_chars (never cut) leaves the field "" with one
+    SOURCE_MLIR_CODE warning and the toolchain's diagnostics; none of these
+    ends the trial.
+    """
+    frontend = getattr(context, "frontend", None)  # a stand-in context may lack the field
+    if frontend is None:
+        return LoweredSource()
+    name, limit = _toolchain_name(frontend), context.recipe.data[SOURCE_MLIR]["max_chars"]
+    try:
+        unit = context.suite.compute_source(context.item, purpose=PURPOSE)
+    except (OSError, ValueError) as error:
+        return LoweredSource(notes=(_source_warning(f"the compute unit could not be read: {error}"),))
+    lowering = frontend.lower(unit.file, unit.text, unit.function, _frontend_dir(context.build_root, trial.trial_id))
+    found = tuple(lowering.diagnostics)
+    where = f"{unit.path} ({unit.function}) with {name}"
+    if lowering.module is None:
+        errors = [item.message for item in found if item.severity == "error"] or ["no module and no error"]
+        return LoweredSource(notes=(_source_warning(f"{where} gave no MLIR: {errors[0]}"), *found))
+    if len(lowering.module) > limit:
+        message = (
+            f"{where} gave {len(lowering.module)} characters of {lowering.level} MLIR, past source_mlir.max_chars "
+            f"{limit}; MLIR is never cut, so the prompt shows none"
+        )
+        return LoweredSource(notes=(_source_warning(message), *found))
+    module = lowering.module if lowering.module.endswith("\n") else lowering.module + "\n"
+    fields = {"path": unit.path, "function": unit.function, "level": lowering.level, "mlir": module}
+    text = render(context.prompts, SOURCE_MLIR_PROMPT, fields)
+    return LoweredSource(text=text, notes=(_lowered_note(where, lowering.level, module), *found))
+
+
+def _frontend_dir(root: Path, trial_id: str) -> Path:
+    """Create and return the fresh directory of one trial's lowering: <trial>/frontend/build."""
+    path = build_dir(root, trial_id, 0).parent.parent / FRONTEND_DIR / "build"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.mkdir()
+    return path
+
+
+def _source_warning(message: str) -> Diagnostic:
+    """Return the SOURCE_MLIR_CODE warning of a lowering the prompt shows nothing of; never fatal to the trial."""
+    return Diagnostic(stage="parse", severity="warning", code=SOURCE_MLIR_CODE,
+                      message=f"source_mlir: {message}; the generation prompt's source_mlir field is empty")
+
+
+def _lowered_note(where: str, level: str, module: str) -> Diagnostic:
+    """Return the SOURCE_MLIR_CODE note of a module the prompt shows: its source, size, sha256, and dialects."""
+    counts: dict[str, int] = {}
+    for match in _MLIR_OP.finditer(module):
+        counts[match.group(1)] = counts.get(match.group(1), 0) + 1
+    dialects = ", ".join(f"{dialect} ({count})" for dialect, count in sorted(counts.items())) or "none"
+    digest = hashlib.sha256(module.encode("utf-8")).hexdigest()
+    message = (
+        f"the prompt carried {where} lowered to {level} MLIR, {len(module)} characters, sha256 {digest}; its ops by "
+        f"dialect: {dialects}"
+    )
+    return Diagnostic(stage="parse", severity="note", code=SOURCE_MLIR_CODE, message=message)
 
 
 def prompt_diagnostics(diagnostics: Sequence[Diagnostic]) -> list[Diagnostic]:
@@ -1406,6 +1570,7 @@ def with_context_blocks(
     core: Sequence[Declaration] = (),
     examples: Sequence[Example] = (),
     skeleton: Skeleton | None = None,
+    dialect: DialectFeedback | None = None,
 ) -> tuple[str, list[Diagnostic]]:
     """Return a template set's `prompt` with its context blocks before it, and the notes its request gets.
 
@@ -1420,7 +1585,9 @@ def with_context_blocks(
     looked-up block (looked_up_block), for which it gets one note
     (looked_up_note), or, for the generation prompt, when `core`
     (core_declarations) holds any, the core block of them (looked_up_block
-    with CORE_API_PROMPT), with one core_note, and last, when `skeleton` is
+    with CORE_API_PROMPT), with one core_note, then, when `dialect`
+    (dialect_feedback; task P17.41) carries anything, the dialect block
+    (dialect_block), with one dialect_note, and last, when `skeleton` is
     set (carried_skeleton), the skeleton's block (lassi.prompts.skeletons
     block_text), with one skeleton_note.
     With none, the prompt comes back unchanged with no note. A fragment
@@ -1446,6 +1613,9 @@ def with_context_blocks(
     if core:
         blocks.append(looked_up_block(context.prompts, core, template=CORE_API_PROMPT))
         notes.append(core_note(core))
+    if dialect is not None and not dialect.empty:
+        blocks.append(dialect_block(context.prompts, dialect))
+        notes.append(dialect_note(dialect))
     if skeleton is not None:
         blocks.append(block_text(skeleton))
         notes.append(skeleton_note(skeleton))
@@ -1924,6 +2094,140 @@ def declarations_described(context: RunContext) -> str:
     return (
         f", with the context pack's declarations of the names its errors give (up to {section['max_chars']} "
         f"characters){near}"
+    )
+
+
+@dataclass(frozen=True)
+class DialectFeedback:
+    """What a compile correction carries under dialect_lookup (task P17.41), each part in carried order.
+
+    `named` holds (name, definition) of each name the verify errors give
+    that the dialect has; `unknown` (name, nearest names) of each it lacks
+    that has a near name; `nearest` (name, definition) of those nearest
+    names. A definition is carried once, in the first part that holds it.
+    """
+
+    named: tuple[tuple[str, str], ...] = ()
+    unknown: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    nearest: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def empty(self) -> bool:
+        """Return True when nothing is carried."""
+        return not (self.named or self.unknown or self.nearest)
+
+
+def verify_names(defs: DialectDefs, previous: Attempt) -> list[str]:
+    """Return the dialect's names the verify errors of a correction's listed diagnostics give, each once, in order.
+
+    For each error at VERIFY_STAGE that the prompt lists (listed_diagnostics
+    of prompt_diagnostics): the names its message gives (error_names), then
+    those on the line of the attempt's file it points at (line_names), when
+    it names a file of the attempt and a line in it. Warnings, notes, and
+    errors of other stages give none.
+    """
+    names: list[str] = []
+    for item in listed_diagnostics(prompt_diagnostics(previous.diagnostics)):
+        if item.stage != VERIFY_STAGE or item.severity != "error":
+            continue
+        names += error_names(defs.dialect, item.message)
+        text = previous.files.get(item.file or "")
+        lines = text.split("\n") if text is not None else []
+        if item.line is not None and 1 <= item.line <= len(lines):
+            names += line_names(defs.dialect, lines[item.line - 1])
+    return list(dict.fromkeys(names))
+
+
+def dialect_feedback(context: RunContext, previous: Attempt) -> DialectFeedback:
+    """Return what a compile correction of `previous` carries under dialect_lookup (task P17.41) [DESIGN].
+
+    For each name of verify_names in order: the dialect's definition of it
+    (RunContext.dialect), or, when the dialect lacks it, up to
+    dialect_lookup.nearest (DIALECT_NEAREST_DEFAULT) nearest names
+    (lassi.prompts.dialect_defs nearest_names), a name with none being left
+    out; then the definitions of those nearest names, in order. Each
+    definition is carried once and skipped whole when it would take the
+    carried definitions past dialect_lookup.max_chars; a later smaller one
+    may still fit.
+    """
+    defs = context.dialect
+    if defs is None:
+        raise ValueError("dialect_feedback needs the run's dialect definitions; the runner loads them")
+    section = context.recipe.data[DIALECT_LOOKUP]
+    budget, count = section["max_chars"], section.get(DIALECT_NEAREST, DIALECT_NEAREST_DEFAULT)
+    carried: dict[str, str] = {}
+    named, unknown = [], []
+    for name in verify_names(defs, previous):
+        text = defs.definitions.get(name)
+        if text is None:
+            close = nearest_names(name, defs, count)
+            if close:
+                unknown.append((name, close))
+        elif _fits(carried, text, budget):
+            carried[name] = text
+            named.append((name, text))
+    nearest = []
+    for name in dict.fromkeys(candidate for _, close in unknown for candidate in close):
+        text = defs.definitions[name]
+        if name not in carried and _fits(carried, text, budget):
+            carried[name] = text
+            nearest.append((name, text))
+    return DialectFeedback(tuple(named), tuple(unknown), tuple(nearest))
+
+
+def _fits(carried: Mapping[str, str], text: str, budget: int) -> bool:
+    """Return True when `text` keeps the carried definitions' total text within `budget` characters."""
+    return sum(len(item) for item in carried.values()) + len(text) <= budget
+
+
+def dialect_block(prompts: str, feedback: DialectFeedback) -> str:
+    """Return DIALECT_PROMPT of set `prompts`: the named definitions, the unknown names, then the nearest definitions.
+
+    Each definition is DEFINITION_PROMPT, each unknown name UNKNOWN_PROMPT
+    with its nearest names joined by NEAREST_JOINER; the entries go one
+    blank line apart.
+    """
+    def definition(name: str, text: str) -> str:
+        """Return one rendered definition."""
+        return render(prompts, DEFINITION_PROMPT, {"name": name, "text": text}).rstrip("\n")
+
+    texts = [definition(name, text) for name, text in feedback.named]
+    texts += [render(prompts, UNKNOWN_PROMPT, {"name": name, "candidates": NEAREST_JOINER.join(close)}).rstrip("\n")
+              for name, close in feedback.unknown]
+    texts += [definition(name, text) for name, text in feedback.nearest]
+    return render(prompts, DIALECT_PROMPT, {"definitions": BLOCK_JOINER.join(texts)})
+
+
+def dialect_note(feedback: DialectFeedback) -> Diagnostic:
+    """Return the note of a request that carried the dialect block: code DIALECT_CODE, severity note, stage parse.
+
+    Its message names the definitions carried for the errors' names, each
+    unknown name with its nearest names, and the nearest names' definitions
+    carried, with the definitions' total characters. It rides on the
+    Request, never on an attempt, so it never enters a prompt.
+    """
+    total = sum(len(text) for _, text in (*feedback.named, *feedback.nearest))
+    parts = [f"the prompt carried {len(feedback.named) + len(feedback.nearest)} definition(s) of the pinned dialect, "
+             f"{total} characters"]
+    if feedback.named:
+        parts.append("for the names its verify errors give: " + NEAREST_JOINER.join(n for n, _ in feedback.named))
+    if feedback.unknown:
+        listing = "; ".join(f"{name} -> {NEAREST_JOINER.join(close)}" for name, close in feedback.unknown)
+        parts.append(f"the nearest names of {len(feedback.unknown)} name(s) the dialect lacks: {listing}")
+    if feedback.nearest:
+        parts.append("the definitions of the nearest names " + NEAREST_JOINER.join(n for n, _ in feedback.nearest))
+    return Diagnostic(stage="parse", severity="note", code=DIALECT_CODE, message="; ".join(parts))
+
+
+def dialect_described(context: RunContext) -> str:
+    """Return what compile_loop's describe() adds under dialect_lookup (task P17.41), else ""."""
+    section = context.recipe.data.get(DIALECT_LOOKUP)
+    if not isinstance(section, Mapping):
+        return ""
+    count = section.get(DIALECT_NEAREST, DIALECT_NEAREST_DEFAULT)
+    return (
+        f", with the pinned dialect's definitions ({section['defs']}) of the names its verify errors give (up to "
+        f"{section['max_chars']} characters) and up to {count} nearest names of each name the dialect lacks"
     )
 
 
@@ -2500,11 +2804,13 @@ class GenerateStage:
         system prompt when there is one. With the fence_tag fix on the
         reply's FILE blocks are parsed, and with it off its first fenced
         block is read as upstream reads it. The request is recorded with
-        attempt 0 as the attempt its reply became, and the blocks' note.
+        attempt 0 as the attempt its reply became, the source_mlir notes
+        (lowered_source; task P17.41) first, then the blocks' note.
         """
         context = self.context
         expected = target_files(context)
-        system, prompt = self._prompt(trial, expected)
+        lowered = lowered_source(context, trial)
+        system, prompt = self._prompt(trial, expected, lowered.text)
         on = retrieval_on(context, RETRIEVAL_GENERATE)
         passages = retrieved_passages(context, generate_query(context)) if on else []
         core = core_declarations(context) if lookup_on(context, LOOKUP_GENERATE) else []
@@ -2519,16 +2825,19 @@ class GenerateStage:
         except ContextExceeded as error:
             return _context_end(trial, self.name, error)
         attempt = _reply_attempt(context, 0, messages[-1].ref, reply, expected)
+        notes = [*lowered.notes, *notes]
         trial = _recorded(context, trial.with_attempt(attempt), self.name, 0, messages, attempt.response_text, notes)
         notify(context.observer, ATTEMPT, trial, self.name)
         return trial
 
-    def _prompt(self, trial: Trial, expected: Sequence[str]) -> tuple[str | None, str]:
+    def _prompt(self, trial: Trial, expected: Sequence[str], mlir: str = "") -> tuple[str | None, str]:
         """Return the system prompt (None for a template set) and the user prompt.
 
         A template set gives generate.txt, filled with the direction's
         languages, the item's source files in FILE blocks, the expected
-        target file names, and the item's kernels (kernel_files). A fragment
+        target file names, the item's kernels (kernel_files), its trusted
+        host program (host_files), and `mlir` as source_mlir (lowered_source,
+        task P17.41; "" without a source_mlir section). A fragment
         set gives the direction's system prompt and the generation prompt
         from the source (as text mode reads it), the target language's
         context pack when the recipe has one, and the trial's summary and
@@ -2546,7 +2855,7 @@ class GenerateStage:
                 "target_files": ", ".join(expected),
                 "kernel_files": kernel_files(context),
                 "host_files": host_files(context),
-                "source_mlir": source_mlir(context),
+                "source_mlir": mlir,
             }
             return None, render(context.prompts, "generate", fields)
         direction = context.direction
@@ -2571,9 +2880,12 @@ class GenerateStage:
         passages = passages_described(self.context, RETRIEVAL_GENERATE)
         examples = examples_described(self.context, EXAMPLES_GENERATE)
         skeleton = skeleton_described(self.context, SKELETON_GENERATE)
+        frontend = getattr(self.context, "frontend", None)
+        lowered = "" if frontend is None else (
+            f", with the item's compute unit lowered to MLIR by {_toolchain_name(frontend)} ({SOURCE_MLIR})")
         return (
             f"generate: one {direction.source} to {direction.target} translation from {source}, parsed from "
-            f"{reply}{examples}{passages}{core_described(self.context)}{skeleton}"
+            f"{reply}{examples}{passages}{core_described(self.context)}{skeleton}{lowered}"
         )
 
 
@@ -2731,7 +3043,7 @@ class CompileLoopStage:
             f"{errors} while an error remains ({limit}{restarts_described(context)})"
             f"{examples_described(context, EXAMPLES_CORRECT)}"
             f"{passages_described(context, RETRIEVAL_CORRECT)}{declarations_described(context)}"
-            f"{skeleton_described(context, SKELETON_CORRECT)}"
+            f"{dialect_described(context)}{skeleton_described(context, SKELETON_CORRECT)}"
         )
 
     @staticmethod
@@ -2908,6 +3220,12 @@ class RunLoopStage:
         self.keeps_outputs = self.files_oracle is not None
         self.on_mismatch = corrects_on_mismatch(context)
         self.on_gap = corrects_on_sim_gap(context)
+        self.on_coord = coord_gap_as_error(context)
+        if self.on_coord and context.fragments:
+            raise ValueError(
+                f"{context.recipe.path}: loop.{COORD_GAP_AS_ERROR} is true, but {context.prompts!r} is a fragment "
+                "prompt set, upstream's prompts, which hold no addressing-error correction"
+            )
         if self.on_mismatch and self.files_oracle is None:
             raise ValueError(
                 f"{context.recipe.path}: loop.{CORRECT_ON_MISMATCH} is true, but the recipe binds no Oracle that "
@@ -2939,7 +3257,10 @@ class RunLoopStage:
         the execute-error correction is appended and compile_loop builds and
         corrects it. Under loop.correct_on_mismatch a clean run is judged
         (_judged), and an oracle mismatch is read as a failed run is, with
-        the mismatch prompt (module docstring, Oracle mismatches).
+        the mismatch prompt (module docstring, Oracle mismatches). Under
+        loop.coord_gap_as_error a gap whose findings hold ttsim's
+        coord_to_tile finding is no gap (_gap) but a failed run, corrected
+        with addressing_text (module docstring, Addressing gaps).
         """
         context = self.context
         compile_loop = CompileLoopStage(context=context)
@@ -2966,10 +3287,10 @@ class RunLoopStage:
                 trial, outputs = self._judged(trial)
                 if outputs is None:
                     break
-            elif run.sim_gap is not None and not self.on_gap:
-                return _ended(trial, SIM_GAP, _gap_message(index, run.sim_gap))
+            elif self._gap(run) is not None and not self.on_gap:
+                return _ended(trial, SIM_GAP, _gap_message(index, str(run.sim_gap)))
             if cap is not None and index >= cap:
-                return _cap_end(trial, cap, outputs, run.sim_gap)
+                return _cap_end(trial, cap, outputs, self._gap(run))
             corrected = self._correction(trial, run, limits, outputs)
             if corrected.final.end_reason is not None:
                 return corrected
@@ -2982,17 +3303,31 @@ class RunLoopStage:
         With `outputs` None the last run failed: the execute-error prompt,
         whose error text is run_error_text's, or, for a run that stopped at
         a simulator gap (read so only under loop.correct_on_sim_gap),
-        sim_gap_text's. Otherwise `outputs` is the oracle mismatch's
-        mismatch_text, sent with MISMATCH_PROMPT.
+        sim_gap_text's, or, for a coord_to_tile gap under
+        loop.coord_gap_as_error, addressing_text's. Otherwise `outputs` is
+        the oracle mismatch's mismatch_text, sent with MISMATCH_PROMPT.
         """
         context = self.context
         expected = target_files(context)
         if outputs is not None:
             return _corrected(context, trial, self.name, expected, outputs, run_error=True, mismatch=True)
+        if run.sim_gap is not None and self._gap(run) is None:
+            return _corrected(context, trial, self.name, expected, addressing_text(run), run_error=True)
         if run.sim_gap is not None:
             return _corrected(context, trial, self.name, expected, sim_gap_text(run), run_error=True)
         errors = run_error_text(run, limits, context.fragments, simulator=declares(context.executor, SIMULATOR))
         return _corrected(context, trial, self.name, expected, errors, run_error=True)
+
+    def _gap(self, run: RunResult) -> str | None:
+        """Return the gap class the loop reads the run by: RunResult.sim_gap, or None for an addressing gap.
+
+        Under loop.coord_gap_as_error a run whose gap holds a coord_to_tile
+        finding (coord_finding) is read as a failed run, not a gap; any
+        other run gives its sim_gap as reported.
+        """
+        if self.on_coord and coord_finding(run) is not None:
+            return None
+        return run.sim_gap
 
     def _judged(self, trial: Trial) -> tuple[Trial, str | None]:
         """Return `trial` with its clean last attempt judged by the output-file Oracle, and the mismatch text or None.
@@ -3038,6 +3373,11 @@ class RunLoopStage:
             mismatch = f" and each clean run whose output files fail the oracle (loop.{CORRECT_ON_MISMATCH})"
         if self.on_gap:
             mismatch += f" and each run that stopped at a simulator gap (loop.{CORRECT_ON_SIM_GAP})"
+        if self.on_coord:
+            mismatch += (
+                f" and each run that stopped at ttsim's coord_to_tile gap, read as an addressing error "
+                f"(loop.{COORD_GAP_AS_ERROR})"
+            )
         passages = passages_described(context, RETRIEVAL_CORRECT)
         return (
             f"run_loop: run {gate} and correct each failed run{mismatch}, sharing compile_loop's correction count"
@@ -3057,7 +3397,10 @@ class RunLoopStage:
         run that is neither a JIT failure (S1) nor a simulator gap stays S4
         with a `run-error` whose message is _run_status's. A simulator gap
         (S4) gets no run-error; under loop.correct_on_sim_gap it gets the
-        SIM_GAP_NOTE note instead (gap_note).
+        SIM_GAP_NOTE note instead (gap_note). Under loop.coord_gap_as_error
+        a gap run holding a coord_to_tile finding (coord_finding) is a
+        failed run: S4 with a `run-error` whose message is
+        addressing_message's, and no gap note.
         """
         context = self.context
         attempt = trial.attempts[-1]
@@ -3074,7 +3417,11 @@ class RunLoopStage:
         info = _run_info(context, run, keep_outputs=self.keeps_outputs)
         diagnostics = [*attempt.diagnostics, *run.diagnostics, *_run_flag_warnings(run)]
         reached = run_stage(run)
-        if reached == COMPILED and run.sim_gap is None:
+        addressing = coord_finding(run) if self.on_coord else None
+        if reached == COMPILED and addressing is not None:
+            message = addressing_message(addressing)
+            diagnostics.append(Diagnostic(stage="run", severity="error", code=RUN_ERROR, message=message))
+        elif reached == COMPILED and run.sim_gap is None:
             status = _run_status(run, limits, simulator=declares(context.executor, SIMULATOR))
             diagnostics.append(Diagnostic(stage="run", severity="error", code=RUN_ERROR, message=status))
         elif reached == COMPILED and run.sim_gap is not None and self.on_gap:
@@ -3351,6 +3698,63 @@ def gap_findings(run: RunResult) -> list[str]:
     return lines
 
 
+def coord_finding(run: RunResult) -> Diagnostic | None:
+    """Return the run's first coord_to_tile finding on a NOC coordinate when it stopped at a gap; else None (P17.41).
+
+    A finding is a run-stage Diagnostic of RunResult.diagnostics coded
+    COORD_GAP_CLASS whose message starts with ttsim's
+    `UnimplementedFunctionality: coord_to_tile: coord (<x>,<y>)`
+    (_COORD_FINDING). A run with no gap (RunResult.sim_gap None) has none,
+    so a clean run or a plain failed run is never read so.
+    """
+    if run.sim_gap is None:
+        return None
+    for item in run.diagnostics:
+        if item.stage == "run" and item.code == COORD_GAP_CLASS and _COORD_FINDING.match(item.message):
+            return item
+    return None
+
+
+def _coordinate(finding: Diagnostic) -> str:
+    """Return the NOC coordinate a coord_to_tile finding names, as ttsim prints it: `(<x>,<y>)`."""
+    match = _COORD_FINDING.match(finding.message)
+    return match.group("coord") if match else "(?)"
+
+
+def addressing_message(finding: Diagnostic) -> str:
+    """Return the run-error message of an attempt whose run stopped at the coord_to_tile `finding` (P17.41)."""
+    return (
+        f"a kernel addressed the NOC coordinate {_coordinate(finding)}, which is no tile of the simulated device "
+        f"({finding.message}): an addressing error, read as a failed run (loop.{COORD_GAP_AS_ERROR})"
+    )
+
+
+def addressing_text(run: RunResult) -> str:
+    """Return the error text of the correction of a run stopped at a coord_to_tile finding (task P17.41) [DESIGN].
+
+    ADDRESSING_HEAD, the coordinate, and ADDRESSING_TAIL (an addressing
+    error in the kernel, not a limit of the simulator, and the bank rule for
+    DRAM); then, after a line feed, GAP_FINDINGS and each such finding once,
+    within the caps of a correction's diagnostics (listed_diagnostics); then
+    the stderr, as sim_gap_text gives it. Call it only for a run
+    coord_finding reads; it goes into correct.txt as a failed run's text.
+    """
+    found = coord_finding(run)
+    if found is None:
+        raise ValueError("addressing_text reads a run that stopped at a coord_to_tile finding; this run has none")
+    unique: dict[str, Diagnostic] = {}
+    for item in run.diagnostics:
+        if item.stage == "run" and item.code == COORD_GAP_CLASS and _COORD_FINDING.match(item.message):
+            unique.setdefault(item.message, item)
+    listed = listed_diagnostics(list(unique.values()))
+    parts = [f"{ADDRESSING_HEAD}{_coordinate(found)}{ADDRESSING_TAIL}"]
+    parts.append("\n".join([GAP_FINDINGS, *(" ".join(item.message.splitlines()) for item in listed)]))
+    stderr = fragment_text.as_text_mode(run.stderr)
+    if stderr:
+        parts.append(f"its standard error follows:\n{stderr}")
+    return "\n".join(parts)
+
+
 def _mismatch_error(oracle: OutputFileOracle, failed: Sequence[OutputStats], count: int) -> Diagnostic:
     """Return the ORACLE_MISMATCH run-stage error of a clean run whose `failed` outputs, of `count`, failed the oracle.
 
@@ -3417,7 +3821,9 @@ def _corrected(
     lists correct and this is no mismatch, the passages for
     correction_query, then, when lookup lists correct and this is a compile
     correction, the declarations of looked_up_declarations and, with
-    lookup.nearest, the nearest names of undeclared_names, then, when the
+    lookup.nearest, the nearest names of undeclared_names, then, under
+    dialect_lookup and for a compile correction, the dialect block of
+    dialect_feedback, then, when the
     skeleton section lists correct and this is a compile correction, the
     skeleton of carried_skeleton).
     With fixes.prompt_newlines off every line feed is removed from it
@@ -3443,11 +3849,14 @@ def _corrected(
         undeclared = undeclared_names(context, previous)
     examples: list[Example] = []
     skeleton: Skeleton | None = None
+    dialect: DialectFeedback | None = None
     if not (mismatch or run_error):
         examples = carried_examples(context) if examples_on(context, EXAMPLES_CORRECT) else []
         skeleton = carried_skeleton(context, SKELETON_CORRECT)
+        dialect = dialect_feedback(context, previous) if getattr(context, "dialect", None) is not None else None
     prompt, notes = with_context_blocks(
-        context, trial, prompt, passages, looked_up, undeclared, examples=examples, skeleton=skeleton)
+        context, trial, prompt, passages, looked_up, undeclared, examples=examples, skeleton=skeleton,
+        dialect=dialect)
     if not fix_on(context, "prompt_newlines"):
         prompt = prompt.replace("\n", "")
     try:

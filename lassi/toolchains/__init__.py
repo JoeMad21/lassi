@@ -5,7 +5,7 @@ Diagnostic records (severity, code, file, line, column, message, stage). The
 compiler's raw stderr is kept as an attachment, the file STDERR_ATTACHMENT in
 the workdir, and never consumed downstream.
 
-Importing this package registers eight presets in
+Importing this package registers nine presets in
 lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
 
 - "nvcc-sm80" (nvcc.NvccSm80): CUDA with nvcc for sm_80.
@@ -30,6 +30,10 @@ lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
   host hipcc, compiled and linked, never run here (compile-only); the
   target is always named, in each build and in the --version check, so
   hipcc never looks for a GPU.
+- "cgeist-affine" (cgeist.CgeistAffine; task P17.41): the pinned cgeist
+  lowering an item's compute-only C unit to affine MLIR for the generation
+  prompt (a recipe's source_mlir section); it declares only lowers_source,
+  builds no program, and is never a language's toolchain.
 
 Toolchain bindings carry no config. Each preset declares its pin as class
 attributes: PIN, the pin file stem (toolchains/<PIN>.pin, read by
@@ -63,7 +67,7 @@ of its own, which the compile sandbox uses far above any compiler output
 
 from __future__ import annotations
 
-from lassi.toolchains import gcc, hipcc, nvcc, nvcpp, ttkernel_build, ttmetal_build
+from lassi.toolchains import cgeist, gcc, hipcc, nvcc, nvcpp, ttkernel_build, ttmetal_build
 from lassi.toolchains._base import (
     STDERR_ATTACHMENT,
     CappedRunner,
@@ -73,6 +77,7 @@ from lassi.toolchains._base import (
     capped_runner,
     subprocess_runner,
 )
+from lassi.toolchains.cgeist import CgeistAffine
 from lassi.toolchains.gcc import GccNative, GccOpenMP
 from lassi.toolchains.hipcc import HipccGfx942
 from lassi.toolchains.nvcc import NvccSm80, NvccToolchain
@@ -83,6 +88,7 @@ from lassi.toolchains.ttmetal_build import TtMetalHost
 __all__ = [
     "STDERR_ATTACHMENT",
     "CappedRunner",
+    "CgeistAffine",
     "CommandResult",
     "CommandRunner",
     "EnvRunner",
@@ -96,6 +102,7 @@ __all__ = [
     "TtKernelBuild",
     "TtMetalHost",
     "capped_runner",
+    "cgeist",
     "gcc",
     "hipcc",
     "nvcc",

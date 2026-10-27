@@ -5,6 +5,8 @@ prompt tuning, and corpus harvest (Agent Rule 5).
 """
 
 from lassi.bench.registry import (
+    ComputeSource,
+    ComputeUnit,
     Direction,
     EvalSplitError,
     LanguageSources,
@@ -18,6 +20,8 @@ from lassi.bench.registry import (
 )
 
 __all__ = [
+    "ComputeSource",
+    "ComputeUnit",
     "Direction",
     "EvalSplitError",
     "LanguageSources",

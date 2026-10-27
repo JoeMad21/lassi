@@ -1224,7 +1224,7 @@ Answer: (3a). The owner, in the working session of 2026-10-26: "Go with recommen
 To apply: the smoke recipe on the synthetic fixture first, then tt-train-v0, any failure reported as found (task P17.38); (3b) stays a later task if 3,072 tokens fails.
 
 ## OQ-103 How A ttkernel Kernel Gets Its Circular Buffers
-State: OPEN
+State: CLOSED
 Kind: decision
 Blocks: P17.37 (the four tt-pairs-v0 items beyond loopback in the cpp -> ttkernel arm)
 Evidence: docs/BIBLE.md, Level Rules (the ttkernel bullet); tt-mlir at 5f396fd6, include/ttmlir/Dialect/TTKernel/IR/TTKernelOps.td:2756-2800 and lib/Conversion/TTKernelToEmitC/TTKernelToEmitC.cpp:357-371; the tracked host programs under assets/bench/tt-pairs-v0/<item>/tt/ of eltwise_binary, eltwise_sfpu, matmul_single_core, and matmul_multi_core.
@@ -1234,7 +1234,8 @@ Options:
 - (b) Wait for P5.9's program-spec generator, which writes host programs from a spec. Consequence: no hand-made host variants, but the four items stay out of the ttkernel arm until P5.9 lands.
 - (c) Leave the four items out of the ttkernel arm. Consequence: the arm tests loopback only.
 Recommendation: (a): it is small, keeps the same trusted host program with arguments added, and lets the MLIR path run on every item soon; (b) can replace it later.
-Answer:
+Answer: Read as option (a). The owner, in the working session of 2026-10-26, on the fixes plans/spikes/mlir-issues.md lists, this one among them: "MLIR fixes and lowering pipeline is important, that definitely needs to get done."
+Applied: 2026-10-26. Task P17.41 adds the four ttkernel host programs (tt-pairs-v0-ttkernel) that pass each kernel's circular buffer indices as compile-time arguments (task P17.37); their ttsim check is plans/runs/mlir/ttkernel-hosts.sh.
 
 ## OQ-104 bale: Which Apps And Directions First, Their Splits, And Copy Or Fetch
 State: CLOSED

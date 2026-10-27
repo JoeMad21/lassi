@@ -1,0 +1,11 @@
+# The C++ -> affine -> TT MLIR pass (task P17.41), the max_abs half: ttkernel-maxabs.yaml, plus the lowering pipeline
+# the owner chose on 2026-10-26: the C++ program is lowered to affine MLIR, and the model writes the ttkernel kernels
+# from the program, the host program, and that MLIR. Each trial's generation prompt shows the item's compute-only C
+# unit (tt-pairs-v0-ttkernel's `compute`: its computation as one function with C linkage and no I/O) lowered by the
+# pinned cgeist (Polygeist 77c04bb2; `cgeist <unit>.c -S --raise-scf-to-affine --function=<name>` in the compile
+# sandbox) to affine MLIR; a lowering that fails is recorded on the generation request and the prompt shows none,
+# never ending the trial. Affine, not linalg: the pinned polygeist-opt has no affine-to-linalg raising (OQ-065).
+# Before the run, as ttkernel-maxabs.yaml says; cgeist is the Polygeist install of task P5.5 under $LASSI_TOOLCHAINS.
+# Exploratory; ttsim is a simulator; tt-pairs-v0 is a development set (OQ-083 (b)).
+extends: ttkernel-maxabs.yaml
+source_mlir: {toolchain: cgeist-affine, max_chars: 24000}  # the compute unit as affine MLIR in the generation prompt

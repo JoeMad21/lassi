@@ -13,7 +13,10 @@ What they fix:
   files are the kernel modules the model writes, one per kernel the item's
   host program launches, at that kernel's path with .mlir in place of .cpp;
   its support is the tracked host program and lassi_io.h, each with its
-  sha256, and no kernel (the upstream kernel C++ would be the answer).
+  sha256, and no kernel (the upstream kernel C++ would be the answer). The
+  host program is the item's tt one for loopback and, for the other four
+  items, the ttkernel host program of task P17.37 (built by task P17.41,
+  tests/bench/test_ttkernel_hosts.py), which passes the CB indices.
 - A language may name `reference: <language>`, another language of the
   item: its reference program is that language's (Suite.reference_target
   and Suite.reference_language), and it must be tracked: true, since its
@@ -80,7 +83,8 @@ def test_the_ttkernel_support_is_the_tracked_host_program_and_harness_with_sha25
     tt = sibling().items[name].languages["tt"]
     assert set(spec.support) == {tt.files[0], "lassi_io.h"}, "the host program and lassi_io.h, never a kernel"
     host = spec.support[tt.files[0]]
-    assert host.tracked and host.path == f"{tt.dir}/{tt.files[0]}"
+    own = tt.dir if name == "loopback" else f"assets/bench/tt-pairs-v0-ttkernel/{name}"
+    assert host.tracked and host.path == f"{own}/{tt.files[0]}"
     for entry in spec.support.values():
         assert entry.tracked and entry.sha256 == hashlib.sha256((REPO / entry.path).read_bytes()).hexdigest()
         assert "kernels" not in PurePosixPath(entry.path).parts

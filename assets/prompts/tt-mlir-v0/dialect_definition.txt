@@ -1,0 +1,2 @@
+$name is defined as:
+$text

@@ -1,0 +1,6 @@
+# The C++ -> affine -> TT MLIR pass (task P17.41), the pcc half: ttkernel-pcc.yaml, plus the lowering pipeline of
+# ttkernel-affine-maxabs.yaml (its comments hold): the matmuls' compute-only C units lowered by the pinned cgeist to
+# affine MLIR in each generation prompt. Exploratory; ttsim is a simulator; tt-pairs-v0 is a development set
+# (OQ-083 (b)).
+extends: ttkernel-pcc.yaml
+source_mlir: {toolchain: cgeist-affine, max_chars: 24000}  # the compute unit as affine MLIR in the generation prompt

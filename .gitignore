@@ -49,6 +49,9 @@ third_party/LASSI/
 # tt-mlir text written by tools/build_ttkernel_context.py from the pinned tt-mlir: only the manifests (task P17.36)
 /assets/context/ttkernel-5f396fd6/*
 !/assets/context/ttkernel-5f396fd6/MANIFEST.yaml
+# and the dialect definitions a verify error's correction carries (task P17.41): only the manifest
+/assets/context/ttkernel-defs-5f396fd6/*
+!/assets/context/ttkernel-defs-5f396fd6/MANIFEST.yaml
 /assets/examples/ttkernel-examples-5f396fd6/*
 !/assets/examples/ttkernel-examples-5f396fd6/MANIFEST.yaml
 

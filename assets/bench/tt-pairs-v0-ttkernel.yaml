@@ -5,9 +5,17 @@
 # ttkernel-ttmetal toolchain lowers each module to kernel C++ at the kernel's path with the pinned tt-mlir and builds
 # the host program, a support file the model never writes (bible Level Rules). The ttkernel support holds the tracked
 # host program and lassi_io.h with their sha256 and no kernel: the upstream kernel C++ would be the answer (Agent Rule
-# 5). `reference: tt` makes the item's tt program (the host program with the upstream kernels, fetched by
-# tools/fetch_bench.py) the ttkernel reference the baseline builds and runs, so the oracle reads a ttkernel candidate
-# exactly as it reads a cpp -> tt candidate on tt-pairs-v0. Fetch with
+# 5). For eltwise_binary, eltwise_sfpu, matmul_single_core, and matmul_multi_core the host program is the ttkernel
+# host program of task P17.37 (built under OQ-103 (a) by task P17.41), assets/bench/tt-pairs-v0-ttkernel/<item>/
+# <item>.cpp: the item's tt host program with each kernel's circular buffer indices appended to its compile-time
+# arguments, since a ttkernel kernel names a circular buffer only through an argument (tt-mlir 5f396fd6,
+# TTKernelOps.td:2756-2800); loopback's kernel uses none, so it keeps the tt host program. Each item's `compute`
+# (task P17.41; <item>/<item>.c in the same directory) is its computation as one compute-only C function, which the
+# source_mlir step lowers with the pinned cgeist for the prompt. The sibling's own files live in that directory, not
+# under assets/bench/tt-pairs-v0/, whose tracked .cpp files are the Tier A references the held-out checks of
+# tt-train-v0 and the tt-metal-docs corpus list. `reference: tt` makes the item's tt program (its tt host program
+# with the upstream kernels, fetched by tools/fetch_bench.py) the ttkernel reference the baseline builds and runs, so
+# the oracle reads a ttkernel candidate exactly as it reads a cpp -> tt candidate on tt-pairs-v0. Fetch with
 # `uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-ttkernel.yaml`.
 suite: tt-pairs-v0-ttkernel
 repo: https://github.com/tenstorrent/tt-metal.git
@@ -40,6 +48,11 @@ items:
       buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the
       same: its one ComputeConfig sets only math_fidelity HiFi4, and its three circular buffers (c_0, c_1, c_16) are
       Float16_b (tests/bench/test_tt_pairs.py checks it)
+    # the computation as one compute-only C function with no I/O (task P17.41), lowered for source_mlir
+    compute:
+      tracked: assets/bench/tt-pairs-v0-ttkernel/eltwise_binary/eltwise_binary.c
+      function: lassi_eltwise_binary
+      sha256: 3807b84b4e15522837a3a5e63facbfa9cde1bdc0505924e6a4abce1d365afff5
     languages:
       cpp:
         dir: assets/bench/tt-pairs-v0/eltwise_binary/cpp
@@ -72,8 +85,9 @@ items:
         reference: tt
         support:
           eltwise_binary.cpp:
-            tracked: assets/bench/tt-pairs-v0/eltwise_binary/tt/eltwise_binary.cpp
-            sha256: cc6f2fba6f6f40ce7525e5d29559b5ead62e5f980d67dd7ac925a86a70877ce0
+            # the ttkernel host program: its kernels' CB indices as compile-time arguments (P17.37)
+            tracked: assets/bench/tt-pairs-v0-ttkernel/eltwise_binary/eltwise_binary.cpp
+            sha256: 16983cc3dff48a78611d7c1d29775ea577fef7c88d5bdd4dafab03fe64e64415
           lassi_io.h:
             tracked: assets/harness/c/lassi_io.h
             sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
@@ -99,6 +113,11 @@ items:
       buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the
       same: its one ComputeConfig sets only math_fidelity HiFi4 and math_approx_mode false, and its two circular
       buffers (c_0, c_16) are Float16_b (tests/bench/test_tt_pairs.py checks it)
+    # the computation as one compute-only C function with no I/O (task P17.41), lowered for source_mlir
+    compute:
+      tracked: assets/bench/tt-pairs-v0-ttkernel/eltwise_sfpu/eltwise_sfpu.c
+      function: lassi_eltwise_sfpu
+      sha256: d138c54dc85ddb3680b49c7d97207325729c98e1a820415bf4e9f312169e827e
     languages:
       cpp:
         dir: assets/bench/tt-pairs-v0/eltwise_sfpu/cpp
@@ -131,8 +150,9 @@ items:
         reference: tt
         support:
           eltwise_sfpu.cpp:
-            tracked: assets/bench/tt-pairs-v0/eltwise_sfpu/tt/eltwise_sfpu.cpp
-            sha256: 135f9d308dd1f4617bc1e6dd4e4cd37541fc373801df434930e86ee5ddb4cb94
+            # the ttkernel host program: its kernels' CB indices as compile-time arguments (P17.37)
+            tracked: assets/bench/tt-pairs-v0-ttkernel/eltwise_sfpu/eltwise_sfpu.cpp
+            sha256: a64d0261327e67a4ab43555cad70236af06d354e9dbce30875010c71769aeed4
           lassi_io.h:
             tracked: assets/harness/c/lassi_io.h
             sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
@@ -156,6 +176,11 @@ items:
       not taken: the example has one data-movement kernel and no compute kernel, so nothing unpacks to dest; the
       host program written here likewise creates one data-movement kernel and no circular buffer, and names no
       compute config, fp32_dest_acc_en, or unpack_to_dest_mode (P4.9 reading; tests/bench/test_tt_pairs.py checks it)
+    # the computation as one compute-only C function with no I/O (task P17.41), lowered for source_mlir
+    compute:
+      tracked: assets/bench/tt-pairs-v0-ttkernel/loopback/loopback.c
+      function: lassi_loopback
+      sha256: ca330047bb8fd0a96f3bf1bc305097b3ba592032759cfed3b3650282b35baa79
     languages:
       cpp:
         dir: assets/bench/tt-pairs-v0/loopback/cpp
@@ -207,6 +232,11 @@ items:
       buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the
       same: its one ComputeConfig sets only math_fidelity HiFi4 and empty compile_args, and its three circular
       buffers (c_0, c_1, c_16) are Float16_b (tests/bench/test_tt_pairs.py checks it)
+    # the computation as one compute-only C function with no I/O (task P17.41), lowered for source_mlir
+    compute:
+      tracked: assets/bench/tt-pairs-v0-ttkernel/matmul_multi_core/matmul_multi_core.c
+      function: lassi_matmul_multi_core
+      sha256: ced4fb6a543f7c399b7d93feafb18ec2d037ec8cd1f9a40dbbaf589b12662151
     languages:
       cpp:
         dir: assets/bench/tt-pairs-v0/matmul_multi_core/cpp
@@ -239,8 +269,9 @@ items:
         reference: tt
         support:
           matmul_multi_core.cpp:
-            tracked: assets/bench/tt-pairs-v0/matmul_multi_core/tt/matmul_multi_core.cpp
-            sha256: 87c04009c8e5ac92e44e6e51c2997bd10c7ccba1fed6445a8dec9d6214046806
+            # the ttkernel host program: its kernels' CB indices as compile-time arguments (P17.37)
+            tracked: assets/bench/tt-pairs-v0-ttkernel/matmul_multi_core/matmul_multi_core.cpp
+            sha256: ee85272856b7781ec04723bb7c8a6eb0c429b4ad8dd0f857e222f87a90a78d1e
           lassi_io.h:
             tracked: assets/harness/c/lassi_io.h
             sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
@@ -267,6 +298,11 @@ items:
       buffer Float16_b (P4.9 reading; its ttsim run printed no finding), and the host program written here does the
       same: its one ComputeConfig sets only math_fidelity HiFi4 and compile_args, and its three circular buffers
       (c_0, c_1, c_16) are Float16_b (tests/bench/test_tt_pairs.py checks it)
+    # the computation as one compute-only C function with no I/O (task P17.41), lowered for source_mlir
+    compute:
+      tracked: assets/bench/tt-pairs-v0-ttkernel/matmul_single_core/matmul_single_core.c
+      function: lassi_matmul_single_core
+      sha256: f14a86939d1f2210342da8211027a20128a1a9d9a78e22848239b2cf511350d8
     languages:
       cpp:
         dir: assets/bench/tt-pairs-v0/matmul_single_core/cpp
@@ -299,8 +335,9 @@ items:
         reference: tt
         support:
           matmul_single_core.cpp:
-            tracked: assets/bench/tt-pairs-v0/matmul_single_core/tt/matmul_single_core.cpp
-            sha256: edcddaab1223ab9cdccdcbabb4a6958f78f60876120ddf2238199a55a2f02669
+            # the ttkernel host program: its kernels' CB indices as compile-time arguments (P17.37)
+            tracked: assets/bench/tt-pairs-v0-ttkernel/matmul_single_core/matmul_single_core.cpp
+            sha256: 3122cc22a9a64d79e0d4836c23acb9f6cd0add76e40c55cf3d605bbde2b53c4c
           lassi_io.h:
             tracked: assets/harness/c/lassi_io.h
             sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5

@@ -12,13 +12,45 @@ What a $target_language kernel is:
   TT-Metalium kernel, void kernel_main(), written at the kernel path the host program launches.
 - Ops are written ttkernel.<op>(<operands>) : (<operand types>) -> <result types>, for example
   %n = ttkernel.get_arg_val(%c1) : (i32) -> i32 for the runtime argument at index 1, and
-  %cb = ttkernel.get_compile_time_arg_val(0) : () -> !ttkernel.cb<2, !ttcore.tile<32x32, bf16>>.
-  A circular buffer value comes only from a compile-time or runtime argument; a buffer address, a count,
-  or an index is an i32 argument. A DRAM buffer is read and written through
-  ttkernel.TensorAccessorArgs and ttkernel.TensorAccessor with noc_async_read_tile and
-  noc_async_write_tile; circular buffers use cb_reserve_back, get_write_ptr, cb_push_back,
-  cb_wait_front, get_read_ptr, and cb_pop_front; compute uses tile_regs_acquire, the tile ops,
-  tile_regs_commit, tile_regs_wait, pack_tile, and tile_regs_release.
+  %cb = ttkernel.get_compile_time_arg_val(2) : () -> !ttkernel.cb<2, !ttcore.tile<32x32, bf16>> for the
+  compile-time argument at index 2, an integer literal. ttkernel.TensorAccessorArgs is the one op whose
+  form differs: it takes no trailing type (below).
+- A circular buffer value comes only from a compile-time or runtime argument, at the position where the
+  host program passes its index; a buffer address, a count, or an index is an i32 argument. Circular
+  buffers use cb_reserve_back, get_write_ptr, cb_push_back, cb_wait_front, get_read_ptr, and cb_pop_front;
+  compute uses tile_regs_acquire, the tile ops, tile_regs_commit, tile_regs_wait, pack_tile, and
+  tile_regs_release.
+
+DRAM is addressed through its bank, never by a NOC coordinate:
+- A DRAM buffer's pages go through its TensorAccessor. %args = ttkernel.TensorAccessorArgs(%cta, %crta),
+  with no trailing type, where %cta and %crta are arith.constant i32 values: the index of the buffer's
+  first compile-time argument (the host program appends them with TensorAccessorArgs(...).append_to, one
+  argument for an interleaved DRAM buffer) and 0; ttkernel.TensorAccessorArgs(prev = %args) gives the
+  arguments of the buffer that follows. Then %acc = ttkernel.TensorAccessor(%args, %addr, %page_bytes) :
+  (!ttkernel.TensorAccessorArgs, i32, i32) -> !ttkernel.TensorAccessor, with the buffer's address (a
+  runtime argument) and its page size in bytes.
+- Read page %p into L1 with ttkernel.noc_async_read_tile(%p, %acc, %l1) : (i32, !ttkernel.TensorAccessor,
+  i32) -> (), and write one from L1 with ttkernel.noc_async_write_tile(%p, %acc, %l1) in the same form; or
+  take the page's address with ttkernel.tensor_accessor.get_noc_addr(%acc, %p, %offset) :
+  (!ttkernel.TensorAccessor, i32, i32) -> !ttkernel.noc_addr for ttkernel.noc_async_read and
+  ttkernel.noc_async_write. One DRAM bank's address is ttkernel.get_noc_addr_from_bank_id(%bank, %offset) :
+  (i32, i32) -> !ttkernel.noc_addr.
+- ttkernel.noc_async_read_barrier() : () -> () follows reads before their data is used, and
+  ttkernel.noc_async_write_barrier() : () -> () follows writes before their L1 space is used again.
+- ttkernel.get_noc_addr(%x, %y, %addr) names the tile at NOC coordinate (x, y), such as a core whose L1 it
+  reaches; it never addresses a DRAM buffer, and the simulator stops a kernel that reads DRAM at (0, 0).
+
+Mistakes that ttmlir-opt refused in earlier runs at this pin:
+- a type the dialect does not have, such as !ttkernel.tensor_accessor_args: the types are
+  !ttkernel.TensorAccessorArgs and !ttkernel.TensorAccessor, and an argument is only an i32, a
+  !ttkernel.cb, or a !ttkernel.l1_addr, never an accessor;
+- an op the dialect does not have, such as ttkernel.InterleavedAddrGenFast: TT-Metalium C++ names are no
+  ops (ttkernel.get_interleaved_addr_gen_fast gives a !ttkernel.interleaved_addr_gen_fast);
+- ttkernel.TensorAccessorArgs with a trailing type, a third operand, or no operand;
+- ttkernel.get_compile_time_arg_val with #0, an SSA value, or no parentheses as its index;
+- a result type in parentheses or without its ! prefix, such as -> (ttkernel.x);
+- arith.index_cast without to (arith.index_cast %i : index to i32), and an scf.for induction variable, an
+  index, used where an i32 is needed.
 
 The host program below is the harness's, read-only: it builds and runs your kernels on the device and
 reads the outputs back. Never return it, lassi_io.h, or any other host file. Read it for what each kernel

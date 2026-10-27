@@ -55,16 +55,16 @@ def tool() -> ModuleType:
     return module
 
 
-def tree(tmp_path: Path, module: ModuleType) -> Path:
-    """Return a SYNTHETIC fetched tt-mlir tree at the pin."""
+def tree(tmp_path: Path, module: ModuleType, ops: str = OPS, cpp: str = "// SYNTHETIC ops source\n",
+         types: str = "// SYNTHETIC license\ndef TTKernel_T : X;\n") -> Path:
+    """Return a SYNTHETIC fetched tt-mlir tree at the pin: `ops`, `cpp`, and `types` as the dialect's sources."""
     root = tmp_path / "tt-mlir"
-    files = {module.OPS_SOURCE: OPS, **{path: "// SYNTHETIC license\ndef TTKernel_T : X;\n" for path in
-                                        module.TYPE_SOURCES}}
+    files = {module.OPS_SOURCE: ops, **{path: types for path in module.TYPE_SOURCES}, module.CPP_SOURCE: cpp}
     files.update({path: f"// SYNTHETIC lit test {path}\nfunc.func @k() -> () {{\n}}\n"
                   for path in module.EXAMPLE_FILES})
     for path, text in files.items():
         (root / path).parent.mkdir(parents=True, exist_ok=True)
-        (root / path).write_text(text, encoding="ascii")
+        (root / path).write_bytes(text.encode("ascii"))  # line feeds as fetch writes them, on every host
     (root / module.FETCH_RECORD).write_text(f"tt-mlir {pins.read_pin('tt-mlir')['COMMIT']} x\n", encoding="ascii")
     return root
 

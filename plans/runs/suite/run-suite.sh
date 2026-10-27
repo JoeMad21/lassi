@@ -219,7 +219,8 @@ build_asset() {  # build_asset <need>: 0 when the asset built and its manifest e
         && git diff --quiet HEAD -- assets/context ;;
     context:ttkernel-5f396fd6|examples:ttkernel-examples-5f396fd6)
       # The cpp -> ttkernel recipes (task P17.36): their suite's sources under $LASSI_SCRATCH/bench, then both packs
-      # from the tt-mlir sources at the pin that toolchains/tt-mlir.sh installed (one build writes both).
+      # from the tt-mlir sources at the pin that toolchains/tt-mlir.sh installed (one build writes both, and the
+      # definitions tree ttkernel-defs-5f396fd6 that dialect_lookup reads, task P17.41).
       local mlir="$toolchains/tt-mlir@0.9.0.dev20260221/src/tt-mlir"
       [ -d "$mlir" ] || { echo "no tt-mlir sources at $mlir"; return 1; }
       uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-ttkernel.yaml > "$out/ttkernel-bench.log" 2>&1 \

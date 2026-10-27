@@ -58,6 +58,13 @@ SIMULATOR = "simulator"
 # note into the run's error text after the hang diagnostic) share one name without importing each other.
 WATCHER_CODE = "watcher"
 
+# The capability of a Toolchain that lowers a compute-only source unit to MLIR for the generation prompt (task P17.41;
+# the recipe's source_mlir section): it provides lower(file, text, function, workdir), which writes the unit as `file`
+# under `workdir`, lowers the function named `function`, and returns a lassi.core.interfaces Lowering, never raising
+# for a tool's failure; and a LEVEL attribute naming the level it lowers to. The runner refuses a source_mlir section
+# naming a toolchain without it, and the stages read the capability, never the toolchain's name.
+LOWERS_SOURCE = "lowers_source"
+
 # The capability of an Executor that runs programs on accelerator silicon (task P17.16; the tt_silicon executor), which
 # only a human starts (Agent Rule 9). The runner reads it, never the executor's name: it refuses such an executor
 # unless RunOptions.silicon is True, which only `lassi run --silicon` sets, and the train layer refuses a reward that

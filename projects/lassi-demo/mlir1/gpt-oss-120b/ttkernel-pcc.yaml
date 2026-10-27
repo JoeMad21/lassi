@@ -1,0 +1,30 @@
+# The C++ -> TT MLIR pass, the pcc half (task P17.37 under OQ-103 (a), built by task P17.41): cpp -> ttkernel on
+# tt-pairs-v0-ttkernel's matmuls, each built with its ttkernel host program, which passes each kernel's circular buffer
+# indices as compile-time arguments. Everything else is ttkernel-maxabs.yaml's (its comments hold); the parent here is
+# the pcc half of the Tier A run, so the items, the tolerance metric, and the oracle are the matmuls' (pcc at least
+# the references' own). Exploratory; every TT program runs on ttsim, a simulator. tt-pairs-v0 is a development set
+# (OQ-083 (b)). Before the run, as ttkernel-maxabs.yaml says.
+extends: ../../tier-a-rngd-pcc.yaml  # the pcc items, baseline_both, ttsim for TT, native for C++, from_baseline
+model:
+  id: furiosa-ai/gpt-oss-120b
+  timeout_s: 3600
+llm:
+  sampling:
+    max_tokens: 32768
+    reasoning_effort: medium
+extract:
+  unfenced_file_lines: true  # as sweep2 on (sweep7's chain)
+bench:
+  suite: tt-pairs-v0-ttkernel  # matmul_multi_core and matmul_single_core, the pcc items, from the parent
+directions: [{source: cpp, target: ttkernel}]
+prompts: tt-mlir-v0
+toolchain:
+  ttkernel: ttkernel-ttmetal  # the pinned tt-mlir tools, then the host program with the pinned clang++-20
+executor:
+  ttkernel: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # candidates run in the sandbox on ttsim, a simulator
+context: [ttkernel-5f396fd6]  # the ttkernel dialect's ops at the pin, built by tools/build_ttkernel_context.py
+examples: {pack: ttkernel-examples-5f396fd6, max_chars: 8000, prompts: [generate, correct]}
+dialect_lookup: {defs: ttkernel-defs-5f396fd6, max_chars: 12000, nearest: 4}  # task P17.41: verify-error feedback
+stages: [baseline, summarize_context, generate, compile_loop, run_loop, oracle]
+trials: {n: 3}
+loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true, coord_gap_as_error: true}

@@ -97,6 +97,20 @@ class Module:
 
 
 @dataclass(frozen=True)
+class Lowering:
+    """What a lowering toolchain gives for one compute unit (task P17.41; lassi.core.capabilities LOWERS_SOURCE).
+
+    `module` is the MLIR module's text, None when the tool gave none;
+    `level` the level it lowers to (such as affine); `diagnostics` the
+    tool's parsed messages, an error among them when `module` is None.
+    """
+
+    module: str | None
+    level: str
+    diagnostics: list[Diagnostic] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class BuildResult:
     """Toolchain output: the artifact path (None on failure) and diagnostics."""
 

@@ -354,6 +354,7 @@ from lassi.core.capabilities import (
     ALIGNS_OUTPUT_FILES,
     COMPUTES_REWARD,
     DEVICE_KEY,
+    LOWERS_SOURCE,
     MODEL_CHECK,
     REASONING_EFFORT,
     SILICON,
@@ -378,6 +379,7 @@ from lassi.core.interfaces import Executor, Profiler, Sampling, Toolchain
 from lassi.core.parquet import write_run_parquet
 from lassi.core.progress import STAGE_START, TRIAL_END, TRIAL_START, GuardedObserver, Observer, ProgressEvent, notify
 from lassi.core.recipe import (
+    DIALECT_LOOKUP,
     EXAMPLES,
     LOOKUP,
     LOOKUP_CORE,
@@ -390,6 +392,7 @@ from lassi.core.recipe import (
     RETRIEVAL,
     SKELETON,
     SKELETON_SHA256_KEY,
+    SOURCE_MLIR,
     UNCAPPED,
     Recipe,
     RecipeError,
@@ -411,20 +414,24 @@ from lassi.core.record import (
     make_trial_id,
     standing_attempt,
 )
-from lassi.core.registry import DEFAULT_REGISTRY, Binding, Entry, Registry, device_path
+from lassi.core.registry import DEFAULT_REGISTRY, Binding, Entry, Registry, RegistryError, device_path
 from lassi.core.stages import (
     BASELINE_X10,
     CONTEXT_PROMPTS,
+    COORD_GAP_AS_ERROR,
     CORE_TEMPLATES,
     CORRECT_ON_MISMATCH,
     CORRECT_ON_SIM_GAP,
+    DIALECT_TEMPLATES,
     EXAMPLE_TEMPLATES,
+    GENERATE_FIELDS,
     LOOKUP_TEMPLATES,
     NEAREST_TEMPLATES,
     PURPOSE,
     RETRIEVAL_PROMPTS,
     RUNS_CODE,
     SANDBOXED,
+    SOURCE_MLIR_TEMPLATES,
     RunContext,
     pack_parts,
 )
@@ -437,6 +444,7 @@ from lassi.prompts import assets as prompt_assets
 from lassi.prompts import examples as examples_pack
 from lassi.prompts import load_recipe_assets, rag_corpus, render
 from lassi.prompts import skeletons as skeleton_files
+from lassi.prompts.dialect_defs import DialectDefs, load_defs
 from lassi.prompts.retrieval import GENERATOR as INDEX_GENERATOR
 from lassi.prompts.retrieval import Index, load_index
 from lassi.scoring.run_scoring import (
@@ -657,7 +665,10 @@ class _Run:
     `examples` is the run's worked examples pack (_examples_pack), empty
     when the recipe sets no examples section. `skeleton` is the run's host
     program skeleton (_run_skeleton), or None when the recipe sets no
-    skeleton section.
+    skeleton section. `dialect` is the run's dialect definitions
+    (_dialect_defs; task P17.41), or None without a dialect_lookup section,
+    and `frontend` its lowering toolchain (_frontend), or None without a
+    source_mlir section.
     """
 
     recipe: Recipe
@@ -682,6 +693,8 @@ class _Run:
     retrieval: Index | None = None
     examples: tuple[examples_pack.Example, ...] = ()
     skeleton: skeleton_files.Skeleton | None = None
+    dialect: DialectDefs | None = None
+    frontend: BuiltToolchain | None = None
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -738,6 +751,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     retrieval = _retrieval_index(recipe)
     examples = _examples_pack(recipe)
     skeleton = _run_skeleton(recipe)
+    dialect = _dialect_defs(recipe)
     _check_adversary(recipe, registry, settings, bench)
     devices = probe_devices(recipe, registry, DEFAULT_PROBES if options.probes is None else options.probes)
     _check_one_role(recipe, registry, devices)
@@ -748,6 +762,8 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     _check_backend(recipe, settings, backend)
     serving = _served_model(recipe, settings, backend)
     toolchains = _toolchains(recipe, registry, _toolchains_root(options), runs_root)
+    frontend = _frontend(recipe, registry, _toolchains_root(options), runs_root)
+    toolchains = toolchains if frontend is None else (*toolchains, frontend)
     executors = _executors(recipe, registry, settings)
     profiler = _built_profiler(recipe, registry)
     pins, target_pins = _run_pins(recipe, settings, toolchains, executors)
@@ -779,6 +795,8 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         retrieval=retrieval,
         examples=examples,
         skeleton=skeleton,
+        dialect=dialect,
+        frontend=frontend,
     )
 
 
@@ -1806,6 +1824,62 @@ def _check_plan(recipe: Recipe, registry: Registry, settings: _Settings, bench: 
         raise RunError(f"{recipe.path}: the project may not be {project!r}, which the run tree uses itself")
     _check_stages(recipe, registry, settings)
     _check_trials(recipe, settings, bench)
+    _check_source_mlir(recipe, registry, settings, bench)
+
+
+# What generate.txt's source_mlir field is filled with to see whether the template shows it (_check_source_mlir).
+_SOURCE_MLIR_PROBE = "lassi-source-mlir-probe"
+
+
+def _check_source_mlir(recipe: Recipe, registry: Registry, settings: _Settings, bench: _Bench) -> None:
+    """Refuse a source_mlir section the run could not carry out (task P17.41; lassi.core.stages lowered_source).
+
+    In this order: a fragment set, whose prompts (upstream's) show no MLIR;
+    a toolchain that is not registered or does not declare LOWERS_SOURCE; a
+    template set lacking SOURCE_MLIR_TEMPLATES or whose generate.txt never
+    shows $source_mlir, so the module would be lowered and never shown; and
+    a bench item without a compute unit (its manifest's `compute`). The
+    toolchain itself is built by _frontend. A recipe without the section is
+    never checked.
+    """
+    section = recipe.data.get(SOURCE_MLIR)
+    if section is None:
+        return
+    where = f"{recipe.path}: {SOURCE_MLIR}"
+    if settings.fragments:
+        raise RunError(f"{where} is set, but {settings.prompts!r} is a fragment prompt set, upstream's prompts, "
+                       f"which show no MLIR; use a template set or remove {SOURCE_MLIR}")
+    try:
+        entry = registry.get("Toolchain", section["toolchain"])
+    except RegistryError as error:
+        raise RunError(f"{where}.toolchain: {error}") from error
+    if LOWERS_SOURCE not in entry.capabilities:
+        raise RunError(f"{where}.toolchain {entry.name!r} does not declare {LOWERS_SOURCE!r}; name a Toolchain that "
+                       "lowers a compute unit to MLIR, such as cgeist-affine")
+    _check_templates(recipe, settings, f"{SOURCE_MLIR} is set", SOURCE_MLIR_TEMPLATES)
+    fields = {**dict.fromkeys(GENERATE_FIELDS, ""), "source_mlir": _SOURCE_MLIR_PROBE}
+    if _SOURCE_MLIR_PROBE not in render(settings.prompts, "generate", fields):
+        raise RunError(f"{where} is set, but generate.txt of {settings.prompts!r} never shows $source_mlir, so the "
+                       "lowered module would never reach the model; add the field or remove the section")
+    missing = [item for item in bench.items if bench.suite.items[item].compute is None]
+    if missing:
+        raise RunError(f"{where} is set, but {bench.suite.name} declares no compute unit (the item key `compute`) for "
+                       f"{', '.join(missing)}; add one per item or remove {SOURCE_MLIR}")
+
+
+def _frontend(
+    recipe: Recipe, registry: Registry, root: Path | None, build_root: Path | None
+) -> BuiltToolchain | None:
+    """Build the source_mlir section's lowering toolchain once per run with build_toolchain; None without it.
+
+    It is built as every toolchain is (its pin, the compile sandbox, and the
+    --version check, for a pinned class), with no language: its pins join
+    every trial's (_run_pins), and toolchains.json records it.
+    """
+    section = recipe.data.get(SOURCE_MLIR)
+    if section is None:
+        return None
+    return build_toolchain(section["toolchain"], root, registry, build_root=build_root)
 
 
 def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> None:
@@ -1860,6 +1934,62 @@ def _check_stages(recipe: Recipe, registry: Registry, settings: _Settings) -> No
     _check_skeleton(recipe, settings)
     _check_restart(recipe, settings)
     _check_sim_gap(recipe, settings)
+    _check_coord_gap(recipe, settings)
+    _check_dialect_lookup(recipe, settings)
+
+
+def _check_dialect_lookup(recipe: Recipe, settings: _Settings) -> None:
+    """Refuse the dialect_lookup section with a fragment set, or a template set that cannot render its block (P17.41).
+
+    Upstream's prompts carry no definitions, so a fragment set cannot carry
+    them; a template set needs each template of DIALECT_TEMPLATES
+    (lassi.core.stages: the block, one definition, and one unknown name)
+    rendering with its fields. The tree itself is read by _dialect_defs. A
+    recipe without the section is never checked.
+    """
+    if DIALECT_LOOKUP not in recipe.data:
+        return
+    if settings.fragments:
+        raise RunError(
+            f"{recipe.path}: {DIALECT_LOOKUP} is set, but {settings.prompts!r} is a fragment prompt set, upstream's "
+            f"prompts, which carry no dialect definitions; use a template set or remove {DIALECT_LOOKUP}"
+        )
+    _check_templates(recipe, settings, f"{DIALECT_LOOKUP} is set", DIALECT_TEMPLATES)
+
+
+def _dialect_defs(recipe: Recipe) -> DialectDefs | None:
+    """Load the definitions tree the recipe's dialect_lookup section names, once per run; None without the section.
+
+    The tree is <assets root>/context/<dialect_lookup.defs>
+    (lassi.prompts.dialect_defs load_defs), read only when every file
+    matches its MANIFEST.yaml; a missing or bad tree is a RunError naming
+    dialect_lookup.defs, raised before any directory exists.
+    """
+    section = recipe.data.get(DIALECT_LOOKUP)
+    if section is None:
+        return None
+    try:
+        return load_defs(section["defs"])
+    except (OSError, ValueError) as error:
+        raise RunError(
+            f"{recipe.path}: {DIALECT_LOOKUP}.defs {section['defs']!r}: {error}; build it with "
+            "uv run tools/build_ttkernel_context.py build --tree <tt-mlir at the pin>"
+        ) from error
+
+
+def _check_coord_gap(recipe: Recipe, settings: _Settings) -> None:
+    """Refuse loop.coord_gap_as_error set true with a fragment prompt set (task P17.41; lassi.core.stages).
+
+    Its correction carries this project's wording (addressing_text) in
+    correct.txt, which only a template set holds. A key that is false or
+    absent is never checked.
+    """
+    key = f"loop.{COORD_GAP_AS_ERROR}"
+    if recipe.data["loop"].get(COORD_GAP_AS_ERROR) is True and settings.fragments:
+        raise RunError(
+            f"{recipe.path}: {key} is true, but {settings.prompts!r} is a fragment prompt set, upstream's prompts, "
+            f"which hold no addressing-error correction; use a template set or remove {key}"
+        )
 
 
 def _check_sim_gap(recipe: Recipe, settings: _Settings) -> None:
@@ -2887,9 +3017,11 @@ def _run_pins(
 
     The run's (provenance.json) are every bound toolchain's and every bound
     executor's pins. A target language's (each of its trials'
-    toolchain_pins) are those of the toolchains bound for it and of the
-    executor that runs it, so a per-language executor's pins join only the
-    trials whose target it runs. A pin that an executor declares with other
+    toolchain_pins) are those of the toolchains bound for it, of a
+    toolchain bound for no language (the source_mlir lowering toolchain,
+    task P17.41, which serves every trial), and of the executor that runs
+    it, so a per-language executor's pins join only the trials whose target
+    it runs. A pin that an executor declares with other
     pairs than a toolchain or another executor that declares the same pin
     name is a RunError naming both (_check_shared_pins), and so is a pin
     with no ToolchainPins field (_pin_versions); both come before any
@@ -2900,7 +3032,7 @@ def _run_pins(
     target_pins = {
         direction.target: _pin_versions(
             [
-                *(built.pins for built in toolchains if direction.target in built.languages),
+                *(built.pins for built in toolchains if direction.target in built.languages or not built.languages),
                 *executors.pins_for(direction.target),
             ]
         )
@@ -3075,6 +3207,8 @@ def _context(run: _Run, backend: Any, direction: Direction, item: str) -> RunCon
         retrieval=run.retrieval,
         examples=run.examples,
         skeleton=run.skeleton,
+        dialect=run.dialect,
+        frontend=None if run.frontend is None else run.frontend.toolchain,
     )
 
 

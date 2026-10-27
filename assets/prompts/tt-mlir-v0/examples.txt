@@ -2,6 +2,8 @@ Worked examples follow: ttkernel modules from tt-mlir's own tests at commit 5f39
 test's RUN lines are the commands that lower it, and its CHECK lines show C++ that it lowers to. They solve
 other tasks than the one after them, so do not copy their computation; copy how they write ttkernel: the
 func.func with its ttkernel.thread attribute, how they get arguments and circular buffers, and the textual
-form of each op with its operand and result types.
+form of each op with its operand and result types. Their ttkernel.get_noc_addr(%x, %y, %addr) addresses the
+tile at NOC coordinate (x, y) at a fixed address; a DRAM buffer is never read so, but through its bank, as the
+task says.
 
 $examples

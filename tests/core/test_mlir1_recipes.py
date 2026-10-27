@@ -1,4 +1,4 @@
-"""Tests for the tt-mlir-v0 template set and the cpp -> ttkernel recipes (task P17.36).
+"""Tests for the tt-mlir-v0 template set and the cpp -> ttkernel recipes (tasks P17.36, P17.37, and P17.41).
 
 Bible: Project Recipes (template sets; the context, examples, and loop
 sections), Level Rules (TT host programs are never model output), Agent
@@ -12,14 +12,21 @@ What they fix:
   only its stage's fields. For every tt-pairs-v0-ttkernel item, generate
   shows the C++ source and the trusted host program (host_files, read-only),
   names the .mlir kernel files to write, and shows no kernel: the upstream
-  kernel C++ would be the answer. source_mlir is empty until a frontend
-  lands. The corrections show the host program too.
+  kernel C++ would be the answer. source_mlir is empty unless the recipe
+  sets source_mlir (tests/core/test_source_mlir.py). The corrections show
+  the host program too: the ttkernel host program of task P17.37 for the
+  four items with circular buffers, the tt one for loopback. The prompts say
+  DRAM is addressed through its bank, never by a NOC coordinate, and name the
+  mistakes of plans/spikes/mlir-issues.md (task P17.41).
 - projects/lassi-demo/mlir1/gpt-oss-120b/ttkernel-{maxabs,pcc}.yaml load,
   bind cpp -> ttkernel with ttkernel-ttmetal on ttsim, carry sweep7's
-  gpt-oss-120b model settings, 3 samples, a cap of 8, and the mismatch and
-  simulator-gap loop opt-ins, and cover each item once by its declared
-  metric. With stand-in fetched kernels, the runner's checks before any
-  directory pass for both (skipped when the generated dialect pack or worked
+  gpt-oss-120b model settings, 3 samples, a cap of 8, the mismatch,
+  simulator-gap, and coord_to_tile loop opt-ins, and the dialect_lookup
+  section, and cover each item once by its declared metric (task P17.37 under
+  OQ-103 (a): every item again). ttkernel-affine-{maxabs,pcc}.yaml are the
+  same plus the source_mlir section on cgeist-affine (task P17.41). With
+  stand-in fetched kernels, the runner's checks before any directory pass for
+  all four (skipped when the generated dialect pack, definitions, or worked
   example, gitignored, is not built in this checkout).
 """
 
@@ -56,12 +63,27 @@ SWEEP7 = REPO / "projects" / "lassi-demo" / "sweep7" / "gpt-oss-120b"
 FIELDS = {"generate": GENERATE_FIELDS, "correct": CORRECT_FIELDS, MISMATCH_PROMPT: MISMATCH_FIELDS}
 CONTEXT_FIELDS = {
     "summarize_context": ("target_language", "context_pack"), "knowledge": ("knowledge_summary",),
-    "examples": ("examples",), "example": ("name", "files"),
+    "examples": ("examples",), "example": ("name", "files"), "dialect_lookup": ("definitions",),
+    "dialect_definition": ("name", "text"), "dialect_unknown": ("name", "candidates"),
+    "source_mlir": ("path", "function", "level", "mlir"),
+}
+# The recipes, each with its sweep7 counterpart and the metric of its items.
+NAMES = {
+    "ttkernel-maxabs": ("base-maxabs", "max_abs"), "ttkernel-pcc": ("base-pcc", "pcc"),
+    "ttkernel-affine-maxabs": ("base-maxabs", "max_abs"), "ttkernel-affine-pcc": ("base-pcc", "pcc"),
 }
 GENERATED = (
     REPO / "assets" / "context" / "ttkernel-5f396fd6" / "ttkernel_ops.ttkernel.txt",
+    REPO / "assets" / "context" / "ttkernel-defs-5f396fd6" / "ttkernel_defs.ttkernel.txt",
     REPO / "assets" / "examples" / "ttkernel-examples-5f396fd6" / "ttkernel_translate" / "ttkernel_noc.mlir",
 )
+
+
+def host_text(item: str) -> tuple[str, str]:
+    """Return the item's ttkernel host program as the prompt shows it: its build name and its text."""
+    spec = SUITE.items[item].languages["ttkernel"]
+    name = SUITE.items[item].languages["tt"].files[0]
+    return name, (REPO / spec.support[name].path).read_text(encoding="utf-8")
 
 
 def stand_in(path: str) -> str:
@@ -114,10 +136,9 @@ def test_generate_shows_the_source_and_the_host_program_and_no_kernel(item: str,
     stage: Any = SimpleNamespace(context=context(item, sources))
     system, prompt = GenerateStage._prompt(stage, None, expected)
     assert system is None
-    tt = SUITE.items[item].languages["tt"]
-    host = (REPO / tt.dir / tt.files[0]).read_text(encoding="utf-8")
+    name, host = host_text(item)
     source = SUITE.source_files(item, DIRECTION, sources, purpose=PURPOSE)
-    assert host in prompt and f"// FILE: {tt.files[0]}" in prompt, "the trusted host program, read-only"
+    assert host in prompt and f"// FILE: {name}" in prompt, "the trusted host program, read-only"
     assert all(text in prompt for text in source.values())
     assert ", ".join(expected) in prompt and all(path.endswith(".mlir") for path in expected)
     assert "SYNTHETIC stand-in for the fetched kernel" not in prompt, "never an upstream kernel"
@@ -130,8 +151,7 @@ def test_generate_shows_the_source_and_the_host_program_and_no_kernel(item: str,
 def test_the_corrections_show_the_host_program_and_no_kernel(item: str, sources: Path) -> None:
     expected = list(SUITE.items[item].languages["ttkernel"].files)
     previous: Any = SimpleNamespace(files={expected[0]: "// SYNTHETIC previous module\n"})
-    tt = SUITE.items[item].languages["tt"]
-    host = (REPO / tt.dir / tt.files[0]).read_text(encoding="utf-8")
+    _, host = host_text(item)
     for mismatch in (False, True):
         _, prompt = _correction_messages(context(item, sources), previous, expected,
                                          "SYNTHETIC error text", run_error=False, mismatch=mismatch)
@@ -147,15 +167,32 @@ def test_the_generate_template_explains_ttkernel_and_the_lowering() -> None:
         assert words in text, words
 
 
+def test_the_prompts_say_dram_is_addressed_by_bank_and_name_the_spikes_mistakes() -> None:
+    # plans/spikes/mlir-issues.md, Half 1: the types and ops the dialect lacks, the custom form of TensorAccessorArgs
+    # (TTKernelOps.cpp:265-269 at 5f396fd6: no trailing type), the literal index of get_compile_time_arg_val, and DRAM
+    # read at the NOC coordinate (0, 0).
+    generate = (SET_DIR / "generate.txt").read_text(encoding="ascii")
+    for words in ("DRAM is addressed through its bank, never by a NOC coordinate", "get_noc_addr_from_bank_id",
+                  "noc_async_read_tile", "tensor_accessor.get_noc_addr", "noc_async_read_barrier",
+                  "!ttkernel.tensor_accessor_args", "ttkernel.InterleavedAddrGenFast", "no trailing type",
+                  "ttkernel.TensorAccessorArgs(prev = %args)", "#0", "arith.index_cast %i : index to i32", "(0, 0)"):
+        assert words in generate, words
+    correct = (SET_DIR / "correct.txt").read_text(encoding="ascii")
+    for words in ("through its bank, never by a NOC coordinate", "no trailing type", "get_noc_addr_from_bank_id"):
+        assert words in correct, words
+    assert "through its bank" in (SET_DIR / "examples.txt").read_text(encoding="ascii")
+
+
 def load(name: str) -> dict[str, Any]:
     """Return the resolved data of one mlir1 recipe."""
     return load_recipe(RECIPES / f"{name}.yaml").data
 
 
-@pytest.mark.parametrize(("name", "metric"), [("ttkernel-maxabs", "max_abs")])
-def test_the_recipes_bind_cpp_to_ttkernel_with_sweep7s_model_settings(name: str, metric: str) -> None:
+@pytest.mark.parametrize("name", sorted(NAMES))
+def test_the_recipes_bind_cpp_to_ttkernel_with_sweep7s_model_settings(name: str) -> None:
     data = load(name)
-    sweep7 = load_recipe(SWEEP7 / f"base-{name.split('-')[1]}.yaml").data
+    base, metric = NAMES[name]
+    sweep7 = load_recipe(SWEEP7 / f"{base}.yaml").data
     assert data["model"] == sweep7["model"]
     assert data["llm"] == sweep7["llm"]
     assert data["extract"] == sweep7["extract"]
@@ -166,6 +203,10 @@ def test_the_recipes_bind_cpp_to_ttkernel_with_sweep7s_model_settings(name: str,
     assert data["trials"] == {"n": 3}
     assert data["loop"]["max_corrections"] == 8
     assert data["loop"]["correct_on_mismatch"] is True and data["loop"]["correct_on_sim_gap"] is True
+    assert data["loop"]["coord_gap_as_error"] is True, "task P17.41: the coord_to_tile gap as an addressing error"
+    assert data["dialect_lookup"] == {"defs": "ttkernel-defs-5f396fd6", "max_chars": 12000, "nearest": 4}
+    lowering = {"toolchain": "cgeist-affine", "max_chars": 24000} if "affine" in name else None
+    assert data.get("source_mlir") == lowering
     assert data["context"] == ["ttkernel-5f396fd6"]
     assert data["examples"]["pack"] == "ttkernel-examples-5f396fd6"
     assert data["oracle"] == {"kind": "binary_io", "metric": metric, "threshold": "from_baseline"}
@@ -174,15 +215,23 @@ def test_the_recipes_bind_cpp_to_ttkernel_with_sweep7s_model_settings(name: str,
         assert SUITE.items[item].tolerance.metric == metric, item
 
 
-def test_the_one_recipe_runs_loopback_alone() -> None:
-    # Until task P17.37 (OQ-103): at the pin a ttkernel kernel gets a circular buffer only from an argument, and
-    # only loopback's tracked host program needs none, so the max_abs recipe holds loopback alone and no pcc
-    # recipe exists (the matmuls' host programs pass no CB index either).
-    assert load("ttkernel-maxabs")["bench"]["items"] == ["loopback"]
-    assert sorted(path.name for path in RECIPES.glob("*.yaml")) == ["ttkernel-maxabs.yaml"]
+def test_the_recipes_cover_every_item_once_by_its_metric() -> None:
+    # Task P17.37 under OQ-103 (a): with the ttkernel host programs passing the CB indices, the max_abs recipe holds
+    # every item of its half again and a pcc recipe for the matmuls joins it.
+    assert sorted(path.stem for path in RECIPES.glob("*.yaml")) == sorted(NAMES)
+    for pair in (("ttkernel-maxabs", "ttkernel-pcc"), ("ttkernel-affine-maxabs", "ttkernel-affine-pcc")):
+        items = [item for name in pair for item in load(name)["bench"]["items"]]
+        assert sorted(items) == sorted(SUITE.items), pair
 
 
-@pytest.mark.parametrize("name", ["ttkernel-maxabs"])
+@pytest.mark.parametrize("half", ["maxabs", "pcc"])
+def test_an_affine_recipe_is_its_base_plus_the_lowering(half: str) -> None:
+    base, affine = load(f"ttkernel-{half}"), load(f"ttkernel-affine-{half}")
+    assert {key: value for key, value in affine.items() if key not in ("source_mlir", "project")} == {
+        key: value for key, value in base.items() if key != "project"}
+
+
+@pytest.mark.parametrize("name", sorted(NAMES))
 def test_the_runners_checks_before_any_directory_pass(name: str, sources: Path) -> None:
     missing = [str(path) for path in GENERATED if not path.is_file()]
     if missing:

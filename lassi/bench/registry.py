@@ -97,6 +97,13 @@ Optional keys for hand-written pairs (task P4.13, tt-pairs-v0):
   None for an item without the key; load_suite refuses another key, a
   missing key, a bad count, and an empty basis, naming `work`.
   lassi.analysis.tt_rates divides it by a measured silicon time only.
+- per item, `compute` (task P17.41): the item's compute-only C translation
+  unit, exactly `{tracked: <path under assets/>, function: <C identifier>,
+  sha256: <64 hex>}`: the item's computation as one function with C linkage
+  and no I/O, which a lowering toolchain (lassi.toolchains.cgeist) lowers by
+  that name for the generation prompt's source_mlir field
+  (lassi.core.stages). SuiteItem.compute holds it, and Suite.compute_source
+  reads it, refusing bytes that differ from its sha256.
 
 A tracked suite (task P16.8): a manifest may leave out `repo` and
 `commit` together, for a suite written wholly in this repository, such as
@@ -154,9 +161,12 @@ _REPO = Path(__file__).resolve().parents[2]
 TRACKED_ROOT = _REPO
 _ITEM_KEYS = {
     "run_args", "passfail", "support", "tolerance", "inputs", "outputs", "seed", "unpack_to_dest", "contract", "work",
+    "compute",
 }
 # The keys of an item's `work` (task P17.42), each required.
 _WORK_KEYS = {"flop", "ops", "bytes", "basis"}
+# A compute unit's function name: a C identifier (the name cgeist's --function takes for a function with C linkage).
+_C_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
 _HELD_OUT = ("inputs", "outputs", "seed")
 
 
@@ -232,6 +242,25 @@ class Work:
 
 
 @dataclass(frozen=True)
+class ComputeUnit:
+    """An item's compute-only C unit (task P17.41): its tracked path, its function's C name, and its sha256."""
+
+    path: str
+    function: str
+    sha256: str
+
+
+@dataclass(frozen=True)
+class ComputeSource:
+    """A compute unit as read: its tracked path, its file name, its function's C name, and its text."""
+
+    path: str
+    file: str
+    function: str
+    text: str
+
+
+@dataclass(frozen=True)
 class SuiteItem:
     """One bench item: its name, split, sources per language, run arguments, and its optional keys.
 
@@ -243,7 +272,8 @@ class SuiteItem:
     held-out inputs (empty and None when it declares none),
     `unpack_to_dest` its unpack_to_dest note, `contract` its input
     contract (lassi.harness InputContract; None without held-out inputs),
-    and `work` its analytic work (Work; None when the manifest declares none).
+    and `work` its analytic work (Work; None when the manifest declares none);
+    and `compute` its compute-only C unit (None when it declares none).
     """
 
     name: str
@@ -259,6 +289,7 @@ class SuiteItem:
     unpack_to_dest: str | None = None
     contract: InputContract | None = None
     work: Work | None = None
+    compute: ComputeUnit | None = None
 
 
 def _held_message(suite: str, name: str, split: str, purpose: str) -> str:
@@ -385,6 +416,25 @@ class Suite:
                     )
                 files[file] = data.decode("utf-8")
         return files
+
+    def compute_source(self, name: str, *, purpose: str) -> ComputeSource:
+        """Return item `name`'s compute-only C unit as read under TRACKED_ROOT (task P17.41).
+
+        Raises ValueError for an item that declares none and for a file whose
+        bytes differ from the sha256 the manifest records; an item refused
+        to `purpose` raises EvalSplitError.
+        """
+        found = self.item(name, purpose=purpose)
+        unit = found.compute
+        if unit is None:
+            raise ValueError(f"{self.name}/{name} declares no compute unit (the item key `compute`)")
+        data = (TRACKED_ROOT / unit.path).read_bytes()
+        if hashlib.sha256(data).hexdigest() != unit.sha256:
+            raise ValueError(
+                f"{self.name}/{name}: the compute unit {unit.path} differs from the sha256 its manifest records "
+                f"({unit.sha256}); the manifest pins the unit's bytes"
+            )
+        return ComputeSource(unit.path, PurePosixPath(unit.path).name, unit.function, data.decode("utf-8"))
 
     def bench_item(self, name: str, direction: Direction) -> BenchItem:
         """Return the Result Record's bench_item for this item and direction."""
@@ -587,6 +637,7 @@ def _item(name: Any, spec: Any, where: str) -> SuiteItem:
         unpack_to_dest=note,
         contract=contract,
         work=_work(spec["work"], f"{where}.work") if "work" in spec else None,
+        compute=_compute(spec.get("compute"), where) if "compute" in spec else None,
     )
 
 
@@ -610,6 +661,24 @@ def _work(value: Any, where: str) -> Work:
         raise ValueError(f"{where}.basis must be a non-empty note on how the counts follow from the shapes")
     return Work(flop=flop, ops=MappingProxyType(counts), bytes=_work_count(value["bytes"], f"{where}.bytes"),
                 basis=basis.strip())
+
+
+def _compute(value: Any, where: str) -> ComputeUnit:
+    """Check an item's `compute` entry: exactly tracked (a path under assets/), function (a C name), and sha256."""
+    at = f"{where}.compute"
+    if not isinstance(value, dict) or set(value) != {"tracked", "function", "sha256"}:
+        raise ValueError(
+            f"{at} must be exactly {{tracked: <path under {TRACKED_PREFIX}>, function: <C name>, sha256: <64 hex>}}, "
+            f"got {value!r}"
+        )
+    path, function, digest = value["tracked"], value["function"], value["sha256"]
+    if not (_relative(path) and path.startswith(TRACKED_PREFIX)):
+        raise ValueError(f"{at}.tracked must be a relative path under {TRACKED_PREFIX} without '..', got {path!r}")
+    if not (isinstance(function, str) and _C_NAME.fullmatch(function)):
+        raise ValueError(f"{at}.function must be a C identifier, got {function!r}")
+    if not (isinstance(digest, str) and _SHA256.fullmatch(digest)):
+        raise ValueError(f"{at}.sha256 must be a 64-hex sha256 digest, got {digest!r}")
+    return ComputeUnit(path=path, function=function, sha256=digest)
 
 
 def _item_support(support: Any, languages: Mapping[str, LanguageSources], where: str) -> dict[str, str]:

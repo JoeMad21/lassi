@@ -50,6 +50,11 @@ and _bind_skeleton refuses the section under faithful: true, set or inherited, t
 (lassi.prompts.skeletons), refusing one that does not match its manifest, a stated skeleton.sha256 that is not its
 sha256, and a direction whose target is not its language, and enters its sha256 at skeleton.sha256.
 
+The optional `dialect_lookup` and `source_mlir` sections (task P17.41; DIALECT_LOOKUP, SOURCE_MLIR) are never
+materialized either, so a recipe without them keeps its resolved recipe and hash. In step 7 each one's required keys
+are checked, and either is refused under faithful: true, set or inherited (_check_unfaithful_sections); the runner
+reads the definitions tree and builds the lowering toolchain (lassi.core.runner).
+
 `executor` has two forms (task P4.5). The single form is a kind section, `{kind: <name>, <config>...}`,
 binding one Executor at executor.kind for every language. The per-language form is a non-empty mapping
 without `kind`, from a language to an Executor name (`cuda: native`) or to a kind section with that
@@ -183,6 +188,12 @@ LOOP_OPT_INS: dict[str, str] = {
         " attempt 0's prompt in place of the next correction, within loop.max_corrections; absent, every request"
         " after attempt 0 is a correction, as in upstream's loop"
     ),
+    "coord_gap_as_error": (
+        "read a run that stopped at ttsim's coord_to_tile gap on a NOC coordinate (UnimplementedFunctionality:"
+        " coord_to_tile: coord (x,y), a coordinate that maps to no tile of the simulated device) as a failed run, fed"
+        " back as an addressing error in the kernel, within loop.max_corrections (task P17.41); off reads it as any"
+        " other simulator gap (OQ-098)"
+    ),
 }
 # The one LOOP_OPT_INS key that is an int (task P17.25): from 1 to the resolved loop.max_corrections, both included,
 # or any int of at least 1 when the loop is uncapped. The schema checks the type and _check_loop the cap.
@@ -246,6 +257,29 @@ SKELETON_GENERATE = "generate"
 SKELETON_CORRECT = "correct"
 SKELETON_PROMPTS = (SKELETON_GENERATE, SKELETON_CORRECT)
 SKELETON_SHA256_KEY = "sha256"
+
+# The optional dialect_lookup section (task P17.41): for each error of an MLIR tool's parse or verify step that a
+# compile correction lists, the exact definition and assembly format of the op or type it names or points at, and for
+# a name the dialect lacks its nearest op and type names, from a definitions tree under assets/context/ that
+# tools/build_ttkernel_context.py builds from the pinned dialect sources (lassi.prompts.dialect_defs), before the
+# correction (lassi.core.stages). Off when absent, and never materialized, so a recipe without it keeps its resolved
+# recipe and hash. Upstream's prompts carry no definitions, so it is refused under faithful: true
+# (_check_dialect_lookup). defs (a tree name) and max_chars (the definitions' total text per prompt) are required;
+# nearest (how many nearest names per unknown name) is optional, default DIALECT_NEAREST_DEFAULT.
+DIALECT_LOOKUP = "dialect_lookup"
+DIALECT_MAX_CHARS = (500, 32000)
+DIALECT_NEAREST = "nearest"
+DIALECT_NEAREST_RANGE = (1, 8)
+DIALECT_NEAREST_DEFAULT = 4
+
+# The optional source_mlir section (task P17.41): the item's compute-only C unit (its suite manifest's `compute`)
+# lowered by a Toolchain that declares lowers_source (lassi.core.capabilities; the pinned cgeist, cgeist-affine) once
+# per trial, and the module shown in the generation prompt's source_mlir field (lassi.core.stages). Off when absent,
+# and never materialized, so a recipe without it keeps its resolved recipe and hash; upstream's prompts show no MLIR,
+# so it is refused under faithful: true (_check_source_mlir). toolchain (a registry name) and max_chars (the largest
+# module shown; a longer one is never cut, but left out with a note) are required.
+SOURCE_MLIR = "source_mlir"
+SOURCE_MLIR_MAX_CHARS = (1000, 64000)
 
 # The opt-in sampling key llm.sampling.reasoning_effort (OQ-080; bible Serving Rules, reasoning effort): one of
 # REASONING_EFFORTS, which a backend declaring the capability of that name takes (lassi.core.capabilities). Off when
@@ -747,6 +781,39 @@ _SKELETON = _Fields(
     },
     required=frozenset({"name", "prompts"}),
 )
+# The dialect_lookup section (task P17.41; DIALECT_LOOKUP): defs and max_chars required, nearest optional.
+_DIALECT_LOOKUP = _Fields(
+    {
+        "defs": _Leaf(
+            f"a definitions tree name matching {_INDEX_TEXT.pattern}, a directory under assets/context holding "
+            "MANIFEST.yaml",
+            lambda value: isinstance(value, str) and _INDEX_TEXT.fullmatch(value) is not None,
+        ),
+        "max_chars": _Leaf(
+            f"an integer from {DIALECT_MAX_CHARS[0]} to {DIALECT_MAX_CHARS[1]}",
+            lambda value: _is_between(value, DIALECT_MAX_CHARS),
+        ),
+        DIALECT_NEAREST: _Leaf(
+            f"an integer from {DIALECT_NEAREST_RANGE[0]} to {DIALECT_NEAREST_RANGE[1]}",
+            lambda value: _is_between(value, DIALECT_NEAREST_RANGE),
+        ),
+    },
+    required=frozenset({"defs", "max_chars"}),
+)
+# The source_mlir section (task P17.41; SOURCE_MLIR): both keys required.
+_SOURCE_MLIR = _Fields(
+    {
+        "toolchain": _Leaf(
+            f"a Toolchain name matching {_INDEX_TEXT.pattern} that declares lowers_source",
+            lambda value: isinstance(value, str) and _INDEX_TEXT.fullmatch(value) is not None,
+        ),
+        "max_chars": _Leaf(
+            f"an integer from {SOURCE_MLIR_MAX_CHARS[0]} to {SOURCE_MLIR_MAX_CHARS[1]}",
+            lambda value: _is_between(value, SOURCE_MLIR_MAX_CHARS),
+        ),
+    },
+    required=frozenset({"toolchain", "max_chars"}),
+)
 
 # Every key a run recipe may hold and its type. Inside a fixed mapping every key is optional unless REQUIRED
 # names it, and any other key is unknown. A train-only key (TRAIN_SCHEMA's base_model, method, trainer, data, and
@@ -786,6 +853,8 @@ SCHEMA = _Fields(
         LOOKUP: _LOOKUP,  # opt-in declarations from the context pack (task P17.26); absent means off
         EXAMPLES: _EXAMPLES,  # opt-in worked examples from a pack (OQ-083 (b)); absent means off
         SKELETON: _SKELETON,  # opt-in host program skeleton (OQ-096 (a)); absent means off
+        DIALECT_LOOKUP: _DIALECT_LOOKUP,  # opt-in dialect definitions for verify errors (task P17.41); absent means off
+        SOURCE_MLIR: _SOURCE_MLIR,  # opt-in source lowered to MLIR in the generation prompt (task P17.41); absent: off
         "toolchain": _OpenMap(_STR),
         "stages": _ListOf(_STR, non_empty=True),
         "executor": _EXECUTOR,
@@ -955,6 +1024,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     _check_examples(path, data)
     _bind_skeleton(path, data)
     _check_sampling(path, data)
+    _check_unfaithful_sections(path, data)
     bindings = _bindings(data)
     registry = DEFAULT_REGISTRY if registry is None else registry
     try:
@@ -1576,6 +1646,30 @@ def _check_examples(path: Path, data: Mapping[str, Any]) -> None:
             f"{path}: {EXAMPLES} is set, but faithful: true reproduces upstream, whose prompts carry no worked "
             f"examples; a recipe with faithful: true may not set it, so remove {EXAMPLES} or set faithful: false"
         )
+
+
+# What upstream's prompts lack, for each opt-in section refused under faithful: true by _check_unfaithful_sections.
+_UNFAITHFUL_SECTIONS = {
+    DIALECT_LOOKUP: "carry no dialect definitions",
+    SOURCE_MLIR: "show no source lowered to MLIR",
+}
+
+
+def _check_unfaithful_sections(path: Path, data: Mapping[str, Any]) -> None:
+    """Refuse a dialect_lookup or source_mlir section under faithful: true, inherited or not (task P17.41).
+
+    Runs after the type check, so a section that is present is a mapping of
+    its keys (Design Principle 4, Agent Rule 4). A recipe without either is
+    never refused here.
+    """
+    if data["faithful"] is not True:
+        return
+    for section, lacks in _UNFAITHFUL_SECTIONS.items():
+        if section in data:
+            raise RecipeError(
+                f"{path}: {section} is set, but faithful: true reproduces upstream, whose prompts {lacks}; a recipe "
+                f"with faithful: true may not set it, so remove {section} or set faithful: false"
+            )
 
 
 def _bind_skeleton(path: Path, data: dict[str, Any]) -> None:
