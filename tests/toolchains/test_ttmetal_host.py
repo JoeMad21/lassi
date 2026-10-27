@@ -451,10 +451,19 @@ def test_every_cpm_include_directory_is_a_recorded_cpm_source() -> None:
 # The tracked CPM list
 
 
+# Task P17.42's Tracy build keys two packages' cache directories otherwise (CMake keys them by their configure
+# options); the packages and their commits are P4.2's (rx 20261026-193016-exec-259e).
+TRACY_KEYS = {
+    "capnproto/8fee591276e6b6c91fac50b2687e44f3a44ea857": "capnproto/e86a3d996c05596599b7a8362f1ea5682b54b88b",
+    "protobuf/169ca95ddbe8ed0eebbba297015fe568604901e6": "protobuf/4bf24bd6cb2d35dc322d1b23932207f7b9520e8e",
+}
+
+
 def test_the_tracked_cpm_list_is_the_install_record() -> None:
     recorded = recorded_cpm_lines()
     assert len(recorded) == 25, "P4.2 recorded 25 CMake-fetched packages"
-    assert tracked_cpm_lines() == recorded, "a line for line copy of the list in results/p4-tt-install/summary.md"
+    expected = [" ".join([TRACY_KEYS.get(line.split()[0], line.split()[0]), *line.split()[1:]]) for line in recorded]
+    assert tracked_cpm_lines() == expected, "P4.2's list (results/p4-tt-install/summary.md) with the two Tracy keys"
 
 
 def test_the_tracked_cpm_list_is_plain_ascii_and_cites_its_record() -> None:
@@ -649,7 +658,7 @@ def make_tree(tree: Path) -> Path:
     """
     tree.mkdir(parents=True)
     (tree / INSTALL_RECORD).write_bytes(lines_text(recorded_install_lines()))
-    (tree / TREE_CPM_LIST).write_bytes(lines_text(recorded_cpm_lines()))
+    (tree / TREE_CPM_LIST).write_bytes(lines_text(tracked_cpm_lines()))
     posix = tree.as_posix()
     for word in fill(INCLUDES, posix):
         if word != "-isystem":
