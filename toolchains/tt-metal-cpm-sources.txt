@@ -6,9 +6,12 @@
 # When lassi.core.runner build_toolchain builds Toolchain "ttmetal-host" (task P4.10), before any process starts,
 # lassi.toolchains.ttmetal_build compares the tree's list with this one, "#" lines and blank lines left out, and
 # refuses a tree whose list differs. A change here is a pin change, recorded in the bible's Decision Log.
+# Task P17.42 (the Tracy build, tt-metal@5280a9cf-tracy): read again by rx exec 20261026-193016-exec-259e;
+# the same packages at the same commits, with two cache keys changed, capnproto and protobuf, since CMake keys a
+# package's cache directory by the options it is configured with, and the Tracy configure passes other options.
 benchmark/17a125dc196d0eea81711f65879e8410dd54303f git c58e6d0710581e3a08d65c349664128a8d9a2461 changed=0
 boost/1359e136761ab2d10afa1c4e21086c8d824735cd files-sha256 68d9f1beda653ac43fbf929aaca110d21d0c1ba7e2bec4ea6fe4de41ba4759de
-capnproto/8fee591276e6b6c91fac50b2687e44f3a44ea857 git d135c9ca5e15219eaf131dfce1a41afdbaea9aab changed=2
+capnproto/e86a3d996c05596599b7a8362f1ea5682b54b88b git d135c9ca5e15219eaf131dfce1a41afdbaea9aab changed=2
 cxxopts/dda70ad5c1afdb5368541192bace55dbcd7872e3 git dbf4c6a66816f6c3872b46cc6af119ad227e04e1 changed=0
 enchantum/2fb7ab238e36c101b9848892ddb6382276b65837 git 8ca5b0eb7e7ebe0252e5bc6915083f1dd1b8294e changed=0
 flatbuffers/2c4062bffa52fa4157b1b4deeae73395df475fda git 595bf0007ab1929570c7671f091313c8fc20644e changed=0
@@ -19,7 +22,7 @@ nanobind/8be24e8fbbe8c9cee0b8c553c21d090a5ede3d79 git c5a3a378aa61d104c82ca053cb
 nanomsg/28cc32d5bdb6a858fe53b3ccf7e923957e53eada git 29b73962b939a6fbbf6ea8d5d7680bb06d0eeb99 changed=0
 nlohmann_json/798e0374658476027d9723eeb67a262d0f3c8308 git 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03 changed=0
 picosha2/c5737937b9b264d5f413bff750447403d1603c55 git 161cb3fc4170fa7a3eca9e582cebd27cc4d1fe29 changed=0
-protobuf/169ca95ddbe8ed0eebbba297015fe568604901e6 git f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c changed=1
+protobuf/4bf24bd6cb2d35dc322d1b23932207f7b9520e8e git f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c changed=1
 range-v3/0_12_0_patched git a81477931a8aa2ad025c6bda0609f38e09e4d7ec changed=1
 reflect/f93e77475670eaeacf332927dfe8b50e3f3812e0 git 1dbce7ae71fc1d32ad786642d9f1e1994a3efafe changed=0
 simd-everywhere/b3b426f78574ef837b17f42e86bab88314c5e4db git 71fd833d9666141edcd1d3c109a80e228303d8d7 changed=0
