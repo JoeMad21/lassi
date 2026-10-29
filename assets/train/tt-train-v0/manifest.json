@@ -26,7 +26,7 @@
   "held_out": {
     "suite": "tt-pairs-v0",
     "suite_manifest": "assets/bench/tt-pairs-v0.yaml",
-    "suite_sha256": "ff9729d845dc0746671e73c9993152dbbf3e1742804bdffcac0de0900a543e38",
+    "suite_sha256": "e406bc71cc2b69237c0b3c6f1feb059eb99dd40e1179dd040fa060105dc04f5c",
     "items": [
       "eltwise_binary",
       "eltwise_sfpu",

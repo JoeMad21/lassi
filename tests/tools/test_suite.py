@@ -561,3 +561,17 @@ def test_the_suite_table_keeps_run_sh_columns() -> None:
              .splitlines() if line and not line.startswith("#")]
     assert [row[:6] for row in rows] == night
     assert all(len(row) == 7 and row[6].isdigit() for row in rows)
+
+
+def test_pull_keeps_the_job_log_and_lists_what_it_left_out(suite: ModuleType, tmp_path: Path) -> None:
+    # The window of 2026-10-27 lost sweep9 to one asset check, said only in the job's own log; the pull keeps it.
+    cache, target = tmp_path / "cache", tmp_path / "out"
+    cache.mkdir()
+    (cache / "output.log").write_bytes(
+        "00:56:24 examples:tt-kh-examples-v0 did not build as tracked; the recipes that need it are left out\n"
+        "00:56:30 progress \u2588\u2588\n"
+        "00:56:37 SKIP gpt-oss-120b over projects/lassi-demo/sweep9: no recipe to run\n".encode("utf-8"))
+    lines = suite.keep_job_log(cache, target)
+    assert len(lines) == 2 and "did not build as tracked" in lines[0] and "sweep9: no recipe to run" in lines[1]
+    assert (target / "output.log").read_bytes().isascii()
+    assert suite.keep_job_log(tmp_path / "none", target) == []

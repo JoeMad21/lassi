@@ -643,6 +643,26 @@ def copy_ascii(source: Path, target: Path) -> list[str]:
     return left_out
 
 
+# Lines of the job's own log that say a recipe or a whole recipe directory was left out (run-suite.sh).
+LEFT_OUT_MARKS = ("did not build as tracked", "SKIP ", "STOP LINE", "STOP file", "no more calls")
+
+
+def keep_job_log(cache: Path, target: Path) -> list[str]:
+    """Copy the job's own log (output.log of `rx pull <job>`) to `target`/output.log; return its left-out lines.
+
+    run-suite.sh says there, and only there, when an asset did not build as tracked or a recipe directory had
+    no recipe to run, so a recipe set that never ran shows in the pull. Bytes that are not plain ASCII (progress
+    bars) become '?', so the copy is plain ASCII.
+    """
+    log = cache / "output.log"
+    if not log.is_file():
+        return []
+    text = log.read_bytes().decode("utf-8", "replace").encode("ascii", "replace").decode("ascii")
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "output.log").write_text(text, encoding="ascii", newline="\n")
+    return [line.strip() for line in text.splitlines() if any(mark in line for mark in LEFT_OUT_MARKS)]
+
+
 def read_tsv(path: Path) -> list[dict[str, str]]:
     """Return a TSV file's rows as dicts keyed by its header."""
     with path.open(encoding="ascii", newline="") as handle:
@@ -684,7 +704,10 @@ def default_results_name(job: str) -> str:
 
 
 def do_pull(args: argparse.Namespace) -> int:
-    """Pull a finished job's provenance and output directory into results/<name>, then print its counts."""
+    """Pull a finished job's provenance, its own log, and its output directory into results/<name>.
+
+    Then print its counts and the lines of its log that say it left an asset or a recipe set out.
+    """
     job = args.job
     if not JOB_ID_RE.match(job):
         raise Refusal(f"{job!r} is not an rx job id (like 20261025-170035-night-395c)", 2)
@@ -698,11 +721,16 @@ def do_pull(args: argparse.Namespace) -> int:
     if state in RUNNING:
         raise Refusal(f"job {job} is still {state}; pull it after it ends (uv run tools/suite.py wait {job})", 1)
     rx_ok(["pull", job, "--into", f"results/{name}"])
+    skipped = keep_job_log(REPO / ".rx" / "pulls" / job, target)
     left_out = copy_ascii(fetch_output(job), target / "night")
     print(f"copied the job's output directory into results/{name}/night")
     for entry in left_out:
         print(f"left out (not plain ASCII): {entry}")
     print_counts(target)
+    if skipped:
+        print(f"\nLeft out by the job (its output.log, kept in results/{name}):")
+        for line in skipped:
+            print(f"  {line}")
     return 0
 
 
@@ -812,8 +840,10 @@ def add_follow_commands(sub: argparse._SubParsersAction) -> None:
     pull = subparser(sub, "pull", "pull a finished job into results/<name> and print its counts",
                      "Run `rx pull ID --into results/<name>` (provenance.json), then `rx pull --path "
                      f"{OUTPUT_DIR}/ID` and copy that directory to results/<name>/night, leaving out any file "
-                     "that is not plain ASCII (download logs' progress bars), and print the job's rows of "
-                     "tables/passes.tsv. Write results/<name>/summary.md from them afterwards.",
+                     "that is not plain ASCII (download logs' progress bars), keep the job's own log as "
+                     "results/<name>/output.log, and print the job's rows of tables/passes.tsv and the lines "
+                     "of that log that say an asset or a recipe set was left out. Write "
+                     "results/<name>/summary.md from them afterwards.",
                      f"Examples:\n  {tool} pull 20261026-170035-suite-ab12\n"
                      f"  {tool} pull 20261026-170035-suite-ab12 --name night-20261026")
     pull.add_argument("job", metavar="ID", help="the rx job id")

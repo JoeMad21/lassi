@@ -82,7 +82,7 @@ The other commands:
 | `status [ID]` | `--lines N` (40; 0 for none) | `rx job status`, and for an id `rx job tail ID -n N`. |
 | `wait ID` | `--timeout S` (3600), `--interval S` (300) | `rx job wait`; exit status 3 while the job still runs. |
 | `stop` | `--clear` | Creates `$LASSI_RUNS_ROOT/rngd-sweep/STOP` with one `rx exec`; `--clear` removes it. |
-| `pull ID` | `--name NAME` (the job's name, date, and time, as `suite-20261026-170035`) | Pulls the job record into `results/<name>/provenance.json` and the job's output directory into `results/<name>/night/`, then prints the job's counts. |
+| `pull ID` | `--name NAME` (the job's name, date, and time, as `suite-20261026-170035`) | Pulls the job record into `results/<name>/provenance.json`, the job's own log into `results/<name>/output.log`, and the job's output directory into `results/<name>/night/`, then prints the job's counts and the log's lines that say an asset or a recipe set was left out. |
 
 ## Stopping Early
 
@@ -116,7 +116,9 @@ assets it needs) and `recipes/` (each selected recipe's resolved text, as a run 
 (run.sh's summary.tsv and each served model's model list), the asset build logs, `fetch-<slug>.log` and `.done`,
 `tables/` (tabulate.py over the whole runs root: trials.tsv, passes.tsv, not_verifiable.tsv, hardware_check.tsv),
 `features-<pass>.tsv`, and `build-errors.txt`. `pull` copies every plain-ASCII file of it and names the files it
-leaves out, the download logs' progress bars, as last night's record left out its two download logs.
+leaves out, the download logs' progress bars, as last night's record left out its two download logs. It also
+keeps the job's own log as `results/<name>/output.log`, which alone says when an asset did not build as
+tracked or a recipe directory had no recipe to run (the 2026-10-27 window lost sweep9 that way).
 
 ## How Long It Takes
 
