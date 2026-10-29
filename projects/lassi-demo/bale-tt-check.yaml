@@ -10,8 +10,10 @@
 extends: base  # projects/base.yaml: sampling, runs root, sandbox, and report choices
 faithful: false
 model:
-  backend: openai_compat  # never asked: no stage here asks the model
-  id: furiosa-ai/gpt-oss-120b
+  # The in-process mock: no stage here asks the model, and a served backend would want its server up even so
+  # (openai_compat confirms its model before any directory exists).
+  backend: mock
+  id: mock-reference
 llm:
   sampling:
     max_tokens: 32768  # required by the loader; never used here

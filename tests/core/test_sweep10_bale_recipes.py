@@ -41,7 +41,7 @@ import re
 from pathlib import Path
 from string import Template
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -56,6 +56,7 @@ from lassi.core.stages import (
     PURPOSE,
     GenerateStage,
     _correction_messages,
+    output_file_oracle,
 )
 from lassi.prompts import render
 from lassi.toolchains.openmp_tag import NO_OPENMP_CODE, read_openmp_tags
@@ -305,6 +306,16 @@ def test_a_cpp_recipe_with_both_references_is_refused_as_its_own_reference(sourc
         checked(RECIPES / "bale-cpp-a.yaml", sources, both=True)
 
 
+@pytest.mark.parametrize("name", ["bale-omp-a", "bale-omp-b"])
+def test_an_omp_recipes_baseline_compares_the_two_programs(name: str) -> None:
+    # The baseline measures the references' agreement only with both built, an output-file Oracle bound, and a
+    # tolerance per item (lassi.core.stages, BaselineStage); then a disagreement ends the trial before the model.
+    recipe = load_recipe(RECIPES / f"{name}.yaml")
+    assert recipe.data["fixes"]["baseline_both"] is True and recipe.data["stages"][0] == "baseline"
+    assert output_file_oracle(cast(Any, SimpleNamespace(recipe=recipe))) is not None
+    assert all(SUITE.items[item].tolerance is not None for item in recipe.data["bench"]["items"])
+
+
 def test_a_reference_that_is_the_source_passes_only_with_baseline_both_off(sources: Path) -> None:
     # The check recipe needs no generated pack, so this runs everywhere.
     path = REPO / "projects" / "lassi-demo" / "bale-tt-check.yaml"
@@ -318,4 +329,6 @@ def test_the_check_recipe_runs_only_the_baseline_over_every_item(sources: Path) 
     data = load_recipe(path).data
     assert data["stages"] == ["baseline"] and data["directions"] == [{"source": "omp", "target": "ttkh"}]
     assert sorted(data["bench"]["items"]) == list(ITEMS) and data["fixes"]["baseline_both"] is True
+    # The in-process mock, never asked: a served backend would want its server up before any directory exists.
+    assert (data["model"]["backend"], data["model"]["id"]) == ("mock", "mock-reference")
     checked(path, sources)
