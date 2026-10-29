@@ -75,3 +75,21 @@ rule and the mistakes above in tt-mlir-v0's prompts, loop.coord_gap_as_error for
 ttkernel host programs of OQ-103 (a), and the compute-only C units with the source_mlir step on cgeist-affine at the
 affine level. Nothing above has run since on alpha01: plans/runs/mlir/lowering-probe.sh and ttkernel-hosts.sh are
 the window's checks.
+
+## Addendum 2026-10-29: the reference card behind two of the errors (task P17.44)
+
+From the records of rx 20261026-055605-window-119f (trial loopback/run02, its generation prompt, read from the
+pulled run tree on the workstation): the prompt opens with the card the model wrote in summarize_context ("Earlier you
+wrote a reference card of the ttkernel MLIR dialect of tt-mlir 0.9.0.dev20260221. Your card follows"). Two of its rows,
+verbatim (the second cut after its result column):
+
+```
+| **ttkernel.get_compile_time_arg_val** | `I32Attr` | `TTKernel_ArgResultType` | `ttkernel.get_compile_time_arg_val(#0) : (I32Attr) -> (TTKernel_ArgResultType)` |
+| **ttkernel.TensorAccessorArgs** | `Optional<I32>`, `Optional<I32>`, `Optional<TTKernel_TensorAccessorArgs>`, `OptionalAttr<StrAttr>`, `OptionalAttr<StrAttr>` | `TTKernel_TensorAccessorArgs` | ... |
+```
+
+The trial's third attempt wrote `ttkernel.get_compile_time_arg_val(#0) : (i32) -> i32`, which ttmlir-opt refused
+with "undefined symbol alias id '0'", and its ninth was refused with "unknown type `tensor_accessor_args` in dialect
+`ttkernel`". The card spells a TableGen
+constraint (`TTKernel_TensorAccessorArgs`) where the dialect's textual type is `!ttkernel.TensorAccessorArgs`, and an
+attribute placeholder (`#0`) where the form takes an integer literal.

@@ -227,6 +227,24 @@ build_asset() {  # build_asset <need>: 0 when the asset built and its manifest e
         && uv run tools/build_ttkernel_context.py build --tree "$mlir" > "$out/ttkernel-packs.log" 2>&1 \
         && git diff --quiet HEAD -- assets/context assets/examples \
         && uv run tools/build_ttkernel_context.py check --tree "$mlir" >> "$out/ttkernel-packs.log" 2>&1 ;;
+    context:ttkernel-ref-5f396fd6)
+      # The exact API reference of the ttkernel dialect at the pin (task P17.44; sweep10's mlir-* recipes), rendered
+      # from the same tt-mlir sources as the packs above, in place of the model's own reference card.
+      local mlir="$toolchains/tt-mlir@0.9.0.dev20260221/src/tt-mlir"
+      [ -d "$mlir" ] || { echo "no tt-mlir sources at $mlir"; return 1; }
+      uv run tools/build_ttkernel_reference.py build --tree "$mlir" > "$out/ttkernel-ref.log" 2>&1 \
+        && git diff --quiet HEAD -- assets/context \
+        && uv run tools/build_ttkernel_reference.py check --tree "$mlir" >> "$out/ttkernel-ref.log" 2>&1 ;;
+    retrieval:tt-mlir-tests)
+      # The tt-mlir tests index (task P17.44; sweep10's mlir-rag-* recipes): ttkernel modules of tt-mlir's own lit
+      # tests at the pin, with the suite's sources under $LASSI_SCRATCH/bench as the Agent Rule 5 references, so
+      # the suite is fetched first; the index goes to $LASSI_SCRATCH/rag, the manifest is checked as tracked.
+      local mlir="$toolchains/tt-mlir@0.9.0.dev20260221/src/tt-mlir"
+      [ -d "$mlir" ] || { echo "no tt-mlir sources at $mlir"; return 1; }
+      uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-ttkernel.yaml > "$out/ttkernel-rag-bench.log" 2>&1 \
+        && uv run tools/build_ttkernel_rag.py build --tree "$mlir" > "$out/ttkernel-rag.log" 2>&1 \
+        && git diff --quiet HEAD -- assets/rag \
+        && uv run tools/build_ttkernel_rag.py check --tree "$mlir" >> "$out/ttkernel-rag.log" 2>&1 ;;
     *) echo "run-suite has no build step for $1"; return 1 ;;
   esac
 }

@@ -399,7 +399,7 @@ def make_registry(script: Script) -> Registry:
         registry.register("Toolchain", name, FakeToolchain)
     for name in ("binary_io", "stdout_mask"):
         registry.register("Oracle", name, DEFAULT_REGISTRY.get("Oracle", name).factory)
-    for name in CONTEXT_STAGES:
+    for name in (*CONTEXT_STAGES, "verbatim_context"):
         registry.register("Stage", name, DEFAULT_REGISTRY.get("Stage", name).factory)
     return registry
 
@@ -632,6 +632,21 @@ def test_the_summary_goes_before_every_later_prompt(base: Path, bench: Path) -> 
     assert len(prompts) == 1 + len(PROMPT_KINDS)
     for kind, before, after in zip(PROMPT_KINDS, user_prompts(plain), prompts[1:], strict=True):
         assert after == joined([knowledge], before), f"the {kind} prompt does not carry the summary first"
+
+
+def test_verbatim_context_puts_the_pack_itself_before_every_later_prompt(base: Path, bench: Path) -> None:
+    # Task P17.44: in place of summarize_context, the pack as it is fills the summary, and no model is asked for it.
+    plain = full_script()
+    run(base, bench, plain, recipe_data(), "plain")
+    script = full_script()
+    stages = [name if name != "summarize_context" else "verbatim_context" for name in CONTEXT_STAGES]
+    _, trial = run(base, bench, script, recipe_data(context=[PACK], stages=stages), "verbatim")
+    assert trial.final.end_reason is None and trial.final.corrections == 3
+    assert trial.context.knowledge_summary == PACK_TEXT
+    assert [request.stage for request in trial.requests or []] == REQUEST_STAGES, "no request for the pack"
+    knowledge = knowledge_block(PACK_TEXT)
+    for kind, before, after in zip(PROMPT_KINDS, user_prompts(plain), user_prompts(script), strict=True):
+        assert after == joined([knowledge], before), f"the {kind} prompt does not carry the pack first"
 
 
 # ---------------------------------------------------------------------------

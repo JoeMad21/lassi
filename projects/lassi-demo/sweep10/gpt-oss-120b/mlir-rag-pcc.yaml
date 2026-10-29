@@ -1,0 +1,5 @@
+# sweep10, the second job of the window of 2026-10-29: cpp -> ttkernel on tt-pairs-v0-ttkernel, the pcc half
+# (the matmuls), combo rag: mlir-ref-pcc.yaml plus the retrieval of mlir-rag-maxabs.yaml (both files' comments
+# hold). Exploratory; ttsim is a simulator; tt-pairs-v0 is a development set (OQ-083 (b)).
+extends: mlir-ref-pcc.yaml
+retrieval: {index: tt-mlir-tests, k: 4, max_chars: 8000, prompts: [generate, correct]}

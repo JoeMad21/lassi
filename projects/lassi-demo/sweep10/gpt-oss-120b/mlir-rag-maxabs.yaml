@@ -1,0 +1,16 @@
+# sweep10, the second job of the window of 2026-10-29: cpp -> ttkernel on tt-pairs-v0-ttkernel, the max_abs half,
+# combo rag: mlir-ref-maxabs.yaml (its comments hold: the exact API reference in place of the model's card) plus
+# retrieval. Before generation, and before each compile or run correction, the prompt gets the k passages of
+# tt-mlir's own lit tests at the pin that BM25 ranks highest (lassi.prompts.retrieval) for what the prompt shows:
+# at generation the item's trusted host program and its C++ source (the kernel API the host program names, such as
+# TensorAccessorArgs and the circular buffers), at a correction the errors it lists. The tests are ttkernel modules
+# that ttmlir-opt parses, verifies, and lowers at the pin, so each passage shows ops in a form the pinned parser
+# accepts. The corpus is assets/rag/tt-mlir-tests/corpus.yaml, built by tools/build_ttkernel_rag.py: the dialect's
+# tests, its lowering to EmitC, and its translation to C++, less the negative tests and the two tests the worked
+# examples already carry. Agent Rule 5: no item's answer is in it; the build reads every item's upstream kernels
+# and tracked files as references (the run check and similarity report of lassi.prompts.rag_corpus) and excludes
+# any test that names an item, its example directory, or a kernel's file stem; the manifest records each.
+# Before the run, as mlir-ref-maxabs.yaml says, and uv run tools/build_ttkernel_rag.py build --tree <tt-mlir src>.
+# Exploratory; ttsim is a simulator; tt-pairs-v0 is a development set (OQ-083 (b)).
+extends: mlir-ref-maxabs.yaml
+retrieval: {index: tt-mlir-tests, k: 4, max_chars: 8000, prompts: [generate, correct]}

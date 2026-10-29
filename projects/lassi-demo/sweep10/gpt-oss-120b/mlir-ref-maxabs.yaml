@@ -1,0 +1,29 @@
+# sweep10, the second job of the window of 2026-10-29: cpp -> ttkernel on tt-pairs-v0-ttkernel, the max_abs half,
+# combo ref. The model writes each kernel as a ttkernel MLIR module, as in mlir1's ttkernel-affine-maxabs.yaml (its
+# comments hold: the host program, the cgeist affine lowering of the compute unit, ttsim, the oracle).
+# Why: in the window of 2026-10-27 (rx 20261027-005611-window-7998) none of the 270 cpp -> ttkernel attempts built
+# (every trial ended at S1 at the correction cap), and on 2026-10-26, before task P17.41, 4 of 27 built. The
+# records of 2026-10-26 show the main source
+# of wrong syntax: summarize_context had the model write its own reference card of the dialect from the context
+# pack, and the card invented forms (ttkernel.get_compile_time_arg_val(#0), refused as "undefined symbol alias id
+# '0'"; !ttkernel.tensor_accessor_args, a type the dialect lacks; plans/spikes/mlir-issues.md). So this combo drops
+# summarize_context and gives the generate and correct prompts an exact API reference instead: every type,
+# attribute, and op of the dialect at the pin (tt-mlir 0.9.0.dev20260221, commit 5f396fd6) with its textual form,
+# rendered by tools/build_ttkernel_reference.py from the pinned dialect sources, never written by hand or by a
+# model. The verbatim_context stage puts that pack, as it is, in the knowledge block of tt-mlir-v1 (the tt-mlir-v0
+# prompts with knowledge.txt worded for a reference), which goes before generate.txt, every correct.txt, and the
+# mismatch prompt. Everything else is mlir1's ttkernel-affine settings: sweep7's gpt-oss-120b model settings, the
+# worked examples, source_mlir on cgeist-affine, dialect_lookup, the coord_to_tile gap as an addressing error, the
+# mismatch and simulator-gap corrections, a correction cap of 8, and 3 samples.
+# Before the run (plans/runs/suite/run-suite.sh does each on the build host): uv run tools/fetch_bench.py
+# assets/bench/tt-pairs-v0-ttkernel.yaml; uv run tools/build_ttkernel_context.py build --tree <tt-mlir src> (the
+# examples and the definitions); uv run tools/build_ttkernel_reference.py build --tree <tt-mlir src> (the
+# reference). Exploratory; ttsim is a simulator; tt-pairs-v0 is a development set (OQ-083 (b)).
+extends: ../../mlir1/gpt-oss-120b/ttkernel-affine-maxabs.yaml
+prompts: tt-mlir-v1  # tt-mlir-v0 with knowledge.txt worded for the reference, and the retrieval templates
+context: [ttkernel-ref-5f396fd6]  # the exact API reference of the dialect at the pin, in place of the model's card
+stages: [baseline, verbatim_context, generate, compile_loop, run_loop, oracle]  # the reference as it is, no summary
+source_mlir: {toolchain: cgeist-affine, max_chars: 24000}  # mlir1's affine lowering, restated
+dialect_lookup: {defs: ttkernel-defs-5f396fd6, max_chars: 12000, nearest: 4}  # mlir1's, restated
+trials: {n: 3}
+loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true, coord_gap_as_error: true}

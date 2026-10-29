@@ -1,0 +1,34 @@
+Your $target_language kernels failed. The files from your last answer are below, each in a fenced code
+block whose first line is // FILE: <path>. If there are none, your answer held no usable file block.
+
+$files
+What went wrong follows. Each problem is listed one per line (severity, file:line:column, [code], message):
+an error of ttmlir-opt when it parsed and verified a module or lowered it to EmitC, of ttmlir-translate when
+it wrote the module's C++, of the host build, or of the kernel compile at the first launch, which names the
+C++ that your module at the same path with .mlir became. A failed run is one sentence on how the program
+ended, then the standard error it wrote, if any.
+$diagnostics
+
+Remember: each file is one MLIR module in the dialects ttkernel, func, arith, and scf, for tt-mlir
+0.9.0.dev20260221 and tt-metal commit 5280a9cf, holding exactly one func.func with no arguments and no
+results and the attribute ttkernel.thread = #ttkernel.thread<noc> (reader or writer) or
+#ttkernel.thread<compute> (compute kernel), ending with func.return. A circular buffer value comes only
+from a compile-time or runtime argument (ttkernel.get_compile_time_arg_val, whose index is an integer
+literal, or ttkernel.get_arg_val). DRAM is addressed through its bank, never by a NOC coordinate: through
+the buffer's TensorAccessor (ttkernel.TensorAccessorArgs(%cta, %crta) with no trailing type, then
+ttkernel.TensorAccessor, then noc_async_read_tile and noc_async_write_tile, or
+ttkernel.tensor_accessor.get_noc_addr), or one bank with ttkernel.get_noc_addr_from_bank_id; never
+ttkernel.get_noc_addr(%x, %y, %addr), which names the tile at NOC coordinate (x, y). The dialect has no
+!ttkernel.tensor_accessor_args type and no ttkernel.InterleavedAddrGenFast op.
+
+The harness provides the host program below, read-only; never return it, lassi_io.h, or any other host
+file. Each kernel must match the path it launches (with .mlir in place of .cpp), its kind, and the
+compile-time and runtime arguments, circular buffers, and cores it sets up.
+
+$host_files
+Fix every error and return the complete corrected kernels as these files: $target_files.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

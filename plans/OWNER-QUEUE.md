@@ -1306,3 +1306,17 @@ Options:
 Recommendation: (a), since its checks need nothing new.
 Answer: The owner, in the working session of 2026-10-29: "I also want the BALE stuff fixed, I want at least the majority of the BALE benchmark and I want C++/openMP to Tenstorrent. I do not care about C++ to openMP and back." Then, asked which apps: "All 8".
 Applied: 2026-10-29. Task P17.43: assets/bench/bale-v0-tt.yaml, all eight apps as cpp -> ttkh and omp -> ttkh items; toposort and randperm are defined so their answer is unique (level-synchronous peeling; synchronous dart rounds over input darts) and keep the exact check, so no validity oracle was built: a translation must reproduce the source's defined order (bible Benchmark Suites, bale-v0-tt; Decision Log 2026-10-29). If the owner wants any valid answer accepted instead, a property oracle for those two items is a later task.
+
+## OQ-109 MLIR: An API Reference And Retrieval For The ttkernel Path
+State: CLOSED
+Kind: decision
+Blocks: P17.44
+Evidence: plans/spikes/mlir-issues.md (rx 20261026-055605-window-119f: the model-written card's invented forms); the window of 2026-10-27 (rx 20261027-005611-window-7998, clean commit 7e42091, gpt-oss-120b, ttsim v1.3.4, a simulator: none of 270 ttkernel attempts built; its trials table pulled to the workstation, not yet committed)
+Question: For the C++ -> ttkernel MLIR path, what goes into tonight's second job?
+Options:
+- (a) An exact API reference generated from the pinned tt-mlir sources in place of the model's card, plus retrieval of tt-mlir test kernels by the ops each item needs; rerun the five items.
+- (b) The generated reference only; rerun.
+- (c) A design write-up only; no MLIR run tonight.
+Recommendation: (a).
+Answer: The owner, in the working session of 2026-10-29: "Additionally, consider a RAG and API reference for MLIR." Then, asked: "API ref + RAG, rerun (Recommended)".
+Applied: 2026-10-29. Task P17.44: tools/build_ttkernel_reference.py and the pack ttkernel-ref-5f396fd6, the stage verbatim_context, tools/build_ttkernel_rag.py and the index tt-mlir-tests, the template set tt-mlir-v1, and the sweep10 recipes mlir-ref and mlir-rag (bible Project Recipes, Notes; Decision Log 2026-10-29).

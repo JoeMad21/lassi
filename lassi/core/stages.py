@@ -64,6 +64,10 @@ The runner checks either kind before any model is asked.
   reply fills Trial.context.knowledge_summary. Under a template set (task
   P17.21) it sends one user message and no system prompt:
   SUMMARY_PROMPT rendered with the target language and that pack.
+- verbatim_context (task P17.44) asks no model: it fills
+  Trial.context.knowledge_summary with the target language's context pack
+  as it is, so the knowledge block carries the pack itself (a template
+  set only; VerbatimContextStage).
 - describe_source sends the general system prompt and the description
   request followed by the source. The reply fills
   Trial.context.source_description.
@@ -269,10 +273,10 @@ The runner checks either kind before any model is asked.
   trial at correction-cap. A gap of any other finding stays a gap.
 
 Context blocks under a template set (with_context_blocks). Each model
-prompt after summarize_context (generate.txt, every correct.txt, and
-MISMATCH_PROMPT) gets, before it, the knowledge block, KNOWLEDGE_PROMPT
-rendered with Trial.context.knowledge_summary, when that summary is not
-empty (task P17.21). With the recipe's retrieval section (task P17.22;
+prompt after summarize_context or verbatim_context (generate.txt, every
+correct.txt, and MISMATCH_PROMPT) gets, before it, the knowledge block,
+KNOWLEDGE_PROMPT rendered with Trial.context.knowledge_summary, when that
+summary is not empty (task P17.21). With the recipe's retrieval section (task P17.22;
 lassi.core.recipe, an opt-in the loader refuses under faithful: true and
 the runner refuses with a fragment set), the prompts it lists (generate,
 correct) get the retrieved block after it: the passages
@@ -281,8 +285,8 @@ one index the runner loads per run, RunContext.retrieval) ranks for the
 prompt's query, each skipped whole when it would take their text past
 retrieval.max_chars, rendered with PASSAGE_PROMPT and joined into
 RETRIEVED_PROMPT. Queries are built only from what the prompt shows:
-generate's is the item's kernels and then its source files
-(generate_query); a compile correction's is query_from_diagnostic of each
+generate's is the item's kernels, its trusted host program, and then its
+source files (generate_query); a compile correction's is query_from_diagnostic of each
 error its prompt lists, and a run-error correction's is its run error
 text (correction_query). An oracle mismatch's correction gets no passages,
 since its report names no API, and an empty query gives none. With the
@@ -1504,13 +1508,17 @@ def retrieval_on(context: RunContext, kind: str) -> bool:
 
 
 def generate_query(context: RunContext) -> str:
-    """Return generate's retrieval query: the item's kernels (kernel_files), then its source files, one line feed apart.
+    """Return generate's retrieval query: the item's kernels, its host program, then its sources, one line feed apart.
 
-    Both are FILE blocks exactly as generate.txt shows them ($kernel_files
-    and $source_files); an empty part is left out.
+    Each is FILE blocks exactly as generate.txt shows them ($kernel_files,
+    $host_files, and $source_files); an empty part is left out. The trusted
+    host program (host_files; task P17.44) names the kernel API a cpp ->
+    ttkernel item needs; tt-pairs-v0's languages hold none, so their
+    queries are what they were.
     """
     sources = context.suite.source_files(context.item, context.direction, context.sources_root, purpose=PURPOSE)
-    return "\n".join(part for part in (kernel_files(context), render_file_blocks(sources)) if part)
+    parts = (kernel_files(context), host_files(context), render_file_blocks(sources))
+    return "\n".join(part for part in parts if part)
 
 
 def correction_query(previous: Attempt, errors: str, *, run_error: bool) -> str:
@@ -2939,6 +2947,48 @@ class SummarizeContextStage:
         context = self.context
         source = context.prompts if context.fragments else f"{context.prompts}/{SUMMARY_PROMPT}.txt"
         return f"summarize_context: summarize the {context.direction.target} context pack ({source})"
+
+
+@register("Stage", "verbatim_context")
+class VerbatimContextStage:
+    """Puts the target language's context pack itself in Trial.context.knowledge_summary, with no model call.
+
+    The departure from summarize_context (task P17.44): in the records of
+    2026-10-26 the reference card the model wrote of the ttkernel dialect
+    in summarize_context invented forms (plans/spikes/mlir-issues.md), so a
+    pack that is already a compact, exact reference (such as the one
+    tools/build_ttkernel_reference.py renders from the pinned dialect)
+    goes to the later prompts as it is. The knowledge block
+    (KNOWLEDGE_PROMPT, with_context_blocks) carries it before generate.txt,
+    every correct.txt, and MISMATCH_PROMPT, as it carries a summary. No
+    request is recorded, since no model is asked. Only a template set can
+    render the knowledge block: under a fragment set, whose generation
+    prompt joins the pack itself, the runner refuses the stage (it renders
+    KNOWLEDGE_PROMPT and declares no fragment keys), and it needs a pack
+    for every target language (`needs_context`).
+    """
+
+    name = "verbatim_context"
+    capabilities: frozenset[str] = frozenset()
+    requires: dict[str, set[str]] = {}
+    prompt_fields = {KNOWLEDGE_PROMPT: KNOWLEDGE_FIELDS}
+    needs_context = True
+    fills_context = ("knowledge_summary",)
+
+    def __init__(self, *, context: RunContext) -> None:
+        """Keep the trial's run context."""
+        self.context = context
+
+    def __call__(self, trial: Trial) -> Trial:
+        """Return `trial` with context.knowledge_summary set to the target language's pack text; no attempt."""
+        pack = self.context.packs[self.context.direction.target]
+        return dataclasses.replace(trial, context=dataclasses.replace(trial.context, knowledge_summary=pack))
+
+    def describe(self) -> str:
+        """Return a one-line description of the stage, naming the template that carries the pack."""
+        context = self.context
+        return (f"verbatim_context: the {context.direction.target} context pack as it is, carried by "
+                f"{context.prompts}/{KNOWLEDGE_PROMPT}.txt before each later prompt")
 
 
 @register("Stage", "describe_source")

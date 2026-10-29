@@ -1,0 +1,6 @@
+The ttkernel dialect at the pin (tt-mlir 0.9.0.dev20260221, commit 5f396fd6) defines the ops and types that
+the errors below name or point at as follows, copied exactly from its TableGen sources (an op whose parser is
+hand-written also gives that format from TTKernelOps.cpp). For a name the dialect does not have, its nearest
+op and type names are listed, then their definitions. Write each op exactly in the form its definition gives.
+
+$definitions

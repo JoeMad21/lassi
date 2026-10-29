@@ -1,0 +1,12 @@
+# sweep10, the second job of the window of 2026-10-29: cpp -> ttkernel on tt-pairs-v0-ttkernel, the pcc half
+# (the matmuls), combo ref: mlir-ref-maxabs.yaml's settings and reasons (its comments hold) over mlir1's
+# ttkernel-affine-pcc.yaml, whose items, tolerance metric, and oracle are the matmuls' (pcc at least the
+# references' own). Exploratory; ttsim is a simulator; tt-pairs-v0 is a development set (OQ-083 (b)).
+extends: ../../mlir1/gpt-oss-120b/ttkernel-affine-pcc.yaml
+prompts: tt-mlir-v1  # tt-mlir-v0 with knowledge.txt worded for the reference, and the retrieval templates
+context: [ttkernel-ref-5f396fd6]  # the exact API reference of the dialect at the pin, in place of the model's card
+stages: [baseline, verbatim_context, generate, compile_loop, run_loop, oracle]  # the reference as it is, no summary
+source_mlir: {toolchain: cgeist-affine, max_chars: 24000}  # mlir1's affine lowering, restated
+dialect_lookup: {defs: ttkernel-defs-5f396fd6, max_chars: 12000, nearest: 4}  # mlir1's, restated
+trials: {n: 3}
+loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true, coord_gap_as_error: true}

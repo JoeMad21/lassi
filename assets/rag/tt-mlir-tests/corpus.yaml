@@ -1,0 +1,63 @@
+# The corpus of the tt-mlir tests retriever (2026-10-29; tools/build_ttkernel_rag.py, lassi.prompts.retrieval,
+# lassi.prompts.rag_corpus): ttkernel MLIR from tt-mlir's own lit tests at the pin, each module one that
+# ttmlir-opt parses, verifies, and lowers there, for the cpp -> ttkernel recipes of sweep10 (mlir-rag-*). Upstream
+# LASSI used fixed context packs only, so retrieval is a departure from it, never part of a faithful recipe.
+#
+# tools/build_ttkernel_rag.py builds the index from the pinned tt-mlir tree (an install's src/tt-mlir under
+# $LASSI_TOOLCHAINS/<PREFIX_NAME>, whose lassi-install.txt names the pin, or a directory `build_ttkernel_rag.py
+# fetch` filled from GitHub at the pin's commit, each file checked against its git blob sha1) and writes
+# MANIFEST.yaml beside this file. Only this spec and the manifest are tracked; the index holds tt-mlir's test text
+# and lives under $LASSI_SCRATCH, never in git (OQ-018).
+corpus: tt-mlir-tests
+# toolchains/tt-mlir.pin: the tree must be at its COMMIT, from its URL.
+pin: tt-mlir
+# The tests whose input is ttkernel MLIR: the dialect's own tests, its lowering to EmitC, and its translation to
+# C++. The D2M-to-TTKernel tests are left out: their input is another dialect, and their ttkernel is in CHECK
+# patterns with FileCheck captures, not MLIR a module may hold.
+include:
+  - test/ttmlir/Dialect/TTKernel/**/*.mlir
+  - test/ttmlir/Conversion/TTKernelToEmitC/**/*.mlir
+  - test/ttmlir/Translate/TTKernel/**/*.mlir
+doxygen: null
+# Agent Rule 5 (tools/build_ttkernel_rag.py, the module docstring): the references are every item's upstream
+# kernels (from the suite's fetched sources) and the suite's tracked files; a selected file that names an item, its
+# example directory, or a kernel's file stem is excluded whole. The run check and the similarity report are
+# lassi.prompts.rag_corpus's, as for the tt-metal documentation (assets/rag/tt-metal-docs/corpus.yaml).
+tier_a:
+  suite: assets/bench/tt-pairs-v0-ttkernel.yaml
+  # Every Tier A example directory lies under this directory of the suite's own tree (tt-metal's).
+  examples: tt_metal/programming_examples
+  # Consecutive lines that make a run: two quoted lines are not a copy, three are.
+  run_lines: 3
+  # The fraction of a file's runs (under either normalization) above which the file is a copy and goes whole.
+  max_file_overlap: 0.1
+  similarity:
+    # The report line, a difflib ratio in [0, 1]; the build records each indexed file at or above it.
+    report_at: 0.7
+    # Lower-case names that keep their own token: the ttkernel op prefixes of the tt-metal kernel API.
+    api_prefixes: [cb_, noc_, get_, tile_, pack_, copy_, add_, mm_, matmul_]
+# Files excluded whole.
+exclude:
+  - path: test/ttmlir/Dialect/TTKernel/invalid.mlir
+    reason: a negative test, whose modules are invalid on purpose (each with its expected error)
+  - path: test/ttmlir/Conversion/TTKernelToEmitC/negative_floor_div.mlir
+    reason: a negative test, whose modules are invalid on purpose (each with its expected error)
+  - path: test/ttmlir/Conversion/TTKernelToEmitC/tensor_accessor_args_negative.mlir
+    reason: a negative test, whose modules are invalid on purpose (each with its expected error)
+  - path: test/ttmlir/Conversion/TTKernelToEmitC/trid_noc_negative.mlir
+    reason: a negative test, whose modules are invalid on purpose (each with its expected error)
+  - path: test/ttmlir/Translate/TTKernel/ttkernel_noc.mlir
+    reason: carried whole in every generation prompt by the examples pack ttkernel-examples-5f396fd6
+  - path: test/ttmlir/Translate/TTKernel/ttkernel_compute.mlir
+    reason: carried whole in every generation prompt by the examples pack ttkernel-examples-5f396fd6
+# How files are cut into chunks (lassi.prompts.rag_corpus): an .mlir file is code, cut at blank lines into blocks
+# (in the TTKernelToEmitC tests one function each) packed in order into chunks of at most max_lines lines and
+# max_chars characters; a line is never cut.
+chunking:
+  max_lines: 40
+  max_chars: 3000
+  min_piece_lines: 3
+# The BM25 ranking parameters (lassi.prompts.retrieval Index.search), as for the tt-metal documentation.
+bm25:
+  k1: 1.2
+  b: 0.75
