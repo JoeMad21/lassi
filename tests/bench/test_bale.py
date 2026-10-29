@@ -157,9 +157,12 @@ def test_fetch_bench_lists_exactly_the_three_upstream_files_with_their_sha256() 
 
 
 def test_no_bale_text_is_tracked_under_the_suites_directory() -> None:
+    # The directory also holds the programs of bale-v0-tt's other five apps (task P17.43), checked in its own tests.
     root = REPO / "assets" / "bench" / "bale-v0"
+    items = sorted(load_suite(REPO / "assets" / "bench" / "bale-v0-tt.yaml").items)
+    assert set(ITEMS) <= set(items)
     found = sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file())
-    assert found == [f"{item}/{language}/{item}.cpp" for item in ITEMS for language in LANGUAGES]
+    assert found == [f"{item}/{language}/{item}.cpp" for item in items for language in LANGUAGES]
 
 
 @pytest.mark.parametrize("item", ITEMS)

@@ -1,0 +1,35 @@
+# A check of bale-v0-tt's programs before sweep10 (the window of 2026-10-29): the baseline stage alone, so no model is
+# asked and no TT program runs. For each item the omp -> ttkh direction builds the item's two programs with the pinned
+# host g++, the OpenMP one as the source and the serial one as the ttkh reference, and runs both on the host CPU;
+# an item whose programs do not build or run clean ends at baseline-compile or baseline-run. It compares no outputs:
+# the baseline measures the references' agreement only through an output-file Oracle, which only the oracle stage
+# binds, so the agreement check is each sweep10 omp recipe's own baseline, which ends a trial at baseline-disagree
+# before any model is asked. One trial per item. Run on the build host, after
+# `uv run tools/fetch_bench.py assets/bench/bale-v0-tt.yaml`. The settings are sweep10's (bale-tt-base.yaml) less
+# everything only a model-asking stage uses.
+extends: base  # projects/base.yaml: sampling, runs root, sandbox, and report choices
+faithful: false
+model:
+  backend: openai_compat  # never asked: no stage here asks the model
+  id: furiosa-ai/gpt-oss-120b
+llm:
+  sampling:
+    max_tokens: 32768  # required by the loader; never used here
+bench:
+  suite: bale-v0-tt
+  split: unassigned
+  items: [histo, ig, permute_matrix, randperm, sssp, toposort, transpose_matrix, triangle]
+directions: [{source: omp, target: ttkh}]
+prompts: bale-tt-v0
+toolchain:
+  cpp: gcc-native
+  omp: gcc-openmp
+  ttkh: ttmetal-host
+executor:
+  cpp: {kind: native}
+  omp: {kind: native}
+  ttkh: {kind: ttsim, arch: wormhole_b0, dispatch: slow}
+fixes:
+  baseline_both: true  # build and run both programs
+stages: [baseline]
+trials: {n: 1}

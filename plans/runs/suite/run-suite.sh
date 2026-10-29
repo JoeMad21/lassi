@@ -251,6 +251,15 @@ if printf '%s\n' "${sweeps[@]}" | grep -q 'projects/lassi-demo/bale1'; then
     echo "$(ts) bale-v0 sources did not fetch; the bale1 recipes will be refused"; tail -3 "$out/fetch-bale-v0.log"
   fi
 fi
+# bale-v0-tt's (the window of 2026-10-29) the same way, when a selected recipe's resolved text names that suite.
+if grep -rqs 'suite: bale-v0-tt' "$out/recipes"; then
+  if uv run tools/fetch_bench.py assets/bench/bale-v0-tt.yaml > "$out/fetch-bale-v0-tt.log" 2>&1; then
+    echo "$(ts) bale-v0-tt sources fetched and checked"
+  else
+    echo "$(ts) bale-v0-tt sources did not fetch; the bale-v0-tt recipes will be refused"
+    tail -3 "$out/fetch-bale-v0-tt.log"
+  fi
+fi
 
 # 5. The sweep: run.sh once per model and recipe directory, one model served at a time.
 calls=()

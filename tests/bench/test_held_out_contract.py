@@ -68,6 +68,34 @@ DIGESTS = {
     ("bale-v0", "triangle", "num_vertices"): "71bfa507b1eb86befe242cf42ca98b8cf247ff19e0d5052fdd2a818968114ec8",
     ("bale-v0", "triangle", "edge_u"): "b3821383ae49846e59086b56c6541093d0376b8455d75895302c4f9499a82c0d",
     ("bale-v0", "triangle", "edge_v"): "a9b4928c3e9ea18e311bc0387d9f44e332684dd16e4ab85171030745bdb63e36",
+    # bale-v0-tt (task P17.43), recorded when the suite was added, the same way.
+    ("bale-v0-tt", "histo", "table_size"): "c9181ad6373ed627294febc5f34af5dd4658239bc50bbcfb6906db1c1af8a8fb",
+    ("bale-v0-tt", "histo", "index"): "2bd21dde9682c23aaf67c284c177f92cd99fe80b0821808d04c37754a5b8227c",
+    ("bale-v0-tt", "ig", "table"): "7bf0d7c0dc89802ebe71c95e6aae354be5501bc9bd9101659b3504855205fb47",
+    ("bale-v0-tt", "ig", "index"): "ba607aa695c8057f0698e6d9b09b46c9055ed040a498099c4043b2b78acf1875",
+    ("bale-v0-tt", "permute_matrix", "num_rows"): "fa48dffb5bd061f221f6de2aae1a9e497ad208767f8260a93aed126f0d52ecb6",
+    ("bale-v0-tt", "permute_matrix", "nz_row"): "76d422327ddc9d5779d2e3bb6cc039812384df71690a8f4b5b5f7eef436244bf",
+    ("bale-v0-tt", "permute_matrix", "nz_col"): "bd454e1b9c9cf9d1fc89ecf46f8fcdbcaaf456cec4aa9a5ccdd0d672174b796b",
+    ("bale-v0-tt", "permute_matrix", "row_key"): "99cf7336dd80f131eb9d7352440904b8034c0e51b8ef17c01ad9f3d4f9cc5cfb",
+    ("bale-v0-tt", "permute_matrix", "col_key"): "ae2fa387158ba87c4e5b23653ac502c6a6f19f64cfa74f79f27bf803c6741874",
+    ("bale-v0-tt", "randperm", "num_darts"): "2b894cd1e590b59d77f20548cd5f3eb59c1035ac34588a533b96c4f376b73489",
+    ("bale-v0-tt", "randperm", "darts"): "7f205382c265d4e546a0d54f16546bde2fe004c480bec5557167a2b433d12540",
+    ("bale-v0-tt", "sssp", "num_vertices"): "ce7a07443aebc516f4eb60b7929bd395f4095cfdcb9866fa48d2fa5466182d76",
+    ("bale-v0-tt", "sssp", "edge_tail"): "476060ee552bfb67d9326cefa54551c02e359989668b3ceeef97f97b9141fae4",
+    ("bale-v0-tt", "sssp", "edge_head"): "f0955ed739a49e0706d256a34963b0ab141a88aa6a4fd2c680116ad5b8f25631",
+    ("bale-v0-tt", "sssp", "edge_weight"): "cd136d9737c551084308a4ed53d37041c71ff2493a04d01600462f3b1bec4c94",
+    ("bale-v0-tt", "toposort", "num_rows"): "fa48dffb5bd061f221f6de2aae1a9e497ad208767f8260a93aed126f0d52ecb6",
+    ("bale-v0-tt", "toposort", "extra_u"): "62d25ed815f7d1a35e50c299a20b8725f1f4967eb40229d33b26eb7c32573cc2",
+    ("bale-v0-tt", "toposort", "extra_v"): "7a6071064b5a7c5ad162d109a249cdaf6227bfcd51da13754a7db38e0e5c316f",
+    ("bale-v0-tt", "toposort", "row_key"): "107abd469870f3bac521882938ed80a9691cb3e7c01d60d8529ad55e397a74bf",
+    ("bale-v0-tt", "toposort", "col_key"): "d01562e358bcf17b240d3f90879a505c5dc248afa8c549ff51450c8592c2ffde",
+    ("bale-v0-tt", "transpose_matrix", "num_rows"): "f2bd54f39bfc99e97de688fbf9f5ee242026e18de050ee0cf420a3be4c11bf8d",
+    ("bale-v0-tt", "transpose_matrix", "num_cols"): "6a8760131ddcee2c75ec6902d5934e76ac38cd03df263eab94550af8206a146d",
+    ("bale-v0-tt", "transpose_matrix", "entry_row"): "43ef8f26a5f1ae06fe74f8fa92c416f4dd3223c6aca1261ddddc9d8dd66c9544",
+    ("bale-v0-tt", "transpose_matrix", "entry_col"): "4b6f83b6d1dec4fd66b3ad310ff28c9ef588cb1d73637da87fb9ffc1b9e02003",
+    ("bale-v0-tt", "triangle", "num_vertices"): "ce7a07443aebc516f4eb60b7929bd395f4095cfdcb9866fa48d2fa5466182d76",
+    ("bale-v0-tt", "triangle", "edge_u"): "1721acaef35aea61c6bc61a9c9dd262bb9d758f0236a370ded39c18125efd37a",
+    ("bale-v0-tt", "triangle", "edge_v"): "cea30188682358b2f0bdd965c7162bad2a60950651d985b03e2068ab13e0f03e",
 }
 # tt-pairs-v0-ttkernel (task P17.36) and tt-pairs-v0-kh (task P17.39) hold tt-pairs-v0's items with the same inputs
 # and seeds, so their files are tt-pairs-v0's, byte for byte (tests/bench/test_ttkernel_suite.py and
@@ -79,7 +107,8 @@ DIGESTS.update({
     if suite == "tt-pairs-v0"
 })
 RECORDED_SUITES = (
-    "adv-seeded-v0", "bale-v0", "lassi-hecbench-10", "tt-pairs-v0", "tt-pairs-v0-ttkernel", "tt-pairs-v0-kh",
+    "adv-seeded-v0", "bale-v0", "bale-v0-tt", "lassi-hecbench-10", "tt-pairs-v0", "tt-pairs-v0-ttkernel",
+    "tt-pairs-v0-kh",
 )
 
 

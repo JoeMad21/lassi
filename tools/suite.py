@@ -644,7 +644,11 @@ def copy_ascii(source: Path, target: Path) -> list[str]:
 
 
 # Lines of the job's own log that say a recipe or a whole recipe directory was left out (run-suite.sh).
-LEFT_OUT_MARKS = ("did not build as tracked", "SKIP ", "STOP LINE", "STOP file", "no more calls")
+# A download run-suite.sh skips ("SKIP the <slug> download: ...") leaves nothing out by itself; a call it then
+# skips says so on its own line.
+LEFT_OUT_MARKS = ("did not build as tracked", "SKIP ", "REFUSED:", "did not fetch", "STOP LINE", "STOP file",
+                  "no more calls")
+NOT_LEFT_OUT = ("SKIP the ",)
 
 
 def keep_job_log(cache: Path, target: Path) -> list[str]:
@@ -660,7 +664,8 @@ def keep_job_log(cache: Path, target: Path) -> list[str]:
     text = log.read_bytes().decode("utf-8", "replace").encode("ascii", "replace").decode("ascii")
     target.mkdir(parents=True, exist_ok=True)
     (target / "output.log").write_text(text, encoding="ascii", newline="\n")
-    return [line.strip() for line in text.splitlines() if any(mark in line for mark in LEFT_OUT_MARKS)]
+    return [line.strip() for line in text.splitlines()
+            if any(mark in line for mark in LEFT_OUT_MARKS) and not any(skip in line for skip in NOT_LEFT_OUT)]
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:

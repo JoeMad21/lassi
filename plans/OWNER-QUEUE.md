@@ -1293,3 +1293,16 @@ Options:
 Recommendation: (a).
 Answer: (a). The owner, in the working session of 2026-10-26: "No network for training (Recommended)".
 Applied: 2026-10-26. Task P17.38: trainer.network none, required with no default; the worker runs under `unshare --user --map-root-user --net` and refuses to touch a card while it sees any interface but the loopback; provenance.json records the setting.
+
+## OQ-108 bale: All Eight Apps, C++ And OpenMP To Tenstorrent
+State: CLOSED
+Kind: decision
+Blocks: P17.43
+Evidence: plans/spikes/bale.md (section 12, scope (a): histo, ig, and triangle, C++ <-> OpenMP, with toposort and randperm left for a property oracle); the window of 2026-10-27 (rx 20261027-005611-window-7998, clean commit 7e42091, gpt-oss-120b; its trials table pulled to the workstation, not yet committed): bale1's 18 trials, on the host CPU, all passed on the first attempt
+Question: Which bale apps and directions should LASSI carry next, and how should the apps whose answer is not unique (toposort, randperm) be checked?
+Options:
+- (a) The majority: add transpose_matrix, permute_matrix, and sssp (with integer weights), 6 of 8 apps, each with one correct output, exact check unchanged.
+- (b) All eight: also toposort and randperm, with a validity-checking oracle for their non-unique answers.
+Recommendation: (a), since its checks need nothing new.
+Answer: The owner, in the working session of 2026-10-29: "I also want the BALE stuff fixed, I want at least the majority of the BALE benchmark and I want C++/openMP to Tenstorrent. I do not care about C++ to openMP and back." Then, asked which apps: "All 8".
+Applied: 2026-10-29. Task P17.43: assets/bench/bale-v0-tt.yaml, all eight apps as cpp -> ttkh and omp -> ttkh items; toposort and randperm are defined so their answer is unique (level-synchronous peeling; synchronous dart rounds over input darts) and keep the exact check, so no validity oracle was built: a translation must reproduce the source's defined order (bible Benchmark Suites, bale-v0-tt; Decision Log 2026-10-29). If the owner wants any valid answer accepted instead, a property oracle for those two items is a later task.

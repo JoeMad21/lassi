@@ -1,0 +1,11 @@
+# sweep10, the second job of the window of 2026-10-29: bale-v0-tt, cpp -> ttkh, half a of its eight items. The model
+# turns bale's serial C++ program into a whole TT-Metalium program (the host program and its kernel). The shared
+# settings and their reasons are in ../../bale-tt-base.yaml. Exploratory; every TT program runs on ttsim, a simulator.
+extends: ../../bale-tt-base.yaml
+bench:
+  items: [histo, ig, triangle, transpose_matrix]
+directions: [{source: cpp, target: ttkh}]
+fixes:
+  # The ttkh reference is this direction's own source, the serial program, so the baseline builds it once, as the
+  # reference, and runs no second copy to compare with it (the omp recipes keep the fix on: OpenMP against serial).
+  baseline_both: false

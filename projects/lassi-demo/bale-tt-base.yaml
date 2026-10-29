@@ -1,0 +1,55 @@
+# The settings shared by the bale-v0-tt recipes of sweep10 (the owner's directions of 2026-10-29: "I want at least the
+# majority of the BALE benchmark and I want C++/openMP to Tenstorrent. I do not care about C++ to openMP and back"; all
+# eight of bale's classic apps). The model writes the whole TT-Metalium program, the host program and its one kernel
+# (the ttkh language), from bale's serial C++ program (cpp) or its OpenMP C++ program (omp). Every bale-v0-tt item is
+# unassigned until the owner assigns it (training, prompt tuning, and harvest are refused), so no result here is a
+# held-out evaluation (Agent Rule 5). Exploratory; every TT program runs on ttsim, a simulator, never silicon.
+# The reference of every ttkh item is its serial C++ program (`reference: cpp` in assets/bench/bale-v0-tt.yaml), built
+# by the pinned host g++ and run on the host CPU; for omp, fixes.baseline_both also builds and runs the OpenMP program,
+# which must agree with it exactly before any model is asked (the cpp recipes turn the fix off, since their source is
+# the reference itself). A candidate's outputs must equal the reference's exactly (binary_io max_abs 0; every output is
+# i64). The bale-tt-v0 templates were written before any run on these items; changing them after sweep10's results
+# would be prompt tuning on unassigned items, which Agent Rule 5 refuses.
+# gpt-oss-120b with sweep8's model settings (reasoning effort medium, a budget of 32768 tokens, timeout 3600 s; OQ-080,
+# OQ-087), the worked examples of tt-kh-examples-v0 (tt-metal's own examples at the pin outside the Tier A items) at
+# generation and each compile correction, as sweep9's kh-ex combination has them, 2 samples per item, a correction cap
+# of 8, a wrong output corrected until the cap, and simulator-gap feedback on (OQ-098). Each attempt's wall limit is
+# 300 s, not a multiple of the reference's time: the reference runs natively on the host CPU, while a candidate pays
+# tt-metal's kernel compile and ttsim (inferred; no candidate of these items has run yet). The default direction below
+# is omp -> ttkh, so this file loads as a recipe of its own; each sweep10 recipe states its direction.
+# Before the run, on the build host: `uv run tools/fetch_bench.py assets/bench/bale-v0-tt.yaml` and the
+# tt-kh-examples-v0 build (plans/runs/suite/run-suite.sh does both).
+extends: base  # projects/base.yaml: sampling, runs root, sandbox, and report choices
+faithful: false  # nothing here reproduces an upstream run
+model:
+  backend: openai_compat  # furiosa-llm's OpenAI-compatible server, as sweep8 binds it
+  id: furiosa-ai/gpt-oss-120b  # served at revision v2026.4 on 4 RNGD cards (plans/runs/suite/models.tsv)
+  timeout_s: 3600
+llm:
+  sampling:
+    max_tokens: 32768  # OQ-080's budget, the reasoning counted in it
+    reasoning_effort: medium
+extract:
+  unfenced_file_lines: true  # as sweep8 has it
+bench:
+  suite: bale-v0-tt  # assets/bench/bale-v0-tt.yaml
+  split: unassigned  # every bale-v0-tt item, unassigned until the owner assigns it
+directions: [{source: omp, target: ttkh}]  # the default; each sweep10 recipe states its own
+prompts: bale-tt-v0  # assets/prompts/bale-tt-v0/: serial C++ and OpenMP C++ -> the host program and one kernel
+toolchain:
+  cpp: gcc-native  # the pinned host g++ with the native row's flags (toolchains/gcc.pin): the reference
+  omp: gcc-openmp  # the same build, plus the OpenMP-construct tag: the omp source
+  ttkh: ttmetal-host  # compiles the host program; writes the kernel uncompiled at its path for the kernel JIT
+executor:
+  cpp: {kind: native}  # the reference runs in the sandbox on the host CPU
+  omp: {kind: native}
+  ttkh: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # candidates run in the sandbox on ttsim, a simulator
+examples: {pack: tt-kh-examples-v0, max_chars: 32000, prompts: [generate, correct]}  # tools/build_tt_examples.py
+sandbox:
+  wall_s: 300
+fixes:
+  baseline_both: true  # build and run both references, which must agree exactly
+stages: [baseline, generate, compile_loop, run_loop, oracle]
+oracle: {kind: binary_io, metric: max_abs, threshold: 0}  # exact
+trials: {n: 2}
+loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true}

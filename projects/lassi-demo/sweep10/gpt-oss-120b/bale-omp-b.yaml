@@ -1,0 +1,7 @@
+# sweep10, the second job of the window of 2026-10-29: bale-v0-tt, omp -> ttkh, half b of its eight items. The model
+# turns bale's OpenMP C++ program into a whole TT-Metalium program (the host program and its kernel). The shared
+# settings and their reasons are in ../../bale-tt-base.yaml. Exploratory; every TT program runs on ttsim, a simulator.
+extends: ../../bale-tt-base.yaml
+bench:
+  items: [permute_matrix, sssp, toposort, randperm]
+directions: [{source: omp, target: ttkh}]

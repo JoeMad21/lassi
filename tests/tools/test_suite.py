@@ -575,3 +575,23 @@ def test_pull_keeps_the_job_log_and_lists_what_it_left_out(suite: ModuleType, tm
     assert len(lines) == 2 and "did not build as tracked" in lines[0] and "sweep9: no recipe to run" in lines[1]
     assert (target / "output.log").read_bytes().isascii()
     assert suite.keep_job_log(tmp_path / "none", target) == []
+
+
+def test_the_left_out_lines_are_run_suites_and_a_skipped_download_is_not_one(suite: ModuleType, tmp_path: Path) -> None:
+    # Every line run-suite.sh writes when a call, a recipe set, or an asset is left out; a download it skipped is not.
+    left_out = [
+        "SKIP call 2 (gpt-oss-120b over projects/lassi-demo/sweep10)",
+        "SKIP gpt-oss-120b: its download did not finish, so its calls are left out",
+        "REFUSED: under 30 minutes to the deadline",
+        "bale-v0-tt sources did not fetch; the bale-v0-tt recipes will be refused",
+        "no more calls: the deadline is near",
+        "SKIP gpt-oss-120b: furiosa-ai/gpt-oss-120b is not in $HF_HOME",
+        "SKIP gpt-oss-120b: 2 free card(s), needs 4",
+        "SKIP gpt-oss-120b--bale-cpp-a: matches SWEEP_SKIP",
+    ]
+    kept = ["SKIP the gpt-oss-120b download: its size is not in plans/runs/suite/models.tsv; run.sh serves it only "
+            "from the cache"]
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "output.log").write_text("\n".join(left_out + kept) + "\n", encoding="ascii")
+    assert suite.keep_job_log(cache, tmp_path / "out") == left_out

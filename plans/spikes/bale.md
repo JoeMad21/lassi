@@ -709,3 +709,21 @@ Under the recommendation, the plan's first task would make these edits, with the
 ```
 | <date> | bale-v0, a suite of bale's apps (github.com/jdevinney/bale at 1b8f673; IDA BSD-3-Clause-style license) re-hosted on the LASSI harness: histo, ig, and triangle as serial C++ and host OpenMP C++ programs written here, exact under binary_io, directions cpp -> omp and omp -> cpp, every item unassigned, no bale text tracked (OQ-<next>, the owner's answer of <date>; plans/spikes/bale.md; Benchmark Suites) | No bale program reads held-out inputs or writes lassi_io outputs, and its parallel models need UPC or OpenSHMEM, so the references are written here; these three apps have unique, exact answers and run with the pinned g++ alone |
 ```
+
+## Addendum 2026-10-29: the upstream files of bale-v0-tt (task P17.43)
+
+The five apps bale-v0-tt adds name these files of bale at 1b8f673b56645b2bd74a8af6213462bbc9d559fe as their upstream
+support files. Each sha256 is of the raw bytes from `gh api -H "Accept: application/vnd.github.raw"
+"repos/jdevinney/bale/contents/<path>?ref=<commit>"`, read on the workstation on 2026-10-29, and each file's git blob
+id matched the one the contents API reports.
+
+| File | Bytes | sha256 |
+| --- | --- | --- |
+| src/other_serial/C/transpose_matrix.c | 3307 | 6f806951ac2d64c9e69be552eab1813aad7ebe50168b91008cce75341f9c7ebf |
+| src/other_serial/C/permute_matrix.c | 3559 | 24dc98a9209fe5da6c325f147fcb44c64ea2054a2eac398af663fcb0ff157443 |
+| src/other_serial/C/sssp_bellmanford.c | - | c6546ef1300fd64443fc9004298f557c516634f61101c124927ac8622b383402 |
+| src/other_serial/C/toposort.c | 10347 | 1e9bbafd2bc944c001195b2f10aa70bc6ef8253314dfc9841a6944deec9cbeb2 |
+| src/other_serial/C/randperm.c | 5633 | fac775d6d40565102ce0d347420b40121fa8dfe8576b01f022cf542e4e829686 |
+
+The line citations in assets/bench/bale-v0-tt.yaml (spmat_utils.c, sssp_bellmanford.c, sssp.c, toposort.c,
+std_options.c, default_app_opts.h) were read from the same fetches. sssp_bellmanford.c's size was not recorded.

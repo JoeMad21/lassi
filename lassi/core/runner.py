@@ -2350,18 +2350,22 @@ def _check_reference_bindings(recipe: Recipe, bench: _Bench, item: str, directio
     toolchain and runs it on that language's executor (lassi.bench
     Suite.reference_language; task P17.36), so with executors bound per
     language both must be bound for it, each message naming the key. A
-    reference that is the direction's own source language is refused too:
-    the baseline would build that one program as both references. The
-    caller has already read the reference language's support files.
+    reference that is the direction's own source language is refused too
+    while fixes.baseline_both is on: the baseline would build that one
+    program as both references and compare it with itself. With the fix
+    off the baseline builds it once, as the target's reference (task
+    P17.43). The caller has already read the reference language's
+    support files.
     """
     program = bench.suite.reference_language(item, direction.target)
     if program == direction.target:
         return
     where = f"{recipe.path}: {bench.suite.name}/{item} ({direction.name})"
-    if program == direction.source:
+    if program == direction.source and recipe.data.get("fixes", {}).get("baseline_both", True) is not False:
         raise RunError(
             f"{where}: the {direction.target} reference is the item's {program} program, the direction's own source, "
-            "so the baseline would build one program twice and compare it with itself; translate from another language"
+            "so the baseline would build one program twice and compare it with itself; translate from another "
+            "language, or turn fixes.baseline_both off so the baseline builds it once"
         )
     if program not in recipe.data.get("toolchain", {}):
         raise RunError(
