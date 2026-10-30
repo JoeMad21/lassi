@@ -1,0 +1,11 @@
+# The sources the builds of the pinned tt-mlir runtime install fetched (task P17.48; toolchains/tt-mlir-runtime.pin):
+# a line for line copy of the install's lassi-fetched-sources.txt, which toolchains/tt-mlir-runtime.sh
+# (record_fetched_sources) writes once tt-metal's configure has run. It lists FetchContent's and ExternalProject's
+# source directories in the three build trees and tt-mlir's third_party/ (tt-mlir's clone of tt-metal), then every
+# package tt-metal's configure placed in its CPM cache. Each line is <path in the install> git <commit>
+# changed=<tracked files that differ from the commit>, or <path in the install> files-sha256 <sha256 of the unpacked
+# files>, the two forms of toolchains/tt-metal-cpm-sources.txt.
+# PLACEHOLDER until the first install records the list. That install compares nothing; until its list is copied here
+# and committed, every later run of the script refuses the install (check_fetched_sources). A change here is a pin
+# change, recorded in the bible's Decision Log.
+PLACEHOLDER

@@ -449,6 +449,7 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Accept: languages ttir and d2m; a Toolchain per language that runs the pinned ttmlir-opt pipeline and ttmlir-translate in the compile sandbox and gives parsed diagnostics; an Executor that runs the flatbuffer through the pinned runtime on ttsim (and, later, a card, which a human starts), with the held-out inputs as tensors and the outputs as lassi_io files; tests with fakes. A runtime build, if P17.46 shows one is needed, is a pin change for the owner.
 - Files: lassi/toolchains/, lassi/executors/, toolchains/tt-mlir.pin if P17.46 needs the runtime, tests/.
 - Host: Windows; alpha01 for the build. Depends: P17.46.
+- Prepared 2026-10-29: toolchains/tt-mlir-runtime.pin, tt-mlir-runtime.sh, tt-mlir-runtime-requirements.txt, tt-mlir-runtime-fetched-sources.txt (PLACEHOLDER until the first install), tests/toolchains/test_tt_mlir_runtime_pins.py, and plans/spikes/ttmlir-runtime.md (sources, the job's command, the checks after it, and the driver's design); the build job runs on 2026-10-30 (LASSI_FREE_FLOOR_GIB 30, LASSI_STOP_GIB 345, as the spike proposes; the owner may name others).
 
 ### P17.49 TTIR and D2M prompt sets and recipes
 - Accept: template sets tt-ttir-v0 and tt-d2m-v0 with the P17.47 references in place of a model-written card and their retrieval; recipes cpp -> ttir and cpp -> d2m on tt-pairs-v0's development items, reported beside the ttkernel and kernels-and-host arms; tests.

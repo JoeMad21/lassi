@@ -1,0 +1,158 @@
+# tt-mlir runtime pin (task P17.48; the owner's answer to OQ-111 of 2026-10-29, option (b): a tt-mlir runtime at the
+# joint pin with MLIR's Python bindings and ttrt, in a new prefix; plans/spikes/ttir-d2m.md, section 4;
+# plans/spikes/ttmlir-runtime.md). Shell-sourced by toolchains/tt-mlir-runtime.sh, which builds in place at
+# $LASSI_TOOLCHAINS/$PREFIX_NAME: flatbuffers into TOOLCHAIN_DIR, a venv with a wheelhouse, LLVM with tt-mlir's
+# patch and MLIR's Python bindings, and tt-mlir with its runtime, which fetches and builds tt-mlir's own tt-metal. The
+# compiler install at $LASSI_TOOLCHAINS/$COMPILER_PREFIX_NAME (toolchains/tt-mlir.pin) is never written to, read as a
+# build input, or moved; the script refuses a layout in which either prefix holds the other. Same sources as
+# toolchains/tt-mlir.pin (the values below repeat it, and the tests hold them equal): another build of them, so a
+# trial records <VERSION>-<BUILD> (lassi/toolchains/pins.py, recorded_version). Values read from upstream on
+# 2026-10-29; file:line citations are at COMMIT unless they name another tree. A pin change is a Decision Log entry.
+NAME=tt-mlir
+VERSION=0.9.0.dev20260221
+BUILD=runtime
+PREFIX_NAME=tt-mlir@0.9.0.dev20260221-runtime
+COMPILER_PREFIX_NAME=tt-mlir@0.9.0.dev20260221
+COMMIT=5f396fd6ef85780bf1b6b85bef9c7d2f84a85f3c
+URL=https://github.com/tenstorrent/tt-mlir.git
+# cmake/modules/TTMLIRVersion.cmake:44-63 describes the newest v<major>.<minor> tag and counts the commits since it;
+# ttrt's wheel takes that version (tools/ttrt/CMakeLists.txt:22-24, setup.py:11-15), PROJECTED 0.0.2995 (the
+# compare API's count, toolchains/tt-mlir.pin:15-18); the script reads the count from its clone.
+VERSION_TAG=v0.0
+VERSION_TAG_COMMIT=a637748e5521f78546027114fabf2023be63901a
+# LLVM and flatbuffers at the commits env/CMakeLists.txt pins (:4-5), fetched by commit at depth 1 into this prefix,
+# as toolchains/tt-mlir.sh fetches them; the compiler install's trees are not reused.
+LLVM_COMMIT=4efe170d858eb54432f520abb4e7f0086236748b
+LLVM_URL=https://github.com/llvm/llvm-project.git
+FLATBUFFERS_COMMIT=fb9afbafc7dfe226b9db54d4923bfb8839635274
+FLATBUFFERS_URL=https://github.com/google/flatbuffers.git
+LLVM_PATCH=env/patches/affine-allow-symbol-vars.patch
+LLVM_PATCH_BLOB=2ffdae14d2bcb8244189d8eb044dd093642fa436
+LLVM_PATCH_SHA256=61e8ae545e956551b87dc7fb63067d570035becbcf0636ce81ca0971e30f3aac
+# The venv's packages, each pinned by version and sha256, a superset of the compiler venv's at the same versions; the
+# file's header says why each is there. torch comes from PYTHON_EXTRA_INDEX (tools/ttrt/requirements.txt:1). They are
+# downloaded into WHEELHOUSE_DIR and installed from it; ttrt's build later runs pip there offline (PIP_FIND_LINKS).
+PYTHON_REQUIREMENTS=tt-mlir-runtime-requirements.txt
+PYTHON_EXTRA_INDEX=https://download.pytorch.org/whl/cpu
+WHEELHOUSE_DIR=toolchain/wheelhouse
+# The pip and setuptools that Ubuntu's python3.10 -m venv seeds (rx 20261029-175313-exec-9dd3 read pip 22.0.2 and
+# setuptools 59.6.0 in the compiler's venv); the requirements change neither. ttrt's `pip wheel .`
+# (tools/ttrt/CMakeLists.txt:27) takes the legacy `setup.py bdist_wheel` path at this pip (src/pip/_internal/
+# pyproject.py:93-94 and wheel_builder.py:63-65 at pip 22.0.2), which runs this setuptools with the requirements'
+# wheel package and needs no build environment from an index.
+PIP_EXPECT="pip 22.0.2"
+SETUPTOOLS_EXPECT=59.6.0
+# flatbuffers as toolchains/tt-mlir.pin builds it (env/CMakeLists.txt:33-40).
+FLATBUFFERS_CMAKE_FLAGS="-G Ninja -DCMAKE_BUILD_TYPE=Release -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON"
+# LLVM as env/CMakeLists.txt:56-71 configures it, with two changes, both toolchains/tt-mlir.pin's: Release (upstream
+# MinSizeRel, :8) and LLVM_TARGETS_TO_BUILD host (tt-mlir links the host's X86 libraries alone,
+# lib/Target/LLVM/CMakeLists.txt:11-16). Unlike the compiler pin, MLIR's Python bindings are on, as upstream sets
+# them (:68): tools/CMakeLists.txt:6 and :23-25 build ttrt only with MLIR_ENABLE_BINDINGS_PYTHON, which tt-mlir reads
+# from LLVM's MLIRConfig (cmake/modules/FindMLIR.cmake:17-20); at LLVM_COMMIT they need Python's Development.Module,
+# pybind11 2.10 or newer, and nanobind 2.9 or newer (mlir/cmake/modules/MLIRDetectPythonEnv.cmake:22-23, :50, :57),
+# from the venv's Python (upstream's Python3_EXECUTABLE, :60, which the script adds). LLVM_INCLUDE_TESTS is on, LLVM's
+# default and upstream's (it sets nothing): tt-mlir's Python extension links MLIRTestToLLVMIRTranslation
+# (python/CMakeLists.txt:144), which only MLIR's test library defines (mlir/test/lib/Dialect/Test/CMakeLists.txt:116 at
+# LLVM_COMMIT), added only under MLIR_INCLUDE_TESTS, whose default is LLVM_INCLUDE_TESTS (mlir/CMakeLists.txt:160-162,
+# :247-257). LLVM's unit tests stay out of its default target (LLVM_BUILD_TESTS is off).
+LLVM_CMAKE_FLAGS="-G Ninja -DCMAKE_BUILD_TYPE=Release -DPython3_FIND_VIRTUALENV=ONLY -DLLVM_ENABLE_PROJECTS=mlir;lld -DLLVM_INSTALL_UTILS=ON -DLLVM_INSTALL_GTEST=ON -DLLVM_ENABLE_ASSERTIONS=ON -DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCMAKE_C_FLAGS=-D_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION -DLLVM_TARGETS_TO_BUILD=host -DLLVM_INCLUDE_TESTS=ON"
+# tt-mlir (option lines of CMakeLists.txt): the runtime on (:33), which makes third_party/CMakeLists.txt:87-131 fetch
+# and build tt-metal; the TTMetal runtime on (:52), which runs TTIR and D2M flatbuffers (runtime/lib/ttmetal/
+# CMakeLists.txt:1-29); the TTNN runtime on (:51), upstream's default with the runtime: libTTMLIRRuntime links TT-NN's
+# _ttnncpp.so whatever it is set to (runtime/CMakeLists.txt:29, runtime/lib/CMakeLists.txt:30-53), tt-metal's default
+# target builds TT-NN anyway, and ttrt's runtime module and wheel are built and tested upstream with it on
+# (.github/workflows/call-build-release.yml:116; runtime/python/__init__.cpp:9-11; tools/ttrt/setup.py:48-57); the
+# distributed runtime off (:53), a multi-host controller and worker (runtime/lib/distributed/CMakeLists.txt:5-8,
+# runtime/bin/distributed/CMakeLists.txt:1-3) that a single ttsim or card run does not use; the Python bindings (:84)
+# and ttrt (:36) on, which the owner chose; TT_USE_SYSTEM_SFPI off (:48, passed to tt-metal at
+# third_party/CMakeLists.txt:126): on, tt-metal takes /opt/tenstorrent/sfpi (tt_metal/hw/CMakeLists.txt:62-64 at
+# METAL_COMMIT), which on alpha01 is not the pinned sfpi (bible, Toolchain Pins, the tt-xla venv: 7.48.0) and fails
+# its version check (:125-130); off, tt-metal fetches SFPI_FILENAME checked by URL_HASH (:65-76). Off as the compiler
+# pin has them: OpModel (:39), the tests (:43), the runtime tests (:59), the explorer (:42), alchemist (:45), pykernel
+# (:34), ttnn-jit (:35), StableHLO (:37), the perf trace (:32, so tt-metal's ENABLE_TRACY is off,
+# third_party/CMakeLists.txt:123), and the runtime's debug checks (:60). Release, as the compiler pin.
+CMAKE_FLAGS="-G Ninja -DCMAKE_BUILD_TYPE=Release -DTTMLIR_ENABLE_RUNTIME=ON -DTT_RUNTIME_ENABLE_TTMETAL=ON -DTT_RUNTIME_ENABLE_TTNN=ON -DTT_RUNTIME_ENABLE_DISTRIBUTED=OFF -DTTMLIR_ENABLE_BINDINGS_PYTHON=ON -DTTMLIR_ENABLE_TTRT=ON -DTT_USE_SYSTEM_SFPI=OFF -DTTMLIR_ENABLE_OPMODEL=OFF -DTTMLIR_ENABLE_TESTS=OFF -DTTMLIR_ENABLE_RUNTIME_TESTS=OFF -DTTMLIR_ENABLE_EXPLORER=OFF -DTTMLIR_ENABLE_ALCHEMIST=OFF -DTTMLIR_ENABLE_PYKERNEL=OFF -DTTMLIR_ENABLE_TTNN_JIT=OFF -DTTMLIR_ENABLE_STABLEHLO=OFF -DTT_RUNTIME_ENABLE_PERF_TRACE=OFF -DTT_RUNTIME_DEBUG=OFF"
+# tt-mlir's own tt-metal: TT_METAL_VERSION (third_party/CMakeLists.txt:3), toolchains/tt-metal.pin's COMMIT. CMake's
+# ExternalProject clones it whole with its submodules (:103-131, no GIT_SHALLOW; ExternalProject/
+# shared_internal_commands.cmake:417-425 and gitclone.cmake.in:24-75 at CMake v3.31.6) into METAL_DIR (:105), with its
+# CPM cache in the tree (:9-13; the script clears CPM_SOURCE_CACHE), configures and builds its default target in
+# METAL_BUILD_DIR (:16, :106), TT-NN and its Python module included (WITH_PYTHON_BINDINGS=ON, :121), and installs it
+# there (:102, :114). No option points tt-mlir at an installed tt-metal (plans/spikes/ttir-d2m.md, section 4), and
+# LASSI's tt-metal installs lack TT-NN, so nothing is reused. METAL_CACHE_FLAGS are the settings :112-126 pass for
+# this pin's flags, read back from tt-metal's CMake cache after its configure; ENABLE_DISTRIBUTED is on for x86_64
+# (:95-96).
+METAL_COMMIT=5280a9cfb00998fd49667a29523d03aee905c129
+METAL_URL=https://github.com/tenstorrent/tt-metal.git
+# The gitlinks at METAL_COMMIT, <path>:<commit>, as toolchains/tt-metal.pin's SUBMODULES; the clone must hold exactly
+# these, unchanged, before tt-metal's configure and after its build.
+METAL_SUBMODULES="tt_metal/third_party/tt_llk:f990966829c2831bf2a58d8ce31779acbb476139 tt_metal/third_party/umd:0450f1be3a21cbf17adb97517038586a6a3af4c0 tt_metal/third_party/tracy:0aaefbb689b4c60694edc905545fc4709fd13f6a models/demos/t3000/llama2_70b/reference/llama:29125b7ad8b5513eeaa4417ed92892bf39c8bd74"
+METAL_DIR=src/tt-mlir/third_party/tt-metal/src/tt-metal
+METAL_BUILD_DIR=src/tt-mlir/third_party/tt-metal/src/tt-metal/build_Release
+METAL_CACHE_FLAGS="-DCMAKE_BUILD_TYPE=Release -DWITH_PYTHON_BINDINGS=ON -DENABLE_TRACY=OFF -DENABLE_LIBCXX=OFF -DENABLE_DISTRIBUTED=ON -DTT_USE_SYSTEM_SFPI=OFF"
+# The sfpi the pinned tt-metal fetches (tt_metal/sfpi-version at METAL_COMMIT), as toolchains/tt-metal.pin records it;
+# the script reads its compiler's version after the build.
+SFPI_VERSION=7.25.0
+SFPI_FILENAME=sfpi_7.25.0_x86_64_debian.txz
+SFPI_SHA256=6a8883c448df537d9661e239e67721b1ba2a4d0e8ea7a573070d2f6c6d015093  # 88805716 bytes
+# With ENABLE_DISTRIBUTED, tt-metal links the ULFM MPI when this library exists, else a system MPI, else its configure
+# fails (tt_metal/distributed/CMakeLists.txt:37-75 at METAL_COMMIT); it does on alpha01 (rx 20261029-175313-exec-9dd3;
+# plans/spikes/ttir-d2m.md, rx 34f2). Read only, by the host check.
+MPI_LIBRARY=/opt/openmpi-v5.0.7-ulfm/lib/libmpi.so.40
+# The builds, each a Ninja run at LASSI_JOBS, in this order. tt-metal first, alone, in three runs:
+# METAL_DOWNLOAD_TARGET and METAL_CONFIGURE_TARGET, the step targets third_party/CMakeLists.txt:133 adds, so the
+# clone is checked before tt-metal's configure and the configure's settings and sfpi before its build; then
+# METAL_TARGET, its build, install, and build link (:135-140; a step joins the main target unless EXCLUDE_FROM_MAIN,
+# ExternalProject.cmake:2064-2069 at CMake v3.31.6). The ExternalProject's steps run one at a time, and its inner
+# `cmake --build` (ExternalProject.cmake:1576-1589) takes LASSI_JOBS from CMAKE_BUILD_PARALLEL_LEVEL, so no more than
+# LASSI_JOBS compile at once. Then TARGETS: the two
+# compiler tools (as toolchains/tt-mlir.pin), the runtime library (runtime/lib/CMakeLists.txt:17), its Python module
+# (runtime/python/CMakeLists.txt:39-42), and the Python packages of tt-mlir (python/CMakeLists.txt:226-232) and ttrt
+# (tools/ttrt/CMakeLists.txt:67-71; AddMLIRPython.cmake:365 at LLVM_COMMIT names the target). TTRT_TARGET last: its
+# command (tools/ttrt/CMakeLists.txt:11-37) copies the libraries and the ttrt package into the wheel, which its
+# dependencies do not order. Not all or install: no ttmlir-lsp-server, ttnn-standalone, or wheel of ttmlir.
+METAL_DOWNLOAD_TARGET=tt-metal-download
+METAL_CONFIGURE_TARGET=tt-metal-configure
+METAL_TARGET=tt-metal
+TARGETS="ttmlir-opt ttmlir-translate TTMLIRRuntime _ttmlir_runtime TTMLIRPythonModules TTRTPythonModules"
+TTRT_TARGET=ttrt
+# Host tools, as toolchains/tt-mlir.pin names them (its comment says why each); tt-mlir passes the compilers and its
+# linker choice to tt-metal (third_party/CMakeLists.txt:115-118). The headers and library of Python 3.10 serve
+# runtime/python/CMakeLists.txt:5-8 (rx 20261029-175313-exec-9dd3 read both on alpha01).
+CMAKE=/usr/local/bin/cmake
+CMAKE_EXPECT="cmake version 3.31.6"
+NINJA=/usr/bin/ninja
+NINJA_EXPECT=1.10.1
+CLANG_C=clang-17
+CLANG_CXX=clang++-17
+CLANG_EXPECT="clang version 17.0.6"
+LINKER=ld.lld-17
+LINKER_EXPECT="LLD 17.0.6"
+PYTHON=/usr/bin/python3.10
+PYTHON_EXPECT="Python 3.10.12"
+# The layout, relative to the prefix, as toolchains/tt-mlir.pin's, plus what the runtime build adds: the runtime
+# library and its Python module (tools/ttrt/setup.py:40, :64-72), tt-mlir's Python packages (CMakeLists.txt:202), the
+# libraries tt-metal installs (third_party/CMakeLists.txt:21, :62-68), and ttrt's entry point in the venv
+# (setup.py:232-234).
+TOOLCHAIN_DIR=toolchain
+VENV_DIR=toolchain/venv
+TTMLIR_OPT=build/tt-mlir/bin/ttmlir-opt
+TTMLIR_TRANSLATE=build/tt-mlir/bin/ttmlir-translate
+EXPECT_VERSION="LLVM version 22.0.0git"
+RUNTIME_LIBRARY=build/tt-mlir/runtime/lib/libTTMLIRRuntime.so
+RUNTIME_MODULE=build/tt-mlir/runtime/python/_ttmlir_runtime.cpython-310-x86_64-linux-gnu.so
+PYTHON_PACKAGES=build/tt-mlir/python_packages
+METAL_LIBRARIES="libtt_metal.so libdevice.so libtt_stl.so _ttnncpp.so _ttnn.so"
+TTRT=toolchain/venv/bin/ttrt
+# Space, PROJECTED, not measured (plans/spikes/ttmlir-runtime.md, Space): about 20 to 29 GiB, from the compiler
+# install's parts read on alpha01 (7.4 GiB in all; LLVM's source 2.5 GiB and build 4.2 GiB; rx
+# 20261029-175313-exec-9dd3), the TurboQuant tt-metal checkout's parts (5.1 GiB with its whole history and TT-NN;
+# plans/spikes/p4-tt-pins.md, Disk estimate), and ttrt's wheel, which copies tt-metal's tt_metal, runtime (sfpi), and
+# ttnn trees three times (setup.py:145-168; its build directory, the wheel, the venv). INSTALL_KIB is the planning
+# bound, 30 GiB. The script also needs LASSI_FREE_FLOOR_GIB from its command line: the space check needs INSTALL_KIB
+# above that floor on the scratch disk, and every build stops when the disk's free space falls under it.
+INSTALL_KIB=31457280
+# Seconds between the free-space checks while a build runs.
+GUARD_SECONDS=30
+# The least niceness the script runs at: the gate's (tools/server/config.default.json, nice; gate.py, wrap) and the
+# long-job runner's (tools/local/longjob.py, nice -n 10) on a shared host.
+NICE_MIN=10

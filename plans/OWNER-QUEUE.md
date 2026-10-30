@@ -1347,3 +1347,4 @@ Options:
 - (d) Defer: the arms only report whether the model's IR compiles to a flatbuffer.
 Recommendation: (a), built in the next owner window.
 Answer: (b), built on Friday 2026-10-30, daytime. The owner, in the working session of 2026-10-29: "(b) (a) + ttrt/Python" and "Friday, daytime (Recommended)".
+Build settings for the owner to confirm with the job (plans/spikes/ttmlir-runtime.md): LASSI_FREE_FLOOR_GIB 30 (the build starts only with 60 GiB free and stops any step that would leave less than 30 GiB), LASSI_STOP_GIB 345 (the precedent under OQ-074's lift); the scratch root grows from about 258 GiB to about 288 GiB (PROJECTED) on a shared disk at 98% use.
