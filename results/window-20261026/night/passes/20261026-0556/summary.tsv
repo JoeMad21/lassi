@@ -1,0 +1,4 @@
+slug	trial	stage	alignment	corrections	end	attempts
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run03	S4	None	8	sim-gap	9

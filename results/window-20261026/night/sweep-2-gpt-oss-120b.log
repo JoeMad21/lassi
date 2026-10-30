@@ -1,0 +1,166 @@
+2026-10-26T06:26:08-0700 sweep 20261026-0626: deadline 09:40:00, 11632 s left, output /mnt/nvme10/joseph_ufl/lassi-runs/rngd-sweep/20261026-0626
+2026-10-26T06:26:08-0700 START gpt-oss-120b: furiosa-ai/gpt-oss-120b@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-10-26T06:27:44-0700 READY gpt-oss-120b: running 10 recipes side by side for at most 10936 s
+2026-10-26T06:45:31-0700 gpt-oss-120b run 723847 ended rc=0
+2026-10-26T06:46:04-0700 gpt-oss-120b run 723849 ended rc=0
+2026-10-26T06:46:04-0700 gpt-oss-120b run 723850 ended rc=0
+2026-10-26T06:46:04-0700 gpt-oss-120b run 723851 ended rc=0
+2026-10-26T07:06:07-0700 gpt-oss-120b run 723852 ended rc=0
+2026-10-26T07:10:58-0700 gpt-oss-120b run 723854 ended rc=0
+2026-10-26T07:36:15-0700 gpt-oss-120b run 723855 ended rc=2
+2026-10-26T07:40:47-0700 gpt-oss-120b run 723858 ended rc=0
+2026-10-26T07:40:47-0700 gpt-oss-120b run 723861 ended rc=0
+2026-10-26T07:40:47-0700 gpt-oss-120b run 723863 ended rc=0
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_binary/run01	S5	1.0	1	-	2
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_binary/run02	S5	1.0	1	-	2
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_binary/run03	S5	1.0	5	-	6
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_sfpu/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_sfpu/run02	S5	1.0	1	-	2
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_sfpu/run03	S5	1.0	1	-	2
+gpt-oss-120b--tc0-maxabs	tt-cpp/loopback/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc0-maxabs	tt-cpp/loopback/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc0-maxabs	tt-cpp/loopback/run03	S5	1.0	0	-	1
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_multi_core/run01	S5	1.0	1	-	2
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_multi_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_multi_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_single_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_single_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_single_core/run03	S5	1.0	1	-	2
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_binary/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_binary/run02	S5	1.0	1	-	2
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_binary/run03	S5	1.0	1	-	2
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_sfpu/run01	S5	1.0	1	-	2
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_sfpu/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_sfpu/run03	S5	1.0	0	-	1
+gpt-oss-120b--tc1-maxabs	tt-cpp/loopback/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc1-maxabs	tt-cpp/loopback/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc1-maxabs	tt-cpp/loopback/run03	S5	1.0	0	-	1
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_multi_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_multi_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_multi_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_single_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_single_core/run02	S5	1.0	2	-	3
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_single_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_binary/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_binary/run02	S5	1.0	1	-	2
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_binary/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_sfpu/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_sfpu/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_sfpu/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/loopback/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/loopback/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/loopback/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_multi_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_multi_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_multi_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_single_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_single_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_single_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_binary/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_binary/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_binary/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/loopback/run01	S5	1.0	4	-	5
+gpt-oss-120b--v1ex-maxabs	cpp-tt/loopback/run02	S5	1.0	2	-	3
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_multi_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_multi_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_multi_core/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_single_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_single_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_single_core/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_binary/run01	S5	1.0	1	-	2
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_binary/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_binary/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_sfpu/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_sfpu/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_sfpu/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/loopback/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/loopback/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/loopback/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_multi_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_multi_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_multi_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_single_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_single_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_single_core/run03	S5	1.0	0	-	1
+2026-10-26T07:40:56-0700 server 643233 exited
+2026-10-26T07:40:56-0700 DONE gpt-oss-120b; free cards now 8; 7144 s left
+2026-10-26T07:40:56-0700 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_binary/run01	S5	1.0	1	-	2
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_binary/run02	S5	1.0	1	-	2
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_binary/run03	S5	1.0	5	-	6
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_sfpu/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_sfpu/run02	S5	1.0	1	-	2
+gpt-oss-120b--tc0-maxabs	tt-cpp/eltwise_sfpu/run03	S5	1.0	1	-	2
+gpt-oss-120b--tc0-maxabs	tt-cpp/loopback/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc0-maxabs	tt-cpp/loopback/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc0-maxabs	tt-cpp/loopback/run03	S5	1.0	0	-	1
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_multi_core/run01	S5	1.0	1	-	2
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_multi_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_multi_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_single_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_single_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc0-pcc	tt-cpp/matmul_single_core/run03	S5	1.0	1	-	2
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_binary/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_binary/run02	S5	1.0	1	-	2
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_binary/run03	S5	1.0	1	-	2
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_sfpu/run01	S5	1.0	1	-	2
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_sfpu/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc1-maxabs	tt-cpp/eltwise_sfpu/run03	S5	1.0	0	-	1
+gpt-oss-120b--tc1-maxabs	tt-cpp/loopback/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc1-maxabs	tt-cpp/loopback/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc1-maxabs	tt-cpp/loopback/run03	S5	1.0	0	-	1
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_multi_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_multi_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_multi_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_single_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_single_core/run02	S5	1.0	2	-	3
+gpt-oss-120b--tc1-pcc	tt-cpp/matmul_single_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_binary/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_binary/run02	S5	1.0	1	-	2
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_binary/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_sfpu/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_sfpu/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/eltwise_sfpu/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/loopback/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/loopback/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-maxabs	cpp-tt/loopback/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_multi_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_multi_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_multi_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_single_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_single_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1allsk-pcc	cpp-tt/matmul_single_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_binary/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_binary/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_binary/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-maxabs	cpp-tt/loopback/run01	S5	1.0	4	-	5
+gpt-oss-120b--v1ex-maxabs	cpp-tt/loopback/run02	S5	1.0	2	-	3
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_multi_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_multi_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_multi_core/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_single_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_single_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--v1ex-pcc	cpp-tt/matmul_single_core/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_binary/run01	S5	1.0	1	-	2
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_binary/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_binary/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_sfpu/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_sfpu/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/eltwise_sfpu/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/loopback/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/loopback/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-maxabs	cpp-tt/loopback/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_multi_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_multi_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_multi_core/run03	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_single_core/run01	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_single_core/run02	S5	1.0	0	-	1
+gpt-oss-120b--v1exsk-pcc	cpp-tt/matmul_single_core/run03	S5	1.0	0	-	1
+2026-10-26T07:40:56-0700 sweep ended

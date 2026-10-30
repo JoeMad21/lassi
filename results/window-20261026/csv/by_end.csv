@@ -1,0 +1,4 @@
+slug,combo,stage,end,trials
+gpt-oss-120b,ttkernel,S1,correction-cap,2
+gpt-oss-120b,ttkernel,S4,sim-gap,1
+gpt-oss-120b,v1ex,S1,correction-cap,12

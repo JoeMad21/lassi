@@ -1,0 +1,85 @@
+# Resolved recipe v1exsk-pcc (chain: base -> tier-a-rngd-pcc -> tier-a-rngd-1trial-pcc -> qwen3-coder-30b-pcc -> qwen3-coder-30b-pcc -> qwen3-coder-30b-pcc -> qwen3-coder-30b-pcc -> fz-pcc -> base-pcc -> base-pcc -> ex-pcc -> v1ex-pcc -> v1exsk-pcc)
+# recipe_hash: 36efecdd8ccd00550671ad6f00637d3251397a41914e97458bed7e98e182c91e is the sha256 of the YAML below these comment lines
+adversary:
+  budget:
+    inputs: 32
+  kind: fuzzer
+  seed: 1
+bench:
+  items:
+  - matmul_multi_core
+  - matmul_single_core
+  split: unassigned
+  suite: tt-pairs-v0
+directions:
+- source: cpp
+  target: tt
+examples:
+  max_chars: 24000
+  pack: tt-examples-v0
+  prompts:
+  - generate
+  - correct
+executor:
+  cpp:
+    kind: native
+  tt:
+    arch: wormhole_b0
+    dispatch: slow
+    kind: ttsim
+extract:
+  unfenced_file_lines: true
+faithful: false
+fixes:
+  baseline_both: true
+  execution_gate: true
+  fence_tag: true
+  parsed_diagnostics: true
+  prompt_newlines: true
+  prompt_spaces: true
+llm:
+  sampling:
+    max_tokens: 32768
+    reasoning_effort: medium
+    temperature: 0.2
+    top_p: 0.9
+loop:
+  correct_on_mismatch: true
+  correct_on_sim_gap: true
+  max_corrections: 8
+model:
+  backend: openai_compat
+  id: furiosa-ai/gpt-oss-120b
+  timeout_s: 3600
+oracle:
+  kind: binary_io
+  metric: pcc
+  threshold: from_baseline
+project: v1exsk-pcc
+prompts: tt-host-v1
+report:
+  parquet: true
+  trial_md: true
+runs_root: /mnt/nvme10/joseph_ufl/lassi-runs
+sandbox:
+  mem_gb: 16
+  network: false
+  wall_s: baseline_x10
+skeleton:
+  name: tt-host-skeleton-v0
+  prompts:
+  - generate
+  - correct
+  sha256: 313151639efa7ba70274c4f7be9d4375e9ff02bc733e7940693cdbfbba01a0da
+stages:
+- baseline
+- generate
+- compile_loop
+- run_loop
+- oracle
+- adversary
+toolchain:
+  cpp: gcc-native
+  tt: ttmetal-host
+trials:
+  n: 3

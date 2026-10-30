@@ -1,0 +1,3 @@
+call	slug	sweep	stamp	rc	recipes	skip
+1	gpt-oss-120b	projects/lassi-demo/mlir1	20261026-0556	0	1	-
+2	gpt-oss-120b	projects/lassi-demo/sweep8	20261026-0626	0	10	-

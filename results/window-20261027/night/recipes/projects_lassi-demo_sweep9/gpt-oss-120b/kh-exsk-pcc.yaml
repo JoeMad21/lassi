@@ -1,0 +1,84 @@
+# Resolved recipe kh-exsk-pcc (chain: base -> tier-a-rngd-pcc -> kh-ex-pcc -> kh-exsk-pcc)
+# recipe_hash: 1405e2317af29043d9ed569922ee00b87f3586e2638aa60721fcc304bb406593 is the sha256 of the YAML below these comment lines
+bench:
+  items:
+  - matmul_multi_core
+  - matmul_single_core
+  split: unassigned
+  suite: tt-pairs-v0-kh
+directions:
+- source: cpp
+  target: ttkh
+examples:
+  max_chars: 32000
+  pack: tt-kh-examples-v0
+  prompts:
+  - generate
+  - correct
+executor:
+  cpp:
+    kind: native
+  tt:
+    arch: wormhole_b0
+    dispatch: slow
+    kind: ttsim
+  ttkh:
+    arch: wormhole_b0
+    dispatch: slow
+    kind: ttsim
+extract:
+  unfenced_file_lines: true
+faithful: false
+fixes:
+  baseline_both: true
+  execution_gate: true
+  fence_tag: true
+  parsed_diagnostics: true
+  prompt_newlines: true
+  prompt_spaces: true
+llm:
+  sampling:
+    max_tokens: 32768
+    reasoning_effort: medium
+    temperature: 0.2
+    top_p: 0.9
+loop:
+  correct_on_mismatch: true
+  correct_on_sim_gap: true
+  max_corrections: 8
+model:
+  backend: openai_compat
+  id: furiosa-ai/gpt-oss-120b
+  timeout_s: 3600
+oracle:
+  kind: binary_io
+  metric: pcc
+  threshold: from_baseline
+project: kh-exsk-pcc
+prompts: tt-kh-v0
+report:
+  parquet: true
+  trial_md: true
+runs_root: /mnt/nvme10/joseph_ufl/lassi-runs
+sandbox:
+  mem_gb: 16
+  network: false
+  wall_s: baseline_x10
+skeleton:
+  name: tt-kh-skeleton-v0
+  prompts:
+  - generate
+  - correct
+  sha256: 01598e8b4dcaabd146cde63c17e16e628180ce51bfb4688a1382c2acd809cfe2
+stages:
+- baseline
+- generate
+- compile_loop
+- run_loop
+- oracle
+toolchain:
+  cpp: gcc-native
+  tt: ttmetal-host
+  ttkh: ttmetal-host
+trials:
+  n: 3

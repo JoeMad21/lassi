@@ -1,0 +1,72 @@
+2026-10-27T00:56:38-0700 sweep 20261027-0056: deadline 04:48:19, 13901 s left, output /mnt/nvme10/joseph_ufl/lassi-runs/rngd-sweep/20261027-0056
+2026-10-27T00:56:38-0700 START gpt-oss-120b: furiosa-ai/gpt-oss-120b@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-10-27T00:58:13-0700 READY gpt-oss-120b: running 4 recipes side by side for at most 13206 s
+2026-10-27T03:03:13-0700 gpt-oss-120b run 471403 ended rc=0
+2026-10-27T03:06:21-0700 gpt-oss-120b run 471404 ended rc=0
+2026-10-27T03:06:21-0700 gpt-oss-120b run 471405 ended rc=0
+2026-10-27T03:06:21-0700 gpt-oss-120b run 471406 ended rc=0
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_binary/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_binary/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_binary/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/loopback/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/loopback/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/loopback/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_multi_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_multi_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_multi_core/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_single_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_single_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_single_core/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_binary/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_binary/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_binary/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_multi_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_multi_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_multi_core/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_single_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_single_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_single_core/run03	S1	None	8	correction-cap	9
+2026-10-27T03:06:28-0700 server 400627 exited
+2026-10-27T03:06:28-0700 DONE gpt-oss-120b; free cards now 8; 6111 s left
+2026-10-27T03:06:28-0700 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_binary/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_binary/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_binary/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/loopback/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/loopback/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-maxabs	cpp-ttkernel/loopback/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_multi_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_multi_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_multi_core/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_single_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_single_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-affine-pcc	cpp-ttkernel/matmul_single_core/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_binary/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_binary/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_binary/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/eltwise_sfpu/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_multi_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_multi_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_multi_core/run03	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_single_core/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_single_core/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-pcc	cpp-ttkernel/matmul_single_core/run03	S1	None	8	correction-cap	9
+2026-10-27T03:06:28-0700 sweep ended

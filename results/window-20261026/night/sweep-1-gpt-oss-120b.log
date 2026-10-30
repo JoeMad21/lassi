@@ -1,0 +1,15 @@
+2026-10-26T05:56:26-0700 sweep 20261026-0556: deadline 07:48:13, 6707 s left, output /mnt/nvme10/joseph_ufl/lassi-runs/rngd-sweep/20261026-0556
+2026-10-26T05:56:27-0700 START gpt-oss-120b: furiosa-ai/gpt-oss-120b@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-10-26T05:58:02-0700 READY gpt-oss-120b: running 1 recipes side by side for at most 6011 s
+2026-10-26T06:26:03-0700 gpt-oss-120b run 1651786 ended rc=0
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run03	S4	None	8	sim-gap	9
+2026-10-26T06:26:08-0700 server 1577549 exited
+2026-10-26T06:26:08-0700 DONE gpt-oss-120b; free cards now 8; 4925 s left
+2026-10-26T06:26:08-0700 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run01	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run02	S1	None	8	correction-cap	9
+gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel/loopback/run03	S4	None	8	sim-gap	9
+2026-10-26T06:26:08-0700 sweep ended

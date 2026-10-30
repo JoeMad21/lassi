@@ -1,0 +1,2 @@
+build_tt_examples: 2 examples, 4 files under /mnt/nvme10/joseph_ufl/lassi-wt/suite/assets/examples/tt-examples-v0; pack sha256 a7ef4deccd5e436b7b8aaa20b84cd294d95216d9d34448dcc2050e1b615aa382
+build_tt_examples: /mnt/nvme10/joseph_ufl/lassi-wt/suite/assets/examples/tt-examples-v0 matches MANIFEST.yaml (pack sha256 a7ef4deccd5e436b7b8aaa20b84cd294d95216d9d34448dcc2050e1b615aa382)

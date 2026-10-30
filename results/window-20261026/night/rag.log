@@ -1,0 +1,4 @@
+build_tt_rag: 539 files, 2807 chunks, 81 excluded, 157 line ranges excised; index /mnt/nvme10/joseph_ufl/rag/tt-metal-docs@5280a9cf/index.json sha256 610376e052c6ffa0db567dc6d947e839fe86cc30079e5be09271092bbbcc1de7
+build_tt_rag: similar: tt_metal/programming_examples/pad_multi_core/kernels/pad_writer_dims_rm_interleaved.cpp has token similarity 0.701 to tt_metal/programming_examples/matmul/matmul_multi_core/kernels/dataflow/writer_unary_interleaved_start_id.cpp
+build_tt_rag: similar: tt_metal/programming_examples/sfpu_eltwise_chain/kernels/dataflow/writer.cpp has token similarity 0.701 to tt_metal/programming_examples/matmul/matmul_multi_core/kernels/dataflow/writer_unary_interleaved_start_id.cpp
+build_tt_rag: /mnt/nvme10/joseph_ufl/lassi-wt/suite/assets/rag/tt-metal-docs/MANIFEST.yaml matches this build (index sha256 610376e052c6ffa0db567dc6d947e839fe86cc30079e5be09271092bbbcc1de7)

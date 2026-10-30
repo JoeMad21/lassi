@@ -1,0 +1,2 @@
+506 trials from 28 pass-model pairs into /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261027-005611-window-7998/tables
+5 attempt(s) built but not verifiable on ttsim (simulator gaps; the label assumes the simulator is ttsim, as every RNGD sweep run is), listed for a human-started hardware check; nothing was run

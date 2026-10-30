@@ -1,0 +1,4 @@
+run_tree	direction	item	run	stage	alignment	corrections	end	generate	compile_loop	run_loop	restart	looked-up_notes	retrieved_notes
+sweep-20261026-0556-gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel	loopback	run01	S1	None	8	correction-cap	1	7	1	0	0	0
+sweep-20261026-0556-gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel	loopback	run02	S1	None	8	correction-cap	1	7	1	0	0	0
+sweep-20261026-0556-gpt-oss-120b--ttkernel-maxabs	cpp-ttkernel	loopback	run03	S4	None	8	sim-gap	1	7	1	0	0	0

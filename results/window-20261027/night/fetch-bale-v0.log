@@ -1,0 +1,5 @@
+fetch_bench: fetched: bale-v0 at 1b8f673b56645b2bd74a8af6213462bbc9d559fe into /mnt/nvme10/joseph_ufl/bench/bale-v0@1b8f673b56645b2bd74a8af6213462bbc9d559fe
+  src/other_serial/C/histo.c
+  src/other_serial/C/ig.c
+  src/other_serial/C/triangle.c
+fetch_bench: 3 files present, sha256 checked for 3

@@ -1,0 +1,12 @@
+slug,combo,half,direction,trials,reached_s5,passed,pass_rate,wilson_low,wilson_high,fuzzer_divergent_passes,sim_gap_attempts
+gpt-oss-120b,tc0,maxabs,tt-cpp,9,9,9,1.0,0.701,1.0,0,0
+gpt-oss-120b,tc0,pcc,tt-cpp,6,6,6,1.0,0.61,1.0,5,0
+gpt-oss-120b,tc1,maxabs,tt-cpp,9,9,9,1.0,0.701,1.0,0,0
+gpt-oss-120b,tc1,pcc,tt-cpp,6,6,6,1.0,0.61,1.0,5,0
+gpt-oss-120b,ttkernel,maxabs,cpp-ttkernel,3,0,0,0.0,0.0,0.562,0,4
+gpt-oss-120b,v1allsk,maxabs,cpp-tt,9,9,9,1.0,0.701,1.0,0,0
+gpt-oss-120b,v1allsk,pcc,cpp-tt,6,6,6,1.0,0.61,1.0,0,0
+gpt-oss-120b,v1ex,maxabs,cpp-tt,8,2,2,0.25,0.071,0.591,0,0
+gpt-oss-120b,v1ex,pcc,cpp-tt,6,0,0,0.0,0.0,0.39,0,0
+gpt-oss-120b,v1exsk,maxabs,cpp-tt,9,9,9,1.0,0.701,1.0,0,0
+gpt-oss-120b,v1exsk,pcc,cpp-tt,6,6,6,1.0,0.61,1.0,0,0

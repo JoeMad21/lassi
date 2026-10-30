@@ -1,0 +1,118 @@
+# Resolved recipe kh-allsk-maxabs (chain: base -> tier-a-rngd-maxabs -> kh-ex-maxabs -> kh-exsk-maxabs -> kh-allsk-maxabs)
+# recipe_hash: 2d53f35f3142c26712961b8b53f4f973e441e598475527d1a01ea6c07b2cdb50 is the sha256 of the YAML below these comment lines
+bench:
+  items:
+  - eltwise_binary
+  - eltwise_sfpu
+  - loopback
+  split: unassigned
+  suite: tt-pairs-v0-kh
+context:
+- tt-metalium-5280a9cf-kh
+directions:
+- source: cpp
+  target: ttkh
+examples:
+  max_chars: 32000
+  pack: tt-kh-examples-v0
+  prompts:
+  - generate
+  - correct
+executor:
+  cpp:
+    kind: native
+  tt:
+    arch: wormhole_b0
+    dispatch: slow
+    kind: ttsim
+  ttkh:
+    arch: wormhole_b0
+    dispatch: slow
+    kind: ttsim
+extract:
+  unfenced_file_lines: true
+faithful: false
+fixes:
+  baseline_both: true
+  execution_gate: true
+  fence_tag: true
+  parsed_diagnostics: true
+  prompt_newlines: true
+  prompt_spaces: true
+llm:
+  sampling:
+    max_tokens: 32768
+    reasoning_effort: medium
+    temperature: 0.2
+    top_p: 0.9
+lookup:
+  core:
+  - tt-metalium/host_api.hpp
+  - tt-metalium/distributed.hpp
+  - tt-metalium/mesh_buffer.hpp
+  - tt-metalium/buffer_types.hpp
+  - tt-metalium/circular_buffer_config.hpp
+  - tt-metalium/kernel_types.hpp
+  - api/dataflow/dataflow_api.h
+  - api/compute/common.h
+  - api/compute/cb_api.h
+  - api/compute/reg_api.h
+  - api/compute/pack.h
+  - api/compute/tile_move_copy.h
+  - api/compute/compute_kernel_hw_startup.h
+  - api/compute/eltwise_binary.h
+  - api/compute/eltwise_unary/eltwise_unary.h
+  - api/compute/matmul.h
+  max_chars: 32000
+  nearest: 3
+  prompts:
+  - generate
+  - correct
+loop:
+  correct_on_mismatch: true
+  correct_on_sim_gap: true
+  max_corrections: 8
+  restart_after: 3
+model:
+  backend: openai_compat
+  id: furiosa-ai/gpt-oss-120b
+  timeout_s: 3600
+oracle:
+  kind: binary_io
+  metric: max_abs
+  threshold: from_baseline
+project: kh-allsk-maxabs
+prompts: tt-kh-v0
+report:
+  parquet: true
+  trial_md: true
+retrieval:
+  index: tt-metal-docs
+  k: 4
+  max_chars: 6000
+  prompts:
+  - generate
+  - correct
+runs_root: /mnt/nvme10/joseph_ufl/lassi-runs
+sandbox:
+  mem_gb: 16
+  network: false
+  wall_s: baseline_x10
+skeleton:
+  name: tt-kh-skeleton-v0
+  prompts:
+  - generate
+  - correct
+  sha256: 01598e8b4dcaabd146cde63c17e16e628180ce51bfb4688a1382c2acd809cfe2
+stages:
+- baseline
+- generate
+- compile_loop
+- run_loop
+- oracle
+toolchain:
+  cpp: gcc-native
+  tt: ttmetal-host
+  ttkh: ttmetal-host
+trials:
+  n: 3

@@ -1,0 +1,15 @@
+fetch_bench: copied from /mnt/nvme10/joseph_ufl/toolchains/tt-metal@5280a9cf-tracy: tt-pairs-v0-kh at 5280a9cfb00998fd49667a29523d03aee905c129 into /mnt/nvme10/joseph_ufl/bench/tt-pairs-v0-kh@5280a9cfb00998fd49667a29523d03aee905c129
+  tt_metal/programming_examples/eltwise_binary/kernels/compute/tiles_add.cpp
+  tt_metal/programming_examples/eltwise_binary/kernels/dataflow/read_tiles.cpp
+  tt_metal/programming_examples/eltwise_binary/kernels/dataflow/write_tile.cpp
+  tt_metal/programming_examples/eltwise_sfpu/kernels/compute/eltwise_sfpu.cpp
+  tt_metal/programming_examples/eltwise_sfpu/kernels/dataflow/read_tile.cpp
+  tt_metal/programming_examples/eltwise_sfpu/kernels/dataflow/write_tile.cpp
+  tt_metal/programming_examples/loopback/kernels/loopback_dram_copy.cpp
+  tt_metal/programming_examples/matmul/matmul_multi_core/kernels/compute/mm.cpp
+  tt_metal/programming_examples/matmul/matmul_multi_core/kernels/dataflow/reader_mm_output_tiles_partitioned.cpp
+  tt_metal/programming_examples/matmul/matmul_multi_core/kernels/dataflow/writer_unary_interleaved_start_id.cpp
+  tt_metal/programming_examples/matmul/matmul_single_core/kernels/compute/mm.cpp
+  tt_metal/programming_examples/matmul/matmul_single_core/kernels/dataflow/reader_single_core_mm.cpp
+  tt_metal/programming_examples/matmul/matmul_single_core/kernels/dataflow/writer_single_core_mm.cpp
+fetch_bench: 13 files present, sha256 checked for 13

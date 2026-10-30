@@ -1,0 +1,46 @@
+2026-10-27T03:06:28-0700 sweep 20261027-0306: deadline 08:40:00, 20012 s left, output /mnt/nvme10/joseph_ufl/lassi-runs/rngd-sweep/20261027-0306
+2026-10-27T03:06:28-0700 START gpt-oss-120b: furiosa-ai/gpt-oss-120b@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-10-27T03:08:04-0700 READY gpt-oss-120b: running 2 recipes side by side for at most 14400 s
+2026-10-27T03:11:55-0700 gpt-oss-120b run 2826050 ended rc=0
+2026-10-27T03:11:55-0700 gpt-oss-120b run 2826051 ended rc=0
+gpt-oss-120b--cpp-to-omp	cpp-omp/histo/run01	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/histo/run02	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/histo/run03	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/ig/run01	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/ig/run02	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/ig/run03	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/triangle/run01	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/triangle/run02	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/triangle/run03	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/histo/run01	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/histo/run02	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/histo/run03	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/ig/run01	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/ig/run02	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/ig/run03	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/triangle/run01	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/triangle/run02	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/triangle/run03	S5	1.0	0	-	1
+2026-10-27T03:12:01-0700 server 2757804 exited
+2026-10-27T03:12:02-0700 DONE gpt-oss-120b; free cards now 8; 19678 s left
+2026-10-27T03:12:02-0700 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+gpt-oss-120b--cpp-to-omp	cpp-omp/histo/run01	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/histo/run02	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/histo/run03	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/ig/run01	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/ig/run02	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/ig/run03	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/triangle/run01	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/triangle/run02	S5	1.0	0	-	1
+gpt-oss-120b--cpp-to-omp	cpp-omp/triangle/run03	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/histo/run01	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/histo/run02	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/histo/run03	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/ig/run01	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/ig/run02	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/ig/run03	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/triangle/run01	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/triangle/run02	S5	1.0	0	-	1
+gpt-oss-120b--omp-to-cpp	omp-cpp/triangle/run03	S5	1.0	0	-	1
+2026-10-27T03:12:02-0700 sweep ended

@@ -1,0 +1,17 @@
+slug,combo,item,trials,reached_s5,passed,pass_rate,wilson_low,wilson_high,fuzzer_divergent_passes,sim_gap_attempts
+gpt-oss-120b,cpp-to,histo,3,3,3,1.0,0.438,1.0,0,0
+gpt-oss-120b,cpp-to,ig,3,3,3,1.0,0.438,1.0,0,0
+gpt-oss-120b,cpp-to,triangle,3,3,3,1.0,0.438,1.0,0,0
+gpt-oss-120b,omp-to,histo,3,3,3,1.0,0.438,1.0,0,0
+gpt-oss-120b,omp-to,ig,3,3,3,1.0,0.438,1.0,0,0
+gpt-oss-120b,omp-to,triangle,3,3,3,1.0,0.438,1.0,0,0
+gpt-oss-120b,ttkernel,eltwise_binary,3,0,0,0.0,0.0,0.562,0,0
+gpt-oss-120b,ttkernel,eltwise_sfpu,3,0,0,0.0,0.0,0.562,0,0
+gpt-oss-120b,ttkernel,loopback,3,0,0,0.0,0.0,0.562,0,0
+gpt-oss-120b,ttkernel,matmul_multi_core,3,0,0,0.0,0.0,0.562,0,0
+gpt-oss-120b,ttkernel,matmul_single_core,3,0,0,0.0,0.0,0.562,0,0
+gpt-oss-120b,ttkernel-affine,eltwise_binary,3,0,0,0.0,0.0,0.562,0,0
+gpt-oss-120b,ttkernel-affine,eltwise_sfpu,3,0,0,0.0,0.0,0.562,0,0
+gpt-oss-120b,ttkernel-affine,loopback,3,0,0,0.0,0.0,0.562,0,0
+gpt-oss-120b,ttkernel-affine,matmul_multi_core,3,0,0,0.0,0.0,0.562,0,0
+gpt-oss-120b,ttkernel-affine,matmul_single_core,3,0,0,0.0,0.0,0.562,0,0

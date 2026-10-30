@@ -1,0 +1,6 @@
+pass	slug	half	combo	trial_id	attempt	gap_class	stage
+20261025-0824	qwen3-coder-30b	maxabs	mmapiragrl	mmapiragrl-maxabs/furiosa-ai--Qwen3-Coder-30B-A3B-Instruct-FP8/tt-pairs-v0/cpp-tt/loopback/run01	8	UnimplementedFunctionality	S4
+20261026-0556	gpt-oss-120b	maxabs	ttkernel	ttkernel-maxabs/furiosa-ai--gpt-oss-120b/tt-pairs-v0-ttkernel/cpp-ttkernel/loopback/run01	6	UnimplementedFunctionality	S4
+20261026-0556	gpt-oss-120b	maxabs	ttkernel	ttkernel-maxabs/furiosa-ai--gpt-oss-120b/tt-pairs-v0-ttkernel/cpp-ttkernel/loopback/run02	1	UnimplementedFunctionality	S4
+20261026-0556	gpt-oss-120b	maxabs	ttkernel	ttkernel-maxabs/furiosa-ai--gpt-oss-120b/tt-pairs-v0-ttkernel/cpp-ttkernel/loopback/run03	2	UnimplementedFunctionality	S4
+20261026-0556	gpt-oss-120b	maxabs	ttkernel	ttkernel-maxabs/furiosa-ai--gpt-oss-120b/tt-pairs-v0-ttkernel/cpp-ttkernel/loopback/run03	8	UnimplementedFunctionality	S4

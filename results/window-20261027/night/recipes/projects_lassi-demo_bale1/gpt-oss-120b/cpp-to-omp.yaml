@@ -1,0 +1,58 @@
+# Resolved recipe cpp-to-omp (chain: base -> cpp-to-omp)
+# recipe_hash: 960fe30f29bda11522332ad4879e1a291afc0eb65466a3007ae358cbcfb20f64 is the sha256 of the YAML below these comment lines
+bench:
+  split: unassigned
+  suite: bale-v0
+directions:
+- source: cpp
+  target: omp
+executor:
+  kind: native
+extract:
+  unfenced_file_lines: true
+faithful: false
+fixes:
+  baseline_both: true
+  execution_gate: true
+  fence_tag: true
+  parsed_diagnostics: true
+  prompt_newlines: true
+  prompt_spaces: true
+llm:
+  sampling:
+    max_tokens: 32768
+    reasoning_effort: medium
+    temperature: 0.2
+    top_p: 0.9
+loop:
+  correct_on_mismatch: true
+  max_corrections: 8
+model:
+  backend: openai_compat
+  id: furiosa-ai/gpt-oss-120b
+  timeout_s: 3600
+oracle:
+  kind: binary_io
+  metric: max_abs
+  threshold: 0
+project: cpp-to-omp
+prompts: cpu-omp-v0
+report:
+  parquet: true
+  trial_md: true
+runs_root: /mnt/nvme10/joseph_ufl/lassi-runs
+sandbox:
+  mem_gb: 16
+  network: false
+  wall_s: baseline_x10
+stages:
+- baseline
+- generate
+- compile_loop
+- run_loop
+- oracle
+toolchain:
+  cpp: gcc-native
+  omp: gcc-openmp
+trials:
+  n: 3
