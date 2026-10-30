@@ -261,7 +261,7 @@ def test_each_recipe_binds_one_direction_with_the_shared_settings(name: str) -> 
     assert data["fixes"]["baseline_both"] is (source == "omp")
     assert data["oracle"] == {"kind": "binary_io", "metric": "max_abs", "threshold": 0}
     assert data["stages"] == ["baseline", "generate", "compile_loop", "run_loop", "oracle"]
-    assert data["trials"] == {"n": 2} and data["sandbox"]["wall_s"] == 300
+    assert data["trials"] == {"n": 1} and data["sandbox"]["wall_s"] == 300
     loop = data["loop"]
     assert (loop["max_corrections"], loop["correct_on_mismatch"], loop["correct_on_sim_gap"]) == (8, True, True)
 

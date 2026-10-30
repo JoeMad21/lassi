@@ -7,7 +7,7 @@
 # gpt-oss-120b with sweep8's model settings (reasoning effort medium, a budget of 32768 tokens, timeout 3600 s;
 # OQ-080, OQ-087), restated here since sweep8's chain carries the adversary stage, whose reference build reads no
 # reference language, so this pass leaves it out (tests/core/test_sweep9_recipes.py checks the settings are
-# sweep8's). 3 samples, a correction cap of 8, and the mismatch report and simulator-gap feedback on (OQ-098).
+# sweep8's). 2 samples, a correction cap of 8, and the mismatch report and simulator-gap feedback on (OQ-098).
 # Combination kh-ex: the tt-kh-v0 prompts with the worked examples tt-kh-examples-v0 (tt-metal's examples at the pin
 # outside the Tier A items, a compute kernel among them) at generation and each compile correction; the max_abs half (eltwise_binary, eltwise_sfpu, loopback).
 # Before the run: `uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-kh.yaml` and
@@ -33,5 +33,6 @@ executor:
   ttkh: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # candidates run in the sandbox on ttsim, a simulator
 examples: {pack: tt-kh-examples-v0, max_chars: 32000, prompts: [generate, correct]}  # tools/build_tt_examples.py
 stages: [baseline, generate, compile_loop, run_loop, oracle]
-trials: {n: 3}
+# 3 until 2026-10-29; fewer samples, so every item gets a trial before the window's deadline (trials run item by item).
+trials: {n: 2}
 loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true}

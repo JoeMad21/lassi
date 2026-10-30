@@ -18,7 +18,8 @@ directory's bale-* recipes are another suite's and are tested elsewhere):
   ttkernel-ref-5f396fd6 (tools/build_ttkernel_reference.py), and the stage
   verbatim_context in place of summarize_context; every other setting is
   mlir1's (source_mlir on cgeist-affine, dialect_lookup, the loop opt-ins,
-  a cap of 8, 3 samples). rag is ref plus retrieval over tt-mlir-tests.
+  a cap of 8), with 2 samples where mlir1 has 3 (the window of
+  2026-10-29). rag is ref plus retrieval over tt-mlir-tests.
 - tt-mlir-v1 is tt-mlir-v0 but for knowledge.txt (worded for a reference)
   and the two retrieval templates it adds; every template is plain ASCII
   and uses only its fields.
@@ -126,14 +127,14 @@ def test_each_recipe_loads_and_binds_cpp_to_ttkernel_on_ttsim(name: str) -> None
     assert data["dialect_lookup"] == {"defs": "ttkernel-defs-5f396fd6", "max_chars": 12000, "nearest": 4}
     assert data["loop"] == {"max_corrections": 8, "correct_on_mismatch": True, "correct_on_sim_gap": True,
                             "coord_gap_as_error": True}
-    assert data["trials"] == {"n": 3}
+    assert data["trials"] == {"n": 2}
     assert data["examples"]["pack"] == "ttkernel-examples-5f396fd6"
 
 
 @pytest.mark.parametrize("half", sorted(HALVES))
 def test_ref_is_mlir1s_affine_recipe_with_the_reference_in_place_of_the_card(half: str) -> None:
     ref, affine = load(f"mlir-ref-{half}"), load_recipe(MLIR1 / f"ttkernel-affine-{half}.yaml").data
-    changed = {"prompts", "context", "stages", "project"}
+    changed = {"prompts", "context", "stages", "project", "trials"}  # 2 samples where mlir1 has 3
     assert {key: value for key, value in ref.items() if key not in changed} == {
         key: value for key, value in affine.items() if key not in changed}
     assert affine["stages"] == [stage if stage != "verbatim_context" else "summarize_context" for stage in STAGES]

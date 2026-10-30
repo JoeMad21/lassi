@@ -8,5 +8,6 @@ context: [ttkernel-ref-5f396fd6]  # the exact API reference of the dialect at th
 stages: [baseline, verbatim_context, generate, compile_loop, run_loop, oracle]  # the reference as it is, no summary
 source_mlir: {toolchain: cgeist-affine, max_chars: 24000}  # mlir1's affine lowering, restated
 dialect_lookup: {defs: ttkernel-defs-5f396fd6, max_chars: 12000, nearest: 4}  # mlir1's, restated
-trials: {n: 3}
+# 3 until 2026-10-29; fewer samples, so every item gets a trial before the window's deadline (trials run item by item).
+trials: {n: 2}
 loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true, coord_gap_as_error: true}

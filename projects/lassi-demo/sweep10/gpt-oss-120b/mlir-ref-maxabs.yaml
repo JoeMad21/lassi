@@ -14,7 +14,8 @@
 # prompts with knowledge.txt worded for a reference), which goes before generate.txt, every correct.txt, and the
 # mismatch prompt. Everything else is mlir1's ttkernel-affine settings: sweep7's gpt-oss-120b model settings, the
 # worked examples, source_mlir on cgeist-affine, dialect_lookup, the coord_to_tile gap as an addressing error, the
-# mismatch and simulator-gap corrections, a correction cap of 8, and 3 samples.
+# mismatch and simulator-gap corrections, and a correction cap of 8; 2 samples where mlir1 has 3 (the window of
+# 2026-10-29).
 # Before the run (plans/runs/suite/run-suite.sh does each on the build host): uv run tools/fetch_bench.py
 # assets/bench/tt-pairs-v0-ttkernel.yaml; uv run tools/build_ttkernel_context.py build --tree <tt-mlir src> (the
 # examples and the definitions); uv run tools/build_ttkernel_reference.py build --tree <tt-mlir src> (the
@@ -25,5 +26,6 @@ context: [ttkernel-ref-5f396fd6]  # the exact API reference of the dialect at th
 stages: [baseline, verbatim_context, generate, compile_loop, run_loop, oracle]  # the reference as it is, no summary
 source_mlir: {toolchain: cgeist-affine, max_chars: 24000}  # mlir1's affine lowering, restated
 dialect_lookup: {defs: ttkernel-defs-5f396fd6, max_chars: 12000, nearest: 4}  # mlir1's, restated
-trials: {n: 3}
+# 3 until 2026-10-29; fewer samples, so every item gets a trial before the window's deadline (trials run item by item).
+trials: {n: 2}
 loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true, coord_gap_as_error: true}

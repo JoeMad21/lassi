@@ -12,7 +12,7 @@
 # would be prompt tuning on unassigned items, which Agent Rule 5 refuses.
 # gpt-oss-120b with sweep8's model settings (reasoning effort medium, a budget of 32768 tokens, timeout 3600 s; OQ-080,
 # OQ-087), the worked examples of tt-kh-examples-v0 (tt-metal's own examples at the pin outside the Tier A items) at
-# generation and each compile correction, as sweep9's kh-ex combination has them, 2 samples per item, a correction cap
+# generation and each compile correction, as sweep9's kh-ex combination has them, 1 sample per item, a correction cap
 # of 8, a wrong output corrected until the cap, and simulator-gap feedback on (OQ-098). Each attempt's wall limit is
 # 300 s, not a multiple of the reference's time: the reference runs natively on the host CPU, while a candidate pays
 # tt-metal's kernel compile and ttsim (inferred; no candidate of these items has run yet). The default direction below
@@ -51,5 +51,6 @@ fixes:
   baseline_both: true  # build and run both references, which must agree exactly
 stages: [baseline, generate, compile_loop, run_loop, oracle]
 oracle: {kind: binary_io, metric: max_abs, threshold: 0}  # exact
-trials: {n: 2}
+# 2 until 2026-10-29; fewer samples, so every item gets a trial before the window's deadline (trials run item by item).
+trials: {n: 1}
 loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true}

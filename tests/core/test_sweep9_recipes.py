@@ -12,7 +12,7 @@ What they fix for projects/lassi-demo/sweep9/gpt-oss-120b/:
   by their declared metric.
 - Each binds cpp -> ttkh on tt-pairs-v0-kh (split unassigned) with the
   tt-kh-v0 set, ttmetal-host for ttkh and for the tt reference, ttsim for
-  both (a simulator), sweep8's gpt-oss-120b model settings, 3 samples, a
+  both (a simulator), sweep8's gpt-oss-120b model settings, 2 samples, a
   correction cap of 8, the mismatch report and simulator-gap feedback on,
   the oracle from the references' agreement, and the stages baseline,
   generate, compile_loop, run_loop, and oracle (no adversary, whose
@@ -91,7 +91,7 @@ def test_each_recipe_binds_cpp_to_ttkh_with_sweep8s_model_settings(name: str) ->
     assert data["toolchain"] == {"cpp": "gcc-native", "tt": "ttmetal-host", "ttkh": "ttmetal-host"}
     assert {language: spec["kind"] for language, spec in data["executor"].items()} == {
         "cpp": "native", "tt": "ttsim", "ttkh": "ttsim"}
-    assert data["trials"] == {"n": 3}
+    assert data["trials"] == {"n": 2}
     assert data["loop"]["max_corrections"] == 8
     assert data["loop"]["correct_on_mismatch"] is True and data["loop"]["correct_on_sim_gap"] is True
     assert data["stages"] == STAGES
