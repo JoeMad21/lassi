@@ -1,0 +1,5 @@
+# sweep15, COMPILE ONLY: the TTIR feature ladder, rung l2: ttir-l1.yaml (its comments hold: no output is checked,
+# nothing runs, a trial passes when its TTIR module compiles to a flatbuffer; exploratory) plus retrieval over
+# tt-mlir's own TTIR tests at the pin, at generate and correct.
+extends: ttir-l1.yaml
+retrieval: {index: tt-mlir-ttir-tests, k: 4, max_chars: 8000, prompts: [generate, correct]}

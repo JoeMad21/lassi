@@ -34,6 +34,8 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 
 - Watch every new sweep's first attempts within minutes of launch, and stop, fix, and relaunch when a harness check fails them (owner, 2026-10-29, about 23:50 EDT: "We can't spend hours on broken checks, make sure that you keep monitoring sweep13 to fix and relaunch when something like this happens."). The same diagnostic on every attempt of every recipe, while each tool exits 0, is a harness bug, not the model's.
 
+- Every new arm set comes with a feature ladder from the bare LASSI loop up (owner, 2026-10-30, about 00:10 EDT: "In the future, prepare tests with less features, all the attempts getting it first try is making me wonder if we are being too helpful with the model." and "We may need to keep GPT OSS for the Saturday testing. If you cannot fit it tonight, I want tests with less features on GPT OSS to confirm if the model can converge with the LASSI framework."). Report how each feature changes first-try and final success, not only the full-feature arm.
+
 ## Audits and the bible
 
 - Most audit FAILs in P2 and P4 were bible or docstring text that claimed more than the code does (P2.9 refusal paths, P4.7 preset strictness and error format, P4.1 CI coverage). Write the bible text after the code, from the code, and check each claim against a line of code or a spike line before sending the audit.

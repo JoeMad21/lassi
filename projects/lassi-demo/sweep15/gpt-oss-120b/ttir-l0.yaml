@@ -1,0 +1,40 @@
+# sweep15, COMPILE ONLY: the feature ladder for cpp -> ttir on tt-pairs-v0-ttir, rung l0, the bare LASSI loop (task
+# P17.61; the owner, 2026-10-30: "prepare tests with less features, all the attempts getting it first try is making me
+# wonder if we are being too helpful with the model" and "I want tests with less features on GPT OSS to confirm if the
+# model can converge with the LASSI framework"). No output is checked and nothing runs: a trial passes when the
+# model's TTIR module compiles to a TT-Metal flatbuffer, compile evidence only. Exploratory.
+# The ladder adds one feature per rung, each rung extending the one below: l0 the bare loop (the task, the item's
+# declared arrays, the program, then the compiler's errors as corrections, tt-ttir-bare-v0); l1 adds the TTIR API
+# reference (verbatim_context, ttir-ref-5f396fd6); l2 adds retrieval over tt-mlir's TTIR tests; l3 adds the cgeist
+# affine lowering of the compute unit; l4 swaps in tt-ttir-v0's guidance (what a TTIR module is, the ops the pipeline
+# lowers, element types, shapes); l5 adds restarts, which makes it sweep13's ttir-t10 (every feature).
+# Everything else is sweep13's ttir arms (items, toolchain, compile-only stages, model settings, 2 samples, a cap of
+# 8 corrections) at temperature 1.0, gpt-oss's recommended sampling setting.
+extends: ../../../base.yaml  # projects/base.yaml: runs root, sandbox, and report choices
+faithful: false  # a compile-only arm of this project; nothing reproduces an upstream run
+model:
+  backend: openai_compat  # the OpenAI-compatible server the sweep10 chain binds
+  id: furiosa-ai/gpt-oss-120b
+  timeout_s: 3600
+llm:
+  sampling:
+    temperature: 1.0  # gpt-oss's recommended setting, the ladder's one temperature
+    top_p: 1.0  # gpt-oss's README recommends 1.0 (sweep12)
+    reasoning_effort: high
+    max_tokens: 65536  # the reasoning counted in it (sweep12)
+extract:
+  unfenced_file_lines: true  # as sweep13's recipes
+bench:
+  suite: tt-pairs-v0-ttir  # tt-pairs-v0's items unchanged, with a ttir language whose reference is tt
+  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  items: [eltwise_binary, eltwise_sfpu, matmul_multi_core]  # sweep13's ttir items
+directions: [{source: cpp, target: ttir}]
+prompts: tt-ttir-bare-v0  # the bare set: no guidance beyond the task, the declared arrays, and the answer format
+toolchain:
+  ttir: ttir-ttmetal-compile  # the pinned ttmlir-opt full pipeline, then ttmlir-translate; compile only
+  tt: ttmetal-host  # the tt reference's toolchain (reference: tt); bound for the runner's check, never used here
+stages: [generate, compile_loop]  # COMPILE ONLY: no context, baseline, run_loop, or oracle
+executor:
+  kind: none  # compile only: nothing generated runs, and no flatbuffer is ever run
+trials: {n: 2}
+loop: {max_corrections: 8}  # LASSI's correction loop alone: no restarts

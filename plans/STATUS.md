@@ -210,3 +210,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.58 | READY | Route A arms: bale-v0 through TTIR -> TTNN, outputs checked on ttsim | P17.57,P17.48 | planned 2026-10-29 (OQ-112) |
 | P17.59 | READY | Route B: ttnn.generic with model-written ttkernel kernels | P17.58 | planned 2026-10-29 (OQ-112) |
 | P17.60 | READY | Route C: TTMetal host ops with model-written ttkernel kernels | P17.59 | planned 2026-10-29 (OQ-112) |
+| P17.61 | READY | Feature ladders: each arm set from the bare LASSI loop up | P17.49 | TTIR ladder built (sweep15); the ttkernel ladder next, for 2026-10-31 |

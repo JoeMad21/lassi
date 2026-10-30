@@ -1,0 +1,6 @@
+# sweep15, COMPILE ONLY: the TTIR feature ladder, rung l1: ttir-l0.yaml (its comments hold: no output is checked,
+# nothing runs, a trial passes when its TTIR module compiles to a flatbuffer; exploratory) plus the TTIR API
+# reference, which verbatim_context puts in the knowledge block before generate.txt and every correct.txt.
+extends: ttir-l0.yaml
+context: [ttir-ref-5f396fd6]  # the exact API reference of the TTIR dialect at the pin (task P17.47)
+stages: [verbatim_context, generate, compile_loop]

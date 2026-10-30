@@ -1,0 +1,5 @@
+# sweep15, COMPILE ONLY: the TTIR feature ladder, rung l3: ttir-l2.yaml (its comments hold: no output is checked,
+# nothing runs, a trial passes when its TTIR module compiles to a flatbuffer; exploratory) plus the item's compute
+# unit lowered by the pinned cgeist to affine MLIR in the generation prompt.
+extends: ttir-l2.yaml
+source_mlir: {toolchain: cgeist-affine, max_chars: 24000}

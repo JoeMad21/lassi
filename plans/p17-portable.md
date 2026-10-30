@@ -543,6 +543,14 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: lassi/toolchains/, assets/, projects/lassi-demo/, tests/.
 - Host: Windows; alpha01 for ttsim. Depends: P17.59.
 
+### P17.61 Feature ladders: each arm set from the bare LASSI loop up
+- Added on 2026-10-30 (the owner, about 00:10 EDT: "In the future, prepare tests with less features, all the attempts getting it first try is making me wonder if we are being too helpful with the model." Then: "We may need to keep GPT OSS for the Saturday testing. If you cannot fit it tonight, I want tests with less features on GPT OSS to confirm if the model can converge with the LASSI framework.").
+- Bible: Project Recipes (stages, template sets, context, retrieval, source_mlir, the loop opt-ins), Agent Rules 2 and 5.
+- Accept: for each arm set, a ladder of recipes that adds one feature per rung, from the bare LASSI loop (the task, the item's declared arrays, the program, and the compiler's errors as corrections) up to every feature, each rung extending the one below and differing from it in that feature alone, at one temperature; tested. First the TTIR ladder (sweep15: the bare set tt-ttir-bare-v0, then the API reference, retrieval, the cgeist affine source, tt-ttir-v0's guidance, restarts), run on gpt-oss-120b; then the ttkernel path's ladder for the window of 2026-10-31, where first-try success is rare and convergence is the question; D2M and route A's arms get theirs when they run.
+- Files: assets/prompts/<set>-bare-v0/, projects/lassi-demo/sweep15/ and later ladders, tests/core/.
+- Host: Windows; alpha01 in the owner's windows. Depends: P17.49.
+- 2026-10-30: the TTIR ladder built (sweep15, six rungs, tests/core/test_sweep15_recipes.py).
+
 ### P17.G Phase gate (BLOCKED: GPU host, OQ-040)
 - Bible: Build Roadmap (P17 row, Gate column), Agent Rules 1 and 10; AGENTS.md Phase Gate and Results.
 - Accept, from one clean commit:

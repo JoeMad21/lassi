@@ -1,0 +1,6 @@
+# sweep15, COMPILE ONLY: the TTIR feature ladder, rung l4: ttir-l3.yaml (its comments hold: no output is checked,
+# nothing runs, a trial passes when its TTIR module compiles to a flatbuffer; exploratory) with tt-ttir-v0's
+# guidance in place of the bare set: what a TTIR module is, the ops the pipeline lowers at the pin, the device's
+# element types, and the shape rules in generate.txt, with a reminder and a diagnostics explanation in correct.txt.
+extends: ttir-l3.yaml
+prompts: tt-ttir-v0
