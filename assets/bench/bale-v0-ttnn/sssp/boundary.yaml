@@ -1,0 +1,14 @@
+# The device boundary of bale-v0-ttnn's sssp (task P17.57): the module's arguments and results and how the host turns
+# the item's i64 lassi_io files into them and back. The format is the header of assets/bench/bale-v0-ttnn.yaml.
+# This is the boundary of one module that computes the whole item; the host loop over rounds that the spike plans
+# for sssp (task P17.58) is not declared here. Names, shapes, element types, and the manifest's bounds only; no
+# held-out value.
+item: sssp
+static:
+  - {input: num_vertices, value: 2048}
+args:
+  - {name: edge_tail, input: edge_tail, dtype: si32, shape: [8192], convert: narrow}
+  - {name: edge_head, input: edge_head, dtype: si32, shape: [8192], convert: narrow}
+  - {name: edge_weight, input: edge_weight, dtype: si32, shape: [8192], convert: narrow}
+results:
+  - {name: distance, output: distance, dtype: si32, shape: [2048], convert: widen}

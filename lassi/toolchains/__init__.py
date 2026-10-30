@@ -5,7 +5,7 @@ Diagnostic records (severity, code, file, line, column, message, stage). The
 compiler's raw stderr is kept as an attachment, the file STDERR_ATTACHMENT in
 the workdir, and never consumed downstream.
 
-Importing this package registers eleven presets in
+Importing this package registers twelve presets in
 lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
 
 - "nvcc-sm80" (nvcc.NvccSm80): CUDA with nvcc for sm_80.
@@ -39,6 +39,10 @@ lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
   by the pinned tt-mlir's full TTIR-to-TTMetal pipeline and translated to a
   TT-Metal flatbuffer, compile only: nothing runs the flatbuffer, which is
   built against the compiler's mock system descriptor.
+- "ttir-ttnn-compile" (ttir_compile.TtirTtnnCompile; task P17.57): one TTIR
+  module, the language ttnn, lowered by the pinned tt-mlir's TTIR-to-TTNN
+  backend pipeline and translated to a TT-NN flatbuffer, compile only, as
+  the two above.
 
 Toolchain bindings carry no config. Each preset declares its pin as class
 attributes: PIN, the pin file stem (toolchains/<PIN>.pin, read by
@@ -87,7 +91,7 @@ from lassi.toolchains.gcc import GccNative, GccOpenMP
 from lassi.toolchains.hipcc import HipccGfx942
 from lassi.toolchains.nvcc import NvccSm80, NvccToolchain
 from lassi.toolchains.nvcpp import NvcppCc80, NvcppToolchain
-from lassi.toolchains.ttir_compile import D2mCompile, TtirCompile
+from lassi.toolchains.ttir_compile import D2mCompile, TtirCompile, TtirTtnnCompile
 from lassi.toolchains.ttkernel_build import TtKernelBuild
 from lassi.toolchains.ttmetal_build import TtMetalHost
 
@@ -108,6 +112,7 @@ __all__ = [
     "NvcppToolchain",
     "TtKernelBuild",
     "TtirCompile",
+    "TtirTtnnCompile",
     "TtMetalHost",
     "capped_runner",
     "cgeist",

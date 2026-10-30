@@ -120,8 +120,8 @@ def test_the_seeds_are_distinct_across_every_manifest() -> None:
     seeds = []
     for path in sorted((REPO / "assets" / "bench").glob("*.yaml")):
         suite = load_suite(path)
-        if suite.name.startswith("tt-pairs-v0-"):
-            continue  # a sibling of tt-pairs-v0 that reuses its items and seeds (task P17.36)
+        if suite.name.startswith("tt-pairs-v0-") or suite.name == "bale-v0-ttnn":
+            continue  # a sibling of tt-pairs-v0 or bale-v0-tt that reuses its items and seeds (tasks P17.36, P17.57)
         seeds += [item.seed for item in suite.items.values() if item.seed is not None]
     assert len(seeds) == len(set(seeds))
 

@@ -1,0 +1,10 @@
+# The device boundary of bale-v0-ttnn's histo (task P17.57): the module's arguments and results and how the host
+# turns the item's i64 lassi_io files into them and back. The format is the header of assets/bench/bale-v0-ttnn.yaml.
+# Names, shapes, element types, and the manifest's bounds only; no held-out value.
+item: histo
+static:
+  - {input: table_size, value: 4096}
+args:
+  - {name: index, input: index, dtype: si32, shape: [16384], convert: narrow}
+results:
+  - {name: counts, output: counts, dtype: si32, shape: [4096], convert: widen}

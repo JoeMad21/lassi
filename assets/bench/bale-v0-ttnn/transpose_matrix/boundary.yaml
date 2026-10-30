@@ -1,0 +1,16 @@
+# The device boundary of bale-v0-ttnn's transpose_matrix (task P17.57): the module's arguments and results and how
+# the host turns the item's i64 lassi_io files into them and back. The format is the header of
+# assets/bench/bale-v0-ttnn.yaml. The transpose's column array has as many entries as A has distinct entries, which
+# a static shape cannot say: the module returns it padded to 8000, the most entries possible, with its length nnz,
+# and the host keeps the first nnz. Names, shapes, element types, and the manifest's bounds only; no held-out value.
+item: transpose_matrix
+static:
+  - {input: num_rows, value: 1000}
+  - {input: num_cols, value: 2000}
+args:
+  - {name: entry_row, input: entry_row, dtype: si32, shape: [8000], convert: narrow}
+  - {name: entry_col, input: entry_col, dtype: si32, shape: [8000], convert: narrow}
+results:
+  - {name: offset, output: offset, dtype: si32, shape: [2001], convert: widen}
+  - {name: column, output: column, dtype: si32, shape: [8000], convert: trim, length: nnz, at_most: entry_row}
+  - {name: nnz, dtype: si32, shape: [1], convert: length}

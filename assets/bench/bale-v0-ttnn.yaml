@@ -1,0 +1,426 @@
+# The cpp -> ttnn and omp -> ttnn suite of bale-v0-tt's eight apps (task P17.57; route A of
+# plans/spikes/scatter-gather-workarounds.md, the owner's answer to OQ-112: "Go with your plans in order, starting with
+# A."), compile only for now. It is a sibling of bale-v0-tt.yaml, as tt-pairs-v0-ttir is of tt-pairs-v0: the eight
+# items unchanged (the same splits, held-out inputs, seeds, outputs, tolerances, notes, and cpp and omp languages;
+# tests/bench/test_bale_ttnn_suite.py checks it), every item unassigned until the owner assigns it (training, prompt
+# tuning, and harvest refused; Agent Rule 5), and a ttnn language in place of ttkh. A ttnn translation is one TTIR
+# MLIR module, <item>.mlir, whose public function computes the item on tensors; the ttir-ttnn-compile toolchain lowers
+# it with the pinned tt-mlir (0.9.0.dev20260221, commit 5f396fd6) through --ttir-to-ttnn-backend-pipeline to TT-NN
+# ops and writes a TT-NN flatbuffer. Nothing runs it yet (task P17.58 measures TT-NN on ttsim first). `reference:
+# cpp` makes the item's serial C++ program the ttnn reference, as for ttkh; the ttnn dir is never read, so no
+# reference module (the item's answer) exists in the repository.
+#
+# The device boundary, the item contract. The device has no 64-bit integer type and the TT-NN pipeline narrows i64 to
+# 32 bits (spike, section 3), and a TTIR function's results have static shapes, so each item's ttnn language carries
+# one support file, boundary.yaml (assets/bench/bale-v0-ttnn/<item>/, pinned by sha256), which fixes the module's
+# public function and how the host converts the item's i64 lassi_io files:
+# - static: an input the module does not take, a scalar whose manifest range holds one value, `value`; the host
+#   refuses an input file that holds another.
+# - args: the function's arguments in order, each {name, input, dtype, shape, convert}. convert narrow: the input's
+#   values as `dtype` (si32 or ui32) in `shape` (the same element count, row-major), the host refusing any value
+#   outside the type's range (the range check); `fits: ui16` adds that every value fits ui16, the key type ttnn.sort
+#   takes at the pin (spike, Compile probe at the pin). convert digits (`digits`, `bias`): an i64 input as bf16
+#   columns of 8-bit digits, column k holding ((v + bias) >> 8k) & 255 for k < digits, then zero columns up to
+#   shape[1] (a multiple of 32), the host refusing v + bias outside [0, 256**digits); bf16 holds every integer to 256
+#   exactly, and ttnn.embedding takes bf16 tables only (spike, section 3).
+# - results: the function's results in order, each {name, dtype, shape, convert}. convert widen: written as the output
+#   `output` in i64, in `output_shape` when given (a one-element result as a scalar), else `shape`. convert recombine
+#   (`digits`, `bias`): bf16 digit columns back to i64, v = the sum of d_k * 256**k over the first `digits` columns,
+#   minus bias, the host refusing a digit that is no integer in [0, 255]. convert trim (`length`, `at_most`): a padded
+#   result whose first n elements are the output, n the value of the result named by `length` (convert length, si32
+#   [1], written to no file), the host refusing n outside [0, shape[0]]; shape[0] is at least the element count of
+#   the input named by `at_most`, the most entries the output can have.
+# Converting the files is the TT-NN executor's work (task P17.58); tests/bench/test_bale_ttnn_suite.py checks every
+# contract against its item's declared inputs and these rules. sssp and toposort declare the boundary of one module
+# for the whole item; the host loop over rounds that the spike plans for them is task P17.58's.
+# Fetch with `uv run tools/fetch_bench.py assets/bench/bale-v0-ttnn.yaml` (bale's serial C files, as for bale-v0-tt);
+# every item comment below is bale-v0-tt.yaml's, copied with its item.
+suite: bale-v0-ttnn
+repo: https://github.com/jdevinney/bale.git
+# bale-v0's commit: master at the bale spike's reading, committed 2022-06-26 (plans/spikes/bale.md).
+commit: 1b8f673b56645b2bd74a8af6213462bbc9d559fe
+items:
+  histo:
+    split: unassigned
+    seed: 4201
+    # bale-v0's histo (counts[index[i]] += 1 over every update; bale's src/other_serial/C/histo.c, histo_generic), with
+    # 4096 bins and 16384 updates in place of bale's 2**20 and 100000.
+    inputs:
+      - {name: table_size, dtype: i64, shape: [], dist: integers, lo: 4096, hi: 4097}
+      - {name: index, dtype: i64, shape: [16384], dist: integers, lo: 0, hi: 4096}
+    outputs: [counts]  # i64 [4096]
+    tolerance: {metric: max_abs, threshold: 0}
+    languages:
+      cpp:
+        dir: assets/bench/bale-v0/histo/cpp
+        tracked: true
+        files: [histo.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/histo.c:
+            upstream: src/other_serial/C/histo.c
+            sha256: 8391f5a020ff67d6d3bcb55558bec37b3a97ee4f6176d8cbc7d605dd53c3ccf2
+      omp:
+        dir: assets/bench/bale-v0/histo/omp
+        tracked: true
+        files: [histo.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/histo.c:
+            upstream: src/other_serial/C/histo.c
+            sha256: 8391f5a020ff67d6d3bcb55558bec37b3a97ee4f6176d8cbc7d605dd53c3ccf2
+      ttnn:
+        dir: assets/bench/bale-v0-ttnn/histo/ttnn  # never read: the reference is the cpp program
+        tracked: true
+        files: [histo.mlir]
+        reference: cpp
+        support:
+          boundary.yaml:
+            tracked: assets/bench/bale-v0-ttnn/histo/boundary.yaml
+            sha256: 41b607ab1d933072ef6ad91e1db3c1288497e163314845e1fd84b296032196a5
+  ig:
+    split: unassigned
+    seed: 4202
+    # bale-v0's ig (tgt[i] = table[index[i]]; bale's src/other_serial/C/ig.c, ig_generic), with a table of 16384 and
+    # 16384 requests in place of bale's 2**20 and 100000.
+    inputs:
+      - {name: table, dtype: i64, shape: [16384], dist: integers, lo: -1099511627776, hi: 1099511627776}
+      - {name: index, dtype: i64, shape: [16384], dist: integers, lo: 0, hi: 16384}
+    outputs: [tgt]  # i64 [16384]
+    tolerance: {metric: max_abs, threshold: 0}
+    languages:
+      cpp:
+        dir: assets/bench/bale-v0/ig/cpp
+        tracked: true
+        files: [ig.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/ig.c:
+            upstream: src/other_serial/C/ig.c
+            sha256: 2cb08618a08eddb9979ca27c5cb5b259325ca34d766eae34f0a9ef961c2144d0
+      omp:
+        dir: assets/bench/bale-v0/ig/omp
+        tracked: true
+        files: [ig.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/ig.c:
+            upstream: src/other_serial/C/ig.c
+            sha256: 2cb08618a08eddb9979ca27c5cb5b259325ca34d766eae34f0a9ef961c2144d0
+      ttnn:
+        dir: assets/bench/bale-v0-ttnn/ig/ttnn  # never read: the reference is the cpp program
+        tracked: true
+        files: [ig.mlir]
+        reference: cpp
+        support:
+          boundary.yaml:
+            tracked: assets/bench/bale-v0-ttnn/ig/boundary.yaml
+            sha256: 8e1697f404b992a4d876c10a0605b7f735238657af2d7bd13da6ef8a55526448
+  triangle:
+    split: unassigned
+    seed: 4203
+    # bale-v0's triangle (for each nonzero (i, j) of the strictly lower-triangular adjacency L, the columns rows i and
+    # j share; bale's src/other_serial/C/triangle.c, triangles_matrix on (L, L)), on a graph each program builds from
+    # the drawn pairs as bale-v0's does: 2048 vertices and 8192 pairs in place of 50000 and 500000, about 8 nonzeros
+    # per row of L; about 85 triangles expected (PROJECTED, (n p)^3 / 6 with n p = 8).
+    inputs:
+      - {name: num_vertices, dtype: i64, shape: [], dist: integers, lo: 2048, hi: 2049}
+      - {name: edge_u, dtype: i64, shape: [8192], dist: integers, lo: 0, hi: 2048}
+      - {name: edge_v, dtype: i64, shape: [8192], dist: integers, lo: 0, hi: 2048}
+    outputs: [triangles]  # an i64 scalar (shape [])
+    tolerance: {metric: max_abs, threshold: 0}
+    languages:
+      cpp:
+        dir: assets/bench/bale-v0/triangle/cpp
+        tracked: true
+        files: [triangle.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/triangle.c:
+            upstream: src/other_serial/C/triangle.c
+            sha256: 07b3d5ba0858fb0667a75b6044e5e7c14741b0c45600582881d7815886a4237f
+      omp:
+        dir: assets/bench/bale-v0/triangle/omp
+        tracked: true
+        files: [triangle.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/triangle.c:
+            upstream: src/other_serial/C/triangle.c
+            sha256: 07b3d5ba0858fb0667a75b6044e5e7c14741b0c45600582881d7815886a4237f
+      ttnn:
+        dir: assets/bench/bale-v0-ttnn/triangle/ttnn  # never read: the reference is the cpp program
+        tracked: true
+        files: [triangle.mlir]
+        reference: cpp
+        support:
+          boundary.yaml:
+            tracked: assets/bench/bale-v0-ttnn/triangle/boundary.yaml
+            sha256: 07566a32e02ecf150e30ee4726f642f9fc2ecda4ca844e8c30df7a264f7d09d2
+  transpose_matrix:
+    split: unassigned
+    seed: 4204
+    # The transpose of a sparse matrix A, in compressed sparse rows with each row's columns sorted, by a counting sort
+    # of A's entries by column: count each column's entries, take the running sums as the transpose's row offsets, then
+    # place A's rows in ascending order, each at the next free slot of its column's row. That is bale's transpose_matrix
+    # routine (src/other_serial/C/spmat_utils.c:467), which bale's app src/other_serial/C/transpose_matrix.c runs and
+    # times. bale transposes the strictly lower-triangular adjacency of an undirected Erdos-Renyi graph it generates,
+    # 10000 rows (default_app_opts.h:25) with about 10 nonzeros per row (std_options.c:105); here each program builds A
+    # from the drawn entries (entry_row[e], entry_col[e]): an entry drawn more than once counts once, rows ascending,
+    # each row's columns sorted (bale's matrices hold no repeats either). A is 1000 by 2000, rectangular so that a
+    # candidate that swaps the dimensions fails, from 8000 entries: about 8 per row of A and 4 per row of the
+    # transpose, about 16 repeats and 37 empty rows of the transpose expected (PROJECTED, m^2 / (2 R C) and
+    # C e^(-m / C)). A has no values, as bale's default graph has none. bale frees the transpose unchecked
+    # (transpose_matrix.c:37 and :104); here the programs write it. The omp program splits A's rows into 64 fixed bands
+    # that count and fill their own slots, so its outputs equal the serial program's for any thread count, where
+    # bale_classic's parallel transposes (transpose_matrix_agp in src/bale_classic/spmat/spmat_agp.upc) take each
+    # entry's slot by an atomic fetch-and-add, so their row order depends on timing.
+    inputs:
+      - {name: num_rows, dtype: i64, shape: [], dist: integers, lo: 1000, hi: 1001}
+      - {name: num_cols, dtype: i64, shape: [], dist: integers, lo: 2000, hi: 2001}
+      - {name: entry_row, dtype: i64, shape: [8000], dist: integers, lo: 0, hi: 1000}
+      - {name: entry_col, dtype: i64, shape: [8000], dist: integers, lo: 0, hi: 2000}
+    outputs: [offset, column]  # i64 [2001], the transpose's row offsets; i64 [nnz], nnz the distinct entries (<= 8000)
+    tolerance: {metric: max_abs, threshold: 0}
+    languages:
+      cpp:
+        dir: assets/bench/bale-v0/transpose_matrix/cpp
+        tracked: true
+        files: [transpose_matrix.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/transpose_matrix.c:
+            upstream: src/other_serial/C/transpose_matrix.c
+            sha256: 6f806951ac2d64c9e69be552eab1813aad7ebe50168b91008cce75341f9c7ebf
+      omp:
+        dir: assets/bench/bale-v0/transpose_matrix/omp
+        tracked: true
+        files: [transpose_matrix.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/transpose_matrix.c:
+            upstream: src/other_serial/C/transpose_matrix.c
+            sha256: 6f806951ac2d64c9e69be552eab1813aad7ebe50168b91008cce75341f9c7ebf
+      ttnn:
+        dir: assets/bench/bale-v0-ttnn/transpose_matrix/ttnn  # never read: the reference is the cpp program
+        tracked: true
+        files: [transpose_matrix.mlir]
+        reference: cpp
+        support:
+          boundary.yaml:
+            tracked: assets/bench/bale-v0-ttnn/transpose_matrix/boundary.yaml
+            sha256: 8176d3a9e08ece9baf642d67930e06cca3daa8cd912a06680dccdaca03c9e12a
+  permute_matrix:
+    split: unassigned
+    seed: 4205
+    # Moves the rows and the columns of a sparse n x n matrix A by two permutations: row i of the result is the row s
+    # of A with row_dest[s] == i, each column c replaced by col_dest[c], in the order the columns have in row s (the
+    # rows are not sorted again, as bale's are not); the generic serial routine of bale's permute_matrix
+    # (src/other_serial/C/permute_matrix.c, permute_matrix_generic, whose kernel is permute_matrix in spmat_utils.c,
+    # lines 429-456). Each program builds A from the drawn pairs: a nonzero at (nz_row[e], nz_col[e]), a repeated pair
+    # once, the diagonal allowed, each row's columns sorted ascending, and no values; bale draws an Erdos-Renyi graph,
+    # by default the strictly lower-triangular adjacency of an undirected, unweighted graph of 10000 rows
+    # (default_app_opts.h:19). The permutations come from drawn keys, where bale draws each with rand_perm
+    # (permute_matrix.c:89-90): row r goes to row_dest[r], the position of r when the rows are ordered by
+    # (row_key[r], r) ascending, so equal keys keep index order, and col_dest comes the same way from col_key. bale
+    # times the call and discards the result; here it is written out. 2048 rows and 8192 pairs, about 4 nonzeros per
+    # row; about 8 repeated pairs and about 32 repeated keys per key array (PROJECTED, m^2 / (2 n^2) and
+    # n^2 / (2 * 65536)), so both rules matter.
+    inputs:
+      - {name: num_rows, dtype: i64, shape: [], dist: integers, lo: 2048, hi: 2049}
+      - {name: nz_row, dtype: i64, shape: [8192], dist: integers, lo: 0, hi: 2048}
+      - {name: nz_col, dtype: i64, shape: [8192], dist: integers, lo: 0, hi: 2048}
+      - {name: row_key, dtype: i64, shape: [2048], dist: integers, lo: 0, hi: 65536}
+      - {name: col_key, dtype: i64, shape: [2048], dist: integers, lo: 0, hi: 65536}
+    outputs: [offset, column]  # i64 [2049] and i64 [nnz], nnz the number of distinct pairs
+    tolerance: {metric: max_abs, threshold: 0}
+    languages:
+      cpp:
+        dir: assets/bench/bale-v0/permute_matrix/cpp
+        tracked: true
+        files: [permute_matrix.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/permute_matrix.c:
+            upstream: src/other_serial/C/permute_matrix.c
+            sha256: 24dc98a9209fe5da6c325f147fcb44c64ea2054a2eac398af663fcb0ff157443
+      omp:
+        dir: assets/bench/bale-v0/permute_matrix/omp
+        tracked: true
+        files: [permute_matrix.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/permute_matrix.c:
+            upstream: src/other_serial/C/permute_matrix.c
+            sha256: 24dc98a9209fe5da6c325f147fcb44c64ea2054a2eac398af663fcb0ff157443
+      ttnn:
+        dir: assets/bench/bale-v0-ttnn/permute_matrix/ttnn  # never read: the reference is the cpp program
+        tracked: true
+        files: [permute_matrix.mlir]
+        reference: cpp
+        support:
+          boundary.yaml:
+            tracked: assets/bench/bale-v0-ttnn/permute_matrix/boundary.yaml
+            sha256: dc2f4199262581af5bea2f5778ea70634fa989104c99a562ce79b3466bcc881b
+  sssp:
+    split: unassigned
+    seed: 4206
+    # Shortest-path distances from vertex 0 in a directed weighted graph by Bellman-Ford in rounds: each round relaxes
+    # the edges out of every vertex whose distance changed in the round before (vertex 0 alone in the first), against
+    # that round's distances, and the rounds stop at the first that changes nothing; bale's Bellman-Ford that recycles
+    # three tentative arrays (src/other_serial/C/sssp_bellmanford.c), as its app sssp.c runs it (directed, weighted,
+    # no loops, V0 = 0; sssp.c:66, :100-102). Each program builds the graph from the drawn triples: tail == head is
+    # dropped, and a (tail, head) pair drawn more than once is one edge with the lightest weight. The omp program pulls
+    # over the transposed rows, each new distance written by one thread, so its rounds equal the serial ones for any
+    # thread count. Deviations: bale draws an Erdos-Renyi graph of 10000 vertices, about 10 edges each, with double
+    # weights in [0, 1) (default_app_opts.h:23, std_options.c:105, spmat_utils.c:1519-1523); here 2048 vertices and
+    # 8192 drawn triples (about 4 edges per vertex, so some vertices are unreached) with i64 weights in [1, 1000], so
+    # every distance is exact and every algorithm agrees; an unreached vertex gets -1 where bale keeps INFINITY; bale
+    # runs at most numrows - 1 rounds and reads its result from a stale array when that cap is met, or an unset one
+    # when numrows < 3 (sssp_bellmanford.c:163-185; read, not run); here the rounds run until one changes nothing (at
+    # most num_vertices rounds); bale's first round assigns the source's edge weights (:155-157) rather than relaxing
+    # them, the same on its simple graphs.
+    inputs:
+      - {name: num_vertices, dtype: i64, shape: [], dist: integers, lo: 2048, hi: 2049}
+      - {name: edge_tail, dtype: i64, shape: [8192], dist: integers, lo: 0, hi: 2048}
+      - {name: edge_head, dtype: i64, shape: [8192], dist: integers, lo: 0, hi: 2048}
+      - {name: edge_weight, dtype: i64, shape: [8192], dist: integers, lo: 1, hi: 1001}
+    outputs: [distance]  # i64 [2048]; -1 where no path reaches
+    tolerance: {metric: max_abs, threshold: 0}
+    languages:
+      cpp:
+        dir: assets/bench/bale-v0/sssp/cpp
+        tracked: true
+        files: [sssp.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/sssp_bellmanford.c:
+            upstream: src/other_serial/C/sssp_bellmanford.c
+            sha256: c6546ef1300fd64443fc9004298f557c516634f61101c124927ac8622b383402
+      omp:
+        dir: assets/bench/bale-v0/sssp/omp
+        tracked: true
+        files: [sssp.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/sssp_bellmanford.c:
+            upstream: src/other_serial/C/sssp_bellmanford.c
+            sha256: c6546ef1300fd64443fc9004298f557c516634f61101c124927ac8622b383402
+      ttnn:
+        dir: assets/bench/bale-v0-ttnn/sssp/ttnn  # never read: the reference is the cpp program
+        tracked: true
+        files: [sssp.mlir]
+        reference: cpp
+        support:
+          boundary.yaml:
+            tracked: assets/bench/bale-v0-ttnn/sssp/boundary.yaml
+            sha256: a6eb7a95ea494f857449f76fb1f682995eec376cf342bdedb94e3a0de8b489c9
+  toposort:
+    split: unassigned
+    seed: 4207
+    # The row and column permutations that make a morally upper triangular matrix A upper triangular: bale's
+    # src/other_serial/C/toposort.c, toposort_matrix_loop, with its sweeps made level-synchronous so the answer is
+    # unique. Each program builds A itself: U is upper triangular with a full diagonal plus (min(u, v), max(u, v))
+    # for each drawn pair with u != v (repeats once); row i of U goes to row rank(row_key, i) and column j to column
+    # rank(col_key, j), rank the position in a stable argsort (ties by index). Uniqueness: rows are peeled in levels,
+    # level 0 every row with exactly one nonzero, each later level every row with exactly one nonzero left once the
+    # columns of all earlier levels are crossed out; a level's rows take the next positions from the end in
+    # increasing row order (the k-th row taken, r with remaining column c, gets row_perm[r] = col_perm[c] =
+    # n - 1 - k), and its columns are crossed out only after all its rows have positions. bale accepts any pair of
+    # permutations that works: its loop model takes a row as soon as a sweep reaches it, its queue model in the order
+    # rows are found. Deviations: that definition; A built here from drawn pairs and keys, where bale transposes an
+    # Erdos-Renyi lower triangle with loops and permutes it by rand_perm with the fixed seeds 1234 and 5678; 2048
+    # rows and 4096 pairs (about 3 nonzeros per row with the diagonal) in place of bale's default of 500 rows
+    # (toposort.c:271) and 10 nonzeros per row (std_options.c:105); bale's check_result is not run, since the oracle
+    # compares exactly. Kept from bale: the row word (count * 2**32 + column sum) and its 16-bit column mask, which is
+    # right below 65536 rows (plans/spikes/bale.md, quirk 1), so it never fires here. Keys in [0, 65536) repeat for
+    # 2048 rows (about 32 repeats per key array, PROJECTED, n^2 / (2 * 65536)), so the tie rule matters.
+    inputs:
+      - {name: num_rows, dtype: i64, shape: [], dist: integers, lo: 2048, hi: 2049}
+      - {name: extra_u, dtype: i64, shape: [4096], dist: integers, lo: 0, hi: 2048}
+      - {name: extra_v, dtype: i64, shape: [4096], dist: integers, lo: 0, hi: 2048}
+      - {name: row_key, dtype: i64, shape: [2048], dist: integers, lo: 0, hi: 65536}
+      - {name: col_key, dtype: i64, shape: [2048], dist: integers, lo: 0, hi: 65536}
+    outputs: [row_perm, col_perm]  # i64 [2048] each
+    tolerance: {metric: max_abs, threshold: 0}  # exact: the definition above makes the permutations unique
+    languages:
+      cpp:
+        dir: assets/bench/bale-v0/toposort/cpp
+        tracked: true
+        files: [toposort.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/toposort.c:
+            upstream: src/other_serial/C/toposort.c
+            sha256: 1e9bbafd2bc944c001195b2f10aa70bc6ef8253314dfc9841a6944deec9cbeb2
+      omp:
+        dir: assets/bench/bale-v0/toposort/omp
+        tracked: true
+        files: [toposort.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/toposort.c:
+            upstream: src/other_serial/C/toposort.c
+            sha256: 1e9bbafd2bc944c001195b2f10aa70bc6ef8253314dfc9841a6944deec9cbeb2
+      ttnn:
+        dir: assets/bench/bale-v0-ttnn/toposort/ttnn  # never read: the reference is the cpp program
+        tracked: true
+        files: [toposort.mlir]
+        reference: cpp
+        support:
+          boundary.yaml:
+            tracked: assets/bench/bale-v0-ttnn/toposort/boundary.yaml
+            sha256: 356b86331d96a7af1a00864d136363a8dac66802882256f67629de40f632f71e
+  randperm:
+    split: unassigned
+    seed: 4208
+    # A random permutation of 0 to n - 1 by dart throwing: the dart model of bale's randperm
+    # (src/other_serial/C/randperm.c, randperm_dart), n darts on a board of 2n slots, the occupied slots then read in
+    # slot order. bale places one dart at a time, redrawing it from its own generator until it finds a free slot; a
+    # parallel throw would depend on thread timing, so here the draws are the input darts and the permutation is
+    # this function of the inputs alone: R = length(darts) / n = 8 synchronous rounds; in round k each dart i still
+    # unplaced aims at slot darts[k * n + i]; a slot occupied at the start of the round takes no dart, an empty one
+    # takes the lowest-numbered dart aimed at it, and the others are thrown again next round; the permutation lists
+    # the occupied slots' darts in slot order, then the darts left after the last round in increasing dart order.
+    # Deviations from bale: the draws are generate_inputs', not bale's generator; the throws are synchronous rounds
+    # with the lowest-numbered dart winning a contested slot, where bale places each dart in turn before the next;
+    # the rounds are bounded and the darts left after them listed last, where bale redraws without bound; the
+    # permutation is written out, where bale checks it and keeps only its time; bale's generic (Fisher-Yates) and
+    # sort models are not carried; n is 2048, not bale's default 1000000 (default_app_opts.h:21), so that no input
+    # exceeds 16384 elements for ttsim. 8 rounds leave about 2.6 darts for the tail (PROJECTED, the mean over 300
+    # simulated boards). The cpp program throws each round's darts in dart order; the omp program claims slots with a
+    # min reduction, then places, so the two agree for any thread count. num_darts is a constant scalar, since a
+    # contract cannot bound darts by another input.
+    inputs:
+      - {name: num_darts, dtype: i64, shape: [], dist: integers, lo: 2048, hi: 2049}
+      - {name: darts, dtype: i64, shape: [16384], dist: integers, lo: 0, hi: 4096}
+    outputs: [perm]  # i64 [2048] on both sides
+    tolerance: {metric: max_abs, threshold: 0}  # exact: one permutation is the answer
+    languages:
+      cpp:
+        dir: assets/bench/bale-v0/randperm/cpp
+        tracked: true
+        files: [randperm.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/randperm.c:
+            upstream: src/other_serial/C/randperm.c
+            sha256: fac775d6d40565102ce0d347420b40121fa8dfe8576b01f022cf542e4e829686
+      omp:
+        dir: assets/bench/bale-v0/randperm/omp
+        tracked: true
+        files: [randperm.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          upstream/randperm.c:
+            upstream: src/other_serial/C/randperm.c
+            sha256: fac775d6d40565102ce0d347420b40121fa8dfe8576b01f022cf542e4e829686
+      ttnn:
+        dir: assets/bench/bale-v0-ttnn/randperm/ttnn  # never read: the reference is the cpp program
+        tracked: true
+        files: [randperm.mlir]
+        reference: cpp
+        support:
+          boundary.yaml:
+            tracked: assets/bench/bale-v0-ttnn/randperm/boundary.yaml
+            sha256: 935a862f55d31c37522ddbff447fe663d7dd8be0c3127ee165cfbb65b9a285d7

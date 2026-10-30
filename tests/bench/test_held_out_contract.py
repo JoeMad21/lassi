@@ -107,9 +107,16 @@ DIGESTS.update({
     for (suite, item, name), digest in list(DIGESTS.items())
     if suite == "tt-pairs-v0"
 })
+# bale-v0-ttnn (task P17.57) holds bale-v0-tt's items with the same inputs and seeds, so its files are bale-v0-tt's,
+# byte for byte (tests/bench/test_bale_ttnn_suite.py checks that the entries are equal).
+DIGESTS.update({
+    ("bale-v0-ttnn", item, name): digest
+    for (suite, item, name), digest in list(DIGESTS.items())
+    if suite == "bale-v0-tt"
+})
 RECORDED_SUITES = (
-    "adv-seeded-v0", "bale-v0", "bale-v0-tt", "lassi-hecbench-10", "tt-pairs-v0", "tt-pairs-v0-ttkernel",
-    "tt-pairs-v0-kh", "tt-pairs-v0-ttir", "tt-pairs-v0-d2m",
+    "adv-seeded-v0", "bale-v0", "bale-v0-tt", "bale-v0-ttnn", "lassi-hecbench-10", "tt-pairs-v0",
+    "tt-pairs-v0-ttkernel", "tt-pairs-v0-kh", "tt-pairs-v0-ttir", "tt-pairs-v0-d2m",
 )
 
 

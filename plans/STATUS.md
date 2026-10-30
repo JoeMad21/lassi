@@ -206,7 +206,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.54 | READY | The sandbox under a translating (DMA) IOMMU | P17.53 | planned 2026-10-29 (OQ-078 and OQ-099 answered) |
 | P17.55 | READY | Silicon as the correction loop's final test, with Tracy | P17.53,P17.42 | planned 2026-10-29 (OQ-078 and OQ-099 answered) |
 | P17.56 | READY | Silicon launch kit | P17.54,P17.55 | planned 2026-10-29 (OQ-078 and OQ-099 answered) |
-| P17.57 | READY | Route A: the ttnn language, TTIR through the TTNN backend, compile side | P17.46,P17.43 | planned 2026-10-29 (OQ-112) |
+| P17.57 | DONE | Route A: the ttnn language, TTIR through the TTNN backend, compile side | P17.46,P17.43 | ttnn language, ttir-ttnn-compile, bale-v0-ttnn with boundary contracts; compile probe: scatter, sort, cumsum, gather lower to TT-NN (exploratory) |
 | P17.58 | READY | Route A arms: bale-v0 through TTIR -> TTNN, outputs checked on ttsim | P17.57,P17.48 | planned 2026-10-29 (OQ-112) |
 | P17.59 | READY | Route B: ttnn.generic with model-written ttkernel kernels | P17.58 | planned 2026-10-29 (OQ-112) |
 | P17.60 | READY | Route C: TTMetal host ops with model-written ttkernel kernels | P17.59 | planned 2026-10-29 (OQ-112) |

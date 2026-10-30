@@ -1,0 +1,12 @@
+# The device boundary of bale-v0-ttnn's ig (task P17.57): the module's arguments and results and how the host turns
+# the item's i64 lassi_io files into them and back. The format is the header of assets/bench/bale-v0-ttnn.yaml.
+# The table spans 41 bits and ttnn.embedding takes bf16 tables only, so the host passes it as 8-bit digit columns
+# (bias 2**40, six digits, padded with zero columns to 32, a tiled embedding's width) and recombines the gathered
+# rows into i64. Names, shapes, element types, and the manifest's bounds only; no held-out value.
+item: ig
+args:
+  - {name: table, input: table, dtype: bf16, shape: [16384, 32], convert: digits, digits: 6, bias: 1099511627776}
+  - {name: index, input: index, dtype: si32, shape: [16384, 1], convert: narrow}
+results:
+  - {name: tgt, output: tgt, dtype: bf16, shape: [16384, 32], convert: recombine, digits: 6, bias: 1099511627776,
+     output_shape: [16384]}

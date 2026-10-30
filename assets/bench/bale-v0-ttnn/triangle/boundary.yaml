@@ -1,0 +1,12 @@
+# The device boundary of bale-v0-ttnn's triangle (task P17.57): the module's arguments and results and how the host
+# turns the item's i64 lassi_io files into them and back. The format is the header of assets/bench/bale-v0-ttnn.yaml.
+# The count is a one-element result written as the item's scalar output. Names, shapes, element types, and the
+# manifest's bounds only; no held-out value.
+item: triangle
+static:
+  - {input: num_vertices, value: 2048}
+args:
+  - {name: edge_u, input: edge_u, dtype: si32, shape: [8192], convert: narrow}
+  - {name: edge_v, input: edge_v, dtype: si32, shape: [8192], convert: narrow}
+results:
+  - {name: triangles, output: triangles, dtype: si32, shape: [1], convert: widen, output_shape: []}

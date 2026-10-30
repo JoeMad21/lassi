@@ -57,7 +57,9 @@ TTIR_TEXT = (
 )
 D2M_TEXT = "// SYNTHETIC D2M module written for this test\nmodule {\n  // d2m.generic ...\n}\n"
 LOWERED = "module {\n  ttmetal.enqueue_program\n}\n"
-FLATBUFFER = b"\x10\x00\x00\x00TTM0" + bytes(16)
+# The first 12 bytes of a real TT-Metal flatbuffer, size-prefixed (the size 52284, the root offset 32, then TTM0): od
+# of the P17.46 probe's eltwise_binary.ttm (rx 20261029-205004-exec-e50a); the rest is zeros here.
+FLATBUFFER = b"\x3c\xcc\x00\x00\x20\x00\x00\x00TTM0" + bytes(16)
 
 
 @dataclass
@@ -242,19 +244,20 @@ def test_a_size_prefixed_flatbuffer_as_the_pin_writes_it_passes(tmp_path: Path) 
     assert errors(result) == [] and result.artifact is not None
 
 
-def test_ttm0_at_byte_8_without_a_matching_size_prefix_fails(tmp_path: Path) -> None:
-    data = size_prefixed(bytes(64))
-    result = build(tmp_path, FakeTools(flatbuffer=b"\x01\x00\x00\x00" + data[4:]))
-    assert result.artifact is None
-    (found,) = errors(result)
-    assert found.code == "no-artifact" and "TTM0" in found.message
-
-
 def test_a_file_that_is_no_flatbuffer_fails(tmp_path: Path) -> None:
     result = build(tmp_path, FakeTools(flatbuffer=b"not a flatbuffer"))
     assert result.artifact is None
     (found,) = errors(result)
     assert found.code == "no-artifact" and "TTM0" in found.message
+
+
+def test_the_identifier_is_read_after_the_size_prefix(tmp_path: Path) -> None:
+    # The pinned translation writes size-prefixed flatbuffers (TTMetalToFlatbuffer.cpp:1068), so the identifier sits at
+    # bytes 8 to 12; TTM0 at bytes 4 to 8 is no TT-Metal flatbuffer of this pin (sweep13's first launch found the old
+    # offset; commit 7d3f3e8, task P17.49).
+    assert ttir_compile.IDENTIFIER_SPAN == slice(8, 12)
+    result = build(tmp_path, FakeTools(flatbuffer=b"\x10\x00\x00\x00TTM0" + bytes(16)))
+    assert result.artifact is None and errors(result)[0].code == "no-artifact"
 
 
 def test_the_ttir_level_refuses_d2m_ops_and_needs_a_ttir_op(tmp_path: Path) -> None:

@@ -14,8 +14,9 @@ LASSI builds (owner-queue draft at the end).
 
 ## Evidence and provenance
 
-- Reading only. No rx command, nothing on alpha01, nothing run. Nothing here is [MEASURED]; every statement about
-  run-time behavior is read from source and marked unmeasured where it matters.
+- Sections 1 to 6: reading only. No rx command, nothing on alpha01, nothing run. Nothing here is [MEASURED]; every
+  statement about run-time behavior is read from source and marked unmeasured where it matters. The section "Compile
+  probe at the pin (2026-10-29)" below ran the pinned compiler on alpha01's CPU (task P17.57); it is exploratory.
 - tt-mlir 5f396fd6: the commit's tarball (sha256 67afd5515290f7c98dc44170bba1a12d489a98d14044c5b7af2b3843850f03dc,
   the same file plans/spikes/ttir-d2m.md used), unpacked in a scratch directory outside the repository and read with
   grep. tt-metal 5280a9cf: `gh api repos/tenstorrent/tt-metal/contents/<path>?ref=5280a9cfb00998fd49667a29523d03aee905c129`
@@ -268,6 +269,127 @@ Answer:
 - That `--ttir-to-ttnn-backend-pipeline` accepts a module that already holds ttnn.generic; that mixing TTIR ops and
   hand-written TTMetal buffers in one function avoids L1 overlap.
 - Every size and op count in sections 4 and 5 is arithmetic from the manifest's shapes (PROJECTED), not a run.
+
+## Compile probe at the pin (2026-10-29)
+
+Task P17.57 (route A, the owner's answer to OQ-112: "Go with your plans in order, starting with A."). Exploratory:
+the hand-written modules and the steps were sent inside one `rx exec` command from a dirty worktree, not from a
+commit, so nothing here is [MEASURED]; a rerun from a clean commit can match each module by its sha256 prefix. CPU
+only: compiler tools alone, no device opened, no runtime, no model, no `--big`; each exec well under 10 minutes. Runs on
+alpha01 under the owner's standing permission for short CPU-only runs, while the window2 sweep ran there; rx ids use
+alpha01's clock (UTC-7), and the probe printed UTC 2026-10-30T03:47:57Z to 03:47:59Z.
+
+| rx id | What |
+| --- | --- |
+| 20261029-204757-exec-d2a1 | probe1: eight TTIR modules through verify, the TTNN backend pipeline, and the TTNN flatbuffer translation |
+| 20261029-204857-exec-9cd1 | Read-only: the eight flatbuffers' first 16 bytes and the lowered bodies of sort, cumsum, the gathers, scatter_args, and identity |
+| 20261029-205004-exec-e50a | Read-only: the first 16 bytes of four TT-Metal flatbuffers of plans/spikes/ttir-d2m.md's probe1 |
+
+Tools: the install of toolchains/tt-mlir.pin, `M=$LASSI_TOOLCHAINS/tt-mlir@0.9.0.dev20260221`, ttmlir-opt sha256
+58c8997c56d7538a... and ttmlir-translate c038995900f7f36b... (the prefixes plans/spikes/ttir-d2m.md recorded);
+`--version` prints LLVM 22.0.0git, "Optimized build with assertions". Outputs under
+`$LASSI_RUNS_ROOT/ttnn-probe/probe1/` (1.8M; the modules in m/, everything else in out/; nothing deleted). Each case
+ran, with `prlimit --pid $$ --core=1:1` read back as 1 1:
+
+```
+OPT=$M/build/tt-mlir/bin/ttmlir-opt; TR=$M/build/tt-mlir/bin/ttmlir-translate
+timeout 240 $OPT --mlir-disable-threading m/<case>.mlir -o out/<case>.verified.mlir
+timeout 240 $OPT --mlir-disable-threading --ttir-to-ttnn-backend-pipeline m/<case>.mlir -o out/<case>.ttnn.mlir
+timeout 240 $TR --ttnn-to-flatbuffer out/<case>.ttnn.mlir -o out/<case>.ttnn
+od -A d -c -N 16 out/<case>.ttnn
+```
+
+No system-desc-path and no mock-system-desc-arch: the pipeline's defaults register the mock wormhole_b0 descriptor
+(TTNNPipelines.h:182-202; TTNNPipelines.cpp:34-42), as ttir-ttmetal-compile compiles TT-Metal, so every flatbuffer
+here is compile evidence only. `--mlir-disable-threading` kept the probe on one thread beside the sweep; the toolchain
+does not pass it. The option names are read at the pin: `system-desc-path` and `mock-system-desc-arch`
+(include/ttmlir/Dialect/TTNN/Utils/PassOverrides.h:32-33), the pipeline `ttir-to-ttnn-backend-pipeline`
+(TTNNPipelines.cpp:599-603), and the translation `ttnn-to-flatbuffer` (lib/Target/TTNN/TTNNToFlatbufferRegistration.cpp:23-24).
+
+The modules (SYNTHETIC, written for the probe; no bench item's file):
+
+| Case | sha256 prefix | Module |
+| --- | --- | --- |
+| scatter_args | 72090220f932cba9 | `ttir.scatter` SUM along dim 0: input si32[4096], index si32[16384], source si32[16384], all arguments |
+| scatter_histo | df32555b0c257400 | The same scatter of `ttir.zeros` si32[4096] and `ttir.ones` si32[16384] made in the module; the index the one argument |
+| scatter_i32 | 087c24a378ac6067 | scatter_args in signless i32, the integer form of the pinned Dialect/TTNN/simple_scatter.mlir |
+| sort | d5590d78581456b8 | `ttir.sort` of si32[2048], dim -1, ascending, stable = true; values and indices si32[2048] |
+| cumsum | b0d83e618056b068 | `ttir.cumsum` of si32[2048] along dim 0 |
+| gather_si32 | a84566b86d4fca0a | `ttir.gather` of rows of bf16[16384, 32] by si32[16384, 1] to bf16[16384, 32], the form of gather_3 in the pinned Dialect/TTNN/embedding/gather_to_embedding.mlir (offset_dims [1], collapsed_slice_dims [0], start_index_map [0], index_vector_dim 1, slice_sizes [1, 32]) |
+| gather_ui32 | 7d1c9ab7d9db9fd4 | gather_si32 with ui32 indices |
+| identity | 02e36630c463c6e5 | Returns its si32[2048] argument |
+
+Results (exit status 0 means the step passed; times are wall time from `date +%s%N` around each command):
+
+| Case | verify | lower | ttnn ops in the lowered module (count) | translate | Flatbuffer bytes, identifier at bytes 8 to 12 |
+| --- | --- | --- | --- | --- | --- |
+| scatter_args | 0 | 0, 35 ms | scatter 64, slice_static 128, to_layout 130, deallocate 324 | 0, 39 ms | 435,864, TTNN |
+| scatter_histo | 0 | 0, 37 ms | scatter 64, slice_static 128, to_layout 129, zeros 1, ones 1, get_device 2, deallocate 323 (and ttcore.load_cached 2) | 0, 39 ms | 460,416, TTNN |
+| scatter_i32 | 0 | 0, 40 ms | as scatter_args | 0, 33 ms | 433,632, TTNN |
+| sort | 0 | 0, 32 ms | sort 1, typecast 3, deallocate 4 | 0, 23 ms | 8,360, TTNN |
+| cumsum | 0 | 0, 27 ms | moreh_cumsum 1, reshape 2, deallocate 3 | 0, 23 ms | 7,104, TTNN |
+| gather_si32 | 0 | 0, 28 ms | embedding 1, typecast 1, to_layout 2, reshape 1, deallocate 6 | 0, 17 ms | 11,024, TTNN |
+| gather_ui32 | 0 | 0, 26 ms | embedding 1, to_layout 2, reshape 1, deallocate 5 | 0, 22 ms | 9,568, TTNN |
+| identity | 0 | 0, 29 ms | none | 0, 18 ms | 3,024, TTNN |
+
+Per op (rx d2a1 and 9cd1):
+
+- ttir.scatter (SUM, si32, histo's shape): passes. The lowering splits the 16384 indices into 64 `ttnn.scatter` ops of
+  256 indices each, each after a `ttnn.slice_static` of the index and of the source and a `ttnn.to_layout` to
+  row-major, chained through the 4096-element input; SUM is kept on each and every operand stays si32 (the split
+  upstream's simple_scatter.mlir checks as 284 indices to 256 + 28; the row-major move is the workaround of section 3).
+  Signless i32 prints as si32 after element type normalization. With zeros and ones made in the module, const-eval
+  hoists `ttnn.zeros` and `ttnn.ones` (with the 64 slices of the ones) into two const_eval functions read by
+  `ttcore.load_cached`, and the forward function keeps the 64 scatters.
+- ttir.sort (si32 keys, 2048): passes, onto ui16. A `ttnn.typecast` takes the keys from si32 to ui16 before
+  `ttnn.sort` (descending = false, dim = -1 : si8, stable = true), the values come back to si32 by a second typecast,
+  and the indices come out as ui16 and are typecast to si32 (the workaround of section 3, TTNNWorkaroundsPass.cpp:
+  836-870). So the program is exact only for keys in [0, 65535], as bale's are; what the typecast does with others is
+  unmeasured.
+- ttir.cumsum (si32, 2048): passes, si32 kept. The [2048] tensor is reshaped to [2048, 1, 1, 1] and
+  `ttnn.moreh_cumsum` runs along dim 0 in tile layout, `memref<2048x1x!ttcore.tile<32x32, si32>>`: one 32 x 32 tile
+  per element, 2048 tiles (8 MiB of si32 tiles in DRAM, PROJECTED by arithmetic). No other shape was probed.
+- ttir.gather (bf16 table 16384 x 32, 16384 indices): passes, through `ttnn.embedding` as section 3 read: indices
+  [16384, 1] and the table both taken to row-major by `ttnn.to_layout`, the embedding giving [16384, 1, 32] bf16, and a
+  `ttnn.reshape` to [16384, 32]. si32 indices get one `ttnn.typecast` to ui32 first; ui32 indices none. The table
+  stays bf16, so ig needs section 5's 8-bit digit columns.
+- identity: lowers to a forward function with no ttnn op at all and still translates (3,024 bytes), so a check for
+  device work must look for a ttnn op that computes, not for a flatbuffer.
+
+Every case:
+
+- One warning from the pipeline at the module's first line, `m/<case>.mlir:2:1: warning: Empty argument type map
+  provided. Skipping argument type population. This may affect subsequent compile steps` (the argument-type pass that
+  createTTNNPipelineTTIRPasses adds, TTNNPipelines.cpp:44-45, with no argument-types option given).
+- The lowered forward function keeps the module's element types and shapes at its boundary (si32, ui32, bf16), each
+  with a `#ttnn_layout` encoding (DRAM, interleaved, tiled), and carries `tt.function_type = "forward_device"`.
+- The TTNN flatbuffer is size-prefixed: bytes 0 to 4 hold its length less 4 (7100 for cumsum's 7104 bytes), 4 to 8
+  the root offset (28), and 8 to 12 the identifier TTNN (all eight, rx 9cd1), as the schema names it
+  (include/ttmlir/Target/TTNN/binary.fbs:18) and TTNNToFlatbuffer.cpp:4205 writes it
+  (FinishSizePrefixedTTNNBinaryBuffer).
+
+A correction this probe found: the TT-Metal flatbuffers of plans/spikes/ttir-d2m.md are size-prefixed too, TTM0 at
+bytes 8 to 12 of eltwise_binary.ttm, eltwise_binary_1d.ttm, eltwise_binary_f32out.ttm, and eltwise_sfpu.ttm (rx e50a;
+TTMetalToFlatbuffer.cpp:1068, FinishSizePrefixedTTMetalBinaryBuffer). lassi/toolchains/ttir_compile.py, at this
+probe's base (bd5e51f), read the identifier at bytes 4 to 8. sweep13's first launch had already shown it on the
+branch: it scored every TTIR attempt that reached the translation as no-artifact, and commit 7d3f3e8 (task P17.49)
+then accepted the size-prefixed form beside the plain one. P17.57 narrows the check to bytes 8 to 12 for both
+routes (TT-Metal and TT-NN), the form the pinned translations write.
+
+Consequences:
+
+- The toolchain ttir-ttnn-compile (lassi/toolchains/ttir_compile.py, TtirTtnnCompile) runs these three commands
+  without `--mlir-disable-threading`, refuses d2m and ttnn ops in the model's module, requires a ttnn op that
+  computes (outside get_device, deallocate, to_layout, to_device, from_device, to_memory_config, and the creation
+  ops), and requires TTNN at bytes 8 to 12.
+- P17.58's first ttsim measurement should cover these four lowered forms as they are: the 64 chained scatters, the
+  ui16 sort between two typecasts, the tile-per-element cumsum, and the row-major embedding; it also needs a ttsim
+  system descriptor in place of the mock one.
+- A ttnn suite's item contracts: si32 (or ui32) at the module's boundary, as the lowered functions keep it; sort keys
+  below 65536; gather tables as bf16 columns of 8-bit digits.
+
+Still unmeasured: everything at run time (whether any of these programs runs on ttsim or a card, whether the 64 chained
+scatters give histo's counts, the sort's stability, int32 cumsum's exactness), and every shape not probed.
 
 ## Sources
 

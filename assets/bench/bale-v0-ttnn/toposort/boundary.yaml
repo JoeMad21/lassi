@@ -1,0 +1,16 @@
+# The device boundary of bale-v0-ttnn's toposort (task P17.57): the module's arguments and results and how the host
+# turns the item's i64 lassi_io files into them and back. The format is the header of assets/bench/bale-v0-ttnn.yaml.
+# The keys fit ui16, the key type ttnn.sort takes at the pin. This is the boundary of one module that computes the
+# whole item; the host loop over levels that the spike plans for toposort (task P17.58) is not declared here. Names,
+# shapes, element types, and the manifest's bounds only; no held-out value.
+item: toposort
+static:
+  - {input: num_rows, value: 2048}
+args:
+  - {name: extra_u, input: extra_u, dtype: si32, shape: [4096], convert: narrow}
+  - {name: extra_v, input: extra_v, dtype: si32, shape: [4096], convert: narrow}
+  - {name: row_key, input: row_key, dtype: si32, shape: [2048], convert: narrow, fits: ui16}
+  - {name: col_key, input: col_key, dtype: si32, shape: [2048], convert: narrow, fits: ui16}
+results:
+  - {name: row_perm, output: row_perm, dtype: si32, shape: [2048], convert: widen}
+  - {name: col_perm, output: col_perm, dtype: si32, shape: [2048], convert: widen}

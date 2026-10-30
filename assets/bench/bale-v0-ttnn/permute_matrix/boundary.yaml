@@ -1,0 +1,17 @@
+# The device boundary of bale-v0-ttnn's permute_matrix (task P17.57): the module's arguments and results and how the
+# host turns the item's i64 lassi_io files into them and back. The format is the header of
+# assets/bench/bale-v0-ttnn.yaml. The keys fit ui16, the key type ttnn.sort takes at the pin. The column array is
+# returned padded to 8192, the most distinct pairs possible, with its length nnz, and the host keeps the first nnz.
+# Names, shapes, element types, and the manifest's bounds only; no held-out value.
+item: permute_matrix
+static:
+  - {input: num_rows, value: 2048}
+args:
+  - {name: nz_row, input: nz_row, dtype: si32, shape: [8192], convert: narrow}
+  - {name: nz_col, input: nz_col, dtype: si32, shape: [8192], convert: narrow}
+  - {name: row_key, input: row_key, dtype: si32, shape: [2048], convert: narrow, fits: ui16}
+  - {name: col_key, input: col_key, dtype: si32, shape: [2048], convert: narrow, fits: ui16}
+results:
+  - {name: offset, output: offset, dtype: si32, shape: [2049], convert: widen}
+  - {name: column, output: column, dtype: si32, shape: [8192], convert: trim, length: nnz, at_most: nz_row}
+  - {name: nnz, dtype: si32, shape: [1], convert: length}
