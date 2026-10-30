@@ -1,0 +1,19 @@
+# sweep12, the temperature arm t07 (tasks P17.51 and P17.52; the owner's directions of 2026-10-29: "Prepare
+# a run with higher reasoning from GPT-OSS after the current runs" and "Plan parallel arms for different
+# temperatures (0.2, 0.5, 0.7, and 1.0)"). It extends sweep9/gpt-oss-120b/kh-allsk-maxabs.yaml,
+# unchanged but for its sampling and its restarts. Sampling: temperature 0.7, top_p 1.0 in every arm (gpt-oss's
+# README recommends 1.0 and 1.0: github.com/openai/gpt-oss at d21f34ec, README.md:576), reasoning effort high, and
+# a budget of 65536 tokens, the reasoning counted in it (the served context is 131072,
+# results/night-20261025/summary.md:19). Restarts (task P17.50): a fresh generation after 3 failed corrections in a
+# row, or when an attempt repeats an error set of its chain, both within the one correction cap. The four arms
+# differ in the temperature alone; the window of 2026-10-29 (temperature 0.2, top_p 0.9, medium effort) is a
+# separate reference point. Every TT program runs on ttsim, a simulator. Which recipes run in each arm is chosen at
+# launch (--only), from the window of 2026-10-29's timings.
+extends: ../../sweep9/gpt-oss-120b/kh-allsk-maxabs.yaml
+llm:
+  sampling:
+    temperature: 0.7
+    top_p: 1.0
+    reasoning_effort: high
+    max_tokens: 65536
+loop: {restart_after: 3, restart_on_repeat: true}

@@ -199,6 +199,10 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.47 | DONE | TTIR and D2M API references and retrieval indexes | P17.44 | the reference and retrieval tools take a dialect; ttir-ref and d2m-ref packs, tt-mlir-ttir-tests and tt-mlir-d2m-tests indexes; ttkernel outputs unchanged; not yet built on the build host; bible mirror, master sync follows |
 | P17.48 | ACTIVE | The ttir and d2m languages: toolchains and a runtime executor | P17.46 | the runtime pin, script, lists, tests, and spike prepared 2026-10-29 (OQ-111 (b)); the build job runs 2026-10-30; then the driver, toolchains, and executor |
 | P17.49 | READY | TTIR and D2M prompt sets and recipes | P17.47,P17.48 | planned 2026-10-29 (the owner's directions that evening) |
-| P17.50 | READY | Restarts: on a repeated error, and in every recipe | P17.25 | restart_on_repeat built and committed (2395db2); left: restart_after and restart_on_repeat in P17.51's and P17.52's recipes, and the master bible sync |
-| P17.51 | READY | gpt-oss-120b at high reasoning effort | P17.39,P17.43,P17.44 | planned 2026-10-29 (the owner's directions that evening) |
-| P17.52 | READY | Sampling temperature arms: 0.2, 0.5, 0.7, and 1.0 | P17.51 | planned 2026-10-29 (the owner's direction that evening) |
+| P17.50 | READY | Restarts: on a repeated error, and in every recipe | P17.25 | restart_on_repeat built (2395db2) and set with restart_after in P17.52's recipes (sweep12); left: the master bible sync |
+| P17.51 | READY | gpt-oss-120b at high reasoning effort | P17.39,P17.43,P17.44 | covered by P17.52's arms (high effort, max_tokens 65536, restarts); the launch is first in the window of 2026-10-31 |
+| P17.52 | READY | Sampling temperature arms: 0.2, 0.5, 0.7, and 1.0 | P17.51 | sweep12-t02/-t05/-t07/-t10 built (32 recipes; tests); left: --only sizing from the window of 2026-10-29's timings, the launch |
+| P17.53 | READY | No gates on silicon use in LASSI's software | P17.16 | planned 2026-10-29 (OQ-078 and OQ-099 answered) |
+| P17.54 | READY | The sandbox under a translating (DMA) IOMMU | P17.53 | planned 2026-10-29 (OQ-078 and OQ-099 answered) |
+| P17.55 | READY | Silicon as the correction loop's final test, with Tracy | P17.53,P17.42 | planned 2026-10-29 (OQ-078 and OQ-099 answered) |
+| P17.56 | READY | Silicon launch kit | P17.54,P17.55 | planned 2026-10-29 (OQ-078 and OQ-099 answered) |
