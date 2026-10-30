@@ -1,0 +1,56 @@
+# The corpus of the D2M tests retriever (2026-10-29, task P17.47; tools/build_ttkernel_rag.py --dialect d2m,
+# lassi.prompts.retrieval, lassi.prompts.rag_corpus): D2M MLIR from tt-mlir's own lit tests at the pin, each module
+# one that ttmlir-opt parses, verifies, and lowers there, for the cpp -> d2m recipes of task P17.49 (no recipe names
+# it yet). Upstream LASSI used fixed context packs only, so retrieval is a departure from it, never part of a
+# faithful recipe.
+#
+# tools/build_ttkernel_rag.py builds the index from the pinned tt-mlir tree (an install's src/tt-mlir under
+# $LASSI_TOOLCHAINS/<PREFIX_NAME>, whose lassi-install.txt names the pin, or a directory `build_ttkernel_rag.py
+# fetch --dialect d2m` filled from GitHub at the pin's commit, each file checked against its git blob sha1) and
+# writes MANIFEST.yaml beside this file. Only this spec and the manifest are tracked; the index holds tt-mlir's test
+# text and lives under $LASSI_SCRATCH, never in git (OQ-018).
+corpus: tt-mlir-d2m-tests
+# toolchains/tt-mlir.pin: the tree must be at its COMMIT, from its URL.
+pin: tt-mlir
+# The tests whose input is D2M: the dialect's own tests and its lowering to TTKernel and to TTMetal (whose ttkernel
+# and ttmetal are in CHECK patterns with FileCheck captures). The TTIR-to-D2M tests are tt-mlir-ttir-tests' (their
+# input is TTIR); the arith and math conversions to D2M tile ops take another dialect; and the D2M-to-TTNN test
+# lowers to TTNN, not the TTKernel and TTMetal path a d2m translation takes (task P17.46).
+include:
+  - test/ttmlir/Dialect/D2M/**/*.mlir
+  - test/ttmlir/Conversion/D2MToTTKernel/**/*.mlir
+  - test/ttmlir/Conversion/D2MToTTMetal/**/*.mlir
+doxygen: null
+# Agent Rule 5 (tools/build_ttkernel_rag.py, the module docstring), as for tt-mlir-tests: the references are every
+# item's upstream kernels (from the suite's fetched sources) and the suite's tracked files; a selected file that names
+# an item, its example directory, or a kernel's file stem is excluded whole, and so is one holding a reference run in
+# its comments or CHECK lines. The run check and the similarity report are lassi.prompts.rag_corpus's. The suite is
+# tt-pairs-v0-ttkernel: tt-pairs-v0's items and answers, and the ttkernel host programs as references too.
+tier_a:
+  suite: assets/bench/tt-pairs-v0-ttkernel.yaml
+  # Every Tier A example directory lies under this directory of the suite's own tree (tt-metal's).
+  examples: tt_metal/programming_examples
+  # Consecutive lines that make a run: two quoted lines are not a copy, three are.
+  run_lines: 3
+  # The fraction of a file's runs (under either normalization) above which the file is a copy and goes whole.
+  max_file_overlap: 0.1
+  similarity:
+    # The report line, a difflib ratio in [0, 1]; the build records each indexed file at or above it.
+    report_at: 0.7
+    # Lower-case names that keep their own token: the op prefixes of the tt-metal kernel API the references use.
+    api_prefixes: [cb_, noc_, get_, tile_, pack_, copy_, add_, mm_, matmul_]
+# Files excluded whole beyond the tool's own rules: none. A negative test (an expected diagnostic or a `RUN: not`
+# line) and an UNSUPPORTED or XFAIL test go by tools/build_ttkernel_rag.py negative_exclusions, each with its reason
+# in the manifest.
+exclude: []
+# How files are cut into chunks (lassi.prompts.rag_corpus), as for tt-mlir-tests: an .mlir file is code, cut at blank
+# lines into blocks packed in order into chunks of at most max_lines lines and max_chars characters; a line is never
+# cut.
+chunking:
+  max_lines: 40
+  max_chars: 3000
+  min_piece_lines: 3
+# The BM25 ranking parameters (lassi.prompts.retrieval Index.search), as for the tt-metal documentation.
+bm25:
+  k1: 1.2
+  b: 0.75

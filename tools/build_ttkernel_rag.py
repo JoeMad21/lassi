@@ -1,17 +1,25 @@
-"""Build the tt-mlir tests retrieval index from the pinned tt-mlir tree (task P17.44).
+"""Build a tt-mlir tests retrieval index from the pinned tt-mlir tree (tasks P17.44 and P17.47).
 
 Usage:
 
-    uv run tools/build_ttkernel_rag.py fetch --dest <dir>
-    uv run tools/build_ttkernel_rag.py build --tree <dir> [--bench-root <dir>] [--index <file>] [--manifest <file>]
-    uv run tools/build_ttkernel_rag.py check --tree <dir> [--bench-root <dir>] [--index <file>] [--manifest <file>]
+    uv run tools/build_ttkernel_rag.py fetch --dest <dir> [--dialect D]
+    uv run tools/build_ttkernel_rag.py build --tree <dir> [--dialect D] [--bench-root <dir>] [--index <file>]
+        [--manifest <file>]
+    uv run tools/build_ttkernel_rag.py check --tree <dir> [--dialect D] [--bench-root <dir>] [--index <file>]
+        [--manifest <file>]
 
-The corpus spec, assets/rag/tt-mlir-tests/corpus.yaml (SPEC; read by
-lassi.prompts.rag_corpus load_corpus_spec, as tools/build_tt_rag.py reads
-its own), selects ttkernel MLIR from tt-mlir's own lit tests at the pin
-(toolchains/tt-mlir.pin): modules that ttmlir-opt parses, verifies, and
-lowers, the exact textual form of each op in use. A cpp -> ttkernel recipe
-names it in its retrieval section, and the runner loads it as it loads the
+D is a dialect of CORPORA: ttkernel (the default, task P17.44), ttir, or d2m
+(task P17.47), each with its corpus spec, assets/rag/<corpus>/corpus.yaml
+(read by lassi.prompts.rag_corpus load_corpus_spec, as tools/build_tt_rag.py
+reads its own; --corpus names another). A spec selects one dialect's MLIR
+from tt-mlir's own lit tests at the pin (toolchains/tt-mlir.pin): modules
+that ttmlir-opt parses, verifies, and lowers, the exact textual form of each
+op in use. tt-mlir-tests holds the ttkernel tests (the dialect's own tests,
+its lowering to EmitC, and its translation to C++); tt-mlir-ttir-tests the
+TTIR tests (Dialect/TTIR and the TTIR-to-D2M conversion, whose input is
+TTIR); tt-mlir-d2m-tests the D2M tests (Dialect/D2M and the D2M-to-TTKernel
+and D2M-to-TTMetal conversions, whose input is D2M). A recipe names the
+corpus in its retrieval section, and the runner loads it as it loads the
 tt-metal documentation index (lassi.core.runner _retrieval_index): the
 manifest beside the spec, and the index under
 $LASSI_SCRATCH/rag/<corpus>@<VERSION>/index.json. The index format, the
@@ -21,12 +29,12 @@ lassi.prompts.rag_corpus's, unchanged.
 The tree is tt-mlir at the pin's COMMIT: an install's src/tt-mlir (whose
 install's lassi-install.txt names the commit;
 tools/build_ttkernel_context.py check_tree), or a directory `fetch` filled
-(tools/build_tt_rag.py fetch with this spec, each file checked against its
-git blob sha1). Any other tree is refused.
+for that corpus (tools/build_tt_rag.py fetch with its spec, each file
+checked against its git blob sha1). Any other tree is refused.
 
 Agent Rule 5, enforced here (references, identity_exclusions, comment_runs) and recorded
-in the manifest: no item of the spec's suite (tt-pairs-v0-ttkernel) may
-reach a prompt through this index.
+in the manifest: no item of the spec's suite (tt-pairs-v0-ttkernel, whose
+items and answers are tt-pairs-v0's) may reach a prompt through any index.
 
 1. References: every upstream kernel of every item (the C++ answer the
    model translates, read from the suite's fetched sources, `--bench-root`,
@@ -38,14 +46,20 @@ reach a prompt through this index.
    and similarity report against them, as for the tt-metal documentation.
 2. Identities: a selected file whose path or text names an item, an item's
    example directory, or an upstream kernel's file stem (of at least
-   MIN_NAME characters) as a whole word, a ttkernel module that could be
-   derived from an item's kernel, is excluded whole, with the name and the
-   item as its reason.
+   MIN_NAME characters) as a whole word, a module that could be derived
+   from an item's kernel, is excluded whole, with the name and the item as
+   its reason.
 3. Comment runs: a selected file holding a reference run once each line
    loses its `//` and FileCheck directive (comment_runs; the C++ a test's
    CHECK lines expect) is excluded whole.
-4. The spec's exclude list: the negative tests, whose IR is invalid on
-   purpose, and the worked examples the examples pack already carries.
+4. The spec's exclude list: for tt-mlir-tests the negative tests, whose IR
+   is invalid on purpose, and the worked examples the examples pack already
+   carries.
+
+Not Rule 5, but the same whole-file exclusion: a negative test or a test lit
+does not run (negative_exclusions: a file with an expected diagnostic, a
+`RUN: not` line, or an UNSUPPORTED or XFAIL directive), whose modules are
+not known to parse at the pin, unless the spec lists it with its own reason.
 
 `build` writes the index (default under $LASSI_SCRATCH, never in this
 repository) and the manifest beside the spec; `check` builds in memory and
@@ -78,12 +92,19 @@ from lassi.prompts.retrieval import index_bytes  # noqa: E402
 from lassi.toolchains import pins  # noqa: E402
 
 GENERATOR = "tools/build_ttkernel_rag.py"
-SPEC = REPO / "assets" / "rag" / "tt-mlir-tests" / "corpus.yaml"
+# Each dialect's corpus, a directory under assets/rag holding its spec and manifest.
+CORPORA = {"ttkernel": "tt-mlir-tests", "ttir": "tt-mlir-ttir-tests", "d2m": "tt-mlir-d2m-tests"}
+SPEC = REPO / "assets" / "rag" / CORPORA["ttkernel"] / "corpus.yaml"
 # A kernel file stem shorter than this (such as mm) is too common a word to mark an item; the run check still
 # covers that kernel's text [DESIGN].
 MIN_NAME = 5
 # What leaves a line before the comment run check (comment_runs): a leading `//` and a FileCheck directive.
 _COMMENT_HEAD = re.compile(r"^\s*//+\s*(?:[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*:\s*)?")
+# A line the comment run check reads (comment_runs): one holding a letter or digit.
+_TEXT = re.compile(r"[A-Za-z0-9]")
+# What marks a negative test (an expected diagnostic, or a RUN line that expects failure) and a test lit does not run.
+_NEGATIVE = re.compile(r"expected-(?:error|warning)|-verify-diagnostics|^//\s*RUN:\s*not\s", re.MULTILINE)
+_NOT_RUN = re.compile(r"^//\s*(?P<directive>UNSUPPORTED|XFAIL):", re.MULTILINE)
 MANIFEST_HEADER = (
     f"# Generated by {GENERATOR} from the corpus spec beside it and the pinned tt-mlir tree; do not edit.\n"
     "# Only this manifest and corpus.yaml are tracked. The index it pins (index.sha256) is generated under\n"
@@ -120,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     """Run one subcommand; 0 on success, 1 when check finds a difference, 2 on a refusal."""
     args = _parser().parse_args(argv)
     try:
-        spec_path = Path(args.corpus).resolve()
+        spec_path = Path(args.corpus or spec_of(args.dialect)).resolve()
         spec = rag_corpus.load_corpus_spec(spec_path)
         pin = pins.read_pin(spec.pin)
         if args.command == "fetch":
@@ -148,6 +169,11 @@ def main(argv: list[str] | None = None) -> int:
     for row in document["excluded"]:
         print(f"build_ttkernel_rag: excluded {row['path']}: {row['reason']}")
     return 0
+
+
+def spec_of(dialect: str) -> Path:
+    """Return the corpus spec of a dialect of CORPORA."""
+    return REPO / "assets" / "rag" / CORPORA[dialect] / "corpus.yaml"
 
 
 def _default_bench(suite: Suite) -> Path:
@@ -234,6 +260,24 @@ def identity_exclusions(files: Mapping[str, bytes], names: Mapping[str, str]) ->
     return found
 
 
+def negative_exclusions(files: Mapping[str, bytes]) -> dict[str, str]:
+    """Return {path: reason} for each negative test and each test lit does not run (the module docstring).
+
+    A negative test's modules are invalid on purpose; an UNSUPPORTED or
+    XFAIL test is not run at the pin, so its modules are not known to parse.
+    """
+    found: dict[str, str] = {}
+    for path, data in sorted(files.items()):
+        text = data.decode("utf-8", errors="replace")
+        skipped = _NOT_RUN.search(text)
+        if skipped is not None:
+            found[path] = (f"not-run: an {skipped.group('directive')} test, which lit does not run at the pin, so "
+                           "its modules are not known to parse")
+        elif _NEGATIVE.search(text):
+            found[path] = "negative-test: its modules are invalid on purpose (each with its expected error)"
+    return found
+
+
 def comment_runs(files: Mapping[str, bytes], refs: Mapping[str, str], run_lines: int) -> dict[str, str]:
     """Return {path: reason} for each file holding a reference run in its comments or FileCheck lines.
 
@@ -241,13 +285,17 @@ def comment_runs(files: Mapping[str, bytes], refs: Mapping[str, str], run_lines:
     CHECK-NEXT:, and the like; _COMMENT_HEAD) before rag_corpus's run check
     reads it, so C++ an item's kernel lowers to, quoted in a test's CHECK
     lines, is caught as a copy, which the run check of the lines as written
-    misses; such a file goes whole.
+    misses; such a file goes whole. A line with no letter or digit left (a
+    closing brace) is skipped, as the code normalization skips a brace-only
+    line: three closing braces in a row are no copy, and before this rule
+    they excluded eleven tests whole, ten of D2M and one of TTIR (task P17.47).
     """
     check = rag_corpus.RunCheck(refs, run_lines)
     found: dict[str, str] = {}
     for path, data in sorted(files.items()):
         lines = rag_corpus.split_lines(data.decode("utf-8", errors="replace"))
-        hits = check.matches([(number, _COMMENT_HEAD.sub("", line)) for number, line in enumerate(lines, 1)]).lines()
+        stripped = [(number, _COMMENT_HEAD.sub("", line)) for number, line in enumerate(lines, 1)]
+        hits = check.matches([(number, line) for number, line in stripped if _TEXT.search(line)]).lines()
         if hits:
             first = min(hits)
             found[path] = (f"tier-a-run in its comments: {len(hits)} line(s) of a reference run, first line {first} "
@@ -264,7 +312,8 @@ def build(tree: Path, spec_path: Path, spec: rag_corpus.CorpusSpec, pin: Mapping
     if not files:
         raise ValueError(f"{tree} holds none of the files {spec_path.name} selects")
     refs = references(suite, bench)
-    named = {**comment_runs(files, refs, spec.run_lines), **identity_exclusions(files, identities(suite))}
+    named = {**negative_exclusions(files), **comment_runs(files, refs, spec.run_lines),
+             **identity_exclusions(files, identities(suite))}
     spec = dataclasses.replace(spec, exclude={**spec.exclude, **{k: v for k, v in sorted(named.items())
                                                                  if k not in spec.exclude}})
     tier_dirs = rag_corpus.tier_a_dirs(suite, spec.examples)
@@ -312,7 +361,9 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("--index", help="index file (default $LASSI_SCRATCH/rag/<corpus>@<VERSION>/index.json)")
         command.add_argument("--manifest", help="manifest file (default MANIFEST.yaml beside the corpus spec)")
     for command in commands.choices.values():
-        command.add_argument("--corpus", default=str(SPEC), help="corpus spec")
+        command.add_argument("--dialect", choices=sorted(CORPORA), default="ttkernel",
+                             help="the dialect whose corpus spec (CORPORA) is read")
+        command.add_argument("--corpus", help="a corpus spec in place of the dialect's")
     return parser
 
 

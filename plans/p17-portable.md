@@ -432,6 +432,7 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Accept: plans/spikes/ttir-d2m.md with commands and outputs: the pipeline names and options at tt-mlir 5f396fd6; for each tt-pairs-v0 item, a hand-written TTIR module and a D2M module that the pinned ttmlir-opt lowers to TTKernel and TT-Metal, and ttmlir-translate to a flatbuffer, or the first error; which ops the D2M path lowers; whether the tt-mlir install at the pin has a runtime that runs a flatbuffer (ttrt or its libraries), and if not what enabling it needs (a pin change, a Decision Log entry, the owner's approval); whether a flatbuffer runs on ttsim. Short CPU-only runs on alpha01 (the owner's standing permission of 2026-10-26).
 - Files: plans/spikes/ttir-d2m.md.
 - Host: Windows; alpha01's CPU. Depends: P17.41.
+- Done 2026-10-29: plans/spikes/ttir-d2m.md; four of five items lower in TTIR or D2M, no runtime at the pin (OQ-111 (b)), no TTIR or D2M route for bale-v0-tt (exploratory runs, CPU only).
 
 ### P17.47 TTIR and D2M API references and retrieval indexes
 - Added on 2026-10-29 (the owner, 2026-10-29: "Those will also need RAGs and references").
@@ -439,9 +440,11 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Accept: tools/build_ttkernel_reference.py and tools/build_ttkernel_rag.py generalized over a dialect (TTKernel, TTIR, D2M) from the pinned TableGen sources and tt-mlir's own lit tests (Dialect/TTIR, Dialect/D2M, Conversion/TTIRToD2M, D2MToTTKernel, D2MToTTMetal), each pack and index with its tracked manifest and run-suite.sh build step, Agent Rule 5 exclusions as P17.44's (no item's answer in a corpus), tests; the ttkernel outputs unchanged byte for byte.
 - Files: tools/build_ttkernel_reference.py, tools/build_ttkernel_rag.py (generalized), assets/context/, assets/rag/, plans/runs/suite/run-suite.sh, plans/runs/suite/recipes.py, .gitignore, tests/tools/.
 - Host: Windows. Depends: P17.44.
+- Done 2026-10-29: the generalized tools, the packs ttir-ref-5f396fd6 and d2m-ref-5f396fd6, the indexes tt-mlir-ttir-tests and tt-mlir-d2m-tests, tests/tools/test_build_mlir_reference.py, test_build_mlir_rag.py, and test_suite_mlir_assets.py; built from GitHub fetches at the pin, not yet on the build host.
 
 ### P17.48 The ttir and d2m languages: toolchains and a runtime executor
 - Added on 2026-10-29. Built after P17.46 shows which pipeline and runtime work.
+- The owner's answer to OQ-111, 2026-10-29: option (b), a tt-mlir runtime at the pin with MLIR Python bindings and ttrt, in a new prefix, plus the LASSI C++ driver (ttrt cannot load given inputs), built on alpha01 on 2026-10-30 during the day (a pin change, with its Decision Log entry; the build runs longer than the short-job allowance, so it runs under that day's approval as one big job, CPU only, niced, no device). The spike's toolchain line: ttmlir-opt --ttir-to-ttmetal-pipeline with a ttsim system descriptor and enable-multicast-inference=false, then ttmlir-translate --ttmetal-to-flatbuffer; a flatbuffer compiled against the mock system descriptor never runs.
 - Bible: IR Strategy, Execution Backends (ttsim; tt_silicon), Harness Contract, Toolchain Pins, Agent Rules 2, 6, 9, and 10.
 - Accept: languages ttir and d2m; a Toolchain per language that runs the pinned ttmlir-opt pipeline and ttmlir-translate in the compile sandbox and gives parsed diagnostics; an Executor that runs the flatbuffer through the pinned runtime on ttsim (and, later, a card, which a human starts), with the held-out inputs as tensors and the outputs as lassi_io files; tests with fakes. A runtime build, if P17.46 shows one is needed, is a pin change for the owner.
 - Files: lassi/toolchains/, lassi/executors/, toolchains/tt-mlir.pin if P17.46 needs the runtime, tests/.

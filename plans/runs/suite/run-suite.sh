@@ -245,6 +245,27 @@ build_asset() {  # build_asset <need>: 0 when the asset built and its manifest e
         && uv run tools/build_ttkernel_rag.py build --tree "$mlir" > "$out/ttkernel-rag.log" 2>&1 \
         && git diff --quiet HEAD -- assets/rag \
         && uv run tools/build_ttkernel_rag.py check --tree "$mlir" >> "$out/ttkernel-rag.log" 2>&1 ;;
+    context:ttir-ref-5f396fd6|context:d2m-ref-5f396fd6)
+      # The exact API references of the TTIR and D2M dialects at the pin (task P17.47; the cpp -> ttir and cpp -> d2m
+      # recipes of task P17.49), rendered by the ttkernel reference's tool from the same tt-mlir sources.
+      local mlir="$toolchains/tt-mlir@0.9.0.dev20260221/src/tt-mlir" dialect=${1#context:}
+      dialect=${dialect%%-ref-*}
+      [ -d "$mlir" ] || { echo "no tt-mlir sources at $mlir"; return 1; }
+      uv run tools/build_ttkernel_reference.py build --tree "$mlir" --dialect "$dialect" > "$out/$dialect-ref.log" 2>&1 \
+        && git diff --quiet HEAD -- assets/context \
+        && uv run tools/build_ttkernel_reference.py check --tree "$mlir" --dialect "$dialect" \
+          >> "$out/$dialect-ref.log" 2>&1 ;;
+    retrieval:tt-mlir-ttir-tests|retrieval:tt-mlir-d2m-tests)
+      # The TTIR and D2M tests indexes (task P17.47): each dialect's modules of tt-mlir's own lit tests at the pin,
+      # with the Agent Rule 5 references of tt-mlir-tests (the suite's sources under $LASSI_SCRATCH/bench, so the
+      # suite is fetched first); the index goes to $LASSI_SCRATCH/rag, the manifest is checked as tracked.
+      local mlir="$toolchains/tt-mlir@0.9.0.dev20260221/src/tt-mlir" dialect=${1#retrieval:tt-mlir-}
+      dialect=${dialect%-tests}
+      [ -d "$mlir" ] || { echo "no tt-mlir sources at $mlir"; return 1; }
+      uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-ttkernel.yaml > "$out/$dialect-rag-bench.log" 2>&1 \
+        && uv run tools/build_ttkernel_rag.py build --dialect "$dialect" --tree "$mlir" > "$out/$dialect-rag.log" 2>&1 \
+        && git diff --quiet HEAD -- assets/rag \
+        && uv run tools/build_ttkernel_rag.py check --dialect "$dialect" --tree "$mlir" >> "$out/$dialect-rag.log" 2>&1 ;;
     *) echo "run-suite has no build step for $1"; return 1 ;;
   esac
 }

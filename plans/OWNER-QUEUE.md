@@ -1333,3 +1333,17 @@ Options:
 Recommendation: (a), unless the card fix the owner mentioned on 2026-10-26 has landed and the owner wants training this window; then (b), with the training run set up and checked before 14:00.
 Answer: (a). The owner, in the working session of 2026-10-29: "Evaluation only (Recommended)".
 Applied: 2026-10-29. plans/runs/2026-10-31-window-plan.md drops training from the window; P17.38's training run waits for a later window.
+
+## OQ-111 A tt-mlir Runtime To Run TTIR And D2M Flatbuffers
+State: ANSWERED
+Kind: decision
+Blocks: P17.48, P17.49
+Evidence: plans/spikes/ttir-d2m.md (task P17.46; exploratory rx exec runs on alpha01's CPU, 2026-10-29): the pinned tt-mlir lowers hand-written TTIR and D2M for four of the five tt-pairs-v0 items to TT-Metal flatbuffers; the install at the pin has no runtime (TTMLIR_ENABLE_RUNTIME, TTRT, and the Python bindings OFF), and enabling one builds tt-mlir's own tt-metal at 5280a9cf with TT-NN (PROJECTED 20 to 60 minutes and 6 to 9 GiB for the runtime alone)
+Question: Should LASSI build a tt-mlir runtime at the pin, so the TTIR and D2M arms run their flatbuffers on ttsim (and later on a card), and when?
+Options:
+- (a) A TTMetal-only runtime at the same pin in a new prefix, plus a LASSI C++ driver that feeds lassi_io inputs and writes outputs.
+- (b) (a) plus MLIR Python bindings and ttrt, which needs tt-mlir's LLVM rebuilt with the bindings: longer, and ttrt still cannot load given inputs, so the driver is still needed.
+- (c) Patch tt-mlir's build, or read the flatbuffer ourselves, to avoid a second tt-metal.
+- (d) Defer: the arms only report whether the model's IR compiles to a flatbuffer.
+Recommendation: (a), built in the next owner window.
+Answer: (b), built on Friday 2026-10-30, daytime. The owner, in the working session of 2026-10-29: "(b) (a) + ttrt/Python" and "Friday, daytime (Recommended)".
