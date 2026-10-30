@@ -5,7 +5,7 @@ Diagnostic records (severity, code, file, line, column, message, stage). The
 compiler's raw stderr is kept as an attachment, the file STDERR_ATTACHMENT in
 the workdir, and never consumed downstream.
 
-Importing this package registers nine presets in
+Importing this package registers eleven presets in
 lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
 
 - "nvcc-sm80" (nvcc.NvccSm80): CUDA with nvcc for sm_80.
@@ -34,6 +34,11 @@ lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
   lowering an item's compute-only C unit to affine MLIR for the generation
   prompt (a recipe's source_mlir section); it declares only lowers_source,
   builds no program, and is never a language's toolchain.
+- "ttir-ttmetal-compile" and "d2m-ttmetal-compile" (ttir_compile.TtirCompile
+  and ttir_compile.D2mCompile; task P17.48): one TTIR or D2M module lowered
+  by the pinned tt-mlir's full TTIR-to-TTMetal pipeline and translated to a
+  TT-Metal flatbuffer, compile only: nothing runs the flatbuffer, which is
+  built against the compiler's mock system descriptor.
 
 Toolchain bindings carry no config. Each preset declares its pin as class
 attributes: PIN, the pin file stem (toolchains/<PIN>.pin, read by
@@ -67,7 +72,7 @@ of its own, which the compile sandbox uses far above any compiler output
 
 from __future__ import annotations
 
-from lassi.toolchains import cgeist, gcc, hipcc, nvcc, nvcpp, ttkernel_build, ttmetal_build
+from lassi.toolchains import cgeist, gcc, hipcc, nvcc, nvcpp, ttir_compile, ttkernel_build, ttmetal_build
 from lassi.toolchains._base import (
     STDERR_ATTACHMENT,
     CappedRunner,
@@ -82,6 +87,7 @@ from lassi.toolchains.gcc import GccNative, GccOpenMP
 from lassi.toolchains.hipcc import HipccGfx942
 from lassi.toolchains.nvcc import NvccSm80, NvccToolchain
 from lassi.toolchains.nvcpp import NvcppCc80, NvcppToolchain
+from lassi.toolchains.ttir_compile import D2mCompile, TtirCompile
 from lassi.toolchains.ttkernel_build import TtKernelBuild
 from lassi.toolchains.ttmetal_build import TtMetalHost
 
@@ -91,6 +97,7 @@ __all__ = [
     "CgeistAffine",
     "CommandResult",
     "CommandRunner",
+    "D2mCompile",
     "EnvRunner",
     "GccNative",
     "GccOpenMP",
@@ -100,6 +107,7 @@ __all__ = [
     "NvcppCc80",
     "NvcppToolchain",
     "TtKernelBuild",
+    "TtirCompile",
     "TtMetalHost",
     "capped_runner",
     "cgeist",
@@ -108,6 +116,7 @@ __all__ = [
     "nvcc",
     "nvcpp",
     "subprocess_runner",
+    "ttir_compile",
     "ttkernel_build",
     "ttmetal_build",
 ]

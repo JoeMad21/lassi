@@ -1,0 +1,62 @@
+Translate the $source_language program below into one D2M MLIR module ($target_language) for the Tenstorrent
+compiler tt-mlir 0.9.0.dev20260221 (commit 5f396fd6) and tt-metal commit 5280a9cf. You write how each array is
+laid out on the grid of Tensix cores, which shard of it each core loads and stores, and the tile computation;
+the compiler writes the device kernels.
+
+What a $target_language module is:
+- D2M is tt-mlir's dialect between the tensor-level TTIR and the kernel-level TTKernel. The file is one MLIR
+  module holding one func.func. Its arguments are the program's input arrays as ranked host tensors, in the
+  order the program reads them, and its results are the program's output arrays as host tensors, in the order
+  it writes them. Write each op, type, and attribute exactly in the form the reference gives.
+- Onto the device: each input goes into a tiled, sharded device tensor, %dev = d2m.to_layout %host, %empty :
+  <host type> into <device type> -> <device type>, where %empty comes from d2m.empty() : <device type>. A
+  device type is tensor<GR x GC x SR x SC x !ttcore.tile<32x32, <element type>>, #layout>: GR x GC is the core
+  grid, SR x SC each core's shard in 32x32 tiles, and #layout a #ttcore.metal_layout naming the host shape
+  (logical_shape), the tile alignment (dim_alignments = 32x32), the dimensions collapsed to two
+  (collapsed_intervals), the out-of-bounds value (undef), the memory space (l1), and the layout (sharded), as
+  the reference gives its parameters. GR x SR x 32 covers the rows and GC x SC x 32 the columns; the grid must
+  divide the tensor's tiles evenly, or the compiler stops on an assertion.
+- On the device: a d2m.generic runs a region on every core of its grid. Its attributes give block_factors, the
+  grid (#ttcore.grid<GRxGC>), one affine_map per operand in indexing_maps, one #ttcore.iterator_type<parallel>
+  or <reduction> per loop dimension in iterator_types, and threads = [#d2m.thread<unified>]; then
+  ins(<inputs> : <types>) outs(<outputs> : <types>) and the region, whose block arguments are one
+  !d2m.cb<shard type> per operand, where the shard type is tensor<SR x SC x !ttcore.tile<32x32, <element type>>>.
+  In the region, d2m.block_index(<dim>) gives this block's index along a loop dimension; d2m.remote_load copies
+  a shard of a device tensor at block indices into a local shard tensor (from tensor.empty()); a linalg.generic
+  over local shards applies d2m.tile_<op> ops to !ttcore.tile values and ends with linalg.yield;
+  d2m.remote_store writes a local shard into the output at block indices; and d2m.yield returns the stored
+  output. Moving data without computing is a load and a store.
+- Off the device: d2m.to_layout from the device result into a d2m.empty() of the host type, which the function
+  returns.
+- The compiler lowers the module with ttmlir-opt --ttir-to-ttmetal-pipeline: it may choose another grid,
+  bufferizes, allocates each core's L1 (1499136 bytes, from address 1024, in the default device), writes the
+  data movement your loads and stores describe, and writes the kernels through TTKernel to TT-Metal;
+  ttmlir-translate --ttmetal-to-flatbuffer then writes the device program. Use the unified thread form with
+  d2m.remote_load and d2m.remote_store: the explicit data-movement form (d2m.stream_layout and the dma ops)
+  does not reach a flatbuffer at this pin.
+- Use the dialects func, d2m, ttcore, tensor, linalg, arith, and affine maps; no ttir op (a D2M module that
+  holds one is refused) and no ttkernel op. Every output value must be computed or moved on the device by the
+  module's d2m.generic ops: a module that only returns an input or a constant lowers to no device program and
+  fails.
+- Element types on the device: f32, f16, bf16, si32, u32, u16, and u8. bf16 is the 16-bit brain float of the
+  program's lassi_io files (the upper half of an f32). An output whose element type differs from its inputs'
+  is converted on the device.
+- Shapes are static. The program reads its arrays at run time, so their declared shapes are listed below.
+  Write each input as a host tensor of exactly that element type and shape. A one-dimensional array may also
+  be written as a two-dimensional tensor with the same elements in row-major order, each dimension a multiple
+  of 32. Each output tensor has the shape and element type the program writes for it (its comments and its
+  write calls say them).
+
+The program's arrays, in order (name, element type, shape; no value is shown):
+$input_shapes
+The $source_language program, which computes the outputs the module must compute, follows, each file in a
+fenced code block whose first line is // FILE: <path>
+
+$source_files
+$source_mlir
+Write the module as this file: $target_files.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

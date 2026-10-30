@@ -1,0 +1,57 @@
+# sweep13, COMPILE ONLY: cpp -> d2m on tt-pairs-v0-d2m, the temperature arm t02 (tasks P17.48 and P17.49; the
+# owner's directions of 2026-10-29: test TTIR and D2M tonight, with "RAG, API references, different temperatures, max
+# reasoning, all the bells and whistles"). No output is checked and nothing runs: a trial passes when the model's
+# D2M module compiles to a TT-Metal flatbuffer, and the flatbuffer is compile evidence only. Exploratory.
+# The model writes the item as one D2M module (d2m.to_layout onto a tiled, sharded device tensor, d2m.generic ops
+# whose regions load and store shards and compute with tile ops, d2m.to_layout back); d2m-ttmetal-compile runs the
+# pinned tt-mlir (0.9.0.dev20260221, commit 5f396fd6) in the compile sandbox: ttmlir-opt verifies the module, its
+# --ttir-to-ttmetal-pipeline (enable-multicast-inference=false) lowers it through TTKernel to TT-Metal, and
+# ttmlir-translate --ttmetal-to-flatbuffer writes the flatbuffer (plans/spikes/ttir-d2m.md, task P17.46). The
+# compiler targets its mock Wormhole descriptor and no executor runs anything (executor kind none), as in
+# ttir-t02.yaml; compile errors, assertion aborts (with the assertion text), a module that lowers to no device
+# program, and a module written at the wrong level feed the correction loop.
+# Items: the four tt-pairs-v0 items the spike lowered from hand-written D2M (spike, section 2): eltwise_binary,
+# eltwise_sfpu, loopback (D2M is the first level with data movement, so a copy is a load and a store), and
+# matmul_multi_core. Left out: matmul_single_core, whose 640^3 operands fit no single core's L1 (the same allocator
+# places a D2M module's operands; the spike's inference), so only a multi-core grid lowers, which is
+# matmul_multi_core's task again.
+# Everything else is ttir-t02.yaml's (its comments hold), for D2M: the D2M API reference (d2m-ref-5f396fd6, task
+# P17.47) through verbatim_context, retrieval over tt-mlir's own D2M lit tests at the pin (tt-mlir-d2m-tests) at
+# generate and correct, source_mlir on cgeist-affine, the item's declared input arrays, and the same model, loop,
+# and restarts at temperature 0.2; d2m-t05, d2m-t07, and d2m-t10 differ from this arm in the temperature alone. Left
+# out, as there: dialect_lookup (no D2M definitions tree exists), worked examples (no D2M examples pack), and the
+# run-time corrections (nothing runs). tt-pairs-v0 is a development set (OQ-083 (b)).
+# Before the run (plans/runs/suite/run-suite.sh does each on the build host): uv run tools/fetch_bench.py
+# assets/bench/tt-pairs-v0-d2m.yaml; uv run tools/build_ttkernel_reference.py build --tree <tt-mlir src> --dialect
+# d2m; uv run tools/build_ttkernel_rag.py build --dialect d2m --tree <tt-mlir src>.
+extends: ../../../base.yaml  # projects/base.yaml: runs root, sandbox, and report choices
+faithful: false  # a compile-only arm of this project; nothing reproduces an upstream run
+model:
+  backend: openai_compat  # the OpenAI-compatible server the sweep10 chain binds
+  id: furiosa-ai/gpt-oss-120b
+  timeout_s: 3600
+llm:
+  sampling:
+    temperature: 0.2  # the arm's temperature (sweep12's arms: 0.2, 0.5, 0.7, 1.0)
+    top_p: 1.0  # gpt-oss's README recommends 1.0 (sweep12)
+    reasoning_effort: high
+    max_tokens: 65536  # the reasoning counted in it (sweep12)
+extract:
+  unfenced_file_lines: true  # as sweep10's mlir recipes (sweep7's chain)
+bench:
+  suite: tt-pairs-v0-d2m  # tt-pairs-v0's items unchanged, with a d2m language whose reference is tt
+  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  items: [eltwise_binary, eltwise_sfpu, loopback, matmul_multi_core]  # the items the spike lowered in D2M
+directions: [{source: cpp, target: d2m}]
+prompts: tt-d2m-v0  # tt-mlir-v1's style for D2M: what a D2M module is at the pin; the item's declared shapes
+context: [d2m-ref-5f396fd6]  # the exact API reference of the D2M dialect at the pin
+retrieval: {index: tt-mlir-d2m-tests, k: 4, max_chars: 8000, prompts: [generate, correct]}
+source_mlir: {toolchain: cgeist-affine, max_chars: 24000}  # mlir1's affine lowering of the compute unit
+toolchain:
+  d2m: d2m-ttmetal-compile  # the pinned ttmlir-opt full pipeline, then ttmlir-translate; compile only
+  tt: ttmetal-host  # the tt reference's toolchain (reference: tt); bound for the runner's check, never used here
+stages: [verbatim_context, generate, compile_loop]  # COMPILE ONLY: no baseline, no run_loop, no oracle
+executor:
+  kind: none  # compile only: nothing generated runs, and no flatbuffer is ever run
+trials: {n: 2}
+loop: {max_corrections: 8, restart_after: 3, restart_on_repeat: true}

@@ -452,12 +452,14 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: lassi/toolchains/, lassi/executors/, toolchains/tt-mlir.pin if P17.46 needs the runtime, tests/.
 - Host: Windows; alpha01 for the build. Depends: P17.46.
 - Prepared 2026-10-29: toolchains/tt-mlir-runtime.pin, tt-mlir-runtime.sh, tt-mlir-runtime-requirements.txt, tt-mlir-runtime-fetched-sources.txt (PLACEHOLDER until the first install), tests/toolchains/test_tt_mlir_runtime_pins.py, and plans/spikes/ttmlir-runtime.md (sources, the job's command, the checks after it, and the driver's design); the build job runs on 2026-10-30 (LASSI_FREE_FLOOR_GIB 30, LASSI_STOP_GIB 345, as the spike proposes; the owner may name others).
+- 2026-10-29: the runtime built on alpha01 (rx 20261029-193649-p1748-tt-mlir-runtime-f0ad, from 3c6a69c; ttrt 0.0.2995, libTTMLIRRuntime with TT-Metal and TT-NN, about 23 minutes, 17.8 GiB), and the compile-only Toolchains ttir-ttmetal-compile and d2m-ttmetal-compile (lassi/toolchains/ttir_compile.py); left: the driver and the executor that run a flatbuffer.
 
 ### P17.49 TTIR and D2M prompt sets and recipes
 - Accept: template sets tt-ttir-v0 and tt-d2m-v0 with the P17.47 references in place of a model-written card and their retrieval; recipes cpp -> ttir and cpp -> d2m on tt-pairs-v0's development items, reported beside the ttkernel and kernels-and-host arms; tests.
 - Bible: Project Recipes (template sets), Benchmark Suites (tt-pairs-v0; a development set, OQ-083 (b)), Agent Rule 5.
 - Files: assets/prompts/tt-ttir-v0/, assets/prompts/tt-d2m-v0/, projects/lassi-demo/, tests/core/.
 - Host: Windows. Depends: P17.47, P17.48.
+- 2026-10-29: compile-only arms built: assets/bench/tt-pairs-v0-ttir.yaml and -d2m.yaml, assets/prompts/tt-ttir-v0 and tt-d2m-v0, projects/lassi-demo/sweep13/gpt-oss-120b/{ttir,d2m}-t{02,05,07,10}.yaml, the generate field input_shapes, tests; outputs are checked once P17.48's driver exists.
 
 ### P17.50 Restarts: on a repeated error, and in every recipe
 - Added on 2026-10-29 (the owner, 2026-10-29: "I like the fresh samples idea, consider a mechanism to restart every once and a while"). loop.restart_after (P17.25) already asks a fresh generation after N failed corrections in a row, but a restart resends attempt 0's prompt at the recipe's temperature (0.2), so it tends to repeat attempt 0 (inferred), and a trial can swing between two files (the window of 2026-10-26, loopback/run02: attempts 5 and 7, and 6 and 8, had byte-identical prompts).

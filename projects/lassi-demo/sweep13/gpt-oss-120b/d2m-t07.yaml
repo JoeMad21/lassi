@@ -1,0 +1,7 @@
+# sweep13, COMPILE ONLY: cpp -> d2m, the temperature arm t07: d2m-t02.yaml (its comments hold: no output is
+# checked, nothing runs, a trial passes when its D2M module compiles to a flatbuffer; exploratory) at temperature
+# 0.7, as sweep12's arms differ (task P17.52). Nothing else changes.
+extends: d2m-t02.yaml
+llm:
+  sampling:
+    temperature: 0.7

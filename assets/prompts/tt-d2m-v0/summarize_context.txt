@@ -1,0 +1,10 @@
+The reference below lists the types, attributes, and ops of the D2M MLIR dialect of tt-mlir 0.9.0.dev20260221
+(commit 5f396fd6), the dialect $target_language modules are written in, with each op's textual form.
+
+Write a reference card that a module author needs: d2m.to_layout and d2m.empty with the #ttcore.metal_layout
+attribute and the tiled device tensor type, d2m.generic with its attributes and region, d2m.block_index,
+d2m.remote_load, d2m.remote_store, d2m.yield, and the d2m.tile ops, with each op's name, its operand and
+result types in order, and a one-line example in its textual form. Keep every type spelling exactly, and
+leave out what such modules do not need. Answer with the reference card only.
+
+$context_pack

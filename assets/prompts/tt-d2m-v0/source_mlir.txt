@@ -1,0 +1,8 @@
+The same computation, as the compute-only C translation unit $path (its function $function, with no I/O),
+lowered by Polygeist's cgeist at the pinned Polygeist (77c04bb2) to $level MLIR, follows. It shows the loops,
+the memory accesses, and the arithmetic that the D2M module must express on the device; the bf16
+conversions of the program's input and output files stay in the program above. Do not copy its loops or
+memrefs into the module: write the computation in D2M as the task says.
+
+```mlir
+$mlir```

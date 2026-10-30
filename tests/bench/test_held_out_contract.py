@@ -97,18 +97,19 @@ DIGESTS = {
     ("bale-v0-tt", "triangle", "edge_u"): "1721acaef35aea61c6bc61a9c9dd262bb9d758f0236a370ded39c18125efd37a",
     ("bale-v0-tt", "triangle", "edge_v"): "cea30188682358b2f0bdd965c7162bad2a60950651d985b03e2068ab13e0f03e",
 }
-# tt-pairs-v0-ttkernel (task P17.36) and tt-pairs-v0-kh (task P17.39) hold tt-pairs-v0's items with the same inputs
-# and seeds, so their files are tt-pairs-v0's, byte for byte (tests/bench/test_ttkernel_suite.py and
-# tests/bench/test_kh_suite.py check that the entries are equal).
+# tt-pairs-v0-ttkernel (task P17.36), tt-pairs-v0-kh (task P17.39), and tt-pairs-v0-ttir and tt-pairs-v0-d2m (task
+# P17.48) hold tt-pairs-v0's items with the same inputs and seeds, so their files are tt-pairs-v0's, byte for byte
+# (tests/bench/test_ttkernel_suite.py, tests/bench/test_kh_suite.py, and tests/bench/test_ttir_d2m_suites.py check
+# that the entries are equal).
 DIGESTS.update({
     (sibling, item, name): digest
-    for sibling in ("tt-pairs-v0-ttkernel", "tt-pairs-v0-kh")
+    for sibling in ("tt-pairs-v0-ttkernel", "tt-pairs-v0-kh", "tt-pairs-v0-ttir", "tt-pairs-v0-d2m")
     for (suite, item, name), digest in list(DIGESTS.items())
     if suite == "tt-pairs-v0"
 })
 RECORDED_SUITES = (
     "adv-seeded-v0", "bale-v0", "bale-v0-tt", "lassi-hecbench-10", "tt-pairs-v0", "tt-pairs-v0-ttkernel",
-    "tt-pairs-v0-kh",
+    "tt-pairs-v0-kh", "tt-pairs-v0-ttir", "tt-pairs-v0-d2m",
 )
 
 

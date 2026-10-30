@@ -1,0 +1,49 @@
+Translate the $source_language program below into one TTIR MLIR module ($target_language) for the Tenstorrent
+compiler tt-mlir 0.9.0.dev20260221 (commit 5f396fd6) and tt-metal commit 5280a9cf. You write the computation at
+tensor level; the compiler writes the device kernels.
+
+What a $target_language module is:
+- TTIR is tt-mlir's tensor-level dialect. The file is one MLIR module holding one func.func. Its arguments are
+  the program's input arrays as ranked tensors, in the order the program reads them, and its results are the
+  program's output arrays as ranked tensors, in the order it writes them. Its body computes every result from
+  the arguments with ttir ops on whole tensors and ends with return.
+- Use only the dialects func and ttir, with ttcore types and attributes where an op needs them. No loops, no
+  scf, no memref, no linalg, no arith on scalars, and no d2m or ttkernel op: the compiler writes those levels.
+- Write each op exactly in the form the reference gives, for example
+  %r = "ttir.maximum"(%x, %y) : (tensor<64x128xbf16>, tensor<64x128xbf16>) -> tensor<64x128xbf16>
+  that is, the operands, then the operand types in order, then the result type. An op with attributes takes
+  them as the reference says.
+- The compiler lowers the module with ttmlir-opt --ttir-to-ttmetal-pipeline: it picks the grid of Tensix
+  cores, tiles each tensor into 32x32 tiles, places the data in each core's L1, and writes the data-movement
+  and compute kernels, through its D2M and TTKernel dialects to TT-Metal; ttmlir-translate
+  --ttmetal-to-flatbuffer then writes the device program. Every output value must be computed on the device by
+  the module's ops: a module that only returns an input or a constant lowers to no device program and fails.
+- The TTIR ops this pipeline lowers at the pin: elementwise abs, add, bitwise_and, bitwise_not, bitwise_or,
+  bitwise_xor, ceil, clamp_scalar, clamp_tensor, cos, div, erf, erfc, exp, floor, gelu, hardsigmoid, log,
+  logical_and, logical_not, logical_or, logical_xor, multiply, maximum, minimum, neg, pow, reciprocal, relu,
+  rsqrt, sigmoid, sign, silu, sin, sqrt, subtract, tan, tanh, where, the comparisons eq, ne, gt, ge, lt, and
+  le, and typecast; the reductions max and sum; rearrange, reshape,
+  slice_static, permute (and transpose), concatenate_heads; empty, full, arange, and matmul. Any other TTIR op
+  is refused by the lowering. Check each one's exact name and form in the reference.
+- Element types on the device: f32, f16, bf16, si32, u32, u16, and u8. bf16 is the 16-bit brain float of the
+  program's lassi_io files (the upper half of an f32). An output whose element type differs from its inputs'
+  is converted on the device by an op of the module.
+- Shapes are static. The program reads its arrays at run time, so their declared shapes are listed below.
+  Write each input as a tensor of exactly that element type and shape. A one-dimensional array may also be
+  written as a two-dimensional tensor with the same elements in row-major order, each dimension a multiple of
+  32. Each output tensor has the shape and element type the program writes for it (its comments and its write
+  calls say them).
+
+The program's arrays, in order (name, element type, shape; no value is shown):
+$input_shapes
+The $source_language program, which computes the outputs the module must compute, follows, each file in a
+fenced code block whose first line is // FILE: <path>
+
+$source_files
+$source_mlir
+Write the module as this file: $target_files.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

@@ -734,9 +734,11 @@ RUN_LOOP_KEYS = (
     RUN_REPORT_STDERR,
 )
 
-# The fields each prompt template gets; a template may use any of them and no other.
+# The fields each prompt template gets; a template may use any of them and no other. generate's input_shapes (task
+# P17.48) is the item's declared input arrays and output names (input_shapes below).
 GENERATE_FIELDS = (
-    "source_language", "target_language", "source_files", "target_files", "kernel_files", "host_files", "source_mlir"
+    "source_language", "target_language", "source_files", "target_files", "kernel_files", "host_files", "source_mlir",
+    "input_shapes",
 )
 CORRECT_FIELDS = ("target_language", "files", "diagnostics", "target_files", "kernel_files", "host_files")
 # The template of the generation prompt's source_mlir field (task P17.41; the recipe's source_mlir section), with its
@@ -1448,6 +1450,28 @@ def host_files(context: RunContext) -> str:
         if PurePosixPath(path).suffix in HOST_SUFFIXES and KERNEL_DIR not in PurePosixPath(path).parts[:-1]
     }
     return render_file_blocks(hosts) if hosts else ""
+
+
+def input_shapes(context: RunContext) -> str:
+    """Return the template field input_shapes: the item's declared input arrays and output names, or "" (P17.48).
+
+    One line per input, in the order the program reads them (the
+    manifest's held-out input entries, SuiteItem.inputs): its name,
+    element type, and shape; then one line per output name, in the order
+    the program writes them. A tensor-level target (ttir, d2m) needs static
+    shapes, which a source that reads its arrays at run time does not show.
+    No value is shown: the held-out values stay in the input files. An item
+    that declares no inputs gives "".
+    """
+    found = context.suite.item(context.item, purpose=PURPOSE)
+    if not found.inputs:
+        return ""
+    lines = [
+        f"- input {entry['name']}: {entry['dtype']}, shape [{', '.join(str(dim) for dim in entry['shape'])}]"
+        for entry in found.inputs
+    ]
+    lines += [f"- output {name}" for name in found.outputs]
+    return "\n".join(lines) + "\n"
 
 
 @dataclass(frozen=True)
@@ -2908,6 +2932,7 @@ class GenerateStage:
                 "kernel_files": kernel_files(context),
                 "host_files": host_files(context),
                 "source_mlir": mlir,
+                "input_shapes": input_shapes(context),
             }
             return None, render(context.prompts, "generate", fields)
         direction = context.direction

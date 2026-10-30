@@ -299,6 +299,18 @@ if grep -rqs 'suite: bale-v0-tt' "$out/recipes"; then
     tail -3 "$out/fetch-bale-v0-tt.log"
   fi
 fi
+# The compile-only cpp -> ttir and cpp -> d2m suites (task P17.48; sweep13) the same way: their ttir and d2m
+# languages name the item's tt program as their reference, whose upstream kernels the runner reads before any
+# directory, so each named suite is fetched like tt-pairs-v0.
+for suite in tt-pairs-v0-ttir tt-pairs-v0-d2m; do
+  if grep -rqsE "suite: $suite\$" "$out/recipes"; then
+    if uv run tools/fetch_bench.py "assets/bench/$suite.yaml" > "$out/fetch-$suite.log" 2>&1; then
+      echo "$(ts) $suite sources fetched and checked"
+    else
+      echo "$(ts) $suite sources did not fetch; the $suite recipes will be refused"; tail -3 "$out/fetch-$suite.log"
+    fi
+  fi
+done
 
 # 5. The sweep: run.sh once per model and recipe directory, one model served at a time.
 calls=()

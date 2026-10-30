@@ -1,0 +1,65 @@
+# sweep13, COMPILE ONLY: cpp -> ttir on tt-pairs-v0-ttir, the temperature arm t02 (tasks P17.48 and P17.49; the
+# owner's directions of 2026-10-29: test TTIR and D2M tonight, with "RAG, API references, different temperatures, max
+# reasoning, all the bells and whistles"). No output is checked and nothing runs: a trial passes when the model's
+# TTIR module compiles to a TT-Metal flatbuffer, and the flatbuffer is compile evidence only. Exploratory.
+# The model writes the item as one TTIR module (tensor-level ops); ttir-ttmetal-compile runs the pinned tt-mlir
+# (0.9.0.dev20260221, commit 5f396fd6) in the compile sandbox: ttmlir-opt verifies the module, its
+# --ttir-to-ttmetal-pipeline (enable-multicast-inference=false) lowers it through D2M and TTKernel to TT-Metal, and
+# ttmlir-translate --ttmetal-to-flatbuffer writes the flatbuffer (plans/spikes/ttir-d2m.md, task P17.46). The pinned
+# install has no runtime and no ttsim system descriptor exists yet, so the compiler targets its mock Wormhole
+# descriptor and no executor runs anything (executor kind none). Compile errors, assertion aborts (exit status 134,
+# with the assertion text), a module that lowers to no device program, and a module written at the wrong level feed
+# the correction loop.
+# Items: the three tt-pairs-v0 items TTIR can express (spike, section 2): eltwise_binary, eltwise_sfpu, and
+# matmul_multi_core. Left out: loopback, since TTIR has no copy op and returning the input lowers to no device
+# program; and matmul_single_core, a single-core program by definition, whose 640^3 operands fit no single core's L1
+# under any allocator option the spike tried, so a TTIR module could only lower on a grid of the compiler's choosing,
+# which is matmul_multi_core's task again.
+# Every feature of sweep10's and sweep12's mlir-rag recipes that applies without a run: verbatim_context puts the
+# TTIR API reference (ttir-ref-5f396fd6, rendered by tools/build_ttkernel_reference.py --dialect ttir from the pinned
+# sources, task P17.47) in the knowledge block before generate.txt and every correct.txt; retrieval over tt-mlir's
+# own TTIR lit tests at the pin (tt-mlir-ttir-tests, task P17.47) at generate and correct; source_mlir shows the
+# item's compute unit lowered by the pinned cgeist to affine MLIR (mlir1's ttkernel-affine); generate also shows the
+# item's declared input arrays ($input_shapes, since TTIR shapes are static). Left out: dialect_lookup (no TTIR
+# definitions tree exists; ttkernel-defs-5f396fd6 is the ttkernel dialect's), the worked examples (no TTIR examples
+# pack exists), and the run-time corrections (correct_on_mismatch, correct_on_sim_gap, coord_gap_as_error: nothing
+# runs). Stages: no baseline, run_loop, or oracle. The suite's ttir reference is the item's tt program (reference:
+# tt, as tt-pairs-v0-ttkernel's), never shown to the model; the runner checks before any directory that its files
+# are fetched and toolchain.tt is bound, and nothing builds it here.
+# gpt-oss-120b as sweep12 sets it (model and timeout of sweep10, reasoning effort high, a budget of 65536 tokens, top_p
+# 1.0, 2 samples, a correction cap of 8, restart_after 3, restart_on_repeat true), at temperature 0.2; ttir-t05,
+# ttir-t07, and ttir-t10 differ from this arm in the temperature alone. tt-pairs-v0 is a development set (OQ-083 (b)).
+# Before the run (plans/runs/suite/run-suite.sh does each on the build host): uv run tools/fetch_bench.py
+# assets/bench/tt-pairs-v0-ttir.yaml; uv run tools/build_ttkernel_reference.py build --tree <tt-mlir src> --dialect
+# ttir; uv run tools/build_ttkernel_rag.py build --dialect ttir --tree <tt-mlir src>.
+extends: ../../../base.yaml  # projects/base.yaml: runs root, sandbox, and report choices
+faithful: false  # a compile-only arm of this project; nothing reproduces an upstream run
+model:
+  backend: openai_compat  # the OpenAI-compatible server the sweep10 chain binds
+  id: furiosa-ai/gpt-oss-120b
+  timeout_s: 3600
+llm:
+  sampling:
+    temperature: 0.2  # the arm's temperature (sweep12's arms: 0.2, 0.5, 0.7, 1.0)
+    top_p: 1.0  # gpt-oss's README recommends 1.0 (sweep12)
+    reasoning_effort: high
+    max_tokens: 65536  # the reasoning counted in it (sweep12)
+extract:
+  unfenced_file_lines: true  # as sweep10's mlir recipes (sweep7's chain)
+bench:
+  suite: tt-pairs-v0-ttir  # tt-pairs-v0's items unchanged, with a ttir language whose reference is tt
+  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  items: [eltwise_binary, eltwise_sfpu, matmul_multi_core]  # the items TTIR can express (see above)
+directions: [{source: cpp, target: ttir}]
+prompts: tt-ttir-v0  # tt-mlir-v1's style for TTIR: what a TTIR module is at the pin; the item's declared shapes
+context: [ttir-ref-5f396fd6]  # the exact API reference of the TTIR dialect at the pin
+retrieval: {index: tt-mlir-ttir-tests, k: 4, max_chars: 8000, prompts: [generate, correct]}
+source_mlir: {toolchain: cgeist-affine, max_chars: 24000}  # mlir1's affine lowering of the compute unit
+toolchain:
+  ttir: ttir-ttmetal-compile  # the pinned ttmlir-opt full pipeline, then ttmlir-translate; compile only
+  tt: ttmetal-host  # the tt reference's toolchain (reference: tt); bound for the runner's check, never used here
+stages: [verbatim_context, generate, compile_loop]  # COMPILE ONLY: no baseline, no run_loop, no oracle
+executor:
+  kind: none  # compile only: nothing generated runs, and no flatbuffer is ever run
+trials: {n: 2}
+loop: {max_corrections: 8, restart_after: 3, restart_on_repeat: true}
