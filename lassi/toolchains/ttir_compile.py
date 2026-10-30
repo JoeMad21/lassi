@@ -92,9 +92,12 @@ WORK_DIR = "_ttmetal"
 VERIFIED_SUFFIX = ".verified.mlir"
 TTMETAL_SUFFIX = ".ttmetal.mlir"
 FLATBUFFER_SUFFIX = ".ttm"
-# A flatbuffer's file identifier sits at bytes 4 to 8; tt-mlir's TT-Metal binary schema names TTM0 (spike, section 1).
+# A flatbuffer's file identifier sits at bytes 4 to 8, or at bytes 8 to 12 in a size-prefixed one, whose first four
+# bytes give the size of the rest; the pinned ttmlir-translate writes the size-prefixed form (sweep13's first trials,
+# 2026-10-29). tt-mlir's TT-Metal binary schema names TTM0 (spike, section 1).
 FILE_IDENTIFIER = b"TTM0"
 IDENTIFIER_SPAN = slice(4, 8)
+PREFIXED_IDENTIFIER_SPAN = slice(8, 12)
 # The op that enqueues one device program in the lowered TTMetal module (TTMetalOps.td:23 at the pin).
 PROGRAM_OP = re.compile(r"\bttmetal\.enqueue_program\b")
 # The exit statuses of a death by SIGABRT: the sandbox's shell form (128 + 6) and Popen's (-6).
@@ -126,6 +129,14 @@ def translate_command(translate: str, ttmetal: str, out: str) -> list[str]:
 def work_path(module: str, suffix: str) -> str:
     """Return the path under WORK_DIR of one of `module`'s intermediate files, its suffix replaced by `suffix`."""
     return str(PurePosixPath(WORK_DIR) / PurePosixPath(module).with_suffix("")) + suffix
+
+
+def has_file_identifier(data: bytes) -> bool:
+    """Return True when `data` is a flatbuffer with identifier TTM0, plain or size-prefixed (its size then matches)."""
+    if data[IDENTIFIER_SPAN] == FILE_IDENTIFIER:
+        return True
+    size = int.from_bytes(data[:4], "little") if len(data) >= 4 else -1
+    return data[PREFIXED_IDENTIFIER_SPAN] == FILE_IDENTIFIER and size == len(data) - 4
 
 
 def assertion_text(stderr: str) -> str | None:
@@ -287,10 +298,10 @@ class TtMlirCompile(CompilerToolchain):
             found.append(Diagnostic(stage=LOWER_STAGE, severity="error", code="no-device-program", file=module,
                                     message=message))
         try:
-            head = (workdir / work_path(module, FLATBUFFER_SUFFIX)).read_bytes()[:8]
+            data = (workdir / work_path(module, FLATBUFFER_SUFFIX)).read_bytes()
         except OSError:
-            head = b""
-        if head[IDENTIFIER_SPAN] != FILE_IDENTIFIER:
+            data = b""
+        if not has_file_identifier(data):
             message = (
                 f"ttmlir-translate exited with status 0 but wrote no TT-Metal flatbuffer for {module} (no file "
                 f"identifier {FILE_IDENTIFIER.decode('ascii')})"

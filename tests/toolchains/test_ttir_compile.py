@@ -231,6 +231,25 @@ def test_a_module_with_no_device_program_fails(tmp_path: Path) -> None:
     assert found.code == "no-device-program" and "ttmetal.enqueue_program" in found.message
 
 
+def size_prefixed(body: bytes) -> bytes:
+    """A size-prefixed flatbuffer as the pinned ttmlir-translate writes it: the size, the root offset, then TTM0."""
+    data = b"\x20\x00\x00\x00TTM0" + body
+    return len(data).to_bytes(4, "little") + data
+
+
+def test_a_size_prefixed_flatbuffer_as_the_pin_writes_it_passes(tmp_path: Path) -> None:
+    result = build(tmp_path, FakeTools(flatbuffer=size_prefixed(bytes(64))))
+    assert errors(result) == [] and result.artifact is not None
+
+
+def test_ttm0_at_byte_8_without_a_matching_size_prefix_fails(tmp_path: Path) -> None:
+    data = size_prefixed(bytes(64))
+    result = build(tmp_path, FakeTools(flatbuffer=b"\x01\x00\x00\x00" + data[4:]))
+    assert result.artifact is None
+    (found,) = errors(result)
+    assert found.code == "no-artifact" and "TTM0" in found.message
+
+
 def test_a_file_that_is_no_flatbuffer_fails(tmp_path: Path) -> None:
     result = build(tmp_path, FakeTools(flatbuffer=b"not a flatbuffer"))
     assert result.artifact is None

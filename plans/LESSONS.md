@@ -32,6 +32,8 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 
 - Only MLIR lowering and rewrites; no source to source until the owner says so (owner, 2026-10-29, about 22:35 EDT: "Kill the BALE source to source and just do ttkernel. Try and move the TTIR/D2M tests to tonight. Get working on lowering the BALE applications to MLIR." and "To be clear, we are no longer interested in source to source for the forseeable future. Go only through MLIR lowering and rewrites in the future. I will remind you when to pursue source to source again."). Recipes whose model writes C++ (the tt, ttkh, cpp, and omp targets: sweep8, sweep9, sweep10's bale-*, sweep11, sweep12's kh-allsk and bale-*) are kept but not launched; the window of 2026-10-29's bale-* recipes were stopped at about 22:31 EDT.
 
+- Watch every new sweep's first attempts within minutes of launch, and stop, fix, and relaunch when a harness check fails them (owner, 2026-10-29, about 23:50 EDT: "We can't spend hours on broken checks, make sure that you keep monitoring sweep13 to fix and relaunch when something like this happens."). The same diagnostic on every attempt of every recipe, while each tool exits 0, is a harness bug, not the model's.
+
 ## Audits and the bible
 
 - Most audit FAILs in P2 and P4 were bible or docstring text that claimed more than the code does (P2.9 refusal paths, P4.7 preset strictness and error format, P4.1 CI coverage). Write the bible text after the code, from the code, and check each claim against a line of code or a spike line before sending the audit.
@@ -77,6 +79,9 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - WSL's newer `mount` breaks the sandbox inside a user namespace (exit 16 on `mount --move`), so a WSL dry run of a batch must wrap the sandbox; alpha01's older mount works (P4). The same may affect any WSL test run that reaches the sandbox (P5.3, 2026-10-10).
 
 ## alpha01
+
+- A check that reads a tool's output format must be tested on a real output from the pinned tool, not only on a fixture written from the schema. sweep13's first launch (2026-10-29, job 20261029-202443-window2-173c) scored every attempt that reached the translation as failed for about 20 minutes: the pinned ttmlir-translate writes a size-prefixed flatbuffer, with TTM0 at bytes 8 to 12, and the toolchain looked at bytes 4 to 8 only. The job was stopped and relaunched with the fix.
+- `rx job kill` marks a job killed but left its process tree running (2026-10-29: run.sh, the model server, and eight recipe runs survived it, holding npu0 to npu3). To stop a sweep, send TERM to the recipes' `timeout` processes (children of run.sh); run.sh then stops the server and exits through its EXIT trap. Confirm the cards read 0.00 GiB before relaunching.
 
 - `rx job kill` ends only the job runner, not the job's command, which the runner starts in a session of its own
   (OQ-082): on 2026-10-25 the killed window job's run-all.sh kept running with its server on npu0 to npu3 and 18
