@@ -1320,3 +1320,16 @@ Options:
 Recommendation: (a).
 Answer: The owner, in the working session of 2026-10-29: "Additionally, consider a RAG and API reference for MLIR." Then, asked: "API ref + RAG, rerun (Recommended)".
 Applied: 2026-10-29. Task P17.44: tools/build_ttkernel_reference.py and the pack ttkernel-ref-5f396fd6, the stage verbatim_context, tools/build_ttkernel_rag.py and the index tt-mlir-tests, the template set tt-mlir-v1, and the sweep10 recipes mlir-ref and mlir-rag (bible Project Recipes, Notes; Decision Log 2026-10-29).
+
+## OQ-110 The Window Of 2026-10-31: Training On A Card, Or Evaluation Only
+State: CLOSED
+Kind: decision
+Blocks: P17.38 (the training run); none of the window's evaluation sets
+Evidence: plans/runs/2026-10-31-window-plan.md; plans/p17-portable.md, P17.38 (training the small models on a Wormhole card through the tt-xla wheel); the owner, 2026-10-26: "Forget the training for now, we'll do a later window"
+Question: Should the window of 2026-10-31 (14:00 to 21:00) include P17.38's training run on a Wormhole card, or evaluation only?
+Options:
+- (a) Evaluation only: completion of 2026-10-29's sets, bale-v0-tt's feature combinations, the ttkernel path, a second model. No card is touched.
+- (b) Evaluation, plus P17.38's training run on one Wormhole card, which the owner starts (Agent Rule 9: silicon runs are runs a human starts; the training program is the pinned tt-xla wheel's, not model-generated code). It shares the window's hours with the RNGD job.
+Recommendation: (a), unless the card fix the owner mentioned on 2026-10-26 has landed and the owner wants training this window; then (b), with the training run set up and checked before 14:00.
+Answer: (a). The owner, in the working session of 2026-10-29: "Evaluation only (Recommended)".
+Applied: 2026-10-29. plans/runs/2026-10-31-window-plan.md drops training from the window; P17.38's training run waits for a later window.
