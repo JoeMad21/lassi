@@ -1,0 +1,14 @@
+# sweep16, COMPILE ONLY: cpp -> ttir on tt-pairs-v0-ttir with the fewest features that reach the correction loop and
+# still produce compiling code, replicate r1 of four (task P17.61; the owner, 2026-10-30: "initiate a full sweep with
+# TTIR lowering. Only keep the most successful features from our previous runs.", "I want the least amount of features
+# that get to the correction loop and produce some useful code.", and "No more temperature checks, just go with the best
+# temperature from the last round of testing."). No output is checked and nothing runs: a trial passes when the model's
+# TTIR module compiles to a TT-Metal flatbuffer, compile evidence only. Exploratory.
+# sweep15's rung l1 unchanged: the bare loop with the TTIR API reference alone, at temperature 1.0. In the ladder's
+# first pass (pass sweep-20261029-2110, exploratory) the bare loop (l0) compiled no trial, l1 compiled 5 of 6 with 1 on
+# the first attempt, so its trials go through the correction loop, and the rungs above it compiled most trials on the
+# first attempt. In sweep13's TTIR arms (pass sweep-20261029-2049, exploratory) temperatures 0.2, 0.5, and 1.0 each
+# compiled 6 of 6 on the first attempt and 0.7 needed more attempts once; 1.0 is the tied temperature the ladder ran l1
+# at. The four replicates are identical but for their project names; run.sh runs a directory's recipes side by side, so
+# four trials share the server at once.
+extends: ../../sweep15/gpt-oss-120b/ttir-l1.yaml
