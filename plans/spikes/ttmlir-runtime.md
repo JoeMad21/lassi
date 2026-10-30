@@ -278,6 +278,16 @@ enable-multicast-inference=false"` and `ttmlir-translate --ttmetal-to-flatbuffer
 > PROJECTED: about 20 to 29 GiB and 40 to 100 minutes at 32 jobs. plans/spikes/ttmlir-runtime.md records the sources,
 > the probe (rx 20261029-175313-exec-9dd3), and the design |
 
+## Result of the first install (2026-10-29)
+
+The job ran on alpha01 from clean commit 3c6a69c as a regular rx job, not --big, because the night's suite job held the
+gate's one big-job slot (rx 20261029-193649-p1748-tt-mlir-runtime-f0ad, rc 0; results/p17-48-runtime-build):
+21 minutes 35 seconds, an install of about 17.8 GiB (du), scratch free 78.3 GB before and 59.1 GB after, ttrt
+0.0.2995 installed, and the job's own checks (ldd, the tools' versions, the pinned sources unchanged, the compiler
+install unchanged, the root filesystem) printed as passing in its log (output-tail.txt there). These replace the
+PROJECTED space, time, and ttrt version above [MEASURED, alpha01]. The install's fetched-sources list (26 lines) is
+copied into toolchains/tt-mlir-runtime-fetched-sources.txt.
+
 ## Open questions
 
 - The free-space floor, LASSI_FREE_FLOOR_GIB=30 on the proposed command line, is a choice for the owner: the disk is

@@ -1,0 +1,29 @@
+Lines 16662, 16673, and 16674 to 16697 (the end) of the job's output.log, 16697 lines in all, pulled with
+rx pull 20261029-193649-p1748-tt-mlir-runtime-f0ad (copied verbatim; the full log stays in the local pull folder).
+
+16662:   Created wheel for ttrt: filename=ttrt-0.0.2995-py3-none-any.whl size=195043108 sha256=07bb2f597911bfafb2d4e8a9d8ac077b059696ea98debec7c60e78a2435cffd1
+16673: Successfully installed nanobind-2.10.2 ttrt-0.0.2995
+tt-mlir-runtime: /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/build/tt-mlir/bin/ttmlir-opt --version prints 'LLVM version 22.0.0git'
+tt-mlir-runtime: /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/build/tt-mlir/bin/ttmlir-opt was compiled by clang version 17.0.6 and linked by LLD 17.0.6
+tt-mlir-runtime: /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/build/tt-mlir/bin/ttmlir-translate --version prints 'LLVM version 22.0.0git'
+tt-mlir-runtime: /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/build/tt-mlir/bin/ttmlir-translate was compiled by clang version 17.0.6 and linked by LLD 17.0.6
+tt-mlir-runtime: ldd resolves every library of /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/build/tt-mlir/runtime/lib/libTTMLIRRuntime.so
+tt-mlir-runtime: ldd resolves every library of /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/build/tt-mlir/runtime/python/_ttmlir_runtime.cpython-310-x86_64-linux-gnu.so
+tt-mlir-runtime: /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/build/tt-mlir/runtime/lib/libTTMLIRRuntime.so was compiled by clang version 17.0.6 and linked by LLD 17.0.6
+tt-mlir-runtime: tt-metal's build holds libtt_metal.so libdevice.so libtt_stl.so _ttnncpp.so _ttnn.so
+tt-mlir-runtime: ttmlir.ir from /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/build/tt-mlir/python_packages/ttmlir/ir.py
+tt-mlir-runtime: ldd resolves every library of /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/toolchain/venv/lib/python3.10/site-packages/ttrt/runtime/_ttmlir_runtime.cpython-310-x86_64-linux-gnu.so
+tt-mlir-runtime: ttrt 0.0.2995 is installed in the venv
+tt-mlir-runtime: /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/src/tt-mlir is at 5f396fd6ef85780bf1b6b85bef9c7d2f84a85f3c, unchanged
+tt-mlir-runtime: /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/src/tt-mlir describes itself as v0.0 (a637748e5521f78546027114fabf2023be63901a)
+tt-mlir-runtime: /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/src/flatbuffers is at fb9afbafc7dfe226b9db54d4923bfb8839635274, unchanged
+tt-mlir-runtime: /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/src/tt-mlir/env/patches/affine-allow-symbol-vars.patch has the pinned sha256 and git blob
+tt-mlir-runtime: /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime/src/llvm-project is at 4efe170d858eb54432f520abb4e7f0086236748b with env/patches/affine-allow-symbol-vars.patch applied and nothing else changed
+tt-mlir-runtime: tt-metal and its submodules are at their pinned commits, unchanged
+tt-mlir-runtime: nothing under the compiler install /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221 changed during this run
+tt-mlir-runtime: root-filesystem check passed: nothing changed under /tmp /var/tmp /opt since the start (find rc=1, 101 unreadable paths skipped)
+tt-mlir-runtime: installed tt-mlir@0.9.0.dev20260221-runtime at 5f396fd6ef85780bf1b6b85bef9c7d2f84a85f3c in /mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime
+18643512	/mnt/nvme10/joseph_ufl/toolchains/tt-mlir@0.9.0.dev20260221-runtime
+290002864	/mnt/nvme10/joseph_ufl
+Filesystem      1024-blocks       Used Available Capacity Mounted on
+/dev/nvme23n1p1  3690724200 3595451440  57749008      99% /mnt/nvme10
