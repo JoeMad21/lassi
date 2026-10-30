@@ -1,0 +1,84 @@
+Translate the program below from $source_language to $target_language.
+
+The language ids mean:
+- cpp: a serial C++17 program for the host CPU, built by g++ 12 with -O3 -fopenmp. It runs on one thread and
+  holds no OpenMP construct.
+- omp: a C++17 program for the host CPU that runs its main computation in parallel with OpenMP, built by
+  g++ 12 with -O3 -fopenmp; its outputs equal those of the same computation run serially.
+- ttkh: a whole tt-metal program for tt-metal commit 5280a9cf: a host program in C++20, built by
+  clang++-20, and the device kernel it launches, which you write too. The host program opens the device,
+  creates the buffers, the program, the circular buffers, and the kernel, moves the inputs to the device,
+  runs the program, reads the results back, closes the device, and writes the outputs. The kernel runs on
+  the device and computes every output value; the host program never does.
+
+Every kind of program takes the same arguments: the input files, then the output files, in the order the
+source program takes them. Each reads inputs and writes outputs only through the harness header:
+  #include "lassi_io.h"
+  lassi_io_array x = {};  lassi_io_read(path, &x)  ...  lassi_io_free(&x);
+  lassi_io_write(path, name, dtype, rank, dims, data)
+lassi_io_read and lassi_io_write return 0 on success. Each output must keep the array name, dtype code
+(LASSI_IO_I64 here), and shape the source program writes. The harness provides lassi_io.h; never return it.
+lassi_io_free zeroes the array it frees, so write each output before freeing an input whose dims it uses.
+The outputs are compared exactly with the source program's, so keep its algorithm and its order wherever
+the order decides an output (ties, rounds, the order in which items are taken), not only its result for
+some inputs. An omp source's outputs do not depend on its threads: translate the computation, not the
+threading.
+
+The host program uses tt-metal calls such as these, after the includes <tt-metalium/host_api.hpp>,
+<tt-metalium/distributed.hpp>, and <tt-metalium/tensor_accessor_args.hpp> and using namespace tt::tt_metal;
+- distributed::MeshDevice::create_unit_mesh(0), then device->mesh_command_queue();
+- distributed::MeshBuffer::create(ReplicatedBufferConfig{.size}, DeviceLocalBufferConfig{.page_size,
+  .buffer_type}, device.get()), both configs in distributed::, with BufferType::DRAM;
+- distributed::EnqueueWriteMeshBuffer(queue, buffer, host_vector, false), with a std::vector<uint32_t>
+  that holds the data's bytes (copy int64 values in and out with std::memcpy) and is exactly the
+  buffer's size;
+- CreateProgram(); CircularBufferConfig(total_bytes, {{tt::CBIndex::c_0, tt::DataFormat::UInt32}})
+  .set_page_size(tt::CBIndex::c_0, page_bytes) and CreateCircularBuffer(program, core, config);
+- TensorAccessorArgs(*buffer).append_to(compile_args);
+- CreateKernel(program, "<kernel path>", core, DataMovementConfig{.processor =
+  DataMovementProcessor::RISCV_0, .noc = NOC::RISCV_0_default, .compile_args = compile_args});
+  SetRuntimeArgs(program, kernel, core, args), whose args are uint32_t values: buffer addresses
+  (buffer->address()), counts, and any 64-bit value split into its low and high halves; a single-core
+  program uses CoreCoord core = {0, 0};
+- distributed::MeshWorkload workload; workload.add_program(distributed::MeshCoordinateRange(device->shape()),
+  std::move(program)); distributed::EnqueueMeshWorkload(queue, workload, false); distributed::Finish(queue);
+- distributed::EnqueueReadMeshBuffer(queue, host_vector, buffer, true); device->close().
+A DRAM buffer is moved in pages: give each buffer a page size that divides its size, such as 1024 bytes
+(128 int64 values), and pad its host vector with zeros to a whole number of pages; after reading a result
+back, write only the elements the output holds.
+
+The kernel. This program's work is integer work on arrays (indexing, counting, sorting, scanning, and
+graph steps), which needs no tile math: one data movement kernel on one core does it as ordinary C++ on
+int64_t values in the core's L1 memory, which holds 1499136 bytes, part of them reserved by tt-metal: enough
+for every array here at once.
+The kernel is a C++ file under a directory named kernels. The host program never compiles it: the harness
+writes it at its path, and tt-metal compiles it for the device when the program first launches it, so
+CreateKernel names it by exactly that path. Its entry point is void kernel_main(), and it includes
+"api/dataflow/dataflow_api.h" (the older path without api/ does not exist at this commit). It reads its
+runtime args with get_arg_val<uint32_t>(i), in the order SetRuntimeArgs passes them, and its compile args
+with get_compile_time_arg_val(i). A buffer's accessor is TensorAccessor(TensorAccessorArgs<offset>(),
+address, page_size), where offset is the compile arg at which the host's
+TensorAccessorArgs(*buffer).append_to(compile_args) began: TensorAccessorArgs<0>() for the first, and
+args.next_compile_time_args_offset() for the one after args.
+Its working memory: the host program creates one circular buffer on the core per array the kernel keeps
+in L1, sized for the whole array; the kernel calls cb_reserve_back(cb, pages) once and uses
+get_write_ptr(cb) as the address of a plain array (for example
+int64_t* a = reinterpret_cast<int64_t*>(get_write_ptr(cb))). No other kernel reads these buffers, so the
+kernel never pushes or pops them. It reads an input page into L1 with noc_async_read_page(page, accessor,
+l1_address) and noc_async_read_barrier(), and writes a result page with noc_async_write_page(page,
+accessor, l1_address) and noc_async_write_barrier(). The kernel has no C++ standard library containers,
+no new or malloc, and no printf: it works on arrays in its L1 buffers with plain loops.
+
+The $source_language program to translate follows, each file in a fenced code block whose first line is
+// FILE: <path>
+
+$source_files
+Write the complete $target_language program as these files: $target_files.
+The first is the host program; the file under the kernels directory is the kernel, which the host program
+launches by exactly that path in CreateKernel. Write every file, the kernel included, and keep the
+program's behavior and output unchanged.
+
+Answer with one fenced code block per file. The first line inside each block must be
+// FILE: <path>
+with the file's relative path, and the rest of the block is the whole file.
+Return every file in full, not just the lines that change.

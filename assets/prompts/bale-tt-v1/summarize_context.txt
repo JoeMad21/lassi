@@ -1,0 +1,17 @@
+The reference below documents the API that $target_language programs are written against. For ttkh it is
+the TT-Metalium API of tt-metal commit 5280a9cf: a guide, then declarations from its host headers, then
+declarations from its device kernel headers.
+
+Summarize what a $target_language program needs from this reference to:
+- open the device and its command queue, and close the device;
+- create buffers in DRAM or L1, write the inputs to them, and read the results back;
+- create a program, its circular buffers, and its kernels, with their compile and runtime arguments;
+- enqueue the program and wait for it to finish;
+- write its kernels: a reader and a writer that move tiles between DRAM and circular buffers through a
+  tensor accessor, and a compute kernel that waits for input tiles, computes them in the dst registers,
+  and packs the results into its output circular buffer, each with its headers, its entry point, and
+  the calls that read its compile and runtime arguments.
+Keep every name, signature, namespace, header, enum value, and argument order exactly as the reference
+writes it, and leave out what such a program does not need. Answer with the summary only.
+
+$context_pack

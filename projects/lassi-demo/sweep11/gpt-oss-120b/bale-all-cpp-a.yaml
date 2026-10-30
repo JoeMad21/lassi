@@ -1,0 +1,7 @@
+# sweep11 (task P17.45): bale-v0-tt, cpp -> ttkh, half a of its eight items, combination bale-all: sweep10's bale-cpp-a
+# (the worked examples alone) with both: bale-api's kernels pack and declaration lookup, and bale-rag's retrieval over
+# the tt-metal docs, as sweep9's kh-allsk sets them. The model turns bale's serial C++ program into a whole TT-Metalium
+# program (the host program and its kernel). The shared settings and their reasons are in ../../bale-tt-v1-base.yaml.
+# Exploratory; every TT program runs on ttsim, a simulator.
+extends: bale-api-cpp-a.yaml  # its pack and lookup; retrieval added here
+retrieval: {index: tt-metal-docs, k: 4, max_chars: 6000, prompts: [generate, correct]}

@@ -1,0 +1,10 @@
+# sweep11 (task P17.45): bale-v0-tt, omp -> ttkh, half a of its eight items, combination bale-rag: sweep10's bale-omp-a
+# (the worked examples alone) with retrieval over the tt-metal docs (tt-metal-docs: 4 passages, at most 6000 characters
+# in all, at generation and at each compile or run-error correction), as sweep9's kh-allsk sets it. The model turns
+# bale's OpenMP C++ program into a whole TT-Metalium program (the host program and its kernel). The shared settings and
+# their reasons are in ../../bale-tt-v1-base.yaml. Exploratory; every TT program runs on ttsim, a simulator.
+extends: ../../bale-tt-v1-base.yaml
+bench:
+  items: [histo, ig, triangle, transpose_matrix]
+directions: [{source: omp, target: ttkh}]
+retrieval: {index: tt-metal-docs, k: 4, max_chars: 6000, prompts: [generate, correct]}

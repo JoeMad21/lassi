@@ -1,0 +1,38 @@
+# sweep11 (task P17.45): bale-v0-tt, cpp -> ttkh, half b of its eight items, combination bale-api: sweep10's bale-cpp-b
+# (the worked examples alone) with the kernels pack tt-metalium-5280a9cf-kh (the guide, the host API, and the kernel API
+# at the pin) and its declaration lookup, as sweep9's kh-allsk sets them: at generation the declarations of the core
+# headers (host headers of buffers, circular buffers, and kernels; kernel headers of the reader, writer, and compute
+# calls), and at each compile correction those of the names its errors mention, with up to 3 nearest declared names for
+# a name the pack lacks. The model turns bale's serial C++ program into a whole TT-Metalium program (the host program
+# and its kernel). The shared settings and their reasons are in ../../bale-tt-v1-base.yaml. Exploratory; every TT
+# program runs on ttsim, a simulator.
+extends: ../../bale-tt-v1-base.yaml
+bench:
+  items: [permute_matrix, sssp, toposort, randperm]
+directions: [{source: cpp, target: ttkh}]
+fixes:
+  # The ttkh reference is this direction's own source, the serial program, so the baseline builds it once, as the
+  # reference, and runs no second copy to compare with it (the omp recipes keep the fix on: OpenMP against serial).
+  baseline_both: false
+context: [tt-metalium-5280a9cf-kh]  # tools/build_tt_context.py --kernels
+lookup:
+  max_chars: 32000
+  prompts: [generate, correct]
+  nearest: 3
+  core:
+  - tt-metalium/host_api.hpp
+  - tt-metalium/distributed.hpp
+  - tt-metalium/mesh_buffer.hpp
+  - tt-metalium/buffer_types.hpp
+  - tt-metalium/circular_buffer_config.hpp
+  - tt-metalium/kernel_types.hpp
+  - api/dataflow/dataflow_api.h
+  - api/compute/common.h
+  - api/compute/cb_api.h
+  - api/compute/reg_api.h
+  - api/compute/pack.h
+  - api/compute/tile_move_copy.h
+  - api/compute/compute_kernel_hw_startup.h
+  - api/compute/eltwise_binary.h
+  - api/compute/eltwise_unary/eltwise_unary.h
+  - api/compute/matmul.h

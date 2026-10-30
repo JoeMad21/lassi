@@ -1,0 +1,2 @@
+Excerpt of $path, lines $start-$end, section "$heading":
+$text

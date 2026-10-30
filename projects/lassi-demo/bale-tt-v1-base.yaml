@@ -1,0 +1,18 @@
+# The settings shared by the bale-v0-tt recipes of sweep11 (task P17.45; the owner's standing direction of
+# 2026-10-23: test every combination of the features added to base LASSI): sweep10's (bale-tt-base.yaml, where the
+# reasons are), with the template set bale-tt-v1 and the loop's restarts. sweep10 runs bale-v0-tt with the worked
+# examples alone; each sweep11 recipe adds the kernels pack with its declaration lookup, retrieval over the tt-metal
+# docs, or both, each section as sweep9's kh-allsk sets it for ttkh. The tt-kh host skeleton (kh-exsk) is left out: it
+# is written for bf16 tiles and three kernels, and bale-v0-tt's programs launch one integer data movement kernel.
+# bale-tt-v1 is bale-tt-v0's five files byte for byte, its wording unchanged (rewording it after sweep10's results
+# would be prompt tuning on unassigned items, which Agent Rule 5 refuses), plus tt-kh-v0's frames for the pack, the
+# lookup, and retrieval, which render only when a recipe turns on their feature. No recipe here lists
+# summarize_context, so no stage sends the whole pack, and summarize_context.txt and knowledge.txt, which the runner
+# renders whenever a recipe names a pack, never reach the model. Restarts (task P17.50), as sweep9's kh-allsk restarts
+# after 3: a fresh generation after 3 failed corrections in a row, or when an attempt repeats an error set of its
+# chain, both within the one correction cap of 8. Every bale-v0-tt item is unassigned (Agent Rule 5); no result here
+# is a held-out evaluation. Exploratory; every TT program runs on ttsim, a simulator, never silicon. The default
+# direction is bale-tt-base.yaml's, so this file loads as a recipe of its own; each sweep11 recipe states its own.
+extends: bale-tt-base.yaml
+prompts: bale-tt-v1  # assets/prompts/bale-tt-v1/: bale-tt-v0 plus tt-kh-v0's pack, lookup, and retrieval frames
+loop: {restart_after: 3, restart_on_repeat: true}

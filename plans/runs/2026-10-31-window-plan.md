@@ -26,6 +26,12 @@ stays until item 0 has run in this window (about 17:30 on 2026-10-31); agents ne
 
 ## Candidate Sets, In Order
 
+The owner's direction of 2026-10-29 limits every set to MLIR lowering and rewrites (plans/LESSONS.md, Owner
+directions): no recipe whose model writes C++ runs in this window. Items 0 to 4 below are read under it: item 0 runs
+only the arms' mlir-rag recipes (--only), item 2 is not run, and items 1 and 4 keep only their MLIR recipes. Added:
+the TTIR and D2M arms (compile-only until the tt-mlir runtime of OQ-111 is built and a driver exists, then with
+outputs checked), and bale-v0's apps on the ttkernel path (sweep14) once built.
+
 0. gpt-oss-120b at high reasoning effort in four temperature arms (0.2, 0.5, 0.7, 1.0; top_p 1.0; tasks P17.51 and
    P17.52, the owner's directions of 2026-10-29), with restarts (P17.50), over the sets the window of 2026-10-29
    shows most worth it. It runs first, before the owner deletes gpt-oss-120b; proposed split: gpt-oss-120b from 14:00

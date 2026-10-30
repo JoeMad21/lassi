@@ -425,6 +425,8 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Accept: a template set bale-tt-v1, bale-tt-v0 with the feature frames copied from tt-kh-v0 and bale-tt-v0's own wording unchanged (rewording it after sweep10's results would be prompt tuning on unassigned items, Agent Rule 5); recipes for cpp and omp with examples plus the kernel API pack and lookup, examples plus tt-metal-docs retrieval, and all three; tests as test_sweep10_bale_recipes.py has them.
 - Files: assets/prompts/bale-tt-v1/, projects/lassi-demo/sweep11/, tests/core/.
 - Host: Windows. Depends: P17.43.
+- Built 2026-10-29: assets/prompts/bale-tt-v1 (bale-tt-v0's five files and tt-kh-v0's eight frames, each byte for byte; summarize_context.txt describes tiles and three kernels, wrong for bale-v0-tt, but no recipe sends it), projects/lassi-demo/bale-tt-v1-base.yaml (bale-tt-base with bale-tt-v1 and the restarts of P17.50), projects/lassi-demo/sweep11/gpt-oss-120b/bale-{api,rag,all}-{cpp,omp}-{a,b}.yaml (12 recipes; the API pack and lookup, tt-metal-docs retrieval, or both, as kh-allsk sets them), tests/core/test_sweep11_bale_recipes.py. Against sweep10 the features and the restarts both change; among sweep11's combinations only the features do.
+- Paused 2026-10-29 by the owner's MLIR-only direction (plans/LESSONS.md): sweep11 is kept and not launched.
 
 ### P17.46 Spike: lowering TTIR and D2M to TTKernel and TT-Metal at the pin
 - Added on 2026-10-29 (the owner, 2026-10-29: "plan parallel work for TTIR and D2M"). The model has written the lowest level so far (ttkernel MLIR, or TT-Metal C++ kernels); tt-mlir at the pin lowers TTIR -> D2M -> TTKernel and D2M -> TTMetal itself (test/ttmlir/Conversion: TTIRToD2M, D2MToTTKernel, D2MToTTMetal), so the model could write tensor-level TTIR, or D2M, and the compiler the kernels.
@@ -479,6 +481,7 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: projects/lassi-demo/<sweep>/gpt-oss-120b/ (one directory per arm), tests/core/.
 - Host: Windows; alpha01 in a booked window. Depends: P17.51.
 - Built 2026-10-29: projects/lassi-demo/sweep12-t02, -t05, -t07, and -t10, each with kh-allsk (sweep9), bale-cpp and bale-omp (sweep10), and mlir-rag (sweep10) in both halves, eight recipes per arm that extend those recipes and change only llm.sampling (the arm's temperature, top_p 1.0, reasoning effort high, max_tokens 65536) and the loop's restarts (restart_after 3, restart_on_repeat true); tests/core/test_sweep12_recipes.py; `suite.py plan` resolves the four arms as 32 recipes over 4 run.sh calls. Which recipes each arm runs (--only) is chosen on 2026-10-30 from the window of 2026-10-29's timings.
+- Under the owner's MLIR-only direction of 2026-10-29 the arms launch with --only "mlir-*"; their kh-allsk and bale-* recipes are kept and not launched.
 
 ### P17.53 No gates on silicon use in LASSI's software
 - Added on 2026-10-29 (the owner's answers to OQ-078 and OQ-099 that evening: "remove all gates ... you cannot enforce gates on my software"; "It should be like TT-SIM. SIlicon [sic] is there as a final test gate, no human's required"; and at about 22:40 EDT the rules kept and removed, OQ-078's follow-up).
@@ -507,6 +510,7 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Accept: recipe sets with silicon as the final test for each arm (the kernels-and-host combinations, bale-v0-tt, and the ttkernel path; TTIR and D2M once P17.49 exists), loading and passing the runner's checks; plans/runs/silicon-launch.md: the read-only check that every card's IOMMU domain is DMA, the gate's tt_silicon device class (the owner enables it), the window runner's plan.json, the pull, and the report; a dry run of the plan on the workstation; tests.
 - Files: projects/lassi-demo/<sweep>-si/, plans/runs/silicon-launch.md, tests/core/.
 - Host: Windows. Depends: P17.54, P17.55.
+- Under the owner's MLIR-only direction of 2026-10-29 the silicon sets are the MLIR paths alone: the ttkernel path for tt-pairs-v0 and bale-v0's apps, and TTIR and D2M once they run.
 
 ### P17.G Phase gate (BLOCKED: GPU host, OQ-040)
 - Bible: Build Roadmap (P17 row, Gate column), Agent Rules 1 and 10; AGENTS.md Phase Gate and Results.
