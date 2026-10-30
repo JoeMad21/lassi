@@ -552,7 +552,7 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: assets/prompts/<set>-bare-v0/, projects/lassi-demo/sweep15/ and later ladders, tests/core/.
 - Host: Windows; alpha01 in the owner's windows. Depends: P17.49.
 - 2026-10-30: the TTIR ladder built (sweep15, six rungs, tests/core/test_sweep15_recipes.py).
-- 2026-10-30, about 00:45 EDT: sweep16 built at the owner's direction ("initiate a full sweep with TTIR lowering. Only keep the most successful features from our previous runs.", "I want the least amount of features that get to the correction loop and produce some useful code.", "No more temperature checks, just go with the best temperature from the last round of testing."): four identical replicates of rung l1 at temperature 1.0, run side by side for more samples. Temperature: 0.2, 0.5, and 1.0 tied in sweep13's TTIR arms (exploratory); 1.0 is the one the ladder ran l1 at.
+- 2026-10-30, about 00:45 EDT: sweep16 built at the owner's direction ("initiate a full sweep with TTIR lowering. Only keep the most successful features from our previous runs.", "I want the least amount of features that get to the correction loop and produce some useful code.", "No more temperature checks, just go with the best temperature from the last round of testing."): rung l1 at temperature 1.0 as one recipe, ttir-min (four side-by-side replicates were built first; the owner: "I think you should just run a single copy."). Temperature: 0.2, 0.5, and 1.0 tied in sweep13's TTIR arms (exploratory); 1.0 is the one the ladder ran l1 at.
 
 ### P17.G Phase gate (BLOCKED: GPU host, OQ-040)
 - Bible: Build Roadmap (P17 row, Gate column), Agent Rules 1 and 10; AGENTS.md Phase Gate and Results.
