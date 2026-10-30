@@ -93,3 +93,16 @@ with "undefined symbol alias id '0'", and its ninth was refused with "unknown ty
 `ttkernel`". The card spells a TableGen
 constraint (`TTKernel_TensorAccessorArgs`) where the dialect's textual type is `!ttkernel.TensorAccessorArgs`, and an
 attribute placeholder (`#0`) where the form takes an integer literal.
+
+Prompts that repeat (task P17.50), from the same records' attempts table (prompt_ref_sha256 of trial
+ttkernel-maxabs/furiosa-ai--gpt-oss-120b/tt-pairs-v0-ttkernel/cpp-ttkernel/loopback/run02):
+
+| Attempt | Prompt sha256 |
+| --- | --- |
+| 5 | 4e9f4c4dd58fb94ce28a841edc0637505d42565cbd03a2fd7edd54dc7b5e090d |
+| 6 | 7b05aab1620abd94f80c86fb73c69e89bcbec09b43c7a6cf0689789a949f5bbb |
+| 7 | 4e9f4c4dd58fb94ce28a841edc0637505d42565cbd03a2fd7edd54dc7b5e090d |
+| 8 | 7b05aab1620abd94f80c86fb73c69e89bcbec09b43c7a6cf0689789a949f5bbb |
+
+A correction's prompt holds the last attempt's files and errors, so equal prompts mean the model returned the same
+file again: attempts 5 and 7 answered one prompt, and 6 and 8 another.

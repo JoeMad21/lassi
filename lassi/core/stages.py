@@ -528,6 +528,7 @@ from lassi.core.recipe import (
     LOOKUP_GENERATE,
     LOOKUP_NEAREST,
     RESTART_AFTER,
+    RESTART_ON_REPEAT,
     RETRIEVAL,
     RETRIEVAL_CORRECT,
     RETRIEVAL_GENERATE,
@@ -1040,16 +1041,59 @@ def failed_corrections(trial: Trial) -> int:
     return count
 
 
+def restart_on_repeat(context: RunContext) -> bool:
+    """Return True only when the recipe sets loop.restart_on_repeat true (lassi.core.recipe RESTART_ON_REPEAT).
+
+    The key is off when absent; the loader refuses it set true under
+    faithful: true, and the runner with a fragment set (task P17.50).
+    """
+    return context.recipe.data.get("loop", {}).get(RESTART_ON_REPEAT) is True
+
+
+def _error_set(attempt: Attempt) -> frozenset[tuple[str | None, str]]:
+    """Return the file and message of each error-severity diagnostic of `attempt`, its line and column left out."""
+    return frozenset((item.file, item.message) for item in attempt.diagnostics if item.severity == "error")
+
+
+def repeats_an_error(trial: Trial) -> bool:
+    """Return True when the last attempt's error set, not empty, is an earlier attempt's of the same chain (P17.50).
+
+    A chain starts at attempt 0, or at the attempt the last restart's reply
+    became, so an error set seen only before the last restart does not count
+    and each fresh generation gets corrections of its own.
+    """
+    start = 0
+    for request in trial.requests or []:
+        if request.stage == RESTART and request.attempt_index is not None:
+            start = request.attempt_index
+    chain = trial.attempts[start:]
+    if len(chain) < 2:
+        return False
+    last = _error_set(chain[-1])
+    return bool(last) and any(_error_set(attempt) == last for attempt in chain[:-1])
+
+
 def restart_due(context: RunContext, trial: Trial) -> bool:
-    """Return True when loop.restart_after is set and that many corrections in a row failed (failed_corrections)."""
+    """Return True when a restart replaces the next correction.
+
+    That is when loop.restart_after is set and that many corrections in a
+    row failed (failed_corrections), or loop.restart_on_repeat is on and the
+    last attempt repeats an error set of its chain (repeats_an_error). The
+    loops check the one cap, loop.max_corrections, before either.
+    """
     after = restart_after(context)
-    return after is not None and failed_corrections(trial) >= after
+    if after is not None and failed_corrections(trial) >= after:
+        return True
+    return restart_on_repeat(context) and repeats_an_error(trial)
 
 
 def restarts_described(context: RunContext) -> str:
-    """Return what compile_loop's and run_loop's describe() add for loop.restart_after: "" when it is not set."""
+    """Return what compile_loop's and run_loop's describe() add for loop.restart_after and loop.restart_on_repeat."""
     after = restart_after(context)
-    return "" if after is None else f", a restart from attempt 0's prompt after {after} failed correction(s) in a row"
+    text = "" if after is None else f", a restart from attempt 0's prompt after {after} failed correction(s) in a row"
+    if restart_on_repeat(context):
+        text += ", a restart from attempt 0's prompt when an attempt repeats an error set of its chain"
+    return text
 
 
 def extract_on(context: RunContext, name: str) -> bool:
@@ -3053,7 +3097,7 @@ class CompileLoopStage:
         carries an error: "no-artifact" when the toolchain reported none,
         and "unwritable" when a file name could not be written. While the
         latest attempt has an error and is not S4, the stage asks for a
-        correction (_correction; a restart when loop.restart_after makes one
+        correction (_correction; a restart when loop.restart_after or loop.restart_on_repeat makes one
         due, _corrected), appends the reply with its diff from the previous
         files and records the request, and builds that. When the
         cap (corrections are the attempts after the first) stops the loop
@@ -3882,7 +3926,7 @@ def _corrected(
     attempt's files; the request keeps the blocks' note. A request the
     backend refuses as past its context (ContextExceeded) ends the trial at
     CONTEXT_EXCEEDED instead, with no attempt appended (_context_end). When
-    a restart is due (restart_due, loop.restart_after), the request is a
+    a restart is due (restart_due: loop.restart_after or loop.restart_on_repeat), the request is a
     restart in place of the correction (_restarted).
     """
     if restart_due(context, trial):

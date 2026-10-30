@@ -194,10 +194,17 @@ LOOP_OPT_INS: dict[str, str] = {
         " back as an addressing error in the kernel, within loop.max_corrections (task P17.41); off reads it as any"
         " other simulator gap (OQ-098)"
     ),
+    "restart_on_repeat": (
+        "ask for a fresh generation from attempt 0's prompt in place of a correction when the last attempt's errors"
+        " (each error's file and message) are an earlier attempt's of the same chain, from attempt 0 or the last"
+        " restart, within loop.max_corrections, which restarts and corrections share (task P17.50); off corrects"
+        " a repeated error like any other"
+    ),
 }
 # The one LOOP_OPT_INS key that is an int (task P17.25): from 1 to the resolved loop.max_corrections, both included,
 # or any int of at least 1 when the loop is uncapped. The schema checks the type and _check_loop the cap.
 RESTART_AFTER = "restart_after"
+RESTART_ON_REPEAT = "restart_on_repeat"
 
 # The optional retrieval section (task P17.22): documentation passages from an index before the prompts it lists
 # (lassi.core.stages). Off when absent, and never materialized, so a recipe without it keeps its resolved recipe and
@@ -1556,7 +1563,8 @@ def _check_loop(path: Path, data: Mapping[str, Any]) -> None:
     Upstream corrects only compile errors and failed runs, never asks a
     fresh generation, and runs on no simulator (Design Principle 4, Agent
     Rule 4), so under faithful: true a bool key set true (correct_on_mismatch,
-    correct_on_sim_gap), or RESTART_AFTER set at all, is refused. Runs
+    correct_on_sim_gap, coord_gap_as_error, restart_on_repeat), or RESTART_AFTER set at all, is
+    refused. Runs
     after the type check, so the loop section maps known names to their
     types. A bool set false, or a key absent, is never refused.
     RESTART_AFTER, an int of at least 1 by then, may not pass the resolved

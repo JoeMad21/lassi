@@ -419,6 +419,61 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Host: Windows; the sweep on alpha01 in the owner's window of 2026-10-29. Depends: P17.41.
 - Samples cut for the window of 2026-10-29, at the owner's request that evening ("I don't want to wake up tomorrow and have 0 translations, everything hit the build limit or nothing ran"): the runner runs a recipe's trials item by item, so a deadline cuts the last items whole; mlir-ref, and mlir-rag through it, take 2 samples where mlir1 takes 3.
 
+### P17.45 bale-v0-tt with the feature combinations (API pack, docs retrieval, both)
+- Added on 2026-10-29 (the owner, 2026-10-29, standing direction of 2026-10-23: test every combination of the features added to base LASSI). sweep10 ran bale-v0-tt with the worked examples alone. The tt-kh host skeleton is written for bf16 tiles and three kernels, so it does not fit bale-v0-tt's one integer kernel and is left out.
+- Bible: Benchmark Suites (bale-v0-tt), Project Recipes (template sets; context, lookup, retrieval), Agent Rule 5.
+- Accept: a template set bale-tt-v1, bale-tt-v0 with the feature frames copied from tt-kh-v0 and bale-tt-v0's own wording unchanged (rewording it after sweep10's results would be prompt tuning on unassigned items, Agent Rule 5); recipes for cpp and omp with examples plus the kernel API pack and lookup, examples plus tt-metal-docs retrieval, and all three; tests as test_sweep10_bale_recipes.py has them.
+- Files: assets/prompts/bale-tt-v1/, projects/lassi-demo/sweep11/, tests/core/.
+- Host: Windows. Depends: P17.43.
+
+### P17.46 Spike: lowering TTIR and D2M to TTKernel and TT-Metal at the pin
+- Added on 2026-10-29 (the owner, 2026-10-29: "plan parallel work for TTIR and D2M"). The model has written the lowest level so far (ttkernel MLIR, or TT-Metal C++ kernels); tt-mlir at the pin lowers TTIR -> D2M -> TTKernel and D2M -> TTMetal itself (test/ttmlir/Conversion: TTIRToD2M, D2MToTTKernel, D2MToTTMetal), so the model could write tensor-level TTIR, or D2M, and the compiler the kernels.
+- Bible: IR Strategy (the ttkernel row; Level Rules), Toolchain Pins (tt-mlir; MLIR stacks), ttsim Facts, Agent Rules 2, 6, 10, and 17.
+- Accept: plans/spikes/ttir-d2m.md with commands and outputs: the pipeline names and options at tt-mlir 5f396fd6; for each tt-pairs-v0 item, a hand-written TTIR module and a D2M module that the pinned ttmlir-opt lowers to TTKernel and TT-Metal, and ttmlir-translate to a flatbuffer, or the first error; which ops the D2M path lowers; whether the tt-mlir install at the pin has a runtime that runs a flatbuffer (ttrt or its libraries), and if not what enabling it needs (a pin change, a Decision Log entry, the owner's approval); whether a flatbuffer runs on ttsim. Short CPU-only runs on alpha01 (the owner's standing permission of 2026-10-26).
+- Files: plans/spikes/ttir-d2m.md.
+- Host: Windows; alpha01's CPU. Depends: P17.41.
+
+### P17.47 TTIR and D2M API references and retrieval indexes
+- Added on 2026-10-29 (the owner, 2026-10-29: "Those will also need RAGs and references").
+- Bible: Project Recipes (context, retrieval; the ttkernel API reference bullet), Agent Rules 3 and 5.
+- Accept: tools/build_ttkernel_reference.py and tools/build_ttkernel_rag.py generalized over a dialect (TTKernel, TTIR, D2M) from the pinned TableGen sources and tt-mlir's own lit tests (Dialect/TTIR, Dialect/D2M, Conversion/TTIRToD2M, D2MToTTKernel, D2MToTTMetal), each pack and index with its tracked manifest and run-suite.sh build step, Agent Rule 5 exclusions as P17.44's (no item's answer in a corpus), tests; the ttkernel outputs unchanged byte for byte.
+- Files: tools/build_ttkernel_reference.py, tools/build_ttkernel_rag.py (generalized), assets/context/, assets/rag/, plans/runs/suite/run-suite.sh, plans/runs/suite/recipes.py, .gitignore, tests/tools/.
+- Host: Windows. Depends: P17.44.
+
+### P17.48 The ttir and d2m languages: toolchains and a runtime executor
+- Added on 2026-10-29. Built after P17.46 shows which pipeline and runtime work.
+- Bible: IR Strategy, Execution Backends (ttsim; tt_silicon), Harness Contract, Toolchain Pins, Agent Rules 2, 6, 9, and 10.
+- Accept: languages ttir and d2m; a Toolchain per language that runs the pinned ttmlir-opt pipeline and ttmlir-translate in the compile sandbox and gives parsed diagnostics; an Executor that runs the flatbuffer through the pinned runtime on ttsim (and, later, a card, which a human starts), with the held-out inputs as tensors and the outputs as lassi_io files; tests with fakes. A runtime build, if P17.46 shows one is needed, is a pin change for the owner.
+- Files: lassi/toolchains/, lassi/executors/, toolchains/tt-mlir.pin if P17.46 needs the runtime, tests/.
+- Host: Windows; alpha01 for the build. Depends: P17.46.
+
+### P17.49 TTIR and D2M prompt sets and recipes
+- Accept: template sets tt-ttir-v0 and tt-d2m-v0 with the P17.47 references in place of a model-written card and their retrieval; recipes cpp -> ttir and cpp -> d2m on tt-pairs-v0's development items, reported beside the ttkernel and kernels-and-host arms; tests.
+- Bible: Project Recipes (template sets), Benchmark Suites (tt-pairs-v0; a development set, OQ-083 (b)), Agent Rule 5.
+- Files: assets/prompts/tt-ttir-v0/, assets/prompts/tt-d2m-v0/, projects/lassi-demo/, tests/core/.
+- Host: Windows. Depends: P17.47, P17.48.
+
+### P17.50 Restarts: on a repeated error, and in every recipe
+- Added on 2026-10-29 (the owner, 2026-10-29: "I like the fresh samples idea, consider a mechanism to restart every once and a while"). loop.restart_after (P17.25) already asks a fresh generation after N failed corrections in a row, but a restart resends attempt 0's prompt at the recipe's temperature (0.2), so it tends to repeat attempt 0 (inferred), and a trial can swing between two files (the window of 2026-10-26, loopback/run02: attempts 5 and 7, and 6 and 8, had byte-identical prompts).
+- Bible: Project Recipes (Notes, the Loop opt-ins bullet), Component Interfaces (the Restarts bullet), Design Principle 4, Agent Rules 1 and 4.
+- Accept: an opt-in beside restart_after, off when absent, refused set true under faithful: true and by the runner with a fragment set: loop.restart_on_repeat, a restart in place of the correction a loop would ask when the last attempt's error set (each error-severity diagnostic's file and message, line and column left out), not empty, equals an earlier attempt's of the same chain, which starts at attempt 0 or at the last restart's attempt, so an error set seen only before the last restart does not count; restarts and corrections share the one count and loop.max_corrections; restart_after and restart_on_repeat set in P17.51's and P17.52's recipes; tests (compile and run corrections, the chain, the cap, the loader, the runner). A restart temperature of its own was considered and left out: P17.52's temperature arms vary the sampling instead, and a second temperature inside a trial would confound them.
+- Files: lassi/core/recipe.py, lassi/core/stages.py, lassi/core/runner.py, docs/BIBLE.md, tests/core/test_restart_on_repeat.py, the P17.51 and P17.52 recipes.
+- Host: Windows. Depends: P17.25.
+
+### P17.51 gpt-oss-120b at high reasoning effort
+- Added on 2026-10-29 (the owner, 2026-10-29: "Prepare a run with higher reasoning from GPT-OSS after the current runs"). gpt-oss-120b stays on alpha01 until it has run (the owner plans to delete it for the 70B and 30B models).
+- Bible: Model Serving (the gpt-oss line), Project Recipes (llm.sampling; reasoning effort), Agent Rules 1 and 10.
+- Accept: recipes with llm.sampling.reasoning_effort high and max_tokens 65536 (the reasoning counts in the budget; the served context is 131072, results/night-20261025/summary.md:19), and temperature 1.0 and top_p 1.0, the sampling gpt-oss's own README recommends (github.com/openai/gpt-oss at d21f34ec3c1ede813adfbd83f07d2ad2eec7ff02, README.md:576, read 2026-10-29), in place of projects/base.yaml's 0.2 and 0.9, the LASSI paper's, which every gpt-oss recipe has inherited; each 70B and 30B model gets its own model card's sampling the same way over the sets chosen on 2026-10-30 from the window of 2026-10-29's results and recorded in this entry, with P17.50's restarts; scheduled first in the next booked window (2026-10-31, 14:00), unless the owner books earlier time; tests.
+- Files: projects/lassi-demo/<sweep>/gpt-oss-120b/, tests/core/.
+- Host: Windows; alpha01 in a booked window. Depends: P17.39, P17.43, P17.44.
+
+### P17.52 Sampling temperature arms: 0.2, 0.5, 0.7, and 1.0
+- Added on 2026-10-29 (the owner, 2026-10-29: "Plan parallel arms for different temperatures (0.2, 0.5, 0.7, and 1.0) should be fine"). Every recipe so far has sampled at projects/base.yaml's 0.2 and top_p 0.9, the LASSI paper's, where gpt-oss's README recommends 1.0 and 1.0; at 0.2 a recipe's samples are close to repeats (inferred).
+- Bible: Project Recipes (llm.sampling), Evaluation Protocol (Reporting Rules), Agent Rule 1.
+- Accept: P17.51's high-effort gpt-oss-120b recipes in four arms that differ only in llm.sampling.temperature (0.2, 0.5, 0.7, 1.0), top_p 1.0 in all four (the README's), one recipe directory per arm so run-suite.sh shares the time between them, each over the same sets, with the item count and samples per arm recorded in this entry on 2026-10-30 from the window of 2026-10-29's timings; the window of 2026-10-29 (0.2, top_p 0.9, medium effort) stays a separate reference point; tests that the arms differ in the temperature alone.
+- Files: projects/lassi-demo/<sweep>/gpt-oss-120b/ (one directory per arm), tests/core/.
+- Host: Windows; alpha01 in a booked window. Depends: P17.51.
+
 ### P17.G Phase gate (BLOCKED: GPU host, OQ-040)
 - Bible: Build Roadmap (P17 row, Gate column), Agent Rules 1 and 10; AGENTS.md Phase Gate and Results.
 - Accept, from one clean commit:

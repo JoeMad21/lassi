@@ -389,6 +389,7 @@ from lassi.core.recipe import (
     RECORDING_KEY,
     RECORDING_SHA256_KEY,
     RESTART_AFTER,
+    RESTART_ON_REPEAT,
     RETRIEVAL,
     SKELETON,
     SKELETON_SHA256_KEY,
@@ -2009,14 +2010,15 @@ def _check_sim_gap(recipe: Recipe, settings: _Settings) -> None:
 
 
 def _check_restart(recipe: Recipe, settings: _Settings) -> None:
-    """Refuse loop.restart_after with a fragment prompt set (task P17.25; lassi.core.stages, restarts).
+    """Refuse loop.restart_after, or loop.restart_on_repeat set true, with a fragment prompt set (tasks P17.25, P17.50).
 
     A restart sends attempt 0's prompt again, generate.txt as a template
     set renders it; a fragment set holds upstream's prompts, whose loop
-    never restarts. A recipe without the key is never checked.
+    never restarts. A recipe without either key is never checked.
     """
-    key = f"loop.{RESTART_AFTER}"
-    if RESTART_AFTER in recipe.data["loop"] and settings.fragments:
+    loop = recipe.data["loop"]
+    key = f"loop.{RESTART_AFTER}" if RESTART_AFTER in loop else f"loop.{RESTART_ON_REPEAT}"
+    if (RESTART_AFTER in loop or loop.get(RESTART_ON_REPEAT) is True) and settings.fragments:
         raise RunError(
             f"{recipe.path}: {key} is set, but {settings.prompts!r} is a fragment prompt set, upstream's prompts, "
             f"whose loop never restarts; a restart sends generate.txt, which only a template set holds, so use a "
