@@ -453,6 +453,7 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Host: Windows; alpha01 for the build. Depends: P17.46.
 - Prepared 2026-10-29: toolchains/tt-mlir-runtime.pin, tt-mlir-runtime.sh, tt-mlir-runtime-requirements.txt, tt-mlir-runtime-fetched-sources.txt (PLACEHOLDER until the first install; filled from it on 2026-10-29), tests/toolchains/test_tt_mlir_runtime_pins.py, and plans/spikes/ttmlir-runtime.md (sources, the job's command, the checks after it, and the driver's design); the build job was planned for 2026-10-30 and ran on 2026-10-29 with the owner's approval (LASSI_FREE_FLOOR_GIB 30, LASSI_STOP_GIB 345, as the spike proposes; the owner may name others).
 - 2026-10-29: the runtime built on alpha01 (rx 20261029-193649-p1748-tt-mlir-runtime-f0ad, from 3c6a69c; ttrt 0.0.2995, libTTMLIRRuntime with TT-Metal and TT-NN, 21 minutes 35 seconds, 17.8 GiB; results/p17-48-runtime-build), and the compile-only Toolchains ttir-ttmetal-compile and d2m-ttmetal-compile (lassi/toolchains/ttir_compile.py); left: the driver and the executor that run a flatbuffer.
+- 2026-10-29: under OQ-112 ("Go with your plans in order, starting with A.") the executor also runs TTNN flatbuffers (route A, P17.58), through the same runtime's TTNN half.
 
 ### P17.49 TTIR and D2M prompt sets and recipes
 - Accept: template sets tt-ttir-v0 and tt-d2m-v0 with the P17.47 references in place of a model-written card and their retrieval; recipes cpp -> ttir and cpp -> d2m on tt-pairs-v0's development items, reported beside the ttkernel and kernels-and-host arms; tests.
@@ -513,6 +514,34 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: projects/lassi-demo/<sweep>-si/, plans/runs/silicon-launch.md, tests/core/.
 - Host: Windows. Depends: P17.54, P17.55.
 - Under the owner's MLIR-only direction of 2026-10-29 the silicon sets are the MLIR paths alone: the ttkernel path for tt-pairs-v0 and bale-v0's apps, and TTIR and D2M once they run.
+
+### P17.57 Route A: the ttnn language, TTIR through the TTNN backend, compile side
+- Added on 2026-10-29 (the owner's answer to OQ-112: "Go with your plans in order, starting with A."). Evidence: plans/spikes/scatter-gather-workarounds.md.
+- Bible: IR Strategy (Level Rules, the gather and scatter bullet), Benchmark Suites, Project Recipes, Toolchain Pins, Agent Rules 3, 5, 6, and 11.
+- Accept: a compile probe on alpha01's CPU (each run under 10 minutes, no device) of hand-written TTIR through `ttmlir-opt --ttir-to-ttnn-backend-pipeline` and `ttmlir-translate --ttnn-to-flatbuffer` at the pin for ttir.scatter (SUM, si32), ttir.sort, ttir.cumsum, and ttir.gather (bf16 embedding), recorded in the spike; the language ttnn (TTIR whose module lowers through the TTNN backend) and a compile Toolchain ttir-ttnn-compile with parsed diagnostics and a level check, as ttir-ttmetal-compile; bale-v0's items in a ttnn suite with an si32 boundary, the i64 conversion and range check, ig's table as 8-bit digit columns with host recombination, and padded outputs with a returned length, all as tested item contracts; tests with fakes.
+- Files: lassi/toolchains/ttir_compile.py, lassi/toolchains/__init__.py, assets/bench/, plans/spikes/, tests/.
+- Host: Windows; alpha01 CPU for the probe. Depends: P17.46, P17.43.
+
+### P17.58 Route A arms: bale-v0 through TTIR -> TTNN, outputs checked on ttsim
+- Added on 2026-10-29 (OQ-112: "Go with your plans in order, starting with A.").
+- Bible: Project Recipes, Execution Backends (ttsim), Harness Contract, Agent Rules 2 and 5.
+- Accept: the first ttsim measurement before any arm runs: whether ttnn.scatter, ttnn.sort, ttnn.moreh_cumsum, and ttnn.embedding run on ttsim v1.3.4 through P17.48's executor (if not, the owner is told and route C moves up); a TTNN reference pack and retrieval index as P17.47's; the template set tt-ttnn-v0; recipes for bale-v0 with references, retrieval, restarts, and the temperature arms; a host loop driver for sssp and toposort; outputs checked against the held-out outputs by the oracle.
+- Files: assets/prompts/, assets/context/, assets/rag/, projects/lassi-demo/, tools/, tests/.
+- Host: Windows; alpha01 for ttsim. Depends: P17.57, P17.48.
+
+### P17.59 Route B: ttnn.generic with model-written ttkernel kernels
+- Added on 2026-10-29 (OQ-112: "Go with your plans in order, starting with A."); after route A.
+- Bible: IR Strategy, Execution Backends (ttsim), Agent Rules 3 and 6.
+- Accept: a language whose files are a TTNN function and ttkernel functions (upstream's form, test_generic_op_unicast.mlir), compiled with ttcore-register-device and the TTNN flatbuffer translation; its first check, one kernel that reads an index from L1 and issues a NOC read from the computed address, run on ttsim; then bale-v0's recipes on this route for the items route A cannot express or gets wrong.
+- Files: lassi/toolchains/, assets/, projects/lassi-demo/, tests/.
+- Host: Windows; alpha01 for ttsim. Depends: P17.58.
+
+### P17.60 Route C: TTMetal host ops with model-written ttkernel kernels
+- Added on 2026-10-29 (OQ-112: "Go with your plans in order, starting with A."); after route B.
+- Bible: IR Strategy, Execution Backends (ttsim), Agent Rules 3 and 6.
+- Accept: a language whose files are TTMetal host ops with buffer addresses and ttkernel kernels (upstream's form, test_fabric_unicast.mlir) through the TTMetal pipeline and flatbuffer translation, run by P17.48's executor on ttsim; bale-v0's recipes on this route.
+- Files: lassi/toolchains/, assets/, projects/lassi-demo/, tests/.
+- Host: Windows; alpha01 for ttsim. Depends: P17.59.
 
 ### P17.G Phase gate (BLOCKED: GPU host, OQ-040)
 - Bible: Build Roadmap (P17 row, Gate column), Agent Rules 1 and 10; AGENTS.md Phase Gate and Results.

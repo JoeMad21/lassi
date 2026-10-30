@@ -1351,3 +1351,17 @@ Recommendation: (a), built in the next owner window.
 Answer: (b), built on Friday 2026-10-30, daytime. The owner, in the working session of 2026-10-29: "(b) (a) + ttrt/Python" and "Friday, daytime (Recommended)".
 Build settings for the owner to confirm with the job (plans/spikes/ttmlir-runtime.md): LASSI_FREE_FLOOR_GIB 30 (the build starts only with 60 GiB free and stops any step that would leave less than 30 GiB), LASSI_STOP_GIB 345 (the precedent under OQ-074's lift); the scratch root grows from about 258 GiB to about 288 GiB (PROJECTED) on a shared disk at 98% use.
 Note (2026-10-29, main session): the owner moved the build up in the working session of 2026-10-29, about 22:35 EDT: "You have my approval to build the runtime alongside the BALE tests. Do it now." The job ran that night with the settings proposed above, LASSI_FREE_FLOOR_GIB 30 and LASSI_STOP_GIB 345, as a regular rx job because the suite job held the big-job slot (rx 20261029-193649-p1748-tt-mlir-runtime-f0ad, rc 0; results/p17-48-runtime-build).
+
+## OQ-112 Which Route Expresses Gather And Scatter For bale-v0 Above ttkh
+State: CLOSED
+Kind: decision
+Blocks: P17.57, P17.58, P17.59, P17.60
+Evidence: plans/spikes/scatter-gather-workarounds.md (read at tt-mlir 5f396fd6 and tt-metal 5280a9cf; nothing ran), plans/spikes/ttir-d2m.md
+Question: The pinned D2M path cannot lower gather or scatter, but the pinned TTNN path lowers ttir.scatter (add and copy), ttir.sort, ttir.cumsum, and a bf16 embedding, and ttnn.generic runs model-written ttkernel kernels beside TT-NN ops; TTMetal host ops also take model-written ttkernel kernels. None of it has run on ttsim. Which route should LASSI build for bale-v0's apps above ttkh?
+Options:
+- (a) Route A, TTIR -> TTNN: one TTIR function per item with scatter, sort, cumsum, and dense ops; six of eight apps in one program, sssp and toposort with a host loop; LASSI builds the TTNN toolchain and executor, i64 conversion, padded outputs, and the loop driver.
+- (b) Route B, TTNN with ttnn.generic: a TTNN function and a ttkernel kernel per item; all eight exactly.
+- (c) Route C, TTMetal host ops with ttkernel kernels: all eight; reuses the TTMetal executor; the model places L1 buffers.
+- (d) Route D, D2M with dense one-hot ops only: three of eight, over L1 at bale-v0's sizes.
+Recommendation: A as the compiler-first arm and B as the exact fallback, sharing one TTNN executor, after one ttsim measurement (histo as one ttir.scatter, and one ttnn.generic kernel that reads an index from L1); C if TT-NN does not run on ttsim.
+Answer: The owner, in the working session of 2026-10-29, about 23:40 EDT: "Go with your plans in order, starting with A." Applied as: route A first (P17.57, P17.58), then route B (P17.59), then route C (P17.60), each task depending on the one before; route D is not planned. P17.48's executor runs TTNN flatbuffers as well as TTMetal ones.
