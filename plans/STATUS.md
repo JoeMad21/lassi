@@ -211,3 +211,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.59 | READY | Route B: ttnn.generic with model-written ttkernel kernels | P17.58 | planned 2026-10-29 (OQ-112) |
 | P17.60 | READY | Route C: TTMetal host ops with model-written ttkernel kernels | P17.59 | planned 2026-10-29 (OQ-112) |
 | P17.61 | READY | Feature ladders: each arm set from the bare LASSI loop up | P17.49 | TTIR ladder (sweep15; jobs 20261029-211026-window4-3905 and 20261029-212927-window5-dda9) and sweep16 (20261029-215429-window6-9dc0) ran 2026-10-30, compile only; sweep18 (the ladder and d2m-min on ttsim for Llama-3.3-70B) built for 2026-11-02 |
+| P17.62 | READY | Training across hosts: logistics | P17.53 | planned 2026-11-01 (plans/training-hosts.md; OQ-116 to OQ-123) |

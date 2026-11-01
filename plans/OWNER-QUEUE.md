@@ -1403,3 +1403,108 @@ Question: Four choices for running the TTIR and D2M arms on ttsim: (1) the outpu
 Options: (1) item tolerance, or from_baseline; (2) leave it out, or state it; (3) the executor sets HOME in the sandbox environment, or the driver keeps its self-restart workaround; (4) keep tt_mlir, or add tt_mlir_runtime.
 Recommendation: item tolerance; leave it out; the executor sets it; keep tt_mlir.
 Answer: The owner, in the working session of 2026-10-30, about 01:55 EDT, chose "Item tolerance (Recommended)", "Leave it out (Recommended)", "Executor sets it (Recommended)", and "Keep tt_mlir (Recommended)".
+
+## OQ-116 The Training Server: Phase, Access, And Approvals
+State: OPEN
+Kind: access
+Blocks: P17.62's rx host profiles for a second gate (a configuration value with no default until answered); the training server's phase
+Evidence: plans/training-hosts.md (a read-only planning pass of 2026-11-01 over commit 40bd4a8)
+Question: How should LASSI bring a second, training server into the work: as a new phase, and under what access rule (Agent Rule 17 names alpha01 only)?
+Options:
+- (a) A new phase P19 (Training Host), a Rule 17 counterpart for the training server (text in the plan, section 5), and a second gate reached through rx.
+- (b) Fold the work into P17 and P8 under the same rule.
+- (c) Unattended access within caps: faster, with less owner oversight of a host that runs model code.
+Recommendation: (a), with a standing permission like the one for alpha01's short CPU runs once the server's sandbox is qualified.
+Answer: Partial, the owner in the working session of 2026-11-01: "This server may at some point provide AMD access, but we cannot count on it. Just focus on the training logisitics [sic] for now, and we'll add training data soon."
+
+## OQ-117 Scratch Root And Caps On The Training Server
+State: OPEN
+Kind: policy
+Blocks: none to start: the training server's installs
+Evidence: plans/training-hosts.md (a read-only planning pass of 2026-11-01 over commit 40bd4a8)
+Question: What scratch root, cap, and stop line apply on the training server (Agent Rule 7's counterpart)?
+Options:
+- (a) alpha01's 150G cap and 145G stop line: one rule for both hosts, likely too small for checkpoints.
+- (b) An owner-named cap sized for checkpoints, the runs root on node-local disk.
+- (c) A free-space floor only: the least friction and the least control.
+Recommendation: (b): toolchains alone are PROJECTED at 28 to 46 GiB plus 20 to 29 GiB for the tt-mlir runtime.
+Answer:
+
+## OQ-118 How The Training Server Gets The Pinned Toolchains
+State: OPEN
+Kind: decision
+Blocks: none to start: the training server's installs and qualification
+Evidence: plans/training-hosts.md (a read-only planning pass of 2026-11-01 over commit 40bd4a8)
+Question: Compile and ttsim rewards are CPU work; how does the training server get bit-for-bit the pinned toolchains, or should those rewards stay on alpha01?
+Options:
+- (a) An Ubuntu 22.04 host or partition, owner-run install batches, the same scripts, and a cross-host parity check.
+- (b) An Ubuntu 22.04 container (the sandbox inside it unqualified).
+- (c) No TT toolchains there: compile and ttsim rewards as a remote service on alpha01's CPU.
+- (d) (a) with alpha01's absolute toolchains path.
+Recommendation: (a), plus (d) if feasible; (c) only if the host is not x86_64 or cannot get the jammy packages.
+Answer:
+
+## OQ-119 The Channel Between The Servers
+State: OPEN
+Kind: decision
+Blocks: P17.62's channel adapter (a configuration value with no default until answered)
+Evidence: plans/training-hosts.md (a read-only planning pass of 2026-11-01 over commit 40bd4a8)
+Question: Nothing reaches alpha01 from a third host today (rx from the workstation only). How do reward requests, results, and checkpoints move?
+Options:
+- (a) A workstation relay: size-capped inbox and outbox verbs with sha256 manifests on both gates.
+- (b) Shared storage the cluster provides.
+- (c) A direct link to alpha01 (the bible rules out new ssh keys).
+- (d) Checkpoints only through a private Hugging Face repository at pinned revisions, a read token from an environment variable.
+Recommendation: (a) for requests and (d) for checkpoints, or (b) if offered.
+Answer:
+
+## OQ-120 Silicon In RL Rewards Across Hosts
+State: OPEN
+Kind: decision
+Blocks: P17.62's silicon reward queue mode (a configuration value with no default until answered)
+Evidence: plans/training-hosts.md (a read-only planning pass of 2026-11-01 over commit 40bd4a8)
+Question: Once the owner's Agent Rule 9 text allows silicon rewards, how does a silicon result reach training on another host, given hours-per-window latency?
+Options:
+- (a) An asynchronous final test: candidates that passed the compiler and ttsim are queued to alpha01; results return as a late labelled reward component and feed offline rounds, never back-filled.
+- (b) A synchronous step that waits for silicon.
+- (c) Silicon only at checkpoint evaluation.
+Recommendation: (a).
+Answer:
+
+## OQ-121 Network Containment On The Training Server
+State: OPEN
+Kind: policy
+Blocks: none to start: training runs on the training server
+Evidence: plans/training-hosts.md (a read-only planning pass of 2026-11-01 over commit 40bd4a8)
+Question: What network containment applies on the training server (OQ-107's counterpart)?
+Options:
+- (a) Sandboxed reward runs with no network; trainers with no egress outside the cluster; the hub offline except named download steps; collectives on the cluster's fabric only.
+- (b) An empty network namespace per training process (single node only).
+- (c) None: the least setup, and nothing stops a model-written program from reaching the network.
+Recommendation: (a), using (b) for single-node runs.
+Answer:
+
+## OQ-122 Train Items For Code-Running Rewards
+State: OPEN
+Kind: decision
+Blocks: P17.62's reward on train items (synthetic fixtures until answered)
+Evidence: plans/training-hosts.md (a read-only planning pass of 2026-11-01 over commit 40bd4a8)
+Question: An RL reward that runs code needs train items with references and held-out inputs; no Tenstorrent item is in a train split. Where do they come from?
+Options:
+- (a) Assign train splits inside the existing suites (never undone).
+- (b) A new train-only suite from non-test tt-metal examples, audited like tt-train-v0.
+- (c) Synthetic seeded items for smoke runs only.
+Recommendation: (b), with (c) for smoke runs.
+Answer: Partial, the owner on 2026-11-01: "we'll add training data soon."
+
+## OQ-123 Where Offline Sampling And Evaluation Run
+State: OPEN
+Kind: decision
+Blocks: none to start: offline sampling
+Evidence: plans/training-hosts.md (a read-only planning pass of 2026-11-01 over commit 40bd4a8)
+Question: The bible samples rft and dpo on RNGD, which means a checkpoint transfer and an RNGD export every round. Keep it?
+Options:
+- (a) As the bible says: sampling on RNGD.
+- (b) Sampling on the training server's GPUs with vLLM; RNGD only for final evaluation of exported checkpoints.
+Recommendation: (b), with a Decision Log entry.
+Answer:

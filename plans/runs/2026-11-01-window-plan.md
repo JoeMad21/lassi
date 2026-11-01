@@ -6,7 +6,9 @@ models."). Every run below is a development result on tt-pairs-v0's unassigned i
 runs on ttsim (a simulator: nothing measures performance), and checks outputs against the item's declared tolerance;
 none runs on silicon (the IOMMU read pass-through at its last reading, 2026-10-22, OQ-078, and Agent Rule 9 stands as written).
 
-## 2026-11-01, 18:00 to 21:00: gpt-oss-120b
+## 2026-11-01, 18:00 to 21:00: gpt-oss-120b, then TurboQuant
+
+Changed at 17:50 (the owner: "I have some TurboQuant code for you to check and run. I want it to happen during the 6pm to 9pm window after the currently planned sweep. Give me a reminder to launch that once the sweep ends or there is one hour remaining."): every sweep17 pass ends by 20:00, and the owner's TurboQuant code runs from 20:00 (or from the sweep's end, if earlier) to 21:00, after a check. The deadlines below that say 20:50 and 20:45 are superseded by 20:00.
 
 - sweep17 (tasks P17.48, P17.49): ttir-min (the bare loop with the TTIR API reference), ttir-full (plus retrieval and
   the cgeist affine source), d2m-min. The first pass's deadline is 20:50, when run.sh stops the recipes and the server; the rx timeout (the deadline plus 900 s) is only a backstop at 21:05. Later passes use 20:45, so their backstop is 21:00.
