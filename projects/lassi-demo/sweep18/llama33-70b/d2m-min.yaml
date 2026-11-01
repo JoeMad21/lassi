@@ -1,0 +1,40 @@
+# sweep18, RUN ON TTSIM WITH THE OUTPUT CHECK: cpp -> d2m on tt-pairs-v0-d2m for Llama-3.3-70B-Instruct-FP8-dynamic
+# (v2026.4, 4 RNGD cards) with the fewest features that reached the correction loop for TTIR (the bare loop with the
+# D2M API reference), as sweep17's d2m-min for gpt-oss-120b, with Llama's own sampling settings and no reasoning
+# setting (the owner, 2026-11-01: "consider minimum features tests for 70B"). Each D2M module compiles for the
+# recorded ttsim descriptor and runs through the driver on ttsim, a simulator (never performance); outputs are checked
+# against the item's declared tolerance. Exploratory.
+extends: ../../../base.yaml  # projects/base.yaml: runs root, sandbox, and report choices
+faithful: false  # an exploratory arm of this project; nothing reproduces an upstream run
+model:
+  backend: openai_compat  # the OpenAI-compatible server run.sh starts on port 8123
+  id: furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic
+  timeout_s: 1800  # as sweep7's llama33-70b recipes
+llm:
+  sampling:
+    temperature: 0.6  # the model's own generation_config.json at v2026.4
+    top_p: 0.9  # the same file
+    max_tokens: 8192  # not a reasoning model; as sweep7's llama33-70b recipes
+extract:
+  unfenced_file_lines: true  # as sweep13's recipes
+bench:
+  suite: tt-pairs-v0-d2m  # tt-pairs-v0's items unchanged, with a d2m language whose reference is tt
+  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  items: [eltwise_binary, eltwise_sfpu, loopback, matmul_multi_core]  # each judged by its declared tolerance
+directions: [{source: cpp, target: d2m}]
+prompts: tt-d2m-bare-v1  # the bare loop for D2M, with run-failure and mismatch corrections
+context: [d2m-ref-5f396fd6]  # the exact API reference of the D2M dialect at the pin
+toolchain:
+  d2m: d2m-ttmetal-ttsim  # the runtime build's tools, lowering for the recorded ttsim descriptor
+  tt: ttmetal-host  # the tt reference's toolchain (reference: tt): the pinned clang++-20 against the pinned tt-metal
+  cpp: gcc-native  # the cpp reference's toolchain, for the references' agreement
+fixes:
+  baseline_both: true  # build and run both references, so the baseline records their agreement
+stages: [baseline, verbatim_context, generate, compile_loop, run_loop, oracle]
+executor:
+  cpp: {kind: native}  # the cpp reference runs in the sandbox on the host CPU
+  tt: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # the tt reference runs in the sandbox on ttsim, a simulator
+  d2m: {kind: ttmlir-ttsim, arch: wormhole_b0, dispatch: slow}  # each flatbuffer runs through the driver on ttsim
+oracle: {kind: binary_io, metric: from_item, threshold: from_item, shape: elements}  # the item's declared tolerance
+trials: {n: 2}
+loop: {max_corrections: 8, correct_on_mismatch: true}  # rung l1's cap; mismatches come back as corrections

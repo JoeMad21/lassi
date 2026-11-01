@@ -1,0 +1,5 @@
+# sweep18, RUN ON TTSIM WITH THE OUTPUT CHECK: the TTIR ladder for Llama-3.3-70B, rung l2: ttir-l1.yaml (its comments
+# hold: ttsim, a simulator; outputs checked against the item's tolerance; exploratory) plus retrieval over tt-mlir's
+# TTIR tests.
+extends: ttir-l1.yaml
+retrieval: {index: tt-mlir-ttir-tests, k: 4, max_chars: 8000, prompts: [generate, correct]}

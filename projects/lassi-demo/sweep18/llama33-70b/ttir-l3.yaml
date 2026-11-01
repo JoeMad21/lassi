@@ -1,0 +1,4 @@
+# sweep18, RUN ON TTSIM WITH THE OUTPUT CHECK: the TTIR ladder for Llama-3.3-70B, rung l3: ttir-l2.yaml (its comments
+# hold: ttsim, a simulator; outputs checked against the item's tolerance; exploratory) plus the cgeist affine source.
+extends: ttir-l2.yaml
+source_mlir: {toolchain: cgeist-affine, max_chars: 24000}

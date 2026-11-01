@@ -1,0 +1,5 @@
+# sweep18, RUN ON TTSIM WITH THE OUTPUT CHECK: the TTIR ladder for Llama-3.3-70B, rung l1: ttir-l0.yaml (its comments
+# hold: ttsim, a simulator; outputs checked against the item's tolerance; exploratory) plus the TTIR API reference.
+extends: ttir-l0.yaml
+context: [ttir-ref-5f396fd6]  # the exact API reference of the TTIR dialect at the pin (task P17.47)
+stages: [baseline, verbatim_context, generate, compile_loop, run_loop, oracle]
