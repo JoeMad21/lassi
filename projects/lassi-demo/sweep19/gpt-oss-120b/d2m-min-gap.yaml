@@ -1,0 +1,9 @@
+# sweep19, RUN ON TTSIM WITH THE OUTPUT CHECK: sweep17's d2m-min (its comments hold: ttsim, a simulator, never
+# performance; outputs checked against the item's declared tolerance; exploratory) with one change,
+# loop.correct_on_sim_gap: an attempt whose run stops at a simulator gap is fed back as a correction within the same
+# cap, saying the simulator cannot run a construct the program uses and that an equivalent construct it runs should be
+# used if one exists (task P17.61; the owner's approval of 2026-11-01, about 18:15 EST, after sweep17's first pass
+# ended most eltwise_sfpu and matmul_multi_core trials at ttsim's tensix_execute_sfploadmacro gap in the f32 and bf16
+# typecasts).
+extends: ../../sweep17/gpt-oss-120b/d2m-min.yaml
+loop: {correct_on_sim_gap: true}
