@@ -575,3 +575,53 @@ def test_the_lassi_profile_leaves_correct_and_compiled_null_at_baseline_disagree
     baseline_note = yaml.safe_load(PROFILE_FILE.read_text(encoding="ascii"))["notes"]["baseline"]
     for name in unscored:
         assert score.notes[name].startswith(baseline_note) and DISAGREE in score.notes[name], name
+
+
+# ---------------------------------------------------------------------------
+# The item's declared tolerance (metric and threshold from_item; OQ-115)
+
+# A candidate 0.009765625 (10 x 2**-10) from the target reference: past the references' agreement of 0.0078125 but
+# within vadd's declared max_abs 0.01.
+BETWEEN = [f32(1.0, 2.0, 3.017578125)]
+BETWEEN_MAX_ABS = 0.009765625
+
+
+@pytest.mark.parametrize(("threshold", "aligned"), [("from_item", 1.0), ("from_baseline", 0.0)])
+def test_from_item_judges_each_output_by_the_items_declared_tolerance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, threshold: str, aligned: float
+) -> None:
+    metric = "from_item" if threshold == "from_item" else "max_abs"
+    outcome = run_one(tmp_path, monkeypatch, ITEM, BETWEEN, metric, threshold)
+    attempt = outcome.trial.attempts[-1]
+    assert attempt.stage_reached == "S5"
+    stats = by_name(attempt.alignment.outputs, "Attempt.alignment.outputs")
+    assert stats["c"].max_abs == BETWEEN_MAX_ABS
+    assert stats["c"].passed is (aligned == 1.0)
+    assert outcome.trial.final.alignment == aligned
+
+
+def test_from_item_still_fails_a_candidate_past_the_items_tolerance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outcome = run_one(tmp_path, monkeypatch, ITEM, FAR, "from_item", "from_item")
+    stats = by_name(outcome.trial.attempts[-1].alignment.outputs, "Attempt.alignment.outputs")
+    assert stats["c"].passed is False and stats["c"].max_abs == FAR_MAX_ABS
+    assert "0.01" in (stats["c"].note or ""), "the note names the item's threshold"
+    assert outcome.trial.final.alignment == 0.0
+
+
+def test_from_item_is_refused_before_any_directory_for_an_item_with_no_tolerance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifests = write_manifest(tmp_path / "manifests", manifest_data(vadd=None)).parent
+    monkeypatch.setattr(runner_module, "BENCH_DIR", manifests)
+    script = Script(replies=[REPLY], attempt_outputs=[list(NEAR)])
+    options = RunOptions(
+        runs_root=tmp_path / "runs-root", run_id="test-run", bench_root=write_bench(tmp_path / "bench"),
+        registry=make_registry(script),
+    )
+    recipe = tmp_path / "binio-run.yaml"
+    recipe.write_bytes(yaml.safe_dump(recipe_data(ITEM, "from_item", "from_item"), sort_keys=False).encode("ascii"))
+    with pytest.raises(runner_module.RunError, match="from_item"):
+        run_recipe(recipe, options)
+    assert not (tmp_path / "runs-root").exists()

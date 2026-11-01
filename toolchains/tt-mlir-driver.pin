@@ -1,0 +1,39 @@
+# The LASSI tt-mlir driver pin (task P17.48; plans/spikes/ttmlir-runtime.md, "The LASSI driver"): lassi-ttmlir-run, a
+# small C++20 program on the pinned tt-mlir runtime (toolchains/tt-mlir-runtime.pin) that writes the ttsim system
+# descriptor and runs one TT-Metal or TT-NN flatbuffer with lassi_io inputs and outputs. Shell-sourced by
+# toolchains/tt-mlir-driver.sh, which builds it at $LASSI_TOOLCHAINS/$PREFIX_NAME, and read by the ttmlir-ttsim executor
+# (lassi/executors/ttmlir_ttsim.py). The driver is this repository's own source, so the run's commit pins it; VERSION
+# names its bytes so that another source gets its own prefix and no install is ever built over. A pin change is a
+# Decision Log entry.
+NAME=lassi-ttmlir-driver
+# The source, relative to toolchains/, and the harness header it includes, relative to the repository root, with
+# their sha256; VERSION is the first 12 hex digits of the sha256 of the source's bytes followed by the header's
+# (tests/toolchains/test_tt_mlir_driver_pin.py checks all three).
+SOURCE=tt-mlir-driver/lassi_ttmlir_run.cpp
+SOURCE_SHA256=f9375024160a7ad20b3e4fbd641b7e4b68806db917d7bc9b446eacc3eacea795
+HEADER=assets/harness/c/lassi_io.h
+HEADER_SHA256=de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+VERSION=a90585ca29fa
+PREFIX_NAME=lassi-ttmlir-driver@a90585ca29fa
+# The runtime it links: toolchains/<RUNTIME_PIN>.pin's install, checked by its record's first line.
+RUNTIME_PIN=tt-mlir-runtime
+# The program inside the prefix.
+BINARY=bin/lassi-ttmlir-run
+# The compiler and linker of the runtime's own build (toolchains/tt-mlir-runtime.pin CLANG_CXX, LINKER), so the
+# driver and libTTMLIRRuntime share one C++ ABI (libstdc++, tt-metal's ENABLE_LIBCXX=OFF); C++20 as the runtime
+# (runtime/lib/CMakeLists.txt:18) and NDEBUG as its Release build, so the headers' inline asserts match.
+CXX=/usr/bin/clang++-17
+CXX_EXPECT="clang version 17.0.6"
+LINKER=/usr/bin/ld.lld-17
+CXXFLAGS="-std=c++20 -O2 -DNDEBUG -Wall"
+# The include directories under the runtime prefix (runtime/lib/CMakeLists.txt:20-25: the runtime's headers, its
+# generated flatbuffer headers, and the generated common target headers; types.h includes them as
+# ttmlir/Target/Common/<name>_generated.h) and flatbuffers' headers in the runtime's toolchain directory.
+INCLUDE_DIRS="src/tt-mlir/runtime/include build/tt-mlir/runtime/include build/tt-mlir/include build/tt-mlir/include/ttmlir/Target/Common toolchain/include"
+# The ttsim system descriptor the driver writes once in the sandbox (tools/ttmlir_system_desc.py) into the prefix,
+# and its sha256; with a PLACEHOLDER the executor runs nothing. This hash is from exploratory runs (dirty trees),
+# until a clean commit's run confirms it (tools/ttmlir_system_desc.py; AGENTS.md, Results): the same 552 bytes from
+# rx 20261029-211036-desktop-8r113ei-detached-bd5e51fc-ddac and -212050-...-655c, and from driver a90585ca29fa in
+# rx 20261101-141227-desktop-8r113ei-detached-40bd4a88-f60a (plans/spikes/ttmlir-runtime.md).
+SYSTEM_DESC=ttsim.ttsys
+SYSTEM_DESC_SHA256=54679eed160e559a75758b0bcf1f577f890194a6b1f83dc99f5b755199f5e302

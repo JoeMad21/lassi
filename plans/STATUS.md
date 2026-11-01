@@ -197,8 +197,8 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.45 | DONE | bale-v0-tt with the feature combinations (API pack, docs retrieval, both) | P17.43 | bale-tt-v1 and sweep11's 12 recipes (API pack, docs retrieval, both; with restarts); tests; paused by the owner's MLIR-only direction of 2026-10-29, not launched |
 | P17.46 | DONE | Spike: lowering TTIR and D2M to TTKernel and TT-Metal at the pin | P17.41 | plans/spikes/ttir-d2m.md: TTIR and D2M lower for four of five items; no runtime at the pin (OQ-111 (b), to be built 2026-10-30); no TTIR or D2M route for bale-v0-tt |
 | P17.47 | DONE | TTIR and D2M API references and retrieval indexes | P17.44 | the reference and retrieval tools take a dialect; ttir-ref and d2m-ref packs, tt-mlir-ttir-tests and tt-mlir-d2m-tests indexes; ttkernel outputs unchanged; not yet built on the build host; bible mirror, master sync follows |
-| P17.48 | ACTIVE | The ttir and d2m languages: toolchains and a runtime executor | P17.46 | runtime built (rx 20261029-193649-p1748-tt-mlir-runtime-f0ad); compile-only ttir/d2m toolchains built; left: the driver and executor |
-| P17.49 | READY | TTIR and D2M prompt sets and recipes | P17.47,P17.48 | compile-only arms built (sweep13); outputs checked once P17.48's driver exists |
+| P17.48 | DONE | The ttir and d2m languages: toolchains and a runtime executor | P17.46 | driver, ttsim descriptor, ttmlir-ttsim executor, ttsim presets, pin_field, binary_io shape and from_item, sandbox HOME rule; hand-written TTIR and D2M checked end to end on ttsim (exploratory) |
+| P17.49 | DONE | TTIR and D2M prompt sets and recipes | P17.47,P17.48 | tt-ttir-bare-v1 and tt-d2m-bare-v1, sweep17 (ttir-min, ttir-full, d2m-min on ttsim, item tolerance), replay checks; not yet run with a model |
 | P17.50 | READY | Restarts: on a repeated error, and in every recipe | P17.25 | restart_on_repeat built (2395db2) and set with restart_after in P17.52's recipes (sweep12); left: the master bible sync |
 | P17.51 | READY | gpt-oss-120b at high reasoning effort | P17.39,P17.43,P17.44 | covered by P17.52's arms (high effort, max_tokens 65536, restarts); the launch is first in the window of 2026-10-31 |
 | P17.52 | READY | Sampling temperature arms: 0.2, 0.5, 0.7, and 1.0 | P17.51 | sweep12-t02/-t05/-t07/-t10 built (32 recipes; tests); left: --only sizing from the window of 2026-10-29's timings, the launch |
@@ -207,7 +207,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.55 | READY | Silicon as the correction loop's final test, with Tracy | P17.53,P17.42 | planned 2026-10-29 (OQ-078 and OQ-099 answered) |
 | P17.56 | READY | Silicon launch kit | P17.54,P17.55 | planned 2026-10-29 (OQ-078 and OQ-099 answered) |
 | P17.57 | DONE | Route A: the ttnn language, TTIR through the TTNN backend, compile side | P17.46,P17.43 | ttnn language, ttir-ttnn-compile, bale-v0-ttnn with boundary contracts; compile probe: scatter, sort, cumsum, gather lower to TT-NN (exploratory) |
-| P17.58 | READY | Route A arms: bale-v0 through TTIR -> TTNN, outputs checked on ttsim | P17.57,P17.48 | planned 2026-10-29 (OQ-112) |
+| P17.58 | OWNER | Route A arms: bale-v0 through TTIR -> TTNN, outputs checked on ttsim | P17.57,P17.48 | waits on OQ-114 (TT-NN 32-bit inputs stop in ttsim) |
 | P17.59 | READY | Route B: ttnn.generic with model-written ttkernel kernels | P17.58 | planned 2026-10-29 (OQ-112) |
 | P17.60 | READY | Route C: TTMetal host ops with model-written ttkernel kernels | P17.59 | planned 2026-10-29 (OQ-112) |
 | P17.61 | READY | Feature ladders: each arm set from the bare LASSI loop up | P17.49 | TTIR ladder built (sweep15) and running; sweep16 (rung l1 at 1.0, one recipe) follows it tonight; the ttkernel ladder next, for 2026-10-31 |

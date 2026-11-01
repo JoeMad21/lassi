@@ -1,4 +1,5 @@
-"""The compile-only tt-mlir toolchains: ttir-ttmetal-compile, d2m-ttmetal-compile (P17.48), ttir-ttnn-compile (P17.57).
+"""The tt-mlir toolchains: ttir-ttmetal-compile, d2m-ttmetal-compile (P17.48), ttir-ttnn-compile (P17.57), compile
+only, and ttir-ttmetal-ttsim and d2m-ttmetal-ttsim (P17.48), the same builds for the recorded ttsim descriptor.
 
 The languages ttir and d2m hold an item as one MLIR module, at tensor level
 (TTIR) or at the level of D2M generic ops with their data movement (D2M),
@@ -44,9 +45,11 @@ a module that only returns its inputs lowers to no device program,
 ttir-d2m.md section 2); on TT-NN at least one ttnn op outside
 TTNN_GLUE, the ops that only fetch the device, free, place, move, or create
 a tensor (a module that returns its input lowers to no ttnn op at all, the
-probe's identity case). The artifact is the flatbuffer. Nothing runs it:
-these toolchains declare only `diagnostics` and `emits_warnings`, nothing
-an executor reads to run a program; recipes bind the executor kind none.
+probe's identity case). The artifact is the flatbuffer. The compile-only
+presets' flatbuffers target the mock descriptor and nothing runs them: these
+toolchains declare only `diagnostics` and `emits_warnings`, and their recipes
+bind the executor kind none; the ttsim presets below declare the same, and
+their recipes bind the ttmlir-ttsim executor, which runs the flatbuffer.
 
 The level rule, read on the printed module of step 1 (comments gone): a
 ttir or ttnn module holds at least one ttir op and no op of a dialect the
@@ -80,10 +83,29 @@ class with the pinned ttmlir-opt as `executable` and checks its --version
 against EXPECT_VERSION; TOOL_PINS names the same pin's TTMLIR_TRANSLATE,
 which the runner checks with check_tool_pin (the install record) and
 --version and passes as `tools` (lassi.core.runner, _tool_pins).
+
+The ttsim presets (task P17.48): ttir-ttmetal-ttsim and d2m-ttmetal-ttsim
+build as ttir-ttmetal-compile and d2m-ttmetal-compile do, on the TT-Metal
+route, with two changes, so that the ttmlir-ttsim executor
+(lassi.executors.ttmlir_ttsim) can run the flatbuffer on ttsim. Their tools
+are the tt-mlir runtime build's (toolchains/tt-mlir-runtime.pin, the same
+commit as the runtime that runs the flatbuffer), so PIN and TOOL_PINS name
+tt-mlir-runtime, the pin the executor declares; check_tool_pin reads the
+runtime install's record ("<NAME> <COMMIT> <URL> <VERSION> <BUILD>") and
+the recorded ttsim system descriptor's sha256 (toolchains/tt-mlir-driver.pin
+SYSTEM_DESC_SHA256) before any process starts. And the lowering is
+`--ttir-to-ttmetal-pipeline=system-desc-path=<descriptor>
+enable-multicast-inference=false`, the descriptor being
+<toolchains root>/<driver PREFIX_NAME>/<SYSTEM_DESC>, which the compile
+sandbox sees with the rest of the root (read-only): a flatbuffer for the
+mock descriptor places L1 buffers below tt-metal's reserved base, and the
+driver refuses it (plans/spikes/ttmlir-runtime.md). The compile-only presets
+are unchanged.
 """
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -95,7 +117,9 @@ from lassi.core.record import Diagnostic
 from lassi.core.registry import register
 from lassi.toolchains._base import STDERR_ATTACHMENT, CommandResult, CommandRunner, CompilerToolchain
 from lassi.toolchains._stderr import compile_diagnostic
+from lassi.toolchains.pins import read_pin
 from lassi.toolchains.ttkernel_build import (
+    INSTALL_RECORD,
     MLIR_PIN,
     OPT_KEY,
     TRANSLATE_KEY,
@@ -295,6 +319,10 @@ class TtMlirCompile(CompilerToolchain):
             return []
         return [_no_device_work(module, "the lowered module has no ttmetal.enqueue_program", self.LANGUAGE)]
 
+    def lowering_pipeline(self) -> str:
+        """Return ttmlir-opt's lowering argument: the route's (BACKEND.pipeline); the ttsim presets add a descriptor."""
+        return self.BACKEND.pipeline
+
     def build(self, files: Mapping[str, str], workdir: Path, harness: Mapping[str, str] | None = None) -> BuildResult:
         """Write the files, then verify, lower, and translate the one module (see the module docstring).
 
@@ -336,7 +364,7 @@ class TtMlirCompile(CompilerToolchain):
         flatbuffer = work_path(module, backend.flatbuffer_suffix, backend.work_dir)
         steps = (
             (VERIFY_STAGE, verify_command(self.executable, module, verified)),
-            (LOWER_STAGE, lower_command(self.executable, module, lowered, backend.pipeline)),
+            (LOWER_STAGE, lower_command(self.executable, module, lowered, self.lowering_pipeline())),
             (LOWER_STAGE, translate_command(self.translate, lowered, flatbuffer, backend.translation)),
         )
         found: list[Diagnostic] = []
@@ -507,3 +535,154 @@ class TtirTtnnCompile(TtirCompile):
         held = ", ".join(f"ttnn.{op}" for op in sorted(set(ops))) or "no ttnn op at all"
         missing = f"the lowered module has no ttnn op that computes; it holds {held}"
         return [_no_device_work(module, missing, self.LANGUAGE)]
+
+
+# ---------------------------------------------------------------------------
+# The ttsim presets (task P17.48): the same build for the recorded ttsim descriptor, with the runtime build's tools
+
+# The tt-mlir runtime build (toolchains/tt-mlir-runtime.pin), whose ttmlir-opt and ttmlir-translate these presets run,
+# and the driver pin (toolchains/tt-mlir-driver.pin), whose install holds the recorded ttsim system descriptor.
+RUNTIME_PIN = "tt-mlir-runtime"
+DRIVER_PIN = "tt-mlir-driver"
+# The lowering option that names the descriptor (plans/spikes/ttmlir-runtime.md, the driver and the first ttsim runs).
+SYSTEM_DESC_OPTION = "system-desc-path"
+# The value a pin holds before it is measured (AGENTS.md, Results).
+PLACEHOLDER = "PLACEHOLDER"
+# The first words of the runtime install's record (toolchains/tt-mlir-runtime.sh writes them so).
+_RUNTIME_RECORD_KEYS = ("NAME", "COMMIT", "URL", "VERSION", "BUILD")
+
+
+def recorded_system_desc(root: Path, driver_pin: Mapping[str, str] | None = None) -> Path:
+    """Return where the recorded ttsim descriptor lies, <root>/<driver PREFIX_NAME>/<SYSTEM_DESC>; nothing checked."""
+    pin = read_pin(DRIVER_PIN) if driver_pin is None else driver_pin
+    return Path(root) / pin["PREFIX_NAME"] / pin["SYSTEM_DESC"]
+
+
+def check_system_desc(path: Path, driver_pin: Mapping[str, str] | None = None) -> None:
+    """Raise ValueError unless `path` is the recorded ttsim descriptor: a regular file whose sha256 is the pin's.
+
+    The driver pin's SYSTEM_DESC_SHA256 must not be a PLACEHOLDER, and the
+    path must hold no whitespace, since the lowering option takes it
+    unquoted.
+    """
+    pin = read_pin(DRIVER_PIN) if driver_pin is None else driver_pin
+    expected = pin["SYSTEM_DESC_SHA256"]
+    if expected == PLACEHOLDER:
+        raise ValueError(
+            f"no ttsim system descriptor is recorded (toolchains/{DRIVER_PIN}.pin SYSTEM_DESC_SHA256 is a "
+            "PLACEHOLDER); write it with tools/ttmlir_system_desc.py and record its sha256"
+        )
+    if any(char.isspace() for char in str(path)):
+        raise ValueError(
+            f"the ttsim system descriptor path {str(path)!r} holds whitespace, which {SYSTEM_DESC_OPTION} cannot take"
+        )
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(
+            f"the recorded ttsim system descriptor {path} is missing; install it with tools/ttmlir_system_desc.py"
+        )
+    found = hashlib.sha256(path.read_bytes()).hexdigest()
+    if found != expected:
+        raise ValueError(f"{path} is not the recorded ttsim system descriptor: its sha256 is {found}, not {expected}")
+
+
+def check_runtime_install(home: Path, pin: Mapping[str, str]) -> None:
+    """Raise ValueError unless `home`'s lassi-install.txt starts with "<NAME> <COMMIT> <URL> <VERSION> <BUILD>"."""
+    head = [pin.get(key, "") for key in _RUNTIME_RECORD_KEYS]
+    record = Path(home) / INSTALL_RECORD
+    try:
+        lines = record.read_bytes().decode("utf-8", errors="replace").splitlines()
+    except OSError as error:
+        raise ValueError(
+            f"{record} cannot be read ({error.strerror or error}), so {home} is not the pinned tt-mlir runtime "
+            f"build; install it with toolchains/{RUNTIME_PIN}.sh"
+        ) from None
+    if not all(head) or not lines or lines[0].split()[: len(head)] != head:
+        raise ValueError(
+            f"the first line of {record} does not start with {' '.join(head)!r}; the tree is not the pinned tt-mlir "
+            f"runtime build, so install it with toolchains/{RUNTIME_PIN}.sh"
+        )
+
+
+def toolchains_root_of(executable: str, pin: Mapping[str, str]) -> Path | None:
+    """Return the toolchains root of a pinned ttmlir-opt, <root>/<PREFIX_NAME>/<TTMLIR_OPT>; None for another path."""
+    path = Path(executable)
+    tail = Path(pin["PREFIX_NAME"], pin[OPT_KEY]).parts
+    if not path.is_absolute() or len(path.parts) <= len(tail) or path.parts[-len(tail):] != tail:
+        return None
+    return Path(*path.parts[: -len(tail)])
+
+
+def ttsim_pipeline(system_desc: Path) -> str:
+    """Return the TT-Metal lowering argument for a descriptor: its system-desc-path, then the route's option."""
+    return f"{PIPELINE}={SYSTEM_DESC_OPTION}={system_desc} {PIPELINE_OPTIONS}"
+
+
+class _TtsimTarget(TtMlirCompile):
+    """The TT-Metal build of a ttsim preset: the runtime build's tools, lowering for the recorded ttsim descriptor.
+
+    PIN and TOOL_PINS name the runtime pin, so the toolchain and the
+    ttmlir-ttsim executor declare one pin (lassi.executors.ttmlir_ttsim).
+    The descriptor is <toolchains root>/<driver PREFIX_NAME>/<SYSTEM_DESC>,
+    the root read off the pinned ttmlir-opt's path (the runner builds the
+    class with <root>/<PREFIX_NAME>/<TTMLIR_OPT>), or `system_desc` as given.
+    check_tool_pin checks the runtime's install record and the descriptor's
+    sha256 before any process starts.
+    """
+
+    PIN = RUNTIME_PIN
+    TOOL_PINS = {RUNTIME_PIN: (TRANSLATE_KEY,)}
+
+    def __init__(
+        self,
+        *,
+        executable: str = DEFAULT_OPT,
+        tools: Mapping[str, str] | None = None,
+        runner: CommandRunner | None = None,
+        timeout_s: float = 600.0,
+        system_desc: str | None = None,
+    ) -> None:
+        """Keep the tools as TtMlirCompile does, and the descriptor: `system_desc`, else the one under the root."""
+        super().__init__(executable=executable, tools=tools, runner=runner, timeout_s=timeout_s)
+        root = toolchains_root_of(executable, read_pin(RUNTIME_PIN))
+        found = system_desc if system_desc is not None else (None if root is None else recorded_system_desc(root))
+        self.system_desc: Path | None = None if found is None else Path(found)
+
+    @classmethod
+    def check_tool_pin(cls, pin_name: str, home: Path, pin: Mapping[str, str]) -> None:
+        """Raise ValueError unless `home` is the runtime build's install and the recorded descriptor lies beside it."""
+        if pin_name != RUNTIME_PIN:
+            raise ValueError(f"{cls.name} names no tool pin {pin_name!r}; its tool pin is {RUNTIME_PIN}")
+        check_runtime_install(home, pin)
+        check_system_desc(recorded_system_desc(Path(home).parent))
+
+    def lowering_pipeline(self) -> str:
+        """Return the TT-Metal lowering for the recorded ttsim descriptor; ValueError when none is known."""
+        if self.system_desc is None:
+            raise ValueError(
+                f"{self.name}: no ttsim system descriptor: the runner builds this toolchain with the pinned ttmlir-opt "
+                "under the toolchains root, or pass system_desc"
+            )
+        return ttsim_pipeline(self.system_desc)
+
+
+@register("Toolchain", "ttir-ttmetal-ttsim")
+class TtirTtsimCompile(_TtsimTarget, TtirCompile):
+    """Compiles one TTIR module to a TT-Metal flatbuffer for the recorded ttsim descriptor (the language ttir).
+
+    The build is ttir-ttmetal-compile's with the runtime build's tools and
+    system-desc-path set, so the ttmlir-ttsim executor can run the
+    flatbuffer on ttsim (a simulator; Agent Rule 2).
+    """
+
+    name = "ttir-ttmetal-ttsim"
+
+
+@register("Toolchain", "d2m-ttmetal-ttsim")
+class D2mTtsimCompile(_TtsimTarget, D2mCompile):
+    """Compiles one D2M module to a TT-Metal flatbuffer for the recorded ttsim descriptor (the language d2m).
+
+    The build is d2m-ttmetal-compile's with the runtime build's tools and
+    system-desc-path set, as ttir-ttmetal-ttsim's.
+    """
+
+    name = "d2m-ttmetal-ttsim"

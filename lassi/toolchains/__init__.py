@@ -43,6 +43,12 @@ lassi.core.registry.DEFAULT_REGISTRY under the interface "Toolchain":
   module, the language ttnn, lowered by the pinned tt-mlir's TTIR-to-TTNN
   backend pipeline and translated to a TT-NN flatbuffer, compile only, as
   the two above.
+- "ttir-ttmetal-ttsim" and "d2m-ttmetal-ttsim" (ttir_compile.TtirTtsimCompile
+  and ttir_compile.D2mTtsimCompile; task P17.48): the builds of
+  ttir-ttmetal-compile and d2m-ttmetal-compile with the tt-mlir runtime
+  build's tools (toolchains/tt-mlir-runtime.pin) and the recorded ttsim
+  system descriptor as system-desc-path, so the ttmlir-ttsim executor runs
+  the flatbuffer on ttsim.
 
 Toolchain bindings carry no config. Each preset declares its pin as class
 attributes: PIN, the pin file stem (toolchains/<PIN>.pin, read by
@@ -91,7 +97,7 @@ from lassi.toolchains.gcc import GccNative, GccOpenMP
 from lassi.toolchains.hipcc import HipccGfx942
 from lassi.toolchains.nvcc import NvccSm80, NvccToolchain
 from lassi.toolchains.nvcpp import NvcppCc80, NvcppToolchain
-from lassi.toolchains.ttir_compile import D2mCompile, TtirCompile, TtirTtnnCompile
+from lassi.toolchains.ttir_compile import D2mCompile, D2mTtsimCompile, TtirCompile, TtirTtnnCompile, TtirTtsimCompile
 from lassi.toolchains.ttkernel_build import TtKernelBuild
 from lassi.toolchains.ttmetal_build import TtMetalHost
 
@@ -102,6 +108,7 @@ __all__ = [
     "CommandResult",
     "CommandRunner",
     "D2mCompile",
+    "D2mTtsimCompile",
     "EnvRunner",
     "GccNative",
     "GccOpenMP",
@@ -113,6 +120,7 @@ __all__ = [
     "TtKernelBuild",
     "TtirCompile",
     "TtirTtnnCompile",
+    "TtirTtsimCompile",
     "TtMetalHost",
     "capped_runner",
     "cgeist",

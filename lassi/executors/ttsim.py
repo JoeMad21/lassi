@@ -146,6 +146,8 @@ RESERVED_DIR = "@ttsim"
 CACHE_DIR = "cache"
 LOGS_DIR = "logs"
 WATCHER_DIR = "watcher"
+# The directories under RESERVED_DIR made before each sandboxed run (TtsimExecutor.reserved_dirs).
+RESERVED_SUBDIRS = (CACHE_DIR, LOGS_DIR)
 # Where tt-metal writes Watcher's log under TT_METAL_LOGS_PATH (the P4.9 captures), and the variable that turns
 # Watcher on for the rerun of a hang.
 WATCHER_LOG = ("generated", "watcher", "watcher.log")
@@ -559,6 +561,8 @@ class TtsimExecutor:
     name = "ttsim"
     capabilities = frozenset({"runs_code", "sandboxed", SIMULATOR})
     config_keys = frozenset({"arch", "dispatch", "chips", "harness"})
+    # The directories made under RESERVED_DIR before each sandboxed run; nothing under RESERVED_DIR is an output.
+    reserved_dirs: tuple[str, ...] = RESERVED_SUBDIRS
 
     def __init__(
         self,
@@ -618,6 +622,14 @@ class TtsimExecutor:
         Raise SandboxUnavailableError when neither is set, when
         $LASSI_TOOLCHAINS is relative, or when check_install refuses.
         """
+        return check_install(self._toolchains_root(), self.pins)
+
+    def _toolchains_root(self) -> Path:
+        """Return the resolved toolchains root: the configured `toolchains`, else $LASSI_TOOLCHAINS.
+
+        Raise SandboxUnavailableError when neither is set or when
+        $LASSI_TOOLCHAINS is relative.
+        """
         root = self.toolchains
         if root is None:
             root = _absolute_variable(_TOOLCHAINS_VARIABLE, "the root of the pinned ttsim and tt-metal installs")
@@ -626,7 +638,7 @@ class TtsimExecutor:
                 f"no toolchains root: set ${_TOOLCHAINS_VARIABLE} or pass toolchains; the ttsim executor runs "
                 "programs against the pinned installs there; nothing ran"
             )
-        return check_install(_resolved(root), self.pins)
+        return _resolved(root)
 
     def run(self, artifact: Path, inputs: Sequence[str], limits: Limits) -> RunResult:
         """Run `artifact` with `inputs` on ttsim in the sandbox under `limits`; return its RunResult and findings.
@@ -654,7 +666,7 @@ class TtsimExecutor:
         mounts = _Mounts(self._hidden_roots(), harness, self.install())
         hashes = _pre_run_hashes(workdir)
         before = _regular_files(workdir)
-        result = self._sandboxed(mounts, workdir, [str(artifact), *inputs], limits, watcher=False)
+        result = self._sandboxed(mounts, workdir, self._argv(mounts, artifact, inputs), limits, watcher=False)
         after = _regular_files(workdir)
         outputs = {path: after[path] for path in sorted(after) if path not in before and not _is_reserved(path)}
         findings, sim_ub, sim_gap = read_findings(result.stdout)
@@ -677,6 +689,25 @@ class TtsimExecutor:
             diagnostics=diagnostics,
         )
 
+    def _environment(self, install: TtsimInstall, workdir: Path, limits: Limits) -> dict[str, str]:
+        """Return the program's environment in `workdir`: program_environment's, the ttsim row's.
+
+        A subclass whose driver needs one more variable (task P17.48,
+        lassi.executors.ttmlir_ttsim, HOME) adds it here; the scored run, the
+        Watcher rerun, and any other sandboxed run take their environment from
+        it.
+        """
+        return program_environment(install, workdir, limits)
+
+    def _argv(self, mounts: _Mounts, artifact: Path, inputs: Sequence[str]) -> list[str]:
+        """Return the program's argv for `artifact`: the artifact itself, then its inputs.
+
+        A subclass that runs its artifact through a pinned driver (task
+        P17.48, lassi.executors.ttmlir_ttsim) names the driver here; the
+        scored run and the Watcher rerun both take their argv from it.
+        """
+        return [str(artifact), *inputs]
+
     def _hidden_roots(self) -> tuple[Path, ...]:
         """Return the configured or environment hidden roots and the runs root, resolved.
 
@@ -693,10 +724,10 @@ class TtsimExecutor:
     def _sandboxed(
         self, mounts: _Mounts, workdir: Path, argv: list[str], limits: Limits, *, watcher: bool
     ) -> SandboxResult:
-        """Create the workdir's @ttsim cache and logs, then run `argv` there in the sandbox; Watcher on when asked."""
-        for name in (CACHE_DIR, LOGS_DIR):
+        """Create the workdir's reserved directories, then run `argv` there in the sandbox; Watcher on when asked."""
+        for name in self.reserved_dirs:
             (workdir / RESERVED_DIR / name).mkdir(parents=True, exist_ok=True)
-        environment = program_environment(mounts.install, workdir, limits)
+        environment = self._environment(mounts.install, workdir, limits)
         if watcher:
             environment[WATCHER_VARIABLE] = "1"
         spec = SandboxSpec(
@@ -730,6 +761,6 @@ class TtsimExecutor:
         copy = _fresh_copy(workdir, hashes)
         if copy is None:
             return None
-        self._sandboxed(mounts, copy, [str(copy / name), *inputs], limits, watcher=True)
+        self._sandboxed(mounts, copy, self._argv(mounts, copy / name, inputs), limits, watcher=True)
         log = _read_tail(copy.joinpath(RESERVED_DIR, LOGS_DIR, *WATCHER_LOG), WATCHER_READ_BYTES)
         return None if log is None else watcher_note(log)

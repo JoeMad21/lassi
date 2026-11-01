@@ -1,0 +1,8 @@
+{
+  "synthetic": true,
+  "completions": [
+    {
+      "text": "SYNTHETIC reply written by hand for the ttsim end-to-end check: the TTIR module, one ttir.exp.\n\n```mlir\n// FILE: eltwise_sfpu.mlir\n// The hand-written TTIR module of tt-pairs-v0's eltwise_sfpu for the end-to-end checks of\n// plans/spikes/ttmlir-runtime.md (2026-10-30): the bf16 input of 65536 elements as a 256x256 tensor and one ttir.exp,\n// as plans/spikes/ttir-d2m.md section 2 lowered it; the item's output is bf16. Written by hand; never a model's output.\nfunc.func @eltwise_sfpu(%src0: tensor<256x256xbf16>) -> tensor<256x256xbf16> {\n  %result = \"ttir.exp\"(%src0) : (tensor<256x256xbf16>) -> tensor<256x256xbf16>\n  return %result : tensor<256x256xbf16>\n}\n```\n"
+    }
+  ]
+}

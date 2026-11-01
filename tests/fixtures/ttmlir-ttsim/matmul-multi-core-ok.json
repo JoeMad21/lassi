@@ -1,0 +1,8 @@
+{
+  "synthetic": true,
+  "completions": [
+    {
+      "text": "SYNTHETIC reply written by hand for the ttsim end-to-end check: the TTIR module, one ttir.matmul.\n\n```mlir\n// FILE: matmul_multi_core.mlir\n// The hand-written TTIR module of tt-pairs-v0's matmul_multi_core for the end-to-end checks of\n// plans/spikes/ttmlir-runtime.md (2026-10-30): one ttir.matmul of the two bf16 640x640 inputs, as\n// plans/spikes/ttir-d2m.md section 2 lowered it; the item's output is bf16 640x640. Written by hand; never a model's\n// output.\nfunc.func @matmul_multi_core(%a: tensor<640x640xbf16>, %b: tensor<640x640xbf16>) -> tensor<640x640xbf16> {\n  %c = \"ttir.matmul\"(%a, %b) : (tensor<640x640xbf16>, tensor<640x640xbf16>) -> tensor<640x640xbf16>\n  return %c : tensor<640x640xbf16>\n}\n```\n"
+    }
+  ]
+}

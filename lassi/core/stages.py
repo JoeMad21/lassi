@@ -561,7 +561,7 @@ from lassi.core.record import (
 )
 from lassi.core.registry import DEFAULT_REGISTRY, Registry, register
 from lassi.core.store import BlobStore, TextStore
-from lassi.core.tolerance import STAT_FIELDS, within
+from lassi.core.tolerance import STAT_FIELDS, Tolerance, within
 from lassi.executors.workdir import build_dir, fresh_build_dir
 from lassi.prompts import render
 from lassi.prompts.dialect_defs import DialectDefs, error_names, line_names, nearest_names
@@ -1237,14 +1237,22 @@ def output_file_oracle(context: RunContext) -> OutputFileOracle | None:
     return None
 
 
-def agreement_bound(oracle: OutputFileOracle, trial: Trial) -> OutputFileOracle:
-    """Return `oracle` bound to Trial.reference_agreement when it reads one (agreement_setting), else `oracle`.
+def agreement_bound(oracle: OutputFileOracle, trial: Trial, tolerance: Tolerance | None = None) -> OutputFileOracle:
+    """Return `oracle` bound to what it reads: the item's `tolerance` or Trial.reference_agreement, else `oracle`.
 
     The oracle stage and run_loop (loop.correct_on_mismatch) both bind it
-    so. Raises ValueError starting with the trial id when the agreement is
-    needed but was not recorded; the message adds any
-    REFERENCE_WORKDIR_INCOMPLETE note the baseline made.
+    so. An oracle whose tolerance_setting is set (binary_io's from_item) is
+    bound with with_tolerance to `tolerance`, the item's declared one;
+    ValueError starting with the trial id when it is None. Otherwise raises
+    ValueError starting with the trial id when the agreement is needed but
+    was not recorded; the message adds any REFERENCE_WORKDIR_INCOMPLETE note
+    the baseline made.
     """
+    setting = getattr(oracle, "tolerance_setting", None)
+    if setting is not None:
+        if tolerance is None:
+            raise ValueError(f"{trial.trial_id}: {setting} reads the item's declared tolerance, and it declares none")
+        return oracle.with_tolerance(tolerance)
     if oracle.agreement_setting is None:
         return oracle
     try:
@@ -3465,7 +3473,8 @@ class RunLoopStage:
             return trial, None
         if reference.outputs is None or reference.workdir_incomplete is True:
             return trial, None
-        oracle = agreement_bound(self.files_oracle, trial)
+        tolerance = self.context.suite.item(self.context.item, purpose=PURPOSE).tolerance
+        oracle = agreement_bound(self.files_oracle, trial, tolerance)
         blobs = BlobStore(self.context.store.root)
         aligned = oracle.alignment(stored_files(blobs, reference.outputs), stored_files(blobs, attempt.run.outputs))
         stats = aligned.outputs or []

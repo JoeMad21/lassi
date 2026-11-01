@@ -29,7 +29,9 @@ oracle whose thresholds come from the references' agreement
 Trial.reference_agreement; a trial that recorded none raises ValueError
 naming the setting (and any reference-workdir-incomplete note in
 Trial.baseline_diagnostics, as when only the source reference's workdir
-came back incomplete).
+came back incomplete). An oracle whose thresholds come from the item's
+declared tolerance (tolerance_setting, as for metric and threshold
+from_item) is bound to that tolerance the same way.
 
 Stdout: an Oracle that declares `masks_stdout` (lassi.oracles.stdout_mask)
 is bound to the trial's item: the item's masks from
@@ -195,7 +197,7 @@ class OracleStage:
             )
         if trial.reference_run.workdir_incomplete is True:
             return self.unaligned_output_files(trial)
-        oracle = agreement_bound(oracle, trial)
+        oracle = agreement_bound(oracle, trial, self.context.suite.item(self.context.item, purpose=PURPOSE).tolerance)
         blobs = BlobStore(self.context.store.root)
         reference_files = stored_files(blobs, reference)
         attempts = []

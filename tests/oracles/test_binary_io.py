@@ -12,8 +12,9 @@ The contract these tests fix:
   oracle stage reads to align output files instead of stdout.
 - lassi.oracles.binary_io registers the Oracle `binary_io` (importing
   lassi.core.runner registers it too). Its class BinaryIOOracle declares
-  exactly the capability ALIGNS_OUTPUT_FILES and the config keys `metric`
-  and `threshold`, and is built as BinaryIOOracle(metric=..., threshold=...),
+  exactly the capability ALIGNS_OUTPUT_FILES and the config keys `metric`,
+  `threshold`, and the optional `shape` (task P17.48;
+  tests/oracles/test_binary_io_shape.py), and is built as BinaryIOOracle(metric=..., threshold=...),
   which keeps them as its `metric` and `threshold` attributes (its `name` is
   "binary_io"). Both keys are required choices with no default: a missing one raises
   ValueError whose message names `oracle.metric` or `oracle.threshold`.
@@ -222,7 +223,7 @@ def test_importing_the_runner_registers_binary_io_with_its_capability_and_keys()
     oracle_class()
     entry = DEFAULT_REGISTRY.get("Oracle", NAME)
     assert entry.capabilities == frozenset({CAPABILITY})
-    assert entry.config_keys == frozenset({"metric", "threshold"})
+    assert entry.config_keys == frozenset({"metric", "threshold", "shape"}), "shape: task P17.48, optional"
     stdout_mask = DEFAULT_REGISTRY.get("Oracle", "stdout_mask")
     assert CAPABILITY not in stdout_mask.capabilities, "stdout_mask aligns stdout, not output files"
 

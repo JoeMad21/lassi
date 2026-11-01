@@ -3074,3 +3074,24 @@ def test_in_all_of_lassi_only_the_sandbox_and_the_compiler_runner_start_processe
             offenders[module] = found
     assert scanned > len(PROCESS_MODULES)
     assert not offenders, offenders
+
+
+# ---------------------------------------------------------------------------
+# HOME in a program's environment (the owner's answer to OQ-115)
+
+
+def test_a_spec_admits_home_at_or_under_its_workdir(sandbox: ModuleType) -> None:
+    for home in (WORK, WORK / "@ttsim" / "home"):
+        spec = sample_spec(sandbox, environment={"PATH": "/usr/bin", "HOME": str(home)})
+        assert dict(spec.environment)["HOME"] == str(home)
+    assert "HOME" not in sandbox.ENVIRONMENT_NAMES, "HOME stays off the allowlist; only _check_home admits it"
+
+
+@pytest.mark.parametrize(
+    "home",
+    [str(HOME), "/tmp", "relative/home", str(WORK / ".." / "elsewhere"), str(WORK.parent)],
+    ids=["host-home", "tmp", "relative", "dotdot", "parent"],
+)
+def test_a_spec_refuses_home_outside_its_workdir(sandbox: ModuleType, home: str) -> None:
+    with pytest.raises(ValueError, match="HOME must be an absolute path at or under the workdir"):
+        sample_spec(sandbox, environment={"PATH": "/usr/bin", "HOME": home})

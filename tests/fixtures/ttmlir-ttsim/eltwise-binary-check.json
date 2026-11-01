@@ -1,0 +1,14 @@
+{
+  "synthetic": true,
+  "completions": [
+    {
+      "text": "SYNTHETIC reply written by hand for the ttsim end-to-end check: a module whose inputs hold half the elements of the input files.\n\n```mlir\n// FILE: eltwise_binary.mlir\n// The deliberately mis-shaped TTIR module of tt-pairs-v0's eltwise_binary for the end-to-end check of\n// plans/spikes/ttmlir-runtime.md (2026-10-30): eltwise_binary_ok.mlir on 128x256 tensors, half the 65536 elements of\n// each input file, so it compiles and the driver must refuse its inputs before it opens the device. Written by hand\n// for the check; never a model's output.\nfunc.func @eltwise_binary(%a: tensor<128x256xbf16>, %b: tensor<128x256xbf16>) -> tensor<128x256xf32> {\n  %sum = \"ttir.add\"(%a, %b) : (tensor<128x256xbf16>, tensor<128x256xbf16>) -> tensor<128x256xbf16>\n  %c = \"ttir.typecast\"(%sum) : (tensor<128x256xbf16>) -> tensor<128x256xf32>\n  return %c : tensor<128x256xf32>\n}\n```\n"
+    },
+    {
+      "text": "SYNTHETIC reply written by hand for the ttsim end-to-end check: a module that computes a - b.\n\n```mlir\n// FILE: eltwise_binary.mlir\n// The deliberately wrong TTIR module of tt-pairs-v0's eltwise_binary for the end-to-end check of\n// plans/spikes/ttmlir-runtime.md (2026-10-30): eltwise_binary_ok.mlir with ttir.subtract in place of ttir.add, so it\n// compiles and runs and its output c must fail the oracle. Written by hand for the check; never a model's output.\nfunc.func @eltwise_binary(%a: tensor<256x256xbf16>, %b: tensor<256x256xbf16>) -> tensor<256x256xf32> {\n  %diff = \"ttir.subtract\"(%a, %b) : (tensor<256x256xbf16>, tensor<256x256xbf16>) -> tensor<256x256xbf16>\n  %c = \"ttir.typecast\"(%diff) : (tensor<256x256xbf16>) -> tensor<256x256xf32>\n  return %c : tensor<256x256xf32>\n}\n```\n"
+    },
+    {
+      "text": "SYNTHETIC reply written by hand for the ttsim end-to-end check: the correct module, a + b widened to f32.\n\n```mlir\n// FILE: eltwise_binary.mlir\n// The hand-written correct TTIR module of tt-pairs-v0's eltwise_binary for the end-to-end check of\n// plans/spikes/ttmlir-runtime.md (2026-10-30): the two bf16 inputs of 65536 elements written as 256x256 tensors\n// (the same elements in row-major order), a bf16 add on the device, and the sum widened to f32, which is what the\n// item's tt program writes as its output c. Written by hand for the check; never a model's output.\nfunc.func @eltwise_binary(%a: tensor<256x256xbf16>, %b: tensor<256x256xbf16>) -> tensor<256x256xf32> {\n  %sum = \"ttir.add\"(%a, %b) : (tensor<256x256xbf16>, tensor<256x256xbf16>) -> tensor<256x256xbf16>\n  %c = \"ttir.typecast\"(%sum) : (tensor<256x256xbf16>) -> tensor<256x256xf32>\n  return %c : tensor<256x256xf32>\n}\n```\n"
+    }
+  ]
+}

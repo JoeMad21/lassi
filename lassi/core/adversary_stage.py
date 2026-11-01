@@ -522,15 +522,16 @@ class AdversaryStage:
         return executor
 
     def _oracle(self, item: SuiteItem) -> OutputFileOracle:
-        """Return the recipe's output-file Oracle, bound to the item's declared tolerance under from_baseline."""
+        """Return the recipe's output-file Oracle, bound to the item's tolerance under from_baseline or from_item."""
         oracle = output_file_oracle(self.context)
         if oracle is None:
             raise ValueError(f"the adversary stage needs an Oracle that declares {ALIGNS_OUTPUT_FILES!r}")
-        if oracle.agreement_setting is None:
+        setting = oracle.agreement_setting or getattr(oracle, "tolerance_setting", None)
+        if setting is None:
             return oracle
         if item.tolerance is None:
             raise ValueError(
-                f"{oracle.agreement_setting}: the adversary stage judges a proposal against the item's declared "
+                f"{setting}: the adversary stage judges a proposal against the item's declared "
                 f"tolerance, and {self.context.suite.name}/{item.name} declares none"
             )
         return oracle.with_tolerance(item.tolerance)

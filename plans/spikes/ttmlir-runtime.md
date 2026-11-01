@@ -288,6 +288,325 @@ install unchanged, the root filesystem) printed as passing in its log (output-ta
 PROJECTED space, time, and ttrt version above [MEASURED, alpha01]. The install's fetched-sources list (26 lines) is
 copied into toolchains/tt-mlir-runtime-fetched-sources.txt.
 
+## The driver, the executor, and the first ttsim runs (2026-10-30, exploratory)
+
+Exploratory, never [MEASURED]: every run below came from a dirty worktree (detached at bd5e51f; rx sent each tree as
+a snapshot commit), on alpha01 under the owner's standing permission for short CPU-only runs: `rx run` or `rx exec`,
+each under `--timeout 600` or less, CPU only, no `--big`, no model. Every process that loaded the runtime ran inside
+the sandbox (lassi.executors.sandbox) with the ttsim row's environment, TT_METAL_SIMULATOR on ttsim v1.3.4's library,
+where no /dev/tenstorrent node is visible, and opened at most one device, on ttsim; no card was opened. rx ids use
+alpha01's clock (UTC-7, 2026-10-29 evening there); an id written `<stamp>-...-<tag>` below stands for
+`<stamp>-desktop-8r113ei-detached-bd5e51fc-<tag>`, the worktree's slot. The scratch disk read 68G available (`df -BG /mnt/nvme10`) before
+the first build and after the last run; the window3 job ran beside them.
+
+What was written (the repository side): toolchains/tt-mlir-driver/lassi_ttmlir_run.cpp (the driver, both modes),
+toolchains/tt-mlir-driver.pin and toolchains/tt-mlir-driver.sh (its build), lassi/executors/ttmlir_ttsim.py (Executor
+"ttmlir-ttsim", the ttsim executor with the driver's argv, the runtime and driver install checks, and the driver's
+diagnostics; lassi/executors/ttsim.py gained the `_argv` and `_toolchains_root` hooks it uses),
+tools/ttmlir_system_desc.py (the descriptor's write and install), tests (tests/executors/test_ttmlir_ttsim.py,
+tests/toolchains/test_tt_mlir_driver_pin.py), and the probe files of this section in plans/spikes/ttmlir-runtime/
+(add.mlir, add_bf16.mlir, histo.mlir, probe.py, compare.py, diag.py).
+
+| rx id | What | Result |
+| --- | --- | --- |
+| 20261029-205005-exec-2cd4 | Read-only: the runtime prefix's layout, readelf of libTTMLIRRuntime.so, clang++-17, df | include and library paths as the pin names them; RUNPATH $ORIGIN and tt-metal's build_Release/lib; 68G available |
+| 20261029-210313-...-e1e8 | Build driver fb17bf849a92 | built and installed on the first try; ldd finds every library |
+| 20261029-210329-...-a45a | describe mode in the sandbox | exit 139 (SIGSEGV) after 0.4 s, no output |
+| 20261029-210412-...-c10e | diag.py usage, refuse, describe | all three exit 139 in 0.4 s: the fault comes before main |
+| 20261029-210430-...-91dc | diag.py ldd, gdb | ldd in the sandbox finds every library (MPI from /opt/openmpi-v5.0.7-ulfm); gdb: `vfork: Resource temporarily unavailable` |
+| 20261029-210448-exec-e421 | Read-only: the user's task counts and limits | 29,863 threads of the user (io_uring workers of window3), ulimit -u 12,347,776, the user slice's pids.current 24,582 of 1,384,119: not the cause |
+| 20261029-210525-...-1e06 | diag.py usage, refuse with TasksMax 4096 | still exit 139: not the sandbox's task cap |
+| 20261029-210538-...-e2a1 | diag.py gdb with TasksMax 4096 | SIGSEGV at 0x7ffff75b217c; gdb cannot read the process (/proc/PID/mem opens read-only in the sandbox) |
+| 20261029-210603-...-0555 | LD_DEBUG=init | not an option of this glibc |
+| 20261029-210614-...-7d39 | LD_DEBUG=files | the last `calling init:` before the fault is _ttnncpp.so |
+| 20261029-210814-...-bde4 | Build driver 5e91d6a405ff (setenv HOME in .preinit_array); usage, refuse | built; still exit 139 |
+| 20261029-210833-...-759c | readelf of 5e91d6a405ff; withhome (HOME=/tmp through env, a diagnosis) | PREINIT_ARRAY present; with HOME set the driver runs: usage refusal, exit 2 |
+| two runs, ids not kept | LD_DEBUG=files on 5e91d6a405ff | `calling preinit` comes first, then `calling init` of ld.so and libc, then the others |
+| 20261029-211006-...-d412 | Build of dc422de5d697 | nothing ran: the local shell rewrote the command's leading `VAR=/path`; rerun with MSYS_NO_PATHCONV=1 |
+| 20261029-211022-...-7302 | Build driver dc422de5d697 (re-exec with HOME in .preinit_array); usage, refuse | built; usage exit 2, refuse exit 2 (`cannot open the flatbuffer missing.ttm`) |
+| 20261029-211036-...-ddac | tools/ttmlir_system_desc.py --install | exit 0, 2.0 s simulator wall time; 552 bytes, sha256 54679eed160e559a75758b0bcf1f577f890194a6b1f83dc99f5b755199f5e302, installed in the driver prefix |
+| 20261029-211100-...-0497 | probe.py add | compiled; the probe stopped before the run (its @inputs directory was not made) |
+| 20261029-211111-...-d0a3 | probe.py add (TT-Metal) | exit 0, outputs compared (below) |
+| 20261029-211133-...-e509 | probe.py histo (TT-NN) | exit 1, ttsim UndefinedBehavior (below) |
+| 20261029-211152-exec-cb60 | Read-only: histo's lowered module and its JIT cache | 64 ttnn.scatter; tilize kernels only (below) |
+| 20261029-211322-...-b94e | probe.py add-ttnn (f32 through TT-NN) | exit 1, ttsim UndefinedBehavior (below) |
+| 20261029-211351-...-a3c1 | probe.py add-bf16-ttnn | exit 0, outputs compared (below) |
+| 20261029-212050-...-655c | Build driver 52325796c083 (a comment of the source changed); tools/ttmlir_system_desc.py --install | the program's sha256 is dc422de5d697's, 1dd776affd27f02d181a4ea5a682184b4a99ed53ab5d47779dc0baf0caeea287 (the same bytes); describe exit 0 after 1.9 s; the same 552 bytes, sha256 54679eed...e302, installed in the new prefix |
+| 20261029-211420-exec-a9de | Read-only: the descriptor as JSON (the runtime toolchain's flatc 24.3.25), du, df | below; this session's files on alpha01: three driver prefixes of 84, 84, and 88 KiB, lassi-runs/ttmlir-runtime-spike 45,488 KiB, lassi-runs/ttmlir-system-desc 2,516 KiB |
+
+Findings:
+
+- The driver builds against the runtime prefix with the runtime's clang++-17 and ld.lld-17 (toolchains/tt-mlir-driver.pin)
+  and its libraries resolve inside the sandbox, MPI from /opt/openmpi-v5.0.7-ulfm included.
+- HOME. With no HOME in its environment (the ttsim row's, bible Execution Backends), the driver died by SIGSEGV while
+  its libraries loaded: TT-NN's configuration, a static object of _ttnncpp.so (ttnn/core/config.cpp:9 at tt-metal
+  5280a9cf), builds its cache paths from `std::filesystem::path{std::getenv("HOME")}` with no check
+  (ttnn/api/ttnn/config.hpp:23-24), and libTTMLIRRuntime links _ttnncpp.so whatever runtime runs
+  (runtime/lib/CMakeLists.txt:30-53), so TT-Metal flatbuffers need HOME too. With HOME set the driver runs (rx 759c). A
+  setenv in the executable's .preinit_array is lost, since libc's initializer runs after it and reinstalls the initial
+  environment array (LD_DEBUG=files: preinit first, then libc). The driver now reads the initial environment in its
+  preinit function and, when it has no HOME, runs itself again once with HOME set to its working directory, the run's
+  workdir (lassi_ttmlir_run.cpp, lassiDefaultHome; SUPERSEDED on 2026-11-01 by the owner's answer to OQ-115: the
+  executor sets HOME and the re-exec is gone, see the part dated 2026-11-01 at the end of the section on the TTIR and D2M arms). The sandbox still passes no HOME and nothing from the caller's
+  environment reaches the program; the ttsim row's "HOME unset" stays true of the environment the executor sets, but
+  the driver's process holds HOME=<workdir>. That is a design point for the owner's review (Execution Backends; Agent
+  Rule 12's intent is kept: no host HOME and no secret).
+- Diagnosis in the sandbox: gdb starts about one worker thread per host CPU (256 here), past the sandbox's TasksMax of
+  256 (`vfork: Resource temporarily unavailable`), and even with a larger cap cannot read the process's memory, since
+  /proc is read-only there; `env LD_DEBUG=files <program>` worked.
+- The ttsim descriptor (flatc of ttsim.ttsys): version 0.0.2995, ttmlir_git_hash 5f396fd6, product_identifier unknown;
+  one chip: grid_size y 9, x 8; coord_translation_offsets 18, 18; l1_size 1499136; 12 DRAM channels of 1073741824
+  bytes; l1_unreserved_base 103712 (the mock descriptor's is 1024, plans/spikes/ttir-d2m.md section 1);
+  erisc_l1_unreserved_base 69632; dram_unreserved_base 32; dram_unreserved_end 1073050400; alignments: NoC L1 16, PCIe
+  32, NoC DRAM 32; the 13 supported data types the runtime lists (runtime/lib/common/system_desc.cpp:179-186); 6 tile
+  sizes; dst_physical_size_tiles 16, num_cbs 64; chip_capabilities HostMMIO; chip_channels empty. The run's log names
+  UMD's simulation device ("Creating Simulation device", EmulationDriver PCI vendor_id 0x1e52 device_id 0x401e).
+- The descriptor check compares what ttrt compares (tools/ttrt/common/util.py:868-907): the flatbuffer's
+  system_desc table as JSON (Binary::getSystemDescAsJson) against the recorded root's system_desc member, both
+  minified; the design note's "equals asJson()" would have compared a table with its root. A flatbuffer compiled for
+  this descriptor passed it on both runtimes.
+- TT-Metal (add.mlir, f32 64x128, `--ttir-to-ttmetal-pipeline="system-desc-path=<descriptor>
+  enable-multicast-inference=false"`, then `--ttmetal-to-flatbuffer`): compile 0.1 s and 0.02 s; head
+  5cc20000 20000000 54544d30 ("TTM0"); the run exited 0 after 4.5 s simulator wall time with no finding and wrote c,
+  f32 [64,128]. Against numpy 2.1.2's f32 sum of the same inputs (seed 7, uniform [-1, 1)): max |difference|
+  1.4484e-3, 8190 of 8192 elements differ, sums 65.80548 and 65.85814; the outputs carry about 10 mantissa bits
+  (0.278564453125 = 1141 x 2^-12 where numpy gives 0.27873552), consistent with f32 operands reduced to TF32 in the
+  source registers (inferred, not traced).
+- TT-NN histo (histo.mlir: one ttir.scatter, SUM, si32 4096 zeros, 16384 indices in [0, 4096), 16384 ones;
+  `--ttir-to-ttnn-backend-pipeline="system-desc-path=<descriptor>"`, then `--ttnn-to-flatbuffer`): compiled with one
+  warning, `Empty argument type map provided. Skipping argument type population.`; the lowering splits the scatter into
+  64 ttnn.scatter of 256 indices each (128 ttnn.slice_static, 130 ttnn.to_layout, 324 ttnn.deallocate); head
+  ... 54544e4e ("TTNN"). The run exited 1 after 1.9 s with one ttsim finding, `[10918] ERROR: UndefinedBehavior:
+  tensix_execute_unpacr: unpack_to_dst=0 in_data_format=8`, and wrote no output, so nothing was compared. The JIT
+  cache holds only tilize_wh, reader_unary_pad_multicore_both_dims, and writer_unary_interleaved_start_id: the run
+  stopped in the input conversion, before any scatter. The runtime tilizes an INT32 or FLOAT32 input on the device
+  (runtime/lib/ttnn/utils/utils.cpp:76-84, :98-103; runtime/lib/ttnn/types/layout_converter.cpp:108-114), and
+  ttsim calls an unpack of a 32-bit format to the source registers undefined (data format 8 is Int32 in tt-metal's
+  DataFormat, tt_metal/api/tt-metalium/tt_backend_api_types.hpp:21-43; that ttsim prints the same codes is inferred).
+- TT-NN f32 add (add.mlir through the TT-NN pipeline): the same stop, `UndefinedBehavior: tensix_execute_unpacr:
+  unpack_to_dst=0 in_data_format=0 out_data_format=0` (0 is Float32), exit 1 after 2.8 s.
+- TT-NN bf16 add (add_bf16.mlir): exit 0 after 3.3 s with no finding; c, bf16 [64,128]. Against numpy's f32 sum of the
+  bf16 inputs widened exactly: max |difference| 0.00390625, half a bf16 step in [1, 2), 4036 of 8192 elements differ,
+  consistent with the sum rounded to bf16 (inferred; not compared element by element with round-to-nearest-even).
+
+Finding: the driver and the ttmlir-ttsim executor run TT-Metal ("TTM0") and TT-NN ("TTNN") flatbuffers on ttsim, a
+program compiled for the recorded ttsim descriptor, with lassi_io inputs and outputs (exploratory). Route A's first
+measurement did not reach ttnn.scatter: on ttsim v1.3.4 every TT-NN program with a 32-bit input stops at the
+runtime's on-device tilize of that input with ttsim's UndefinedBehavior finding, before the program's own ops run
+(inferred: two programs were run, histo with si32 inputs and add with f32 inputs, and the runtime code cited above
+tilizes every INT32 or FLOAT32 input on the device; no other 32-bit program was run).
+Whether ttnn.scatter, sort, moreh_cumsum, and embedding run on ttsim stays unmeasured. What could move it, each a
+choice for the owner (OQ-112's fallback names route C when TT-NN does not run on ttsim): a ttsim release that takes
+the 32-bit unpack (a pin change); a host-side tilize of 32-bit inputs (the pinned runtime offers none through its API;
+a runtime patch, or the driver calling TT-NN's host conversion itself, linking _ttnncpp.so); 16-bit index and value
+types where exact (lassi_io has no u16, and counts past 256 are not exact in bf16); or route C, whose TT-Metal path ran
+here.
+
+Not shown here: a run from a clean commit (the descriptor's sha256 in toolchains/tt-mlir-driver.pin comes from rx ddac
+and rx 655c and is to be confirmed so; the runs above used driver dc422de5d697, whose program has the bytes of the
+pinned 52325796c083's), the TTIR and D2M toolchains compiling with the descriptor (SUPERSEDED by the next section:
+when this was written, lassi.toolchains.ttir_compile still used the compiler install and the mock descriptor and
+declared the compiler pin under tt-mlir; the ttsim presets ttir-ttmetal-ttsim and d2m-ttmetal-ttsim now compile with
+the runtime prefix's tools for the recorded descriptor under the runtime pin), and the
+older driver prefixes fb17bf849a92, 5e91d6a405ff, and dc422de5d697, left on alpha01 (never deleted; 84 to 88 KiB
+each).
+
+## The TTIR and D2M arms on ttsim, end to end (2026-10-30, exploratory)
+
+Exploratory, never [MEASURED]: every run below came from a dirty worktree (detached at 40bd4a8, the tip of
+p16-adversarial, with the driver and executor work above uncommitted; rx sent each tree as a snapshot commit), on
+alpha01 under the owner's standing permission for short CPU-only runs: `rx run` or `rx exec`, each under
+`--timeout 600` or less, CPU only, no `--big`, no model (the replay backend gives hand-written replies), no RNGD card
+touched. Every flatbuffer ran through the ttmlir-ttsim executor in the sandbox with TT_METAL_SIMULATOR on ttsim v1.3.4,
+one device open per run process; no card was opened. rx ids use alpha01's clock (UTC-7, 2026-10-29 evening there);
+`<stamp>-...-<tag>` stands for `<stamp>-desktop-8r113ei-detached-40bd4a88-<tag>`. The scratch disk read 68G available
+(`df -BG /mnt/nvme10`) before the first run and before each run after it.
+
+What changed in the repository (uncommitted, in the worktree):
+
+- Pins. The executor declares the runtime pin under its own name, tt-mlir-runtime (it declared it as tt-mlir, the
+  compiler pin's name, so the runner refused the pair). lassi.core.runner pin_field records a pin under the field of
+  its name, and a build variant kept in its own pin file, <NAME>-<BUILD>.pin with those NAME and BUILD keys, under
+  NAME's field: tt-mlir-runtime as tt_mlir, 0.9.0.dev20260221-runtime, as the runtime pin's header and the executor
+  intended. Two pin names that would put two versions in one field are refused before any directory exists, so the
+  runtime executor beside a compile-only toolchain (compiler pin, mock descriptor) is refused; the Trial record's
+  fields are unchanged.
+- Toolchains. ttir-ttmetal-ttsim and d2m-ttmetal-ttsim (lassi.toolchains.ttir_compile) are ttir-ttmetal-compile and
+  d2m-ttmetal-compile with the runtime build's ttmlir-opt and ttmlir-translate (PIN and TOOL_PINS tt-mlir-runtime,
+  the executor's pin) and `--ttir-to-ttmetal-pipeline=system-desc-path=<descriptor> enable-multicast-inference=false`,
+  the descriptor at <toolchains root>/<driver PREFIX_NAME>/ttsim.ttsys; check_tool_pin reads the runtime's install
+  record and the descriptor's sha256 against toolchains/tt-mlir-driver.pin before any process starts. The compile-only
+  presets and sweep13, sweep15, and sweep16 are unchanged.
+- Outputs. binary_io takes an optional recipe key `shape`: `exact` (the default, the rule before) or `elements`, which
+  compares two arrays of one dtype whose shapes differ but hold the same element count in row-major order, as lassi_io
+  stores them; another count is still a shape mismatch, its note giving both counts. The driver writes each output in
+  its tensor's logical shape, so a module that writes a 65536-element array as 256x256 writes c as [256, 256] where the
+  tt program writes [65536] (read below).
+- Reference. As the ttkernel recipes have it (mlir1, sweep10): baseline builds and runs the item's tt program, the ttir
+  and d2m languages' reference (`reference: tt`), on ttsim, and the cpp program natively (fixes.baseline_both); the
+  oracle judges each candidate's outputs against the tt program's within the references' agreement (threshold
+  from_baseline). The tt program, not the cpp program, is the target reference, so a candidate that computes what the
+  device computes (a bf16 add) matches it exactly.
+- Prompts. tt-ttir-bare-v1 is tt-ttir-bare-v0 with correct.txt worded for run failures too (how the program ended and
+  its standard error, the driver's refusals among them) and a bare correct_mismatch.txt (the per-output report, no
+  guidance); tt-d2m-bare-v1 is the same for D2M, with tt-d2m-v0's reference, retrieval, and cgeist templates.
+- Recipes. projects/lassi-demo/sweep17/gpt-oss-120b: ttir-min (sweep16's ttir-min plus the run), ttir-full (plus rung
+  l2's retrieval and rung l3's cgeist source), and d2m-min (rung l1's features for D2M), each in a max_abs half
+  (eltwise_binary, eltwise_sfpu; d2m adds loopback) and a pcc half (matmul_multi_core), every one with run_loop and
+  loop.correct_on_mismatch within the cap of 8. projects/lassi-demo/sweep17/check: four replay recipes on SYNTHETIC
+  recordings (tests/fixtures/ttmlir-ttsim/) of the hand-written modules in this directory (eltwise_binary_ok,
+  _wrong, _refused, eltwise_sfpu_ok, matmul_multi_core_ok, d2m_eltwise_sfpu_ok); summarize.py prints a run's trials.
+
+| rx id | What | Result |
+| --- | --- | --- |
+| 20261029-221047-exec-6e66 | Read-only: df, the toolchains root, the runtime's record, the driver prefix, the descriptor | 68G available; record `tt-mlir 5f396fd6... 0.9.0.dev20260221 runtime`; ttsim.ttsys 552 bytes, sha256 54679eed...e302, the pin's; bench sources of tt-pairs-v0-ttir and -d2m fetched |
+| 20261029-221124-...-f7cd | The runtime build's ttmlir-opt and ttmlir-translate on eltwise_binary_ok and _wrong for the descriptor | both TTM0 (size prefixes 74788 and 75404 bytes), 5 ttmetal.enqueue_program each; ttmlir-opt --version `LLVM version 22.0.0git`, `Optimized build with assertions` |
+| 20261029-221408-...-2d69 | `uv run lassi --graphics off run projects/lassi-demo/sweep17/check/ttir-eltwise-replay.yaml --run-id ttir-ttsim-check-1` (eltwise-binary-wrong-then-ok.json, loop.max_corrections 1) | rc 0; `stage S5  corrections 1  wall_s 26.42` |
+| 20261029-221446-exec-779c, 221501-exec-0a0c, 221533-...-7d88 | Reads of ttir-ttsim-check-1 (221516-...-ee40 named a wrong blob path) | below |
+| 20261029-221627-...-8be5 | the same recipe on eltwise-binary-check.json, loop.max_corrections 2, `--run-id ttir-ttsim-check-2` | rc 0; `stage S5  corrections 2  wall_s 28.80` |
+| 20261029-221707-exec-90de | Read of ttir-ttsim-check-2 | below |
+| 20261029-221908-...-dc61 | The runtime build's tools on eltwise_sfpu_ok, matmul_multi_core_ok, d2m_eltwise_sfpu_ok | TTM0 each; 3, 4, and 3 programs |
+| id not returned (the ssh session dropped; the runs' provenance names snapshot 718f18cb) | ttir-sfpu-replay, ttir-matmul-replay, d2m-sfpu-replay, run ids ttsim-check-<name>-1 | all three finished (rx 20261029-222117-exec-3982, -222206-exec-9ca3) |
+| 20261029-222151-...-e1da | summarize.py on the three | below |
+
+Results (simulator wall time of each run, never performance; Agent Rule 2):
+
+- ttir-ttsim-check-2, eltwise_binary, one trial of three replies. Trial pins tt_mlir 0.9.0.dev20260221-runtime, ttsim
+  v1.3.4; device `ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with the tt-mlir runtime
+  0.9.0.dev20260221-runtime (tt-mlir 5f396fd6, tt-metal 5280a9cf) and lassi-ttmlir-run 52325796c083: a simulator, not
+  silicon`. The tt reference ran clean in 2.11 s; the references' agreement on c: pcc 0.99999885, max_abs 0.001953125
+  (the threshold). Attempt 0 (128x256 inputs): exit status 2 in 0.42 s, S4, diagnostics `driver-refused: the driver
+  refused the run: input 0 (@inputs/a.lassiio) holds 65536 elements; the program's input 0 [128x256] holds 32768` and
+  `run-error: the program exited with status 2`; the correction prompt (correct.txt) carried `the program exited with
+  status 2; its standard error follows:` and the driver's line. Attempt 1 (a - b): clean in 5.46 s, S5, alignment 0.0:
+  `c: pcc -0.0015, max_abs 2.00390625, passed False, note max_abs 2.00390625 is above the max_abs threshold
+  0.001953125`, diagnostic `oracle-mismatch`; the mismatch prompt read `c: failed; pcc -0.001; over 1000 times the
+  allowed error`. Attempt 2 (a + b widened to f32): clean in 5.45 s, S5, alignment 1.0: `c: pcc 1.0, max_abs 0.0,
+  max_ulp 0, passed True`. Final: S5, alignment 1.0, corrections 2, end_reason none. ttir-ttsim-check-1 read the same
+  for its two replies (attempt 0 a - b failed with the same statistics; attempt 1 passed, max_abs 0.0; corrections 1).
+- The output shapes (lassi.harness.lassi_io read_array on the blob store): the tt reference's c f32 (65536,), each
+  attempt's c f32 (256, 256); with `shape: exact` every attempt would have failed as a shape mismatch.
+- ttsim-check-ttir-sfpu-1, eltwise_sfpu (one ttir.exp): tt reference clean in 2.14 s, result bf16 (65536,); agreement
+  pcc 0.99995954, max_abs 0.015625; attempt 0 clean in 3.84 s, result bf16 (256, 256), pcc 1.0, max_abs 0.0, passed.
+- ttsim-check-ttir-matmul-1, matmul_multi_core (one ttir.matmul, metric pcc): tt reference clean in 3.19 s, c bf16
+  (640, 640); agreement pcc 0.99994025, max_abs 0.25; attempt 0 clean in 6.71 s, c bf16 (640, 640), pcc 1.0, max_abs
+  0.0, passed.
+- ttsim-check-d2m-sfpu-1, eltwise_sfpu through d2m-ttmetal-ttsim (one generic of d2m.tile_exp on an 8x8 grid): tt
+  reference clean in 2.08 s; attempt 0 clean in 3.80 s, result bf16 (256, 256), pcc 1.0, max_abs 0.0, passed.
+- No run printed a ttsim finding (sim_ub false, no gap), and no run wrote a file into its workdir but its outputs.
+
+Finding (exploratory): the TTIR and D2M TT-Metal path runs end to end through the runner on ttsim: the ttsim preset
+compiles for the recorded descriptor with the runtime's tools, the driver runs the flatbuffer, the oracle reads the
+outputs against the tt program's, and run_loop feeds a driver refusal and an oracle mismatch back as corrections and
+stops at a pass. Hand-written modules of eltwise_binary, eltwise_sfpu, and matmul_multi_core in TTIR, and eltwise_sfpu
+in D2M, equal the tt program's outputs bit for bit on ttsim.
+
+Not shown here: any sweep17 arm with the model (no model was served); verbatim_context, retrieval, and source_mlir on
+these recipes (unchanged features of sweep15 and sweep16; the check recipes leave them out); loopback and
+matmul_multi_core in D2M; a run from a clean commit; and the TT-NN route (the 32-bit unpack finding above holds).
+
+For the owner:
+
+- The driver's HOME workaround (answered: OQ-115 chose (b); see the part dated 2026-11-01 at the end of the section on the TTIR and D2M arms). TT-NN's static configuration in _ttnncpp.so builds its cache paths from
+  getenv("HOME") with no check, and libTTMLIRRuntime links _ttnncpp.so whatever runtime runs, so a process with no HOME
+  dies by SIGSEGV while its libraries load, before main (above). The ttsim row's environment passes no HOME (bible,
+  Execution Backends), and the sandbox passes nothing from the caller, so the driver re-executes itself once, from its
+  preinit function, with HOME set to its working directory, the run's workdir inside the sandbox
+  (lassi_ttmlir_run.cpp, lassiDefaultHome); it is kept, and every run above went through it. No host HOME and no
+  secret reaches the program (Agent Rule 12's intent), and in the runs above nothing was written under that HOME (each
+  run's only new workdir files were its outputs), but the program's process holds a HOME that the recorded
+  environment does not show. The choice: (a) keep it in the driver and name it in the ttsim row as the ttmlir-ttsim
+  executor's exception; (b) have the executor set HOME=<workdir> for this row in the environment it records, and drop
+  the re-exec from the driver (a change to the ttsim row and a driver rebuild, a new driver VERSION); or (c) patch the
+  runtime build so TT-NN's configuration tolerates no HOME (a pin change and a rebuild). Recommendation: (b), so the
+  recorded environment says what the program sees and the driver holds no environment logic; (a) stands until then.
+- The record field (answered: OQ-115 chose to keep tt_mlir). The runtime build is recorded as tt_mlir, 0.9.0.dev20260221-runtime (pin_field), with no change
+  to the Trial record; a field of its own (tt_mlir_runtime) would let one run record both builds, at the cost of a
+  record schema change (bible, the Trial record; Parquet and corpus columns).
+- The threshold (answered: OQ-115 chose the item's tolerance; see the part dated 2026-11-01 at the end of the section on the TTIR and D2M arms). The arms judged
+  against the references' agreement (from_baseline), as the ttkernel recipes do; for
+  eltwise_binary that is 0.001953125 (half a bf16 step in [0.5, 1)), far inside the item's 1e-2, so a module that
+  adds in f32 on the device (about 10 mantissa bits, above) may fail where the item's tolerance would pass it.
+- Output dtypes in the prompt (answered: OQ-115 chose to leave them out). The bare prompts show each output's name alone ("- output c"); eltwise_binary's c is f32 in both references (the
+  cpp program's comment and write call say so), so a module that returns bf16 reads "dtype mismatch" until it widens.
+- The bible (done: two Decision Log rows dated 2026-10-30, with the driver bullet, the ttmlir-ttsim row, binary_io's
+  shape and from_item, and the sandbox's HOME rule).
+
+### 2026-11-01: the owner's answers to OQ-115 applied, and the replays again (exploratory)
+
+Exploratory, never [MEASURED]: every run below came from a dirty worktree (detached at 40bd4a8, the work above still
+uncommitted; rx sent each tree as a snapshot commit), on alpha01 under the owner's standing permission for short
+CPU-only runs: `rx run` or `rx exec`, each under `--timeout 600` or less, CPU only, no `--big`, no model (the replay
+backend gives the hand-written SYNTHETIC replies of tests/fixtures/ttmlir-ttsim/), no RNGD or Tenstorrent card
+touched. Every flatbuffer ran through the ttmlir-ttsim executor in the sandbox with TT_METAL_SIMULATOR on ttsim
+v1.3.4, one device open per run process. rx ids use alpha01's clock (UTC-7); `<stamp>-...-<tag>` stands for
+`<stamp>-desktop-8r113ei-detached-40bd4a88-<tag>`. The scratch disk read 66G available (`df -BG /mnt/nvme10`) before
+the first run and after the last.
+
+What changed (uncommitted, in the worktree):
+
+- Threshold (the owner's "Item tolerance"). No recipe value bound the item's declared tolerance in the oracle stage
+  (the baseline judged the references' agreement by it, and the adversary stage bound it under from_baseline), so
+  binary_io gained one generic choice: `metric: from_item, threshold: from_item` (the two go together), which judges
+  each output against the item's declared tolerance in the suite manifest. The Oracle protocol gained
+  tolerance_setting beside agreement_setting; lassi.core.stages agreement_bound binds such an oracle with
+  with_tolerance to the item's tolerance in the oracle stage and in run_loop's correct_on_mismatch, the adversary
+  stage binds it as under from_baseline, and the runner refuses it, before any directory exists, for an item that
+  declares no tolerance. Since each item now carries its own metric and threshold, the max_abs and pcc halves were
+  merged: sweep17/gpt-oss-120b holds ttir-min, ttir-full, and d2m-min, each over its items (ttir: eltwise_binary
+  max_abs 0.01, eltwise_sfpu max_abs 0.05, matmul_multi_core pcc 0.97; d2m adds loopback max_abs 0), and the check
+  recipes use the same oracle. Tests: tests/oracles/test_binary_io_from_item.py, tests/core/test_binary_io_baseline.py
+  (a candidate past the references' agreement but within the item's tolerance passes under from_item and fails under
+  from_baseline; the run refusal), tests/core/test_sweep17_recipes.py.
+- HOME (the owner's "Executor sets it"). The ttmlir-ttsim executor passes HOME=<workdir>/@ttsim/home in the sandbox
+  environment it records, a reserved directory made before the run and never collected as an output (files under
+  @ttsim are not outputs); the sandbox admits HOME only for a program's run, as an absolute path at or under that
+  run's workdir with no `..` part, and refuses it in a compile environment. The driver's .preinit_array re-exec
+  (lassiDefaultHome) is removed; toolchains/tt-mlir-driver.pin: SOURCE_SHA256
+  f9375024160a7ad20b3e4fbd641b7e4b68806db917d7bc9b446eacc3eacea795, VERSION a90585ca29fa, PREFIX_NAME
+  lassi-ttmlir-driver@a90585ca29fa, a new prefix; the older prefixes stay on alpha01, untouched.
+
+| rx id | What | Result |
+| --- | --- | --- |
+| 20261101-140651-exec-ea43 | Read-only: `df -BG /mnt/nvme10`, the new prefix | 66G available; no prefix lassi-ttmlir-driver@a90585ca29fa yet |
+| 20261101-140709-...-0514 | `LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl bash toolchains/tt-mlir-driver.sh` | rc 0; bin/lassi-ttmlir-run sha256 e04bcf102f856741e1aa37e1913a7ac40a9de45189dcecd668bdd9adb94d64cb |
+| 20261101-141227-...-f60a | `uv run tools/ttmlir_system_desc.py --install`; diag.py usage and refuse without and with the executor's HOME | describe exit 0 after 2.0 s simulator wall time; 552 bytes, sha256 54679eed...e302 (the pin's), installed in the new prefix; without HOME both exit 139 (SIGSEGV) in 0.4 s, the driver no longer working around it; with HOME both exit 2 with their refusal lines |
+| 20261101-141243-exec-f133 | Read-only: df, the describe run's @ttsim/home, the install record | 66G; @ttsim/home empty; record `lassi-ttmlir-driver a90585ca29fa f9375024... de51ccc4... tt-mlir@0.9.0.dev20260221-runtime` |
+| 20261101-141959-exec-89ab | Read-only: `df -BG /mnt/nvme10` | 66G available |
+| 20261101-142021-...-f37f | For each n of ttir-eltwise, ttir-sfpu, ttir-matmul, d2m-sfpu: `uv run lassi --graphics off run projects/lassi-demo/sweep17/check/<n>-replay.yaml --run-id item-check-<n>-1`; then summarize.py on each run; then df | rc 0 for all four; 66G after |
+| 20261101-142217-exec-1c16 | Read-only: the driver each trial's device names, the resolved recipe | lassi-ttmlir-run a90585ca29fa in all four; recipe.resolved.yaml holds from_item |
+
+Results (simulator wall time of each run, never performance; Agent Rule 2):
+
+- item-check-ttir-eltwise-1, eltwise_binary (item tolerance max_abs 0.01), the three replies of
+  eltwise-binary-check.json: the tt reference clean in 2.03 s, c f32 (65536,); the references' agreement on c: pcc
+  0.99999885, max_abs 0.001953125, passed (by the item's tolerance). Attempt 0 (128x256 inputs): exit 2 in 0.42 s,
+  S4, `driver-refused: ... input 0 (@inputs/a.lassiio) holds 65536 elements; the program's input 0 [128x256] holds
+  32768` and `run-error: the program exited with status 2`. Attempt 1 (a - b): clean in 5.40 s, S5, alignment 0.0:
+  `c: pcc -0.0015, max_abs 2.00390625, passed False, note max_abs 2.00390625 is above the max_abs threshold 0.01`
+  (the item's threshold, where the run of 2026-10-30 read 0.001953125, the agreement), diagnostic `oracle-mismatch
+  ... c (about 100 to 1000 times the allowed error)`. Attempt 2 (a + b widened to f32): clean in 5.35 s, S5,
+  alignment 1.0: `c: pcc 1.0, max_abs 0.0, max_ulp 0, passed True`. Final: S5, alignment 1.0, corrections 2,
+  end_reason none.
+- item-check-ttir-sfpu-1, eltwise_sfpu (max_abs 0.05): tt reference clean in 1.98 s; agreement pcc 0.99995954,
+  max_abs 0.015625, passed; attempt 0 clean in 3.89 s, result bf16 (256, 256), pcc 1.0, max_abs 0.0, passed; final S5,
+  alignment 1.0.
+- item-check-ttir-matmul-1, matmul_multi_core (pcc 0.97): tt reference clean in 3.10 s, c bf16 (640, 640); agreement
+  pcc 0.99994025, max_abs 0.25, passed; attempt 0 clean in 6.66 s, pcc 1.0, max_abs 0.0, passed; final S5, alignment
+  1.0.
+- item-check-d2m-sfpu-1, eltwise_sfpu through d2m-ttmetal-ttsim (max_abs 0.05): tt reference clean in 2.08 s;
+  agreement pcc 0.99995954, max_abs 0.015625, passed; attempt 0 clean in 3.79 s, result bf16 (256, 256), pcc 1.0,
+  max_abs 0.0, passed; final S5, alignment 1.0.
+- No run printed a ttsim finding (sim_ub false, no gap).
+
+Finding (exploratory): with driver a90585ca29fa, HOME set by the executor, and the item-tolerance oracle, the four
+replays read as before: the refused run and the wrong module fail, and each correct module passes; the wrong
+module's note now names the item's threshold, 0.01.
+
+Not shown here: a run from a clean commit (the descriptor's hash stays from exploratory runs until one confirms it);
+any sweep17 arm with the model; loopback and matmul_multi_core in D2M; a module that passes only under the item's
+tolerance on ttsim (the f32 add of the first section, max_abs 1.4484e-3, would by its numbers; not rerun here).
+
 ## Open questions
 
 - The free-space floor, LASSI_FREE_FLOOR_GIB=30 on the proposed command line, is a choice for the owner: the disk is

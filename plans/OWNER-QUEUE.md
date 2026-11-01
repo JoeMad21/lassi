@@ -1365,3 +1365,41 @@ Options:
 - (d) Route D, D2M with dense one-hot ops only: three of eight, over L1 at bale-v0's sizes.
 Recommendation: A as the compiler-first arm and B as the exact fallback, sharing one TTNN executor, after one ttsim measurement (histo as one ttir.scatter, and one ttnn.generic kernel that reads an index from L1); C if TT-NN does not run on ttsim.
 Answer: The owner, in the working session of 2026-10-29, about 23:40 EDT: "Go with your plans in order, starting with A." Applied as: route A first (P17.57, P17.58), then route B (P17.59), then route C (P17.60), each task depending on the one before; route D is not planned. P17.48's executor runs TTNN flatbuffers as well as TTMetal ones.
+
+## OQ-113 Move The TT Joint Pin For D2M Gather?
+State: OPEN
+Kind: decision
+Blocks: none
+Evidence: plans/spikes/scatter-gather-upstream.md (read from GitHub on 2026-10-29, nothing run)
+Question: tt-mlir main lowers ttir.embedding (a row gather) through D2M since PR 8133 (merged 2026-04-29), shipped only inside tt-xla 1.2.0 and later; no version lowers scatter through D2M, and no version has device int64. Should LASSI move the joint pin to get D2M gather?
+Options:
+- (a) Keep tt-mlir 5f396fd6, tt-metal 5280a9cf, ttsim v1.3.4.
+- (b) Move to tt-xla 1.4.0's set (tt-mlir 6b2d83bb, tt-metal f1f4ff75, ttsim v1.9.6) and reword the joint-pin rule: every TT toolchain rebuilt and re-qualified; a newer ttsim may also run TT-NN's 32-bit inputs (OQ-114).
+- (c) Move to tt-mlir main, with no matching tt-xla release.
+- (d) A second TT stack beside the current pin.
+Recommendation: (a) for now; revisit if OQ-114's option (b) fails.
+Answer:
+
+## OQ-114 Route A On ttsim: TT-NN Programs With 32-Bit Inputs Stop In The Simulator
+State: OPEN
+Kind: decision
+Blocks: P17.58
+Evidence: plans/spikes/ttmlir-runtime.md (the driver's first ttsim runs, 2026-10-30, exploratory)
+Question: A TT-NN histo (one ttir.scatter, SUM over si32) stopped in ttsim before any scatter ran: "UndefinedBehavior: tensix_execute_unpacr ... in_data_format=8" (Int32), while the pinned runtime tiled the inputs on the device; an f32 TT-NN add stopped the same way, and a bf16 TT-NN add ran. Route A's integer inputs cannot run on ttsim at this pin (inferred from these runs and the runtime's sources). P17.58's acceptance says the owner is told, and OQ-112 names route C for this case. How should route A proceed?
+Options:
+- (a) A newer tt-mlir, tt-metal, and ttsim set (OQ-113 (b)).
+- (b) Tile 32-bit inputs on the host in the driver at the current pin (the runtime's API offers no host tilize, so the driver links TT-NN directly or the runtime is patched); the scatter kernels may still hit the same limit.
+- (c) Move route C ahead of routes A and B (TT-Metal host ops with ttkernel kernels, which run on ttsim).
+- (d) Run route A only on silicon, once the IOMMU is fixed.
+Recommendation: (b) first, as the cheapest test at the pin; if the scatter kernels hit the same limit, (c).
+Answer:
+
+## OQ-115 The TTIR And D2M Arms On ttsim: Threshold, Prompt, HOME, Record Field
+State: CLOSED
+Kind: decision
+Blocks: P17.48, P17.49
+Evidence: plans/spikes/ttmlir-runtime.md (the end-to-end runs of 2026-10-30, exploratory), the audit of the uncommitted work
+Question: Four choices for running the TTIR and D2M arms on ttsim: (1) the output check's threshold, the item's declared tolerance or the references' agreement (from_baseline); (2) whether the bare prompts state each output's dtype and shape; (3) how TT-NN's library gets the HOME it reads when it loads, the sandbox having none; (4) whether the runtime build is recorded in the existing tt_mlir field or a new one.
+Options: (1) item tolerance, or from_baseline; (2) leave it out, or state it; (3) the executor sets HOME in the sandbox environment, or the driver keeps its self-restart workaround; (4) keep tt_mlir, or add tt_mlir_runtime.
+Recommendation: item tolerance; leave it out; the executor sets it; keep tt_mlir.
+Answer: The owner, in the working session of 2026-10-30, about 01:55 EDT, chose "Item tolerance (Recommended)", "Leave it out (Recommended)", "Executor sets it (Recommended)", and "Keep tt_mlir (Recommended)".

@@ -499,6 +499,10 @@ TT_PROFILER_NAMES = (
     "TT_METAL_PROFILER_DISABLE_PUSH_TO_TRACY",
     "TT_METAL_PROFILER_DIR",
 )
+# HOME is never on ENVIRONMENT_NAMES. A program's SandboxSpec.environment may still set it, only to an absolute path
+# at or under the spec's own workdir (_check_home), so no host HOME reaches a program (Agent Rule 12): the
+# ttmlir-ttsim executor sets it to a reserved directory there (the owner's answer to OQ-115). A compile never sets it.
+HOME_NAME = "HOME"
 # The only names SandboxSpec.environment may hold (P0.20), by group: PATH, the locale (LANG, LC_ALL), and TMPDIR,
 # which programs and compiles get; each variable a pin names (lassi.toolchains.pins PREFIX_VARIABLES,
 # NVHPC_CUDA_HOME), for compiles; OMP_NUM_THREADS, the OpenMP runtime's default thread count, which the native
@@ -1253,8 +1257,9 @@ def _checked_environment(environment: object) -> dict[str, str] | None:
     """Return a copy of a program environment after checking it, or None for None (the program defaults).
 
     Raise ValueError, naming the variable, unless `environment` is a mapping
-    (not a string) whose names are in ENVIRONMENT_NAMES and whose values are
-    strings without NUL.
+    (not a string) whose names are in ENVIRONMENT_NAMES, or HOME_NAME (which
+    SandboxSpec admits only under its workdir, _check_home), and whose values
+    are strings without NUL.
     """
     if environment is None:
         return None
@@ -1262,13 +1267,29 @@ def _checked_environment(environment: object) -> dict[str, str] | None:
         raise ValueError(f"a sandbox environment must be a mapping of names to values, got {environment!r}")
     checked: dict[str, str] = {}
     for name, value in environment.items():
-        if not isinstance(name, str) or name not in ENVIRONMENT_NAMES:
+        if not isinstance(name, str) or name not in {*ENVIRONMENT_NAMES, HOME_NAME}:
             allowed = ", ".join(sorted(ENVIRONMENT_NAMES))
             raise ValueError(f"the sandbox environment may not set {name!r}; allowed names: {allowed}")
         if not isinstance(value, str) or "\0" in value:
             raise ValueError(f"the sandbox environment's {name} must be a string without NUL, got {value!r}")
         checked[name] = value
     return checked
+
+
+def _check_home(environment: Mapping[str, str] | None, workdir: Path) -> None:
+    """Raise ValueError unless the environment's HOME, when set, is an absolute path at or under `workdir`.
+
+    A path with a ".." part is refused, so HOME cannot leave the workdir
+    by name; no host HOME reaches a program (Agent Rule 12).
+    """
+    if environment is None or HOME_NAME not in environment:
+        return
+    home = Path(environment[HOME_NAME])
+    if not home.is_absolute() or ".." in home.parts or not _covers(workdir, home):
+        raise ValueError(
+            f"the sandbox environment's {HOME_NAME} must be an absolute path at or under the workdir "
+            f"{str(workdir)!r}, got {environment[HOME_NAME]!r}"
+        )
 
 
 @dataclass(frozen=True)
@@ -1540,6 +1561,7 @@ class SandboxSpec:
         _check_int("tasks_max", self.tasks_max)
         _check_int("disk_mb", self.disk_mb)
         environment = _checked_environment(self.environment)
+        _check_home(environment, self.workdir)
         if isinstance(self.devices, TenstorrentExposure):
             _check_tenstorrent(self.devices)
         elif self.devices is not None:
@@ -2072,13 +2094,15 @@ class SandboxedCompileRunner:
         `runner` None means CappedRunner(COMPILE_OUTPUT_CAP_BYTES), read
         when the runner is made. Raise ValueError when the environment holds
         a name outside ENVIRONMENT_NAMES, a value that is not a string
-        without NUL, TMPDIR (each compile gets its own), or one of
+        without NUL, TMPDIR (each compile gets its own), HOME, or one of
         GPU_VISIBILITY_NAMES or TT_PROFILER_NAMES (a compile has no device
         exposure), or when no hidden root is given.
         """
         checked = _checked_environment(environment)
         if checked is None or "TMPDIR" in checked:
             raise ValueError("a compile environment is a mapping without TMPDIR; each compile gets its own TMPDIR")
+        if HOME_NAME in checked:
+            raise ValueError(f"a compile environment may not set {HOME_NAME}; only a program's run may, in its workdir")
         visible = sorted(set(checked) & {*GPU_VISIBILITY_NAMES, *TT_PROFILER_NAMES})
         if visible:
             raise ValueError(f"a compile environment may not set {', '.join(visible)}; a compile sees no device")

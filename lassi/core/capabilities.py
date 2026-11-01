@@ -349,6 +349,11 @@ class OutputFileOracle(Protocol):
         """Return the recipe setting that makes this oracle read the references' agreement, or None when none does."""
         ...
 
+    @property
+    def tolerance_setting(self) -> str | None:
+        """Return the recipe setting that makes this oracle read the item's declared tolerance, else None."""
+        ...
+
     def describe(self) -> str:
         """Return a one-line description of what each output must meet."""
         ...

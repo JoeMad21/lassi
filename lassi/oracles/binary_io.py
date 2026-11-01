@@ -34,7 +34,14 @@ Rules [DESIGN, task P4.4]:
   threshold; max_abs is the exact largest difference as a float, pcc is
   computed in double as for floats, and max_ulp is None.
 - A dtype or a shape mismatch fails the output with a note naming it; its
-  pcc, max_abs, and max_ulp are None.
+  pcc, max_abs, and max_ulp are None. With the recipe key `shape: elements`
+  (task P17.48; default `exact`, the rule above) two arrays of one dtype
+  whose shapes differ but hold the same number of elements are compared
+  element by element in row-major (C) order, as lassi_io stores them: a
+  program may write a one-dimensional array as a two-dimensional tensor of
+  the same elements (the TTIR prompts allow it, and the tt-mlir driver
+  writes each output in its tensor's shape). A different element count is
+  still a shape mismatch, its note giving both counts.
 - Output files: every file the reference run wrote must be a lassi_io file
   whose array name no other file of that run repeats, and there must be at
   least one; anything else is a reference problem (reference_problem), and
@@ -46,14 +53,19 @@ Rules [DESIGN, task P4.4]:
 - per_input is 1.0 when every output passes, else 0.0 (alignment).
 
 The recipe section is `oracle: {kind: binary_io, metric: <pcc | max_abs |
-ulp>, threshold: <number | from_baseline>}`; both keys are required choices
-with no default. A number follows lassi.core.tolerance (pcc in [-1, 1];
+ulp | from_item>, threshold: <number | from_baseline | from_item>}`, plus the optional `shape:
+<exact | elements>` (default exact); metric and threshold are required
+choices with no default. A number follows lassi.core.tolerance (pcc in [-1, 1];
 max_abs and ulp finite and >= 0; exact match is max_abs 0). With
 `from_baseline`, each output's threshold is that output's value of the
 metric in the references' agreement the baseline recorded
 (Trial.reference_agreement), bound with with_baseline. A float output
 the agreement gives no value for fails with a note; an integer output
-passes only on exact equality, whatever the agreement holds.
+passes only on exact equality, whatever the agreement holds. With
+`metric: from_item, threshold: from_item` (the two go together), every
+output is judged against the item's declared tolerance in the suite
+manifest, its metric and threshold, bound with with_tolerance by the
+stages that align output files (tolerance_setting).
 """
 
 from __future__ import annotations
@@ -72,8 +84,14 @@ from lassi.harness.lassi_io import DTYPES, LassiArray, read_array
 
 # The threshold value that takes each output's threshold from the references' agreement.
 FROM_BASELINE = "from_baseline"
+# The metric and threshold value that take both from the item's declared tolerance (the suite manifest).
+FROM_ITEM = "from_item"
 # The names the notes give the two sides of a comparison, unless a caller names them.
 SIDES = ("reference", "candidate")
+# The shape rules (recipe key `shape`): exact shapes, the default, or the same element count in row-major order.
+SHAPE_EXACT = "exact"
+SHAPE_ELEMENTS = "elements"
+SHAPE_RULES = (SHAPE_EXACT, SHAPE_ELEMENTS)
 
 # Float dtypes: the struct code of a value (bf16 is widened to f32) and of its bits, and the bit width.
 _FLOAT_VALUE = {"f16": "e", "bf16": "f", "f32": "f", "f64": "d"}
@@ -154,29 +172,65 @@ def compare_arrays(
     metric: str,
     threshold: float,
     sides: tuple[str, str] = SIDES,
+    shape: str = SHAPE_EXACT,
 ) -> OutputStats:
     """Return the OutputStats of `candidate` against `reference` under `metric` and `threshold` (module rules).
 
     The stats carry the reference's array name. `sides` names the two runs
-    in the notes. Raises ValueError for a metric outside METRICS or a
-    threshold lassi.core.tolerance refuses.
+    in the notes, and `shape` is the shape rule (SHAPE_RULES). Raises
+    ValueError for a metric outside METRICS, a threshold
+    lassi.core.tolerance refuses, or a shape rule outside SHAPE_RULES.
     """
-    problem = metric_problem(metric) or threshold_problem(metric, threshold)
+    problem = metric_problem(metric) or threshold_problem(metric, threshold) or shape_problem(shape)
     if problem:
         raise ValueError(problem)
-    return _compared(reference, candidate, metric, threshold, sides)
+    return _compared(reference, candidate, metric, threshold, sides, shape)
+
+
+def shape_problem(shape: object) -> str | None:
+    """Return why `shape` is not a shape rule, or None when it is one of SHAPE_RULES."""
+    if isinstance(shape, str) and shape in SHAPE_RULES:
+        return None
+    return f"the shape rule must be one of {', '.join(SHAPE_RULES)}, got {shape!r}"
+
+
+def _element_count(array: LassiArray) -> int:
+    """Return the number of elements an array's shape holds."""
+    return math.prod(array.shape)
+
+
+def _shape_note(reference: LassiArray, candidate: LassiArray, shape: str, sides: tuple[str, str]) -> str | None:
+    """Return the shape mismatch note of two arrays under the shape rule, or None when they may be compared.
+
+    Under SHAPE_EXACT the shapes must be equal; under SHAPE_ELEMENTS their
+    element counts, and the note then gives both counts.
+    """
+    ours, theirs = reference.shape, candidate.shape
+    if ours == theirs:
+        return None
+    note = f"shape mismatch: {_shown(ours)} in the {sides[0]}, {_shown(theirs)} in the {sides[1]}"
+    if shape == SHAPE_EXACT:
+        return note
+    counts = _element_count(reference), _element_count(candidate)
+    return None if counts[0] == counts[1] else f"{note}, {counts[0]} and {counts[1]} elements"
 
 
 def _compared(
-    reference: LassiArray, candidate: LassiArray, metric: str, threshold: float | None, sides: tuple[str, str]
+    reference: LassiArray,
+    candidate: LassiArray,
+    metric: str,
+    threshold: float | None,
+    sides: tuple[str, str],
+    shape: str = SHAPE_EXACT,
 ) -> OutputStats:
     """Return the OutputStats of one output; a None threshold fails a float output with a note."""
     name = reference.name
-    for part in ("dtype", "shape"):
-        ours, theirs = getattr(reference, part), getattr(candidate, part)
-        if ours != theirs:
-            note = f"{part} mismatch: {_shown(ours)} in the {sides[0]}, {_shown(theirs)} in the {sides[1]}"
-            return _not_compared(name, note)
+    if reference.dtype != candidate.dtype:
+        note = f"dtype mismatch: {reference.dtype} in the {sides[0]}, {candidate.dtype} in the {sides[1]}"
+        return _not_compared(name, note)
+    note = _shape_note(reference, candidate, shape, sides)
+    if note is not None:
+        return _not_compared(name, note)
     if reference.dtype in _INT_VALUE:
         return _integer_stats(reference, candidate, sides)
     return _float_stats(reference, candidate, metric, threshold, sides)
@@ -308,30 +362,33 @@ class BinaryIOOracle:
     """Compares a run's lassi_io output files with the reference's, output by output (see the module rules).
 
     Built from the recipe section `oracle: {kind: binary_io, metric: ...,
-    threshold: ...}` as BinaryIOOracle(metric=..., threshold=...).
+    threshold: ..., shape: ...}` as BinaryIOOracle(metric=..., threshold=...,
+    shape=...); shape is optional (SHAPE_EXACT).
     """
 
     name = "binary_io"
     capabilities = frozenset({ALIGNS_OUTPUT_FILES})
-    config_keys = frozenset({"metric", "threshold"})
+    config_keys = frozenset({"metric", "threshold", "shape"})
 
-    def __init__(self, *, metric: str | None = None, threshold: float | str | None = None) -> None:
-        """Keep the recipe's metric and threshold, both required choices; ValueError names a bad or missing one."""
-        if metric is None:
-            choices = ", ".join(METRICS)
-            raise ValueError(f"oracle.metric is a required choice with no default: set it to one of {choices}")
-        problem = metric_problem(metric)
+    def __init__(
+        self, *, metric: str | None = None, threshold: float | str | None = None, shape: str = SHAPE_EXACT
+    ) -> None:
+        """Keep the metric and threshold, both required choices, and the shape rule; ValueError names a bad one."""
+        problem = _choice_problem(metric, threshold)
         if problem:
-            raise ValueError(f"oracle.metric: {problem}")
-        if threshold is None:
-            raise ValueError(f"oracle.threshold is a required choice with no default: set a number or {FROM_BASELINE}")
-        if not (isinstance(threshold, str) and threshold == FROM_BASELINE):
-            problem = threshold_problem(metric, threshold)
-            if problem:
-                raise ValueError(f"oracle.threshold: {problem}, or {FROM_BASELINE}")
+            raise ValueError(problem)
+        problem = shape_problem(shape)
+        if problem:
+            raise ValueError(f"oracle.shape: {problem}")
         self.metric = metric
         self.threshold = threshold
+        self.shape = shape
         self._agreement: dict[str, float | int | None] | None = None
+
+    @property
+    def tolerance_setting(self) -> str | None:
+        """Return "oracle.threshold from_item" when every output is judged against the item's tolerance, else None."""
+        return f"oracle.threshold {FROM_ITEM}" if self.threshold == FROM_ITEM else None
 
     @property
     def agreement_setting(self) -> str | None:
@@ -345,7 +402,7 @@ class BinaryIOOracle:
         With from_baseline, an agreement of None (not recorded) raises
         ValueError naming from_baseline.
         """
-        bound = BinaryIOOracle(metric=self.metric, threshold=self.threshold)
+        bound = BinaryIOOracle(metric=self.metric, threshold=self.threshold, shape=self.shape)
         if self.threshold != FROM_BASELINE:
             return bound
         if agreement is None:
@@ -358,15 +415,19 @@ class BinaryIOOracle:
         return bound
 
     def with_tolerance(self, tolerance: Tolerance) -> BinaryIOOracle:
-        """Return an oracle that judges every output against `tolerance`, its metric and threshold."""
-        return BinaryIOOracle(metric=tolerance.metric, threshold=tolerance.threshold)
+        """Return an oracle that judges every output against `tolerance` (metric, threshold) by this shape rule."""
+        return BinaryIOOracle(metric=tolerance.metric, threshold=tolerance.threshold, shape=self.shape)
 
     def describe(self) -> str:
         """Return a one-line description: the metric and the threshold each output must meet."""
         bound = "at least" if self.metric == "pcc" else "at most"
+        shapes = "" if self.shape == SHAPE_EXACT else "; shapes may differ when the element counts agree (row-major)"
+        if self.threshold == FROM_ITEM:
+            return f"{self.name}: each output within the item's declared tolerance ({FROM_ITEM}){shapes}"
         if self.threshold == FROM_BASELINE:
-            return f"{self.name}: {self.metric} {bound} the references' agreement, per output ({FROM_BASELINE})"
-        return f"{self.name}: {self.metric} {bound} {self.threshold!r}, per output"
+            return (f"{self.name}: {self.metric} {bound} the references' agreement, per output ({FROM_BASELINE})"
+                    f"{shapes}")
+        return f"{self.name}: {self.metric} {bound} {self.threshold!r}, per output{shapes}"
 
     def reference_problem(self, files: Mapping[str, Path], side: str = SIDES[0]) -> str | None:
         """Return why a reference run's output files cannot be compared against, or None when they can.
@@ -399,6 +460,8 @@ class BinaryIOOracle:
             raise ValueError(
                 f"oracle.threshold {FROM_BASELINE} needs the references' agreement: bind it with with_baseline first"
             )
+        if self.threshold == FROM_ITEM:
+            raise ValueError(f"oracle.threshold {FROM_ITEM} needs the item's tolerance: bind it with with_tolerance")
         reference = _reference_arrays(reference_files, sides[0])
         candidate, repeated, unreadable = _read_side(candidate_files, sides[1])
         stats = []
@@ -408,7 +471,8 @@ class BinaryIOOracle:
             elif name not in candidate:
                 stats.append(_not_compared(name, f"missing output: the {sides[1]} wrote no array named {name!r}"))
             else:
-                stats.append(_compared(reference[name], candidate[name], self.metric, self.threshold_for(name), sides))
+                threshold = self.threshold_for(name)
+                stats.append(_compared(reference[name], candidate[name], self.metric, threshold, sides, self.shape))
         for name in sorted(set(candidate) - set(reference)):
             note = repeated.get(name, f"extra output: the {sides[0]} wrote no array named {name!r}")
             stats.append(_not_compared(name, note))
@@ -442,5 +506,30 @@ class BinaryIOOracle:
             return self._agreement.get(name)
         if self.threshold == FROM_BASELINE:
             raise ValueError(f"oracle.threshold {FROM_BASELINE} has no threshold until with_baseline binds it")
+        if self.threshold == FROM_ITEM:
+            raise ValueError(f"oracle.threshold {FROM_ITEM} has no threshold until with_tolerance binds it")
         return float(self.threshold)
+
+
+def _choice_problem(metric: object, threshold: object) -> str | None:
+    """Return why a metric and threshold pair is refused, naming the recipe key, or None when it is accepted."""
+    if metric is None:
+        choices = ", ".join((*METRICS, FROM_ITEM))
+        return f"oracle.metric is a required choice with no default: set it to one of {choices}"
+    if threshold is None:
+        return f"oracle.threshold is a required choice with no default: set a number, {FROM_BASELINE}, or {FROM_ITEM}"
+    if (metric == FROM_ITEM) != (threshold == FROM_ITEM):
+        return (
+            f"oracle.metric {FROM_ITEM} and oracle.threshold {FROM_ITEM} go together (the item's declared tolerance "
+            f"gives both); got metric {metric!r} and threshold {threshold!r}"
+        )
+    if metric == FROM_ITEM:
+        return None
+    problem = metric_problem(metric)
+    if problem:
+        return f"oracle.metric: {problem}"
+    if isinstance(threshold, str) and threshold == FROM_BASELINE:
+        return None
+    problem = threshold_problem(metric, threshold)
+    return f"oracle.threshold: {problem}, or {FROM_BASELINE}" if problem else None
 

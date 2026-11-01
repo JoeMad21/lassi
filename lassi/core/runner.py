@@ -114,8 +114,10 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    that returns neither None nor one non-empty line of printable ASCII with
    no leading or trailing blank; and an executor's `pins` (task P4.11) that
    are not pin name -> pairs with a VERSION, that name a pin with no Trial
-   toolchain_pins field, or that give a pin other pairs than a toolchain or
-   an earlier executor gives the same pin name.
+   toolchain_pins field (pin_field), that give a pin other pairs than a
+   toolchain or an earlier executor gives the same pin name, or that put a
+   second version in a field another pin name already fills (a build
+   variant beside its source's pin, task P17.48).
    Right after the stage plan is checked, before any component is built
    (the Oracle and the ScoreProfiles included), it probes the device of
    every binding whose component declares `takes_device` (task P17.2;
@@ -318,7 +320,10 @@ trial's toolchain_pins records the pins of the toolchain that builds its
 target language and of the executor that runs it; provenance.json records
 every bound toolchain's and executor's pins. A pin name that a toolchain
 and an executor, or two executors, declare must carry the same pairs, or
-the run is refused before any directory exists; the runner reads the
+the run is refused before any directory exists. A pin is recorded under
+the field of its name, and a build variant's own pin file under its
+source's field (pin_field: tt-mlir-runtime as tt_mlir), so two pin names
+that would put two versions in one field are refused too; the runner reads the
 attribute, never an executor's name (Agent Rule 3). git, for the commit
 and dirty flag, runs through
 lassi.toolchains.EnvRunner, the audited command runner, and every compiler
@@ -2443,6 +2448,19 @@ def _check_oracle(recipe: Recipe, registry: Registry, bench: _Bench) -> None:
         setting = getattr(oracle, "agreement_setting", None)
         if setting is not None:
             _check_agreement(recipe, stages, bench, setting)
+        _check_item_tolerance(recipe, bench, getattr(oracle, "tolerance_setting", None))
+
+
+def _check_item_tolerance(recipe: Recipe, bench: _Bench, setting: str | None) -> None:
+    """Refuse an oracle that reads the item's declared tolerance (from_item) for an item that declares none."""
+    if setting is None:
+        return
+    missing = [item for item in bench.items if bench.suite.items[item].tolerance is None]
+    if missing:
+        raise RunError(
+            f"{recipe.path}: {setting} judges each output against the item's declared tolerance; "
+            f"{bench.suite.name} item(s) {', '.join(missing)} declare none"
+        )
 
 
 def _check_adversary(recipe: Recipe, registry: Registry, settings: _Settings, bench: _Bench) -> None:
@@ -3071,20 +3089,50 @@ def _check_shared_pins(recipe: Recipe, toolchains: Sequence[BuiltToolchain], exe
                 )
 
 
+def pin_field(pin_name: str, pin: Mapping[str, str]) -> str:
+    """Return the Trial toolchain_pins field a pin is recorded under; RunError for a pin with none.
+
+    A pin's field is its name with "-" written "_" (tt-metal: tt_metal). A
+    build variant kept in a pin file of its own, <NAME>-<BUILD>.pin with
+    those NAME and BUILD keys (toolchains/tt-mlir-runtime.pin: NAME tt-mlir,
+    BUILD runtime), is another build of NAME's source, so it is recorded
+    under NAME's field, as <VERSION>-<BUILD> (recorded_version; task
+    P17.48).
+    """
+    field = pin_name.replace("-", "_")
+    if field in TOOLCHAIN_PIN_NAMES:
+        return field
+    source, build = pin.get("NAME", ""), pin.get("BUILD", "")
+    variant_of = source.replace("-", "_")
+    if source and build and pin_name == f"{source}-{build}" and variant_of in TOOLCHAIN_PIN_NAMES:
+        return variant_of
+    raise RunError(f"the pin {pin_name!r} has no Trial toolchain_pins field; fields: {TOOLCHAIN_PIN_NAMES}")
+
+
 def _pin_versions(pin_maps: Iterable[Mapping[str, Mapping[str, str]]]) -> ToolchainPins:
     """Return the recorded version of every pin the given pin maps hold (pin name -> pairs), under its field.
 
     The recorded version is VERSION, or <VERSION>-<BUILD> for a pin that names
     a build variant (lassi.toolchains.pins recorded_version; task P17.42), so
-    a trial on the Tracy build of tt-metal records 5280a9cf-tracy.
+    a trial on the Tracy build of tt-metal records 5280a9cf-tracy. The field
+    is pin_field's. Two pin names recorded under one field with different
+    versions (the tt-mlir compiler pin and its runtime build) are a RunError
+    naming both: a trial records one version of each field (Agent Rule 10).
     """
     versions: dict[str, str] = {}
+    owners: dict[str, str] = {}
     for pins in pin_maps:
         for pin_name, pin in pins.items():
-            field = pin_name.replace("-", "_")
-            if field not in TOOLCHAIN_PIN_NAMES:
-                raise RunError(f"the pin {pin_name!r} has no Trial toolchain_pins field; fields: {TOOLCHAIN_PIN_NAMES}")
-            versions[field] = recorded_version(pin)
+            field = pin_field(pin_name, pin)
+            version = recorded_version(pin)
+            owner = owners.setdefault(field, pin_name)
+            if owner != pin_name and versions[field] != version:
+                raise RunError(
+                    f"the pins {owner!r} ({versions[field]}) and {pin_name!r} ({version}) are both recorded as the "
+                    f"Trial toolchain_pins field {field!r}, which holds one version; bind toolchains and executors "
+                    f"that use one build (Agent Rule 10)"
+                )
+            versions[field] = version
     return ToolchainPins(**versions)
 
 

@@ -36,6 +36,8 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 
 - Every new arm set comes with a feature ladder from the bare LASSI loop up (owner, 2026-10-30, about 00:10 EDT: "In the future, prepare tests with less features, all the attempts getting it first try is making me wonder if we are being too helpful with the model." and "We may need to keep GPT OSS for the Saturday testing. If you cannot fit it tonight, I want tests with less features on GPT OSS to confirm if the model can converge with the LASSI framework."). Report how each feature changes first-try and final success, not only the full-feature arm.
 
+- Every result, table, and status update opens with the loop stages that ran and those that were skipped (compile, simulator run, output check, silicon), for example "COMPILE ONLY: no simulation, no output check, no silicon" (owner, 2026-10-30, about 00:58 EDT: "In the future, you really need to highlight when a stage is missing from the loop. I can be mislead by results if you don't tell me that we are skipping sim or silicon.").
+
 ## Audits and the bible
 
 - Most audit FAILs in P2 and P4 were bible or docstring text that claimed more than the code does (P2.9 refusal paths, P4.7 preset strictness and error format, P4.1 CI coverage). Write the bible text after the code, from the code, and check each claim against a line of code or a spike line before sending the audit.
@@ -81,6 +83,8 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - WSL's newer `mount` breaks the sandbox inside a user namespace (exit 16 on `mount --move`), so a WSL dry run of a batch must wrap the sandbox; alpha01's older mount works (P4). The same may affect any WSL test run that reaches the sandbox (P5.3, 2026-10-10).
 
 ## alpha01
+
+- An inspection command on alpha01 must not redirect to /tmp, /dev/shm, or any path outside the scratch root, even a scratch list (Agent Rule 7): a dry run of 2026-11-01 left a 3,000-byte list at /dev/shm/x, which the owner removes. Pipe lists, or write them under /mnt/nvme10/joseph_ufl.
 
 - A check that reads a tool's output format must be tested on a real output from the pinned tool, not only on a fixture written from the schema. sweep13's first launch (2026-10-29, job 20261029-202443-window2-173c) scored every attempt that reached the translation as failed for about 20 minutes: the pinned ttmlir-translate writes a size-prefixed flatbuffer, with TTM0 at bytes 8 to 12, and the toolchain looked at bytes 4 to 8 only. The job was stopped and relaunched with the fix.
 - `rx job kill` marks a job killed but left its process tree running (2026-10-29: run.sh, the model server, and eight recipe runs survived it, holding npu0 to npu3). To stop a sweep, send TERM to the recipes' `timeout` processes (children of run.sh); run.sh then stops the server and exits through its EXIT trap. Confirm the cards read 0.00 GiB before relaunching.

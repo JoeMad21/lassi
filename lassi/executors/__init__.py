@@ -7,6 +7,9 @@ lassi.core.registry.DEFAULT_REGISTRY:
 - "native" (native.NativeExecutor): runs a CPU artifact.
 - "ttsim" (ttsim.TtsimExecutor): runs a TT host program on ttsim, the
   pinned Wormhole simulator (task P4.11).
+- "ttmlir-ttsim" (ttmlir_ttsim.TtmlirTtsimExecutor): runs a tt-mlir
+  TT-Metal or TT-NN flatbuffer on ttsim through the pinned tt-mlir runtime
+  and LASSI's driver, lassi-ttmlir-run (task P17.48).
 - "gpu" (gpu.GpuExecutor): runs a built GPU artifact on the GPUs its
   device section names, with only their nodes exposed in the sandbox
   (task P17.5).
@@ -19,7 +22,8 @@ Each executor names the device its programs run on with device(), one
 non-empty line of printable ASCII with no leading or trailing blank, which
 starts no process (task P4.5): "none (compile only)" for none; the host
 CPU with its model for native; ttsim with its pin and the pinned
-tt-metal, as a simulator, for ttsim; and the kind, each GPU's index and
+tt-metal, as a simulator, for ttsim; ttsim, the tt-mlir runtime, and the
+driver, as a simulator, for ttmlir-ttsim; and the kind, each GPU's index and
 name, and the driver, read at construction, for gpu; and the cards, each
 card's serial and firmware, the driver, and the pinned tt-metal, read at
 construction, as silicon, for tt_silicon.
@@ -36,7 +40,7 @@ sandbox_command, and classify. lassi.executors.workdir gives each attempt
 its build directory under the runs root.
 """
 
-from lassi.executors import devices, gpu, native, none, sandbox, tt_silicon, ttsim
+from lassi.executors import devices, gpu, native, none, sandbox, tt_silicon, ttmlir_ttsim, ttsim
 from lassi.executors.gpu import GpuExecutor
 from lassi.executors.native import NativeExecutor
 from lassi.executors.none import NoneExecutor
@@ -49,6 +53,7 @@ from lassi.executors.sandbox import (
     sandbox_command,
 )
 from lassi.executors.tt_silicon import TtSiliconExecutor
+from lassi.executors.ttmlir_ttsim import TtmlirTtsimExecutor
 from lassi.executors.ttsim import TtsimExecutor
 
 __all__ = [
@@ -60,6 +65,7 @@ __all__ = [
     "SandboxSpec",
     "SandboxUnavailableError",
     "TtSiliconExecutor",
+    "TtmlirTtsimExecutor",
     "TtsimExecutor",
     "classify",
     "devices",
@@ -69,5 +75,6 @@ __all__ = [
     "sandbox",
     "sandbox_command",
     "tt_silicon",
+    "ttmlir_ttsim",
     "ttsim",
 ]
