@@ -1,0 +1,6 @@
+The reference below gives every type, attribute, and op of the TTIR MLIR dialect at the pin (tt-mlir
+0.9.0.dev20260221, commit 5f396fd6), with the ttcore types and enums it uses, rendered by rule from the
+dialect's own TableGen sources at that commit. Write each op, type, and attribute exactly in the form it gives,
+with its operands, attributes, and types in its order; a name it does not list is not in the dialect.
+
+$knowledge_summary

@@ -1,0 +1,37 @@
+# sweep17's end-to-end check of the d2m path, no model: one cpp -> d2m trial of eltwise_sfpu through the runner,
+# compiled by d2m-ttmetal-ttsim, run on ttsim (a simulator) by the ttmlir-ttsim executor, and judged by binary_io
+# against the tt program within the item's declared tolerance, as d2m-min.yaml is set up. The replay backend gives one
+# SYNTHETIC reply written by hand, never model output (tests/fixtures/ttmlir-ttsim/d2m-eltwise-sfpu-ok.json): a D2M
+# module of one generic of d2m.tile_exp. Exploratory; its wall times are simulator wall time (Agent Rule 2). Run it as
+# ttir-eltwise-replay.yaml says, after uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-d2m.yaml.
+extends: ../../../base.yaml  # projects/base.yaml: runs root, sandbox, and report choices
+faithful: false  # a check recipe; nothing reproduces an upstream run
+model:
+  backend: replay  # the one scripted reply (lassi.llm.replay); no model is served or loaded
+  id: d2m-ttsim-check  # a label for the trial records
+  recording: tests/fixtures/ttmlir-ttsim/d2m-eltwise-sfpu-ok.json
+llm:
+  sampling:
+    max_tokens: 4096  # base.yaml leaves it open and the runner never picks it; the replay ignores it
+extract:
+  unfenced_file_lines: true  # as the sweep17 recipes
+bench:
+  suite: tt-pairs-v0-d2m
+  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  items: [eltwise_sfpu]
+directions: [{source: cpp, target: d2m}]
+prompts: tt-d2m-bare-v1  # the sweep17 d2m template set; the replay ignores the prompts
+toolchain:
+  d2m: d2m-ttmetal-ttsim
+  tt: ttmetal-host
+  cpp: gcc-native
+fixes:
+  baseline_both: true  # both references, as the arms build them
+stages: [baseline, generate, compile_loop, run_loop, oracle]  # d2m-min's, without the API reference
+executor:
+  cpp: {kind: native}
+  tt: {kind: ttsim, arch: wormhole_b0, dispatch: slow}
+  d2m: {kind: ttmlir-ttsim, arch: wormhole_b0, dispatch: slow}
+oracle: {kind: binary_io, metric: from_item, threshold: from_item, shape: elements}  # the item's declared tolerance
+trials: {n: 1}
+loop: {max_corrections: 0, correct_on_mismatch: true}  # the one reply: no correction

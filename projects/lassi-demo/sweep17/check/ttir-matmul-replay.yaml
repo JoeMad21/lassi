@@ -1,0 +1,10 @@
+# sweep17's end-to-end check of matmul_multi_core, no model: ttir-eltwise-replay.yaml (its comments hold: the runner,
+# ttir-ttmetal-ttsim, the ttmlir-ttsim executor on ttsim, a simulator, binary_io against the tt program; exploratory)
+# with one SYNTHETIC reply written by hand, never model output (tests/fixtures/ttmlir-ttsim/matmul-multi-core-ok.json):
+# the TTIR module of one ttir.matmul, judged by the item's declared tolerance (pcc 0.97), as ttir-min.yaml judges.
+extends: ttir-eltwise-replay.yaml
+model:
+  recording: tests/fixtures/ttmlir-ttsim/matmul-multi-core-ok.json
+bench:
+  items: [matmul_multi_core]
+loop: {max_corrections: 0, correct_on_mismatch: true}  # the one reply: no correction

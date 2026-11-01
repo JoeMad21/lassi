@@ -1,0 +1,11 @@
+# sweep17's end-to-end check of eltwise_sfpu, no model: ttir-eltwise-replay.yaml (its comments hold: the runner,
+# ttir-ttmetal-ttsim, the ttmlir-ttsim executor on ttsim, a simulator, binary_io against the tt program; exploratory)
+# with one SYNTHETIC reply written by hand, never model output (tests/fixtures/ttmlir-ttsim/eltwise-sfpu-ok.json): the
+# TTIR module of one ttir.exp, which reads whether the exp the compiler writes runs on ttsim and how its result
+# compares with the tt program's.
+extends: ttir-eltwise-replay.yaml
+model:
+  recording: tests/fixtures/ttmlir-ttsim/eltwise-sfpu-ok.json
+bench:
+  items: [eltwise_sfpu]
+loop: {max_corrections: 0, correct_on_mismatch: true}  # the one reply: no correction

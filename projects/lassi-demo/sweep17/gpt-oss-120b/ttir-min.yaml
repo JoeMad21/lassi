@@ -1,0 +1,46 @@
+# sweep17, COMPILE AND RUN ON TTSIM: cpp -> ttir on tt-pairs-v0-ttir, arm ttir-min (task P17.48; the owner's
+# request for the owner's windows of 2026-10-31 and 2026-11-01: the TTIR arms run end to end on ttsim with their outputs checked). Every TT
+# program runs on ttsim, a simulator: nothing here measures performance, and its wall times are simulator wall time
+# (Agent Rule 2). Each output is checked against the item's declared tolerance in the suite manifest (OQ-115).
+# Exploratory; tt-pairs-v0 is a development set (OQ-083 (b)).
+# The features are sweep16's ttir-min, sweep15's rung l1: the bare template set with the TTIR API reference alone
+# (verbatim_context, ttir-ref-5f396fd6), at temperature 1.0, 2 samples, and a cap of 8 corrections. What the run
+# adds:
+# - ttir-ttmetal-ttsim compiles the module with the tt-mlir runtime build's own ttmlir-opt and ttmlir-translate (the
+#   commit the runtime runs, toolchains/tt-mlir-runtime.pin) for the recorded ttsim system descriptor
+#   (system-desc-path; toolchains/tt-mlir-driver.pin SYSTEM_DESC_SHA256), and the ttmlir-ttsim executor runs the
+#   flatbuffer through LASSI's driver in the sandbox on ttsim (plans/spikes/ttmlir-runtime.md).
+# - The references, as the ttkernel recipes have them (mlir1, sweep10): baseline builds and runs the item's tt program
+#   (the ttir reference, reference: tt) on ttsim and the cpp program natively, and records their agreement, judged
+#   against the item's tolerance. The oracle judges each candidate's outputs against the tt program's within the
+#   item's declared tolerance, its metric and threshold (binary_io, metric and threshold from_item; the owner's
+#   answer to OQ-115: at TTIR level the compiler picks the arithmetic, so the references' agreement is too tight).
+#   The oracle compares outputs of one dtype and element count in row-major order (shape: elements), since the module
+#   may write a one-dimensional array as a two-dimensional tensor of the same elements and the driver writes each
+#   output in its tensor's shape.
+# - run_loop feeds each failed run (how the program ended and its standard error, the driver's refusals among them)
+#   and, with loop.correct_on_mismatch, each oracle mismatch back as a correction within the same cap of 8.
+#   tt-ttir-bare-v1 is tt-ttir-bare-v0 with its correction prompt worded for run failures too and a bare mismatch
+#   prompt; nothing else is added to what the model sees.
+# Items: eltwise_binary (max_abs 0.01), eltwise_sfpu (max_abs 0.05), and matmul_multi_core (pcc 0.97), each judged
+# by its own tolerance (assets/bench/tt-pairs-v0-ttir.yaml).
+# Before the run (on the build host): uv run tools/fetch_bench.py assets/bench/tt-pairs-v0-ttir.yaml; the TTIR API
+# reference as sweep16 needs it; the runtime build, the driver, and the recorded descriptor under $LASSI_TOOLCHAINS
+# (toolchains/tt-mlir-runtime.sh, toolchains/tt-mlir-driver.sh, tools/ttmlir_system_desc.py --install).
+extends: ../../sweep16/gpt-oss-120b/ttir-min.yaml  # rung l1's features: the bare set, the API reference, temperature 1.0
+bench:
+  items: [eltwise_binary, eltwise_sfpu, matmul_multi_core]  # each judged by its declared tolerance
+prompts: tt-ttir-bare-v1  # tt-ttir-bare-v0 with run-failure and mismatch corrections
+toolchain:
+  ttir: ttir-ttmetal-ttsim  # the runtime build's tools, lowering for the recorded ttsim descriptor
+  tt: ttmetal-host  # the tt reference's toolchain (reference: tt): the pinned clang++-20 against the pinned tt-metal
+  cpp: gcc-native  # the cpp reference's toolchain, for the references' agreement
+fixes:
+  baseline_both: true  # build and run both references; the baseline judges their agreement by the item's
+stages: [baseline, verbatim_context, generate, compile_loop, run_loop, oracle]
+executor:
+  cpp: {kind: native}  # the cpp reference runs in the sandbox on the host CPU
+  tt: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # the tt reference runs in the sandbox on ttsim, a simulator
+  ttir: {kind: ttmlir-ttsim, arch: wormhole_b0, dispatch: slow}  # each flatbuffer runs through the driver on ttsim
+oracle: {kind: binary_io, metric: from_item, threshold: from_item, shape: elements}  # the item's declared tolerance
+loop: {max_corrections: 8, correct_on_mismatch: true}  # rung l1's cap; mismatches come back as corrections

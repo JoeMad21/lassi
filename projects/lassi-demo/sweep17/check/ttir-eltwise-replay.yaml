@@ -1,0 +1,43 @@
+# sweep17's end-to-end check, no model: one cpp -> ttir trial of eltwise_binary through the runner, compiled by
+# ttir-ttmetal-ttsim, run on ttsim (a simulator) by the ttmlir-ttsim executor, and judged by binary_io against the tt
+# program within the item's declared tolerance (max_abs 0.01), as sweep17/gpt-oss-120b's recipes are set up
+# (plans/spikes/ttmlir-runtime.md, the dated sections on the TTIR arms on ttsim). The replay backend gives three
+# SYNTHETIC replies written by hand, never model output (tests/fixtures/ttmlir-ttsim/eltwise-binary-check.json): first a
+# module on tensors of half the input files' elements (it compiles, and the driver must refuse its inputs, a failed run
+# that asks for a correction), then a module that computes a - b (it compiles and runs, and the oracle must fail it,
+# which asks for a correction), then the correct module, a + b widened to f32 (the oracle must pass it). Its first run,
+# rx 20261029-221408-...-2d69, replayed the last two alone (eltwise-binary-wrong-then-ok.json, loop.max_corrections 1).
+# Exploratory; no value it gives is a measurement of a model, and its wall times are simulator wall time (Agent Rule 2).
+# Run it on the build host, CPU only, after the fetch and installs ttir-min.yaml names:
+# `uv run lassi --graphics off run projects/lassi-demo/sweep17/check/ttir-eltwise-replay.yaml --run-id <run id>`.
+extends: ../../../base.yaml  # projects/base.yaml: runs root, sandbox, and report choices
+faithful: false  # a check recipe; nothing reproduces an upstream run
+model:
+  backend: replay  # the three scripted replies in order (lassi.llm.replay); no model is served or loaded
+  id: ttir-ttsim-check  # a label for the trial records
+  recording: tests/fixtures/ttmlir-ttsim/eltwise-binary-check.json
+llm:
+  sampling:
+    max_tokens: 4096  # base.yaml leaves it open and the runner never picks it; the replay ignores it
+extract:
+  unfenced_file_lines: true  # as the sweep17 recipes
+bench:
+  suite: tt-pairs-v0-ttir
+  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  items: [eltwise_binary]
+directions: [{source: cpp, target: ttir}]
+prompts: tt-ttir-bare-v1  # the sweep17 template set; the replay ignores the prompts
+toolchain:
+  ttir: ttir-ttmetal-ttsim
+  tt: ttmetal-host
+  cpp: gcc-native
+fixes:
+  baseline_both: true  # both references, as the arms build them
+stages: [baseline, generate, compile_loop, run_loop, oracle]  # sweep17's, without the API reference (no model reads it)
+executor:
+  cpp: {kind: native}
+  tt: {kind: ttsim, arch: wormhole_b0, dispatch: slow}
+  ttir: {kind: ttmlir-ttsim, arch: wormhole_b0, dispatch: slow}
+oracle: {kind: binary_io, metric: from_item, threshold: from_item, shape: elements}  # the item's declared tolerance
+trials: {n: 1}
+loop: {max_corrections: 2, correct_on_mismatch: true}  # two corrections: exactly the three replies

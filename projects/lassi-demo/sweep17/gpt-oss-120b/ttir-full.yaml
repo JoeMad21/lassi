@@ -1,0 +1,11 @@
+# sweep17, COMPILE AND RUN ON TTSIM: cpp -> ttir, arm ttir-full: ttir-min.yaml (its comments hold: the runtime
+# build's tools for the recorded ttsim descriptor, the ttmlir-ttsim executor, the references, the oracle against each
+# item's declared tolerance, run_loop's corrections; ttsim is a simulator, never performance; exploratory) with
+# sweep15's rung l3 features: rung l1's (the bare set, the TTIR API reference, temperature 1.0) plus retrieval over
+# tt-mlir's own TTIR tests at the pin (rung l2) and the item's compute unit lowered by the pinned cgeist to affine
+# MLIR in the generation prompt (rung l3).
+# Before the run, besides ttir-min.yaml's: the retrieval index as sweep15's rung l2 needs it (uv run
+# tools/build_ttkernel_rag.py build --dialect ttir --tree <tt-mlir src>) and the Polygeist install for cgeist.
+extends: ttir-min.yaml
+retrieval: {index: tt-mlir-ttir-tests, k: 4, max_chars: 8000, prompts: [generate, correct]}  # rung l2's
+source_mlir: {toolchain: cgeist-affine, max_chars: 24000}  # rung l3's

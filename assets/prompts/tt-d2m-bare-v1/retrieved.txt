@@ -1,0 +1,9 @@
+Excerpts from tt-mlir's own tests at commit 5f396fd6 follow: D2M modules that ttmlir-opt parses and verifies at
+the pin, found by searching the tests for the names in the task after them or in its errors. They do other work
+than the task, so do not copy their computation; copy how they write each d2m op, its operands, its
+attributes, and its types. Their RUN lines name other passes and options than the pipeline your module goes
+through, their CHECK lines show the output of those passes, not input to write, and a test in the explicit
+data-movement form (d2m.stream_layout, dma ops) shows a form that does not reach a flatbuffer at this pin.
+Each starts with its file and its lines.
+
+$passages
