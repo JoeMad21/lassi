@@ -40,8 +40,12 @@ ends every call by 08:30.
   https://huggingface.co/furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic/raw/v2026.4/generation_config.json, read
   2026-11-01) and no reasoning setting (the owner: "consider minimum features tests for 70B. May be the case that the model needs more features to
   converge."). l1, l3, and d2m-min match sweep19's gpt-oss-120b arms (ttir-min-gap, ttir-full-gap, d2m-min-gap) but
-  for the model, and every recipe feeds simulator gaps back as corrections, as sweep19 does. Deadline 08:15; passes
-  chained as above.
+  for the model, and every recipe feeds simulator gaps back as corrections, as sweep19 does. Deadline 08:15.
+  Changed at 00:40 on 2026-11-02 (the owner: "I'm going to bed, you're good to handle testing right? Consider updating
+  the background program in case you run out of usage."): the passes are chained on alpha01, not from the
+  workstation. One rx job, started about 01:00, runs plans/runs/suite/run-passes.sh, which waits on the host until
+  03:00, runs run-suite.sh, and runs it again after each pass that ends early while at least 31 minutes remain to
+  08:15, so no session or workstation is needed once it starts.
 - TurboQuant testing (the owner, 2026-11-01: "Set a reminder to also do TurboQuant testing during one of the windows"):
   a candidate for the end of this window or a later one. TurboQuant is P18, deferred and outside the work order
   (OQ-066), so what "testing" runs needs the owner's scope first (to be asked in the attended session); plans/spikes/p5-tier-b.md and results/p5-tier-b

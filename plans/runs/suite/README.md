@@ -150,10 +150,25 @@ the gate's tt_silicon device class is the owner's switch for silicon work on alp
 and the launcher does not check it. Agents do not launch model-generated programs on the cards while their IOMMU
 domains are identity (docs/tt-silicon-iommu.md; OQ-078), a practice the launcher does not enforce.
 
+## Passes In One Job
+
+For a window that opens after the launch, `plans/runs/suite/run-passes.sh` (task P17.61) waits on alpha01 until
+`--start`, runs run-suite.sh with `--deadline` and the options after `--`, and runs it again after each pass ends
+while at least `--min-left` seconds (default 1860) remain to the deadline, so a pass that ends early is followed by
+the next with no session and no workstation. The launcher does not start it; it is started as an rx job with the
+command the plan prints, its timeout from the launch to the deadline plus 900 s, and `bash
+plans/runs/suite/run-passes.sh --start <epoch> --deadline <epoch> --` in place of `bash
+plans/runs/suite/run-suite.sh --deadline <epoch>`, run-suite.sh's other options following. Pass 1 writes
+`$LASSI_RUNS_ROOT/suite/<job id>/` (`tools/suite.py pull` fetches it); pass k writes
+`$LASSI_RUNS_ROOT/suite/<job id>-p<k>/`, which `rx pull --path lassi-runs/suite/<job id>-p<k>` fetches. It stops
+at the STOP file, after a pass shorter than `--min-pass` (default 600 s), or after `--max-passes` (default 8), and
+between passes waits up to 5 minutes for this user's furiosa-llm servers and run.sh to exit.
+
 ## Files
 
 - `tools/suite.py`: the launcher.
 - `plans/runs/suite/run-suite.sh`: the job (`bash plans/runs/suite/run-suite.sh --help`).
+- `plans/runs/suite/run-passes.sh`: passes of the job in one rx job, from a start time (`--help`).
 - `plans/runs/suite/recipes.py`: its recipe helper (the manifest, the assets needed, and run.sh's SWEEP_SKIP).
 - `plans/runs/suite/models.tsv`: the default model table.
-- `tests/tools/test_suite.py`: tests with fakes for rx and git.
+- `tests/tools/test_suite.py`: tests with fakes for rx and git; `tests/tools/test_run_passes.py`: run-passes.sh.
