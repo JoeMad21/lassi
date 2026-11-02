@@ -24,7 +24,7 @@
 # - Time: with the compile, 20 to 40 minutes by the spike's estimate, 30 to 90 minutes in all; timeout_s 5400 (90
 #   minutes) ends it as a hang past that.
 base_model: Qwen/Qwen3-1.7B@70d244cc86ccca08cf5af4e1e306ecf908b1ad5e  # a HEAD request read X-Repo-Commit equal to it
-method: sft  # the only method on silicon: RL rewards never execute there (Agent Rule 9)
+method: sft  # the ttxla trainer's one method (lassi.train.ttxla_trainer)
 weights: prompt_tuning
 trainer:
   kind: ttxla

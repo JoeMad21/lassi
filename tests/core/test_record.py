@@ -148,10 +148,12 @@ NESTED_RECORDS = {
     "AgentLog": ["AgentLog"],
     "DeviceTiming": ["DeviceTiming"],
     "DeviceProgram": ["DeviceProgram"],
+    "FinalTest": ["FinalTest"],
 }
 # The top-level blocks of the bible's Result Record yaml block, in order, and the record class of each. The
 # adversary stage's three blocks (task P16.5) follow DeviceRecord; Trial names its record as AdversaryRecord, whose
-# agent_log names AgentLog (task P16.4). RunInfo.device_timing's two blocks come last (task P17.42).
+# agent_log names AgentLog (task P16.4). RunInfo.device_timing's two blocks follow (task P17.42), and
+# Attempt.final_test's block comes last (task P17.55).
 BIBLE_BLOCKS = (
     "Trial",
     "Request",
@@ -166,6 +168,7 @@ BIBLE_BLOCKS = (
     "AgentLog",
     "DeviceTiming",
     "DeviceProgram",
+    "FinalTest",
 )
 
 CORE_MODULES = ("lassi.core.record", "lassi.core.store", "lassi.core.trial_md", "lassi.core.parquet")
@@ -181,6 +184,7 @@ RECORD_CLASSES: tuple[type, ...] = (
     record.Profile,
     record.Guards,
     record.ScoreBreakdown,
+    record.FinalTest,
     record.Attempt,
     record.RequestMessage,
     record.Request,
@@ -1550,6 +1554,7 @@ def test_minimal_attempt_to_dict_exact() -> None:
             "host_compute_not_checked": None,
         },
         "score": {"components": {}, "scalar": None},
+        "final_test": None,
     }
 
 

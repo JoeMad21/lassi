@@ -14,8 +14,8 @@ venv's own interpreter with `-I`; LASSI's side imports no framework at all.
 Everything that runs on the card is tracked code: the wheel, PyTorch, and
 the worker, never model output (Agent Rule 6).
 
-Declarations. Method sft alone: no reward, so RL never touches silicon
-(Agent Rule 9). Weight modes full, lora (PEFT LoraConfig, lora.r, every
+Declarations. Method sft alone: the worker's loop trains on prompt and
+completion records, with no reward. Weight modes full, lora (PEFT LoraConfig, lora.r, every
 linear layer but the output layer, as the trl trainer's), and
 prompt_tuning (PEFT PromptTuningConfig, trainer.virtual_tokens, RANDOM
 initialization). Data sources synthetic and corpus. packages, the venv's

@@ -25,8 +25,16 @@ class is read from the words "stopped at a simulator gap, <class>" that both mes
 that ended at sim-gap with no attempt stopped at its reference run and lists none. The script writes
 <output dir>/not_verifiable.tsv, one row per such attempt (pass, slug, half, combination, trial id, attempt index, gap
 class, stage reached), and <output dir>/hardware_check.tsv, the same attempts with the path of each trial record under
-<runs root>/runs: the list for a later hardware check, which a human starts. This script runs nothing, on silicon or
-anywhere (Agent Rule 9), and a simulator result is never a silicon or performance result (Agent Rule 2).
+<runs root>/runs: the list for a later hardware check. This script runs nothing, on silicon or anywhere, and a
+simulator result is never a silicon or performance result (Agent Rule 2).
+
+Final tests (task P17.55). An attempt of a recipe with a final_executor section that passed the oracle on ttsim
+was run once more on the final executor (the Wormhole cards through tt_silicon), and its record holds that run
+(Attempt.final_test). The script writes <output dir>/final_tests.tsv, one row per final test (pass, slug, half,
+combination, trial id, attempt index, executor, passed, stage reached, the device kernel time in ns summed over
+the run's programs, the AICLK in MHz, and the device), the device time "-" when the run's device profiler
+read none. That time is the device profiler's reading, labelled by its device; every rate derives from it in
+lassi.analysis.tt_rates (final_test_rates), never from ttsim.
 """
 
 from __future__ import annotations
@@ -43,6 +51,8 @@ HEADER = ("pass", "slug", "half", "direction", "item", "run", "stage", "alignmen
 PASS_HEADER = ("pass", "slug", "trials", "s5", "alignment_1", "with_divergence", "combo", "sim_gap_attempts")
 GAP_HEADER = ("pass", "slug", "half", "combo", "trial_id", "attempt", "gap_class", "stage")
 CHECK_HEADER = ("trial_id", "attempt", "gap_class", "record")
+FINAL_HEADER = ("pass", "slug", "half", "combo", "trial_id", "attempt", "executor", "passed", "stage",
+                "kernel_ns", "aiclk_mhz", "device")
 # The end code and the run-stage note code of a simulator gap (lassi.core.record END_REASONS and SIM_GAP_NOTE), and
 # the words both messages name the gap's class after (lassi.core.stages _gap_message, gap_note).
 SIM_GAP = "sim-gap"
@@ -107,6 +117,24 @@ def gap_rows(row: list[str], path: Path, runs: Path) -> tuple[list[list[str]], l
     return listed, checks
 
 
+def final_rows(row: list[str], path: Path) -> list[list[str]]:
+    """Return the final_tests.tsv rows of the trial record at `path` (trials row `row`): one per final test."""
+    trial = json.loads(path.read_text(encoding="utf-8"))
+    found = []
+    for attempt in trial.get("attempts") or []:
+        final = attempt.get("final_test")
+        if not final:
+            continue
+        timing = (final.get("run") or {}).get("device_timing")
+        kernel = "-" if not timing else str(sum(program["kernel_ns"] for program in timing["programs"]))
+        aiclk = "-" if not timing else str(timing["aiclk_mhz"])
+        passed = "true" if final.get("passed") else "false"
+        found.append([row[0], row[1], row[2], row[16], trial["trial_id"], str(attempt["index"]),
+                      str(final.get("executor")), passed, str(final.get("stage_reached")), kernel, aiclk,
+                      str(final.get("device") or "-")])
+    return found
+
+
 def write_tsv(path: Path, header: tuple[str, ...], rows: list[list[str]]) -> None:
     """Write `header` and `rows` to `path` as tab-separated ASCII lines."""
     with path.open("w", encoding="ascii", newline="\n") as handle:
@@ -115,13 +143,13 @@ def write_tsv(path: Path, header: tuple[str, ...], rows: list[list[str]]) -> Non
 
 
 def main(argv: list[str]) -> int:
-    """Write trials.tsv, passes.tsv, not_verifiable.tsv, and hardware_check.tsv; return 0, or 2 for a usage error."""
+    """Write trials.tsv, passes.tsv, not_verifiable.tsv, hardware_check.tsv, and final_tests.tsv; 0, or 2 for usage."""
     if len(argv) != 2:
         print(__doc__.split("\n")[2].strip(), file=sys.stderr)
         return 2
     runs, out = Path(argv[0]) / "runs", Path(argv[1])
     out.mkdir(parents=True, exist_ok=True)
-    rows, listed, checks = [], [], []
+    rows, listed, checks, finals = [], [], [], []
     for tree in sorted(runs.glob("sweep-*")):
         _, date, clock, *rest = tree.name.split("-")
         slug, _, combo = "-".join(rest[:-1]).partition("--")
@@ -131,6 +159,7 @@ def main(argv: list[str]) -> int:
             gaps, hardware = gap_rows(rows[-1], path, runs)
             listed += gaps
             checks += hardware
+            finals += final_rows(rows[-1], path)
     write_tsv(out / "trials.tsv", HEADER, rows)
     counts: dict[tuple[str, str, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0])
     for row in rows:
@@ -145,9 +174,10 @@ def main(argv: list[str]) -> int:
     write_tsv(out / "passes.tsv", PASS_HEADER, passes)
     write_tsv(out / "not_verifiable.tsv", GAP_HEADER, listed)
     write_tsv(out / "hardware_check.tsv", CHECK_HEADER, checks)
+    write_tsv(out / "final_tests.tsv", FINAL_HEADER, finals)
     print(f"{len(rows)} trials from {len({(r[0], r[1]) for r in rows})} pass-model pairs into {out}")
     print(f"{len(listed)} attempt(s) built but not verifiable on ttsim (simulator gaps; the label assumes the "
-          "simulator is ttsim, as every RNGD sweep run is), listed for a human-started hardware check; nothing was run")
+          "simulator is ttsim, as every RNGD sweep run is), listed for a hardware check; nothing was run")
     return 0
 
 

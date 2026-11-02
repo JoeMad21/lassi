@@ -1,33 +1,36 @@
-"""Tests for `lassi train --silicon`: training on a Tenstorrent card, started by a human (task P17.38).
+"""Tests for training on a Tenstorrent card: no start flag, the card guard kept (tasks P17.38 and P17.53).
 
-Bible: Agent Rule 9 as OQ-100 (a) amends it ("silicon runs are evaluation
-runs, or training runs of tracked code, that a human starts"; RL rewards
-never execute on silicon); OQ-100 (s2): one human start may run a sequence
-of runs, each its own process, stopping at the first failure or hang;
-OQ-075 (2a) and (3a), the tt_silicon executor's lock and quarantine marker,
-which a training run shares; Training Module, Safeguards.
+Bible: Agent Rule 9 (the owner's text; its current text stands until the
+owner's revision, OQ-099); the owner's answers of 2026-10-29 to
+OQ-078 and OQ-099 (no gate on silicon use in LASSI's software, no human
+start) and the owner's refinement that evening (kept: one placement at a
+time, the quarantine after a hang, and no network for training, OQ-107
+(a)); OQ-075 (2a) and (3a), the tt_silicon executor's lock and quarantine
+marker, which a training run shares; Training Module, Safeguards.
 
 The contract these tests fix (lassi.train.run, lassi.train.silicon,
 lassi.cli):
 
-- A train recipe whose trainer.device is of kind tenstorrent is refused
-  unless TrainOptions.silicon is True, which only `lassi train <recipe>
-  --silicon` sets (no recipe key or variable stands in for it), before any
-  directory exists, naming --silicon and Agent Rule 9. On such a device the
-  method must be sft (RL rewards never execute on silicon), trainer.network
-  must be none, with no default (the training worker runs in its own empty
-  network namespace: the training stack's Tracy client listens and
-  broadcasts from library load; plans/spikes/tt-perf.md), which
-  provenance.json records under network (null for a run whose trainer
-  section names none), and $LASSI_SCRATCH must be set, since the lock lives
-  there.
-- With the flag, once every other refusal has passed and before any
-  directory exists, the run takes the one lock of every card,
-  $LASSI_SCRATCH/locks/tt-silicon.lock (refused at once while another
-  process holds it, never a wait), refuses while any quarantine marker is
-  there, and polls the cards until no other account holds them (the
-  executor's poll), refusing after its limit. It holds the lock until the
-  final provenance.json is written.
+- A train recipe whose trainer.device is of kind tenstorrent needs no start
+  flag: TrainOptions has no `silicon` field, and `lassi train` takes no
+  --silicon (the argument parser refuses it, exit 2). On such a device any
+  method the Trainer declares trains (the sft-only refusal went with the
+  rule it cited, that RL rewards never execute on silicon, which the owner
+  directed removed on 2026-10-29; Agent Rule 9's current text stands until
+  the owner's revision, OQ-099); trainer.network must be none, with no default
+  (the training worker runs
+  in its own empty network namespace: the training stack's Tracy client
+  listens and broadcasts from library load; plans/spikes/tt-perf.md),
+  which provenance.json records under network (null for a run whose
+  trainer section names none), and $LASSI_SCRATCH must be set, since the
+  lock lives there.
+- Once every other refusal has passed and before any directory exists,
+  the run takes the one lock of every card,
+  $LASSI_SCRATCH/locks/tt-silicon.lock (while another process holds it, it
+  waits, trying every POLL_INTERVAL_S, and refuses only after LOCK_WAIT_S),
+  refuses while any quarantine marker is there, and polls the cards until
+  no other account holds them (the executor's poll), refusing after its
+  limit. It holds the lock until the final provenance.json is written.
 - Right before train(job) it writes the quarantine marker
   tt-silicon.quarantine naming the ending "not recorded", the run, and the
   card's serial and PCI address. train() is called once, never retried.
@@ -35,7 +38,7 @@ lassi.cli):
   says the card was left in a known state (silicon.CleanEnding); it stays,
   rewritten to name the ending, after silicon.CardEnding (a hang, a kill,
   or a crash the trainer saw) and after any other exception.
-- A cpu device needs no flag and takes no lock, with or without it.
+- A cpu device takes no lock.
 
 Every component is a fake: the train layer's fake Trainer (train_fakes)
 with a SYNTHETIC pjrt-plugin-tt build, the real tenstorrent probe on the
@@ -46,6 +49,7 @@ measurement.
 
 from __future__ import annotations
 
+import importlib
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -93,24 +97,22 @@ def rig(setup: Setup, monkeypatch: pytest.MonkeyPatch) -> Rig:
 
 
 # ---------------------------------------------------------------------------
-# The human start
+# No start flag and any declared method; the network check kept
 
 
-def test_a_tenstorrent_device_without_the_flag_is_refused_before_any_directory(setup: Setup, rig: Rig) -> None:
-    with pytest.raises(RunError) as refused:
-        rig.run(trainer_registry(setup.log), flag=False)
-    message = str(refused.value)
-    assert "--silicon" in message and "Agent Rule 9" in message, message
-    assert not setup.runs_root.exists() and not rig.locks.exists()
-    assert "build" not in setup.log.events and "train" not in setup.log.events
+def test_a_tenstorrent_device_trains_without_any_start_flag(setup: Setup, rig: Rig) -> None:
+    train_dir = rig.run(trainer_registry(setup.log))
+    assert provenance(train_dir)["status"] == "complete"
+    assert rig.flock.calls, "the card guard took the lock"
+    assert not rig.flock.held(rig.locks / LOCK) and not (rig.locks / MARKER).exists()
 
 
-def test_only_sft_trains_on_silicon(setup: Setup, rig: Rig) -> None:
-    with pytest.raises(RunError) as refused:
-        rig.run(trainer_registry(setup.log), method="dpo")
-    message = str(refused.value)
-    assert "sft" in message and "Agent Rule 9" in message, message
-    assert not setup.runs_root.exists() and "train" not in setup.log.events
+def test_any_method_the_trainer_declares_trains_on_silicon(setup: Setup, rig: Rig) -> None:
+    # The sft-only refusal is gone (task P17.53: silicon runs may feed RL rewards); the guard still holds.
+    train_dir = rig.run(trainer_registry(setup.log), method="dpo")
+    assert provenance(train_dir)["status"] == "complete"
+    assert rig.flock.calls, "the card guard took the lock"
+    assert not rig.flock.held(rig.locks / LOCK) and not (rig.locks / MARKER).exists()
 
 
 @pytest.mark.parametrize("network", [None, "host", "bridge"], ids=["missing", "host", "bridge"])
@@ -140,26 +142,24 @@ def test_a_silicon_run_needs_lassi_scratch_for_its_lock(
     assert not setup.runs_root.exists() and "train" not in setup.log.events
 
 
-@pytest.mark.parametrize("flag", [False, True], ids=["without-flag", "with-flag"])
-def test_a_cpu_run_takes_no_lock_with_or_without_the_flag(setup: Setup, rig: Rig, flag: bool) -> None:
+def test_a_cpu_run_takes_no_lock(setup: Setup, rig: Rig) -> None:
     registry = trainer_registry(setup.log)
     data = recipe_data(trainer={"kind": "fake", "device": {"kind": "cpu"}, "steps": 2})
-    train_dir = setup.run(data, registry=registry, probes=rig.probes(), silicon=flag, silicon_host=rig.host_seams())
+    train_dir = setup.run(data, registry=registry, probes=rig.probes(), silicon_host=rig.host_seams())
     assert provenance(train_dir)["status"] == "complete"
     assert provenance(train_dir)["network"] is None, "a trainer section without network records null"
     assert not rig.locks.exists() and rig.flock.calls == []
 
 
-def test_the_command_line_passes_the_flag_and_no_variable_stands_in(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("LASSI_SILICON", "1")
+def test_the_command_line_takes_no_silicon_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[Any] = []
     monkeypatch.setattr(cli, "run_training", lambda path, options: seen.append(options))
     recipe = str(tmp_path / "train.yaml")
-    assert cli.main(["--graphics", "off", "train", recipe, "--silicon"]) == 0
     assert cli.main(["--graphics", "off", "train", recipe]) == 0
-    assert [options.silicon for options in seen] == [True, False]
+    with pytest.raises(SystemExit) as exit_:
+        cli.main(["--graphics", "off", "train", recipe, "--silicon"])
+    assert exit_.value.code == 2 and len(seen) == 1
+    assert not hasattr(seen[0], "silicon")
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +182,7 @@ def test_the_run_holds_the_lock_and_the_marker_while_it_trains_and_releases_both
     assert device["framework"] == "pjrt-plugin-tt"
 
 
-def test_a_second_holder_is_refused_at_once_before_any_directory(setup: Setup, rig: Rig) -> None:
+def test_a_second_holder_is_waited_for_then_refused_before_any_directory(setup: Setup, rig: Rig) -> None:
     rig.locks.mkdir()
     fd = os.open(rig.locks / LOCK, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
     try:
@@ -195,7 +195,28 @@ def test_a_second_holder_is_refused_at_once_before_any_directory(setup: Setup, r
     message = str(refused.value)
     assert LOCK in message and "4242" in message, message
     assert not setup.runs_root.exists() and "train" not in setup.log.events
-    assert rig.clock.sleeps == [], "a held lock is refused at once, never waited for"
+    wait = importlib.import_module("lassi.executors.tt_silicon").LOCK_WAIT_S
+    assert sum(rig.clock.sleeps) >= wait, "a held lock is waited for, then refused"
+
+
+def test_a_second_holder_that_lets_go_is_waited_for_and_the_run_trains(setup: Setup, rig: Rig) -> None:
+    rig.locks.mkdir()
+    fd = os.open(rig.locks / LOCK, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
+    rig.flock(fd, rig.fakes.LOCK_EX | rig.fakes.LOCK_NB)
+    closed: list[int] = []
+
+    def let_go(count: int) -> None:
+        if count == 2:
+            os.close(fd)
+            closed.append(count)
+
+    rig.clock.on_sleep = let_go
+    try:
+        train_dir = rig.run(trainer_registry(setup.log))
+    finally:
+        if not closed:
+            os.close(fd)
+    assert closed == [2] and provenance(train_dir)["status"] == "complete"
 
 
 def test_a_quarantine_marker_refuses_the_run_before_any_directory(setup: Setup, rig: Rig) -> None:
@@ -273,7 +294,7 @@ def test_a_later_run_is_refused_while_the_marker_stays(setup: Setup, rig: Rig) -
         rig.run(trainer_registry(setup.log, behave=crash))
     with pytest.raises(RunError) as refused:
         setup.run(recipe_data(trainer={"kind": "fake", "device": TT_DEVICE, "steps": 2, "network": "none"}),
-                  registry=trainer_registry(setup.log), probes=rig.probes(), silicon=True,
+                  registry=trainer_registry(setup.log), probes=rig.probes(),
                   silicon_host=rig.host_seams(), train_id="t2")
     assert MARKER in str(refused.value)
     assert not setup.train_dir("t2").exists()

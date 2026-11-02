@@ -19,11 +19,14 @@ lassi.executors.sandbox:
     under /dev: the executor of P17.16 is to bind each host node at its own
     path, and the remote tests bind harmless stand-ins there);
   - pci_dirs: DeviceBinds of each card's PCI sysfs directory (the directory
-    /sys/class/tenstorrent/tenstorrent!<n>/device resolves to, a path under
-    /sys whose last segment is the card's address), each bound read-only at
-    /sys/bus/pci/devices/<address>;
+    /sys/class/tenstorrent/tenstorrent!<n>/device resolves to, a path
+    strictly below a /sys/devices entry other than system whose last
+    segment is the card's address), each bound read-only at its own path,
+    with /sys/bus/pci/devices/<address> made a link to it (task P17.54;
+    tests/executors/test_sandbox_iommu.py);
   - hugepages: the run's own hugepage directory, strictly under the host's
-    /dev/hugepages-1G, bound writable at /dev/hugepages-1G;
+    /dev/hugepages-1G, bound writable at /dev/hugepages-1G, or None when
+    every card is in a DMA domain (task P17.54);
   - reset_filter: a bool with no default, True only when the caller asks the
     seccomp filter to refuse the driver's reset ioctl (OQ-075 (4)).
   A run with one also gets /sys/bus/pci/slots, bound read-only at its own
@@ -57,11 +60,13 @@ What is checked, on Windows or any host with sh and awk:
   adding noexec, before the mount check, and the setup stopped (exit 2)
   right after the bind when the running user does not own the directory;
   the slot list and each PCI directory staged while the host's /sys is in
-  view and bound below the /sys/bus cover, which is read-only again before
-  the check; that cover's inode cap raised, read-only, before the first
-  directory below it, so it holds all eight cards' directories (the 8
-  inodes every cover gets hold four); and every other call the same as
-  SETUP_SCRIPT's. The stub mkdir makes nothing, so each stub run points the
+  view and bound at its own path, the slot list below the /sys/bus cover
+  and each card's directory below its /sys/devices cover, each cover
+  read-only again before the check; the /sys/bus cover's inode cap raised,
+  read-only, before the first directory below it, so it holds all eight
+  cards' links (the 8 inodes every cover gets hold four); and every other
+  call the same as SETUP_SCRIPT's. The stub mkdir makes nothing, so each
+  stub run points the
   owner check at a directory the test made, or at a path the user does not
   own; the shell's own test builtin runs it.
 - The run's mount check, its recorded awk call replayed with the awk on
@@ -90,6 +95,7 @@ import ast
 import dataclasses
 import hashlib
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -151,6 +157,8 @@ PCI_DIRS = tuple(
 )
 SLOTS = "/sys/bus/pci/slots"
 BUS_COVER = "/sys/bus"
+# The /sys/devices cover every card's directory here lies under (task P17.54).
+CARD_COVER = "/sys/devices/pci0000:e2"
 DRIVER_VERSION = "/sys/module/tenstorrent/version"
 PAGE_COUNT = "/sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages"
 # UMD's fixed hugepage directory (umd hugepage.cpp:28), the run's own directory under it (SYNTHETIC names), and the
@@ -223,8 +231,17 @@ def sha256(text: str) -> str:
 
 
 def sys_binds() -> tuple[tuple[str, str], ...]:
-    """Return every /sys bind a run with the exposure gets: the slot list, then each card's PCI directory."""
-    return ((SLOTS, SLOTS), *PCI_DIRS)
+    """Return every /sys bind a run with the exposure gets, as (source, point): the slot list, then each card's.
+
+    Each card's directory is bound at its own path (task P17.54), and its
+    /sys/bus/pci/devices/<address> is a link to it (bus_links).
+    """
+    return ((SLOTS, SLOTS), *((source, source) for source, _target in PCI_DIRS))
+
+
+def bus_links() -> tuple[str, ...]:
+    """Return each card's /sys/bus/pci/devices/<address>, which a run with the exposure gets as a link."""
+    return tuple(target for _source, target in PCI_DIRS)
 
 
 # ---------------------------------------------------------------------------
@@ -361,26 +378,27 @@ def tenstorrent_calls(calls: list[list[str]], dev: str) -> set[int]:
     They are each node's bind (with its file and its parent directory in the
     private /dev), the hugepage directory's mkdir, bind, and any call that
     makes it writable, each /sys source's staging bind (and the staging
-    directories), each /sys target's mkdir and bind, every remount of the
-    /sys/bus cover, and any call naming the driver version or the 1 GiB page
-    count.
+    directories), each /sys bind's mkdir and bind at its point, each card's
+    link and the mkdir of its parent (task P17.54), every remount of the
+    /sys/bus cover and of the cards' /sys/devices cover, and any call naming
+    the driver version or the 1 GiB page count.
     """
     nodes = {dev + target[len("/dev") :] for _source, target in NODES}
     huge = {dev + HUGEPAGE_POINT[len("/dev") :], HUGEPAGE_POINT}
-    stages = {staged(calls, source)[1] for source, _target in sys_binds()}
-    targets = {target for _source, target in sys_binds()}
+    stages = {staged(calls, source)[1] for source, _point in sys_binds()}
+    points = {point for _source, point in sys_binds()}
     made = {dev + "/tenstorrent", *huge}
     made |= set().union(*(tree_paths(stage, "/tmp") for stage in stages))
-    made |= set().union(*(tree_paths(target, BUS_COVER) for target in targets))
-    named = nodes | huge | stages | targets | made | {HUGEPAGES, DRIVER_VERSION, PAGE_COUNT}
-    named |= {source for source, _target in sys_binds()}
+    made |= set().union(*(tree_paths(point, BUS_COVER) | tree_paths(point, CARD_COVER) for point in points))
+    made |= set().union(*(tree_paths(posixpath.dirname(link), BUS_COVER) for link in bus_links()))
+    named = nodes | huge | stages | points | made | set(bus_links()) | {HUGEPAGES, DRIVER_VERSION, PAGE_COUNT}
     marked = set()
     for index, call in enumerate(calls):
         args = call[1:]
         paths = [part for part in args if not part.startswith("-")]
         if call[0] == "mkdir" and paths and set(paths) <= made:
             marked.add(index)
-        elif set(args) & named or cover_remounts([call], BUS_COVER):
+        elif set(args) & named or cover_remounts([call], BUS_COVER) or cover_remounts([call], CARD_COVER):
             marked.add(index)
         elif call[0] == "python3" and any(point in part for part in args for point in huge):
             marked.add(index)
@@ -588,7 +606,10 @@ def test_the_hugepage_directory_is_a_directory_bind_made_writable_before_the_mou
 def test_the_hugepage_bind_fails_closed_unless_the_running_user_owns_it(sandbox: ModuleType, tmp_path: Path) -> None:
     # Inside, uid 0 is the host user and another host user's directory shows the overflow uid, so `[ -O ]` holds only
     # for the user's own directory. The check sits between the bind and the remount that makes the bind writable.
-    for script in sandbox.TENSTORRENT_SETUP_SCRIPTS.values():
+    for (_reset_filter, hugepages), script in sandbox.TENSTORRENT_SETUP_SCRIPTS.items():
+        if not hugepages:
+            assert OWNER_CHECK not in script and HUGEPAGE_BIND not in script, "no hugepage step without a directory"
+            continue
         assert script.count(OWNER_CHECK) == 1 and script.count(HUGEPAGE_BIND) == script.count(HUGEPAGE_REMOUNT) == 1
         assert script.index(HUGEPAGE_BIND) < script.index(OWNER_CHECK) < script.index(HUGEPAGE_REMOUNT), script
     assert OWNER_CHECK not in sandbox.SETUP_SCRIPT and OWNER_CHECK not in sandbox.DEVICE_SETUP_SCRIPT
@@ -610,40 +631,44 @@ def test_the_hugepage_bind_fails_closed_unless_the_running_user_owns_it(sandbox:
         assert not writable_reopens(run.calls, (point, HUGEPAGE_POINT)), "the bind is never made writable"
 
 
-def test_the_slot_list_and_each_pci_directory_are_staged_then_bound_below_the_bus_cover(
+def test_the_slot_list_and_each_pci_directory_are_staged_then_bound_at_their_own_paths_below_their_covers(
     sandbox: ModuleType, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
     calls = stub_runs(sandbox, tmp_path_factory).exposed.calls
     dev = private_dev(calls)
-    cover = cover_made(calls, BUS_COVER)
     first_hide = typed_mounts(calls, "tmpfs", "lassi-hide")[0][0]
     covers = [i for i, args in typed_mounts(calls, "tmpfs", "lassi-sys") if "remount" not in args[3].split(",")]
     private = min(i for kind in ("lassi-private", "lassi-tmp") for i, _args in typed_mounts(calls, "tmpfs", kind))
-    reopens = cover_remounts(calls, BUS_COVER)
     stages: list[str] = []
-    for source, target in sys_binds():
+    for source, point in sys_binds():
+        cover = BUS_COVER if point == SLOTS else CARD_COVER
         stage_index, stage = staged(calls, source)
         assert stage.startswith("/tmp/") and not stage.startswith(dev + "/") and stage not in stages, stage
         assert stage_index < min([first_hide, *covers]), "staged while the host's /sys is still in view"
         stages.append(stage)
-        bound = index_of(calls, ["mount", "--bind", stage, target])
-        assert cover < bound < private, (target, cover, bound, private)
-        before = [options for index, options in reopens if index < bound]
-        assert before and "rw" in before[-1], f"the /sys/bus cover is open for the bind of {target}"
-        assert [i for i, call in enumerate(calls[:bound]) if call[0] == "mkdir" and target in call[1:]], target
-        assert not writable_reopens(calls, (target, stage)), f"{target} stays read-only"
-    assert reopens and "ro" in reopens[-1][1] and reopens[-1][0] < private, "the cover is read-only again"
+        bound = index_of(calls, ["mount", "--bind", stage, point])
+        assert cover_made(calls, cover) < bound < private, (point, bound, private)
+        before = [options for index, options in cover_remounts(calls, cover) if index < bound]
+        assert before and "rw" in before[-1], f"the cover {cover} is open for the bind of {point}"
+        assert [i for i, call in enumerate(calls[:bound]) if call[0] == "mkdir" and point in call[1:]], point
+        assert not writable_reopens(calls, (point, stage)), f"{point} stays read-only"
+    for cover in (BUS_COVER, CARD_COVER):
+        reopens = cover_remounts(calls, cover)
+        assert reopens and "ro" in reopens[-1][1] and reopens[-1][0] < private, f"{cover} is read-only again"
+    for link in bus_links():
+        made = [call for call in calls if call[:2] == ["ln", "-s"] and call[3] == link]
+        assert len(made) == 1 and made[0][2].startswith("../../../devices/pci0000:e2/"), (link, made)
 
 
 def test_the_bus_cover_holds_every_directory_of_an_eight_card_exposure(
     sandbox: ModuleType, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
     # Every cover holds 8 inodes, its root included, and an eight-card exposure needs 12 below /sys/bus: the root,
-    # pci, slots, devices, and one directory per card. The run's script raises the /sys/bus cover's cap, keeping it
+    # pci, slots, devices, and one link per card. The run's script raises the /sys/bus cover's cap, keeping it
     # read-only, before the first mkdir below it, with room for twice alpha01's cards; every cover mounts as before.
     runs = stub_runs(sandbox, tmp_path_factory)
     command, calls = runs.command, runs.exposed.calls
-    needed = {BUS_COVER}.union(*(tree_paths(target, BUS_COVER) for _source, target in sys_binds()))
+    needed = {BUS_COVER}.union(*(tree_paths(path, BUS_COVER) for path in (SLOTS, *bus_links())))
     assert len(needed) == 4 + len(ADDRESSES) == 12, sorted(needed)
     below = [i for i, call in enumerate(calls) if call[0] == "mkdir" and call[-1].startswith(BUS_COVER + "/")]
     remounts = cover_remounts(calls, BUS_COVER)
@@ -705,7 +730,8 @@ TT_BASE = [
     "40 27 0:5 /tenstorrent/0 /dev/tenstorrent/0 ro,nosuid,relatime - devtmpfs udev rw,size=100k,mode=755",
     "41 24 0:56 / /sys/bus ro,relatime - tmpfs lassi-sys rw,size=4k,nr_inodes=8,mode=555",
     "42 41 0:22 /bus/pci/slots /sys/bus/pci/slots ro,nosuid,nodev,noexec,relatime - sysfs sysfs rw",
-    f"43 41 0:22 {PCI_DIRS[0][0][len('/sys') :]} {PCI_DIRS[0][1]} ro,nosuid,nodev,noexec,relatime - sysfs sysfs rw",
+    "43 24 0:57 / /sys/devices/pci0000:e2 ro,relatime - tmpfs lassi-sys rw,size=4k,nr_inodes=23,mode=555",
+    f"44 43 0:22 {PCI_DIRS[0][0][len('/sys') :]} {PCI_DIRS[0][0]} ro,nosuid,nodev,noexec,relatime - sysfs sysfs rw",
 ]
 TT_ACCEPTED = [*TT_BASE, hugepage_line()]
 # Mountinfo the run's check refuses: case -> (lines, the mount point it must name).

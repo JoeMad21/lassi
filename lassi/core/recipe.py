@@ -288,6 +288,19 @@ DIALECT_NEAREST_DEFAULT = 4
 SOURCE_MLIR = "source_mlir"
 SOURCE_MLIR_MAX_CHARS = (1000, 64000)
 
+# The optional final_executor section (task P17.55; OQ-099, the owner: "SIlicon [sic] is there as a final test gate"): a
+# kind section binding a second Executor, the loop's final test. run_loop (lassi.core.stages) builds an attempt that
+# passed the oracle on the trial's executor once more and runs it on this one on the same held-out inputs; a failure
+# there is fed back as a correction within loop.max_corrections. Off when absent, and never materialized, so a recipe
+# without it keeps its resolved recipe and hash. Its executor must declare runs_code and sandboxed (Agent Rule 6; the
+# section's needs, _KIND_SECTIONS), the loop must judge clean runs by the oracle (loop.correct_on_mismatch true), and,
+# since upstream's loop runs on no second executor, it is refused under faithful: true (_check_final_executor). It
+# binds at final_executor.kind; run_executor_bindings leaves it out of the trial's own executors.
+FINAL_EXECUTOR = "final_executor"
+FINAL_EXECUTOR_WHERE = f"{FINAL_EXECUTOR}.kind"
+# The capability an executor that runs model-generated code must declare (lassi.core.stages SANDBOXED; Agent Rule 6).
+_SANDBOXED = "sandboxed"
+
 # The opt-in sampling key llm.sampling.reasoning_effort (OQ-080; bible Serving Rules, reasoning effort): one of
 # REASONING_EFFORTS, which a backend declaring the capability of that name takes (lassi.core.capabilities). Off when
 # absent, and never materialized, so a recipe without it keeps its resolved recipe and hash. Upstream sends no such
@@ -868,6 +881,7 @@ SCHEMA = _Fields(
         "oracle": _KIND,
         "profiler": _KIND,
         "adversary": _KIND,
+        FINAL_EXECUTOR: _KIND,  # opt-in final test on a second executor (task P17.55); absent means off
         # device: a device section (P17.2); base_url, timeout_s, api_key_env: a served backend's settings (P17.3);
         # revision, seed: an in-process model's settings (P17.4); recording and its sha256: the replay backend's
         # recording (P16.13)
@@ -929,12 +943,14 @@ _MODEL_OWN = ("backend", "id", RECORDING_SHA256_KEY)
 # declare proposes_inputs (task P16.2), while an Agent bound to a role under agents needs none. Known cases, not
 # complete: the rule holds for a run recipe (load_recipe). load_train_recipe binds only trainer.kind, so a train
 # recipe's adversary section (method adversarial, part (b)) is bound and checked by neither rule until task P16.12
-# binds it through the entry here; lassi train refuses the key until then.
+# binds it through the entry here; lassi train refuses the key until then. The final_executor section binds an
+# Executor that must run programs in the sandbox, since it runs model-generated code (task P17.55; Agent Rule 6).
 _KIND_SECTIONS: tuple[tuple[str, str, frozenset[str]], ...] = (
     ("executor", "Executor", frozenset()),
     ("oracle", "Oracle", frozenset()),
     ("profiler", "Profiler", frozenset()),
     ("adversary", "Agent", frozenset({PROPOSES_INPUTS})),
+    (FINAL_EXECUTOR, "Executor", frozenset({RUNS_CODE, _SANDBOXED})),
 )
 
 # The train recipe's names (bible Training Module, Algorithms and Weight Modes; the train.yaml block's comments),
@@ -1032,6 +1048,7 @@ def load_recipe(path: Path, *, roots: Sequence[Path] | None = None, registry: Re
     _bind_skeleton(path, data)
     _check_sampling(path, data)
     _check_unfaithful_sections(path, data)
+    _check_final_executor(path, data)
     bindings = _bindings(data)
     registry = DEFAULT_REGISTRY if registry is None else registry
     try:
@@ -1678,6 +1695,46 @@ def _check_unfaithful_sections(path: Path, data: Mapping[str, Any]) -> None:
                 f"{path}: {section} is set, but faithful: true reproduces upstream, whose prompts {lacks}; a recipe "
                 f"with faithful: true may not set it, so remove {section} or set faithful: false"
             )
+
+
+def _check_final_executor(path: Path, data: Mapping[str, Any]) -> None:
+    """Refuse a final_executor section under faithful: true, or without loop.correct_on_mismatch true (task P17.55).
+
+    Upstream's loop runs every attempt on one machine (Design Principle 4,
+    Agent Rule 4). The final test runs only an attempt that passed the
+    oracle on the trial's executor, and run_loop judges a clean run by the
+    oracle only under loop.correct_on_mismatch, so without it no attempt
+    could reach the final test. Runs after the type check; a recipe without
+    the section is never refused here.
+    """
+    if FINAL_EXECUTOR not in data:
+        return
+    if data["faithful"] is True:
+        raise RecipeError(
+            f"{path}: {FINAL_EXECUTOR} is set, but faithful: true reproduces upstream, whose loop runs every attempt "
+            f"on one machine; a recipe with faithful: true may not set it, so remove {FINAL_EXECUTOR} or set "
+            "faithful: false"
+        )
+    if data["loop"].get("correct_on_mismatch") is not True:
+        raise RecipeError(
+            f"{path}: {FINAL_EXECUTOR} is set, but loop.correct_on_mismatch is not true; the final test runs only an "
+            "attempt whose clean run passed the oracle, which run_loop judges only under loop.correct_on_mismatch, "
+            "so set it true or remove the section"
+        )
+
+
+def run_executor_bindings(bindings: Sequence[Binding]) -> list[Binding]:
+    """Return the Executor bindings that run a trial's attempts and references, in binding order (task P17.55).
+
+    Those are the executor section's, single or per language; the
+    final_executor section's binding (FINAL_EXECUTOR_WHERE) is left out.
+    """
+    return [item for item in bindings if item.interface == "Executor" and item.where != FINAL_EXECUTOR_WHERE]
+
+
+def final_executor_binding(bindings: Sequence[Binding]) -> Binding | None:
+    """Return the final_executor section's Executor binding (FINAL_EXECUTOR_WHERE), or None without one."""
+    return next((item for item in bindings if item.where == FINAL_EXECUTOR_WHERE), None)
 
 
 def _bind_skeleton(path: Path, data: dict[str, Any]) -> None:

@@ -17,11 +17,11 @@
 #    $HF_HOME/hub); a failure is recorded and stops the sequence when that recipe's turn comes.
 # 4. The sequence, in the order given: before each recipe the STOP file and the deadline (it starts only when the time
 #    left covers its trainer.timeout_s and a margin; else it is skipped), and SPACING seconds after the previous run;
-#    then `uv run lassi --graphics off train <recipe> --silicon` once, never retried: the trainer holds the cards' lock
+#    then `uv run lassi --graphics off train <recipe>` once, never retried: the trainer holds the cards' lock
 #    for the run's length, polls the cards, and leaves the quarantine marker after a hang, a kill, or a crash
 #    (lassi.train.silicon). The first failure or hang stops the sequence.
-# Nothing here runs model output: the recipes train tracked code on upstream text (Agent Rule 6), sft only, so no
-# reward runs on silicon (Agent Rule 9). Output under $LASSI_RUNS_ROOT/train-tt/<rx job id>/ (summary.tsv, one log per
+# Nothing here runs model output: the recipes train tracked code on upstream text (Agent Rule 6), sft only, with no
+# reward. Output under $LASSI_RUNS_ROOT/train-tt/<rx job id>/ (summary.tsv, one log per
 # step, and each run's records under runs/<recipe>/; tools/train_tt.py pull fetches it); the train trees are
 # $LASSI_RUNS_ROOT/train/tt-<stamp>-<recipe>, their checkpoints left on the host.
 set -u -o pipefail
@@ -33,7 +33,7 @@ Usage: bash plans/runs/train-tt/run.sh --deadline EPOCH --recipe PATH:SECONDS [-
 
 Trains the given recipes on a Wormhole card, one process each, in order, from the repository root of a checkout:
 the tt-xla venv (toolchains/tt-xla.sh) first, then the records and the bases (CPU only), then each recipe with
-`lassi --graphics off train <recipe> --silicon`, the sequence stopping at the first failure or hang (OQ-100 (s2)).
+`lassi --graphics off train <recipe>`, the sequence stopping at the first failure or hang (OQ-100 (s2)).
 tools/train_tt.py launch starts it.
 
 Options:
@@ -166,7 +166,7 @@ for entry in "${recipes[@]}"; do
   started=$(ts)
   echo "$(ts) START $name (train id $train_id, trainer.timeout_s $seconds)"
   timeout --signal=TERM --kill-after=120 $((seconds + margin)) \
-    uv run lassi --graphics off train "$recipe" --silicon --train-id "$train_id" > "$out/$name.log" 2>&1
+    uv run lassi --graphics off train "$recipe" --train-id "$train_id" > "$out/$name.log" 2>&1
   rc=$?
   tree_dir="$runs/train/$train_id"
   mkdir -p "$out/runs/$name"

@@ -1182,6 +1182,7 @@ Options:
 Recommendation: (a), with OQ-078 (a) first; (b) for the first windows until pacing and the fault stop have run clean. Training is unaffected either way: RL rewards still never execute on silicon.
 Answer: The owner, in the working session of 2026-10-29 at about 22:05 EDT: "It should be like TT-SIM. SIlicon [sic] is there as a final test gate, no human's required." Read as: the tt_silicon executor is an executor like ttsim, and silicon is the correction loop's final test, after a candidate passes on ttsim, with no human start (tasks P17.53 to P17.56). Agent Rule 9's text is the owner's to change (AGENTS.md, Authority); the wording proposed to the owner is in plans/p17-portable.md, P17.53. See OQ-078's follow-up for the rules kept and removed.
 To apply: tasks P17.53 to P17.56, and the owner's edit of Agent Rule 9 in AGENTS.md, docs/BIBLE.md, and the master bible; no candidate runs on silicon inside the loop until that edit lands; the item closes then.
+To apply: plans/rule9-proposed.md (2026-11-01) supersedes the wording in plans/p17-portable.md, P17.53.
 
 ## OQ-100 Training On The Wormhole Cards: Agent Rule 9 And The Training Host
 State: ANSWERED

@@ -6,7 +6,7 @@
 # random and the data four lines. If tt-train-v0's recipes fail later, this one still says where the card stands.
 # Every number below is PROJECTED: arithmetic, never a measurement of a run.
 #
-# Run it only as a human's start, with `uv run lassi --graphics off train <this file> --silicon` (the owner's
+# Run it with `uv run lassi --graphics off train <this file>`, no start flag since task P17.53 (the owner's
 # launcher, tools/train_tt.py, does that in the window's sequence). Nothing is downloaded: the fixture is tracked.
 #
 # Arithmetic (PROJECTED). The fixture (tests/fixtures/train/tiny-causal-lm): a Qwen2-style config with a 258-entry
@@ -20,7 +20,7 @@
 # - The fixture's head size of 8 and hidden size of 16 are below the 32 of a Tenstorrent tile; whether tt-mlir pads
 #   them is not known until this runs, and a failure here is a finding, reported as such.
 base_model: fixture:tiny-causal-lm  # tests/fixtures/train/tiny-causal-lm: config and tokenizer, random weights
-method: sft  # the only method on silicon: RL rewards never execute there (Agent Rule 9)
+method: sft  # the ttxla trainer's one method (lassi.train.ttxla_trainer)
 weights: full
 trainer:
   kind: ttxla

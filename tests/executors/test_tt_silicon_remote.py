@@ -1,9 +1,11 @@
 """Remote tests of the tt_silicon executor on the cluster's Wormhole cards (task P17.16; task P17.17 runs them).
 
 ONLY THE OWNER'S GO STARTS THESE TESTS. They put a program on Tenstorrent
-silicon, which only a human starts as an evaluation run (Agent Rule 9), on
-alpha01, which needs the owner's approval in the working session and an
-approved window (Agent Rule 17; plans/LESSONS.md, Owner directions). No
+silicon on alpha01, which needs the owner's approval in the working session
+and an approved window (Agent Rule 17; Agent Rule 9, whose current text makes a
+silicon run an evaluation run a human starts until the owner's revision,
+OQ-099; plans/LESSONS.md, Owner directions);
+the executor itself needs no start flag since task P17.53. No
 unattended session, CI job, or test sweep ever sets LASSI_SILICON_TESTS.
 
 Bible: Execution Backends (the tt_silicon row), Sandbox, Oracles
@@ -129,7 +131,7 @@ pytestmark = [
     pytest.mark.remote,
     pytest.mark.skipif(
         not SILICON_TESTS,
-        reason="only the owner's go starts a silicon run (Agent Rules 9 and 17); LASSI_SILICON_TESTS=1 is not set",
+        reason="only the owner's go starts these tests on alpha01 (Agent Rule 17); LASSI_SILICON_TESTS=1 is not set",
     ),
 ]
 

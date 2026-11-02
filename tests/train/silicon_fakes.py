@@ -1,4 +1,4 @@
-"""The SYNTHETIC Wormhole host of the `lassi train --silicon` tests (task P17.38); not a test module.
+"""The SYNTHETIC Wormhole host of the tests of training on a card (tasks P17.38 and P17.53); not a test module.
 
 Rig puts one test's silicon run together: the tt_silicon tests' SYNTHETIC
 host tree (tests/executors/tt_silicon_fakes.py write_host: eight n300 cards
@@ -78,12 +78,11 @@ class Rig:
         probe = devices.TenstorrentProbe(root=self.host.root, access=lambda path: True)
         return {**fake_probes(self.setup.log), "tenstorrent": probe}
 
-    def run(self, registry: Any, *, flag: bool = True, **changes: Any) -> Path:
-        """Run a recipe of the fake Trainer on card 0, with top-level `changes`, through run_training."""
+    def run(self, registry: Any, **changes: Any) -> Path:
+        """Run a recipe of the fake Trainer on card 0, with top-level `changes`, through run_training (no flag)."""
         trainer = {"kind": "fake", "device": TT_DEVICE, "steps": 2, "network": "none"}
         data = recipe_data(**{"trainer": trainer, **changes})
-        return self.setup.run(data, registry=registry, probes=self.probes(), silicon=flag,
-                              silicon_host=self.host_seams())
+        return self.setup.run(data, registry=registry, probes=self.probes(), silicon_host=self.host_seams())
 
     def watching(self) -> Callable[[Any], None]:
         """Return a hook that records in self.seen, inside train(), whether the lock is held and the marker's text."""

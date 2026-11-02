@@ -173,18 +173,17 @@ def loaded_recipe(setup: Setup, path: Path) -> Any:
 # Options and the keys carried out
 
 
-def test_train_options_default_every_field_to_none_and_silicon_to_false() -> None:
-    # silicon is the human start of a training run on a card (task P17.38; OQ-100 (a)): off unless
-    # `lassi train --silicon` sets it; silicon_host is the guard's host seam, None for the real host.
+def test_train_options_default_every_field_to_none() -> None:
+    # No human start (task P17.53, the owner's answers to OQ-078 and OQ-099): no silicon flag; silicon_host is the
+    # card guard's host seam, None for the real host.
     options = train_run().TrainOptions
     assert dataclasses.is_dataclass(options) and options.__dataclass_params__.frozen
     names = [item.name for item in dataclasses.fields(options)]
     assert names == [
         "runs_root", "train_id", "registry", "roots", "probes", "suites_dir", "synthetic_dir", "corpus_root",
-        "corpus_manifests", "silicon", "silicon_host",
+        "corpus_manifests", "silicon_host",
     ]
     defaults = dataclasses.asdict(options())
-    assert defaults.pop("silicon") is False
     assert all(value is None for value in defaults.values())
 
 

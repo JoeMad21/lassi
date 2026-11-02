@@ -12,30 +12,41 @@
     printed on alpha01;
   - sys/class/tenstorrent/tenstorrent!<n>/ with tt_card_type, tt_serial,
     tt_fw_bundle_ver, tt_arc_fw_ver, and tt_eth_fw_ver, and a plain device/
-    directory holding uevent (with PCI_SLOT_NAME=<address>) and
-    iommu_group/type. On the host, device and iommu_group are links; Windows
-    cannot make links without a privilege this workstation lacks, so here
-    they are directories, and the card's PCI address is read from the
-    uevent text, which is what the kernel's PCI uevent carries;
+    directory holding uevent (with PCI_SLOT_NAME=<address>). On the host,
+    device is a link; Windows cannot make links without a privilege this
+    workstation lacks, so here it is a directory, and the card's PCI
+    address is read from the uevent text, which is what the kernel's PCI
+    uevent carries;
+  - sys/kernel/iommu_groups/<group>/type for each card (task P17.54), the
+    card's IOMMU domain type, "identity" unless the test names another;
   - sys/bus/pci/slots/ with two SYNTHETIC slot entries,
     sys/module/tenstorrent/version, and the 1 GiB pool's nr_hugepages and
     free_hugepages under sys/kernel/mm/hugepages/hugepages-1048576kB/.
   No PCI address is a file or directory name, since Windows refuses ':' in
-  names.
+  names. The host's links (task P17.54) are kept as text in Host.links, by
+  host path: /sys/bus/pci/devices/<address> to the card's device directory
+  below /sys/devices, and that directory's iommu_group to
+  /sys/kernel/iommu_groups/<group>, each as relative as the kernel's;
+  Links answers the executor's readlink seam from them.
 - Access stands in for access(2) on the card nodes; Owners for the owner of
   a path (the uid lstat gives on Linux; Windows has no uids); Clock for
   time.monotonic and time.sleep; FakeFlock for fcntl.flock, with the
   operation values of Linux's <sys/file.h> and an exclusive lock per open
-  file, keyed by the file's (st_dev, st_ino) as os.fstat gives them.
+  file, keyed by the file's (st_dev, st_ino) as os.fstat gives them; Links
+  for readlink(2).
 - build(module, host, ...) returns a TtSiliconExecutor on a host tree with
   every seam faked.
 
 The card type "n300" is the value tt_card_type read for card 0 on alpha01
 (results/tt-silicon-smoke-20261023/loopback/record.json); the PCI addresses
 are the eight lspci listed on alpha01 (rx 20261021-201421-exec-4ea0), used
-only as text; the two hugetlbfs mount lines are spike probe 7aeb's output.
+only as text; the two hugetlbfs mount lines are spike probe 7aeb's output;
+the eight cards' device directories and IOMMU groups are the ones the
+read-only probe rx 20261029-191025-exec-99dd printed on alpha01, as text.
 Every other value (serials, firmware versions, the driver version, uids,
-page counts, uevent fields) is SYNTHETIC. No value here is a measurement.
+page counts, uevent fields, the paths and groups of cards past the eighth,
+and every group type but identity) is SYNTHETIC. No value here is a
+measurement.
 """
 
 from __future__ import annotations
@@ -56,6 +67,18 @@ ADDRESSES = (
     "0000:f1:00.0", "0000:f2:00.0", "0000:f3:00.0", "0000:f4:00.0",
 )  # fmt: skip
 CARDS = tuple(range(len(ADDRESSES)))
+# The eight cards' parents below /sys/devices and IOMMU groups on alpha01 (rx 20261029-191025-exec-99dd), as text.
+SWITCH_A = "pci0000:e2/0000:e2:01.1/0000:e3:00.0/0000:e4:00.0/0000:e5:00.0"
+SWITCH_B = "pci0000:e2/0000:e2:01.1/0000:e3:00.0/0000:e4:01.0/0000:ee:00.0"
+PARENTS = tuple(f"{SWITCH_A}/0000:e6:0{port}.0" for port in range(1, 5)) + tuple(
+    f"{SWITCH_B}/0000:ef:0{port}.0" for port in range(1, 5)
+)
+GROUPS = (135, 136, 137, 138, 150, 151, 152, 153)
+# The IOMMU domain type every card's group read on alpha01 (the same probe), and the translating types UMD counts as
+# an IOMMU (umd pcie/pci_device.cpp:105: a type that starts with DMA).
+IDENTITY = "identity"
+PCI_DEVICES = "/sys/bus/pci/devices"
+IOMMU_GROUPS = "/sys/kernel/iommu_groups"
 # SYNTHETIC driver version and uids: this account's, another account's, and root's.
 DRIVER = "SYNTHETIC-2.8.0"
 OWN_UID = 4100
@@ -94,6 +117,27 @@ def address(card: int) -> str:
     return ADDRESSES[card] if card < len(ADDRESSES) else f"0000:{0x10 + card:02x}:00.0"
 
 
+def device_dir(card: int) -> str:
+    """Return card `card`'s device directory below /sys/devices: alpha01's for the first eight, SYNTHETIC past them."""
+    parent = PARENTS[card] if card < len(PARENTS) else f"pci0000:{0x10 + card:02x}/0000:{0x10 + card:02x}:01.0"
+    return f"/sys/devices/{parent}/{address(card)}"
+
+
+def group(card: int) -> int:
+    """Return card `card`'s IOMMU group: alpha01's for the first eight, a SYNTHETIC one past them."""
+    return GROUPS[card] if card < len(GROUPS) else 200 + card
+
+
+def bus_link(card: int) -> str:
+    """Return the text of card `card`'s /sys/bus/pci/devices/<address> link, as relative as the kernel's."""
+    return "../../.." + device_dir(card)[len("/sys") :]
+
+
+def group_link(card: int) -> str:
+    """Return the text of card `card`'s iommu_group link: up to /sys from its device directory, then the group."""
+    return "../" * (len(device_dir(card).split("/")) - 2) + f"kernel/iommu_groups/{group(card)}"
+
+
 def serial(card: int) -> str:
     """Return card `card`'s SYNTHETIC serial."""
     return f"SYNTHETIC{card:08d}"
@@ -130,10 +174,15 @@ def mounts_text(*lines: str) -> str:
 
 @dataclass(frozen=True)
 class Host:
-    """A SYNTHETIC host tree: its root and its cards' numbers."""
+    """A SYNTHETIC host tree: its root, its cards' numbers, and its links' texts by host path (tests change them)."""
 
     root: Path
     cards: tuple[int, ...]
+    links: dict[str, str] = field(default_factory=dict)
+
+    def group_type(self, card: int) -> Path:
+        """Return card `card`'s IOMMU group type file, sys/kernel/iommu_groups/<group>/type, under the root."""
+        return self.at(f"{IOMMU_GROUPS}/{group(card)}/type")
 
     def at(self, host_path: str) -> Path:
         """Return the root-joined path of a host path such as /dev/hugepages-1G."""
@@ -163,11 +212,26 @@ def write_text(path: Path, text: str) -> Path:
     return path
 
 
-def write_host(root: Path, cards: Iterable[int] = CARDS, *, pages: int = POOL_PAGES, free: int | None = None) -> Host:
-    """Write the SYNTHETIC host tree at `root` for `cards`; return it. `free` defaults to `pages`."""
+def write_host(
+    root: Path,
+    cards: Iterable[int] = CARDS,
+    *,
+    pages: int = POOL_PAGES,
+    free: int | None = None,
+    iommu: str | Mapping[int, str] = IDENTITY,
+) -> Host:
+    """Write the SYNTHETIC host tree at `root` for `cards`; return it. `free` defaults to `pages`.
+
+    `iommu` is every card's IOMMU domain type, or a type by card number
+    (identity for a card it does not name).
+    """
     numbers = tuple(cards)
     host = Host(root=Path(root), cards=numbers)
     for card in numbers:
+        kind = iommu if isinstance(iommu, str) else iommu.get(card, IDENTITY)
+        write_text(host.group_type(card), f"{kind}\n")
+        host.links[f"{PCI_DEVICES}/{address(card)}"] = bus_link(card)
+        host.links[f"{device_dir(card)}/iommu_group"] = group_link(card)
         write_text(host.at(f"{NODE_DIR}/{card}"), "")
         write_text(host.at(f"{NODE_DIR}/by-id/wormhole-SYNTHETIC{card}"), "")
         files = {
@@ -180,7 +244,6 @@ def write_host(root: Path, cards: Iterable[int] = CARDS, *, pages: int = POOL_PA
         for name, value in files.items():
             write_text(host.class_dir(card) / name, f"{value}\n")
         write_text(host.class_dir(card) / "device" / "uevent", uevent(card))
-        write_text(host.class_dir(card) / "device" / "iommu_group" / "type", "identity\n")
     host.at(f"{HUGEPAGE_POINT}/libvirt").mkdir(parents=True)
     host.at(SHM).mkdir(parents=True)
     write_text(host.at(MOUNTS), mounts_text())
@@ -206,6 +269,21 @@ class Access:
         relative = Path(path).relative_to(self.root).as_posix()
         self.asked.append(relative)
         return relative not in self.deny
+
+
+class Links:
+    """A stand-in for readlink(2): the text of each of the host's links (Host.links), None for any other path."""
+
+    def __init__(self, host: Host) -> None:
+        """Answer from `host`'s links; record each host path asked about."""
+        self.host = host
+        self.asked: list[str] = []
+
+    def __call__(self, path: Path) -> str | None:
+        """Record the host path of `path` (which must lie under the root) and return its link's text, or None."""
+        host_path = "/" + Path(path).relative_to(self.host.root).as_posix()
+        self.asked.append(host_path)
+        return self.host.links.get(host_path)
 
 
 class Owners:
@@ -324,13 +402,14 @@ def build(
     flock: FakeFlock | None = None,
     access: Access | None = None,
     owners: Owners | None = None,
+    links: Links | None = None,
     **settings: Any,
 ) -> Any:
     """Return module.TtSiliconExecutor on `host` with every seam faked; `settings` add or replace keywords.
 
     The defaults are hugepages "private-per-run", reset_filter True, device_profiler "off" (task P17.42), the
-    host root, Access and Owners on it, uid OWN_UID, a fresh Clock (also as
-    sleep), and a fresh FakeFlock.
+    host root, Access, Owners, and Links on it, uid OWN_UID, a fresh Clock
+    (also as sleep), and a fresh FakeFlock.
     """
     clock = Clock() if clock is None else clock
     values: dict[str, Any] = {
@@ -340,6 +419,7 @@ def build(
         "root": host.root,
         "access": Access(host.root) if access is None else access,
         "owner": Owners(host.root) if owners is None else owners,
+        "link": Links(host) if links is None else links,
         "uid": OWN_UID,
         "clock": clock,
         "sleep": clock.sleep,

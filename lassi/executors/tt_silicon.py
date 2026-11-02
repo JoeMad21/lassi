@@ -6,18 +6,22 @@ lassi.executors.sandbox (Agent Rule 6), with every card exposed through the
 sandbox's TenstorrentExposure (task P17.15): the owner gave a silicon run
 every Wormhole card in the cluster (OQ-072) and approved the settings below
 (OQ-075). Its capabilities are runs_code, sandboxed, and silicon
-(lassi.core.capabilities SILICON). Silicon runs are evaluation runs a human
-starts, one program at a time (Agent Rule 9), so the runner refuses it
-unless `lassi run --silicon` starts the run, a reward stage or a train
-recipe's reward refuses it outright, and both read the capability, never
-this name. Until OQ-078 is answered the runner also refuses it, with the
-flag too, beside any listed stage that runs model-generated code or an
-adversary's proposals (lassi.core.runner _check_silicon): under the cards'
-identity IOMMU domain a program can reach host memory through a card's DMA
-(Known limits, below), so the executor runs only tracked references a
-human starts (OQ-078's recommendation (c)). It declares neither simulator,
-since nothing is simulated (Agent Rule 2), nor takes_device, since every
-card is exposed and there is no card key.
+(lassi.core.capabilities SILICON). It is an executor like ttsim: the
+runner builds and runs it like any other, with no start flag and no
+refusal by stage, reward, or IOMMU domain (the owner's answers of
+2026-10-29 to OQ-078, "remove all gates ... you cannot enforce gates on my
+software", and OQ-099, "It should be like TT-SIM. SIlicon [sic] is there as a
+final test gate, no human's required"; task P17.53). What stays is what
+the owner kept that evening: one placement at a time on the cards (Agent
+Rule 9's first clause; Agent Rule 9 is the owner's text, and its current
+text stands until the owner's revision, OQ-099), which the lock
+below makes a run wait for, and the quarantine after a run that
+leaves the cards in an unknown state. A placement holds every card, as
+many as a program may need, beside whatever serves on the RNGD cards.
+Agents do not launch model-generated programs on the cards while their
+IOMMU domain is identity (Known limits), a practice nothing here enforces.
+It declares neither simulator, since nothing is simulated (Agent Rule 2),
+nor takes_device, since every card is exposed and there is no card key.
 
 Settings (a recipe's executor section, `executor: {kind: tt_silicon,
 hugepages: private-per-run, reset_filter: true, device_profiler: off}`),
@@ -35,29 +39,43 @@ compiles the profiler (the owner's answer of 2026-10-26: the main pin built
 with Tracy). `harness` is the ttsim executor's.
 
 Construction reads the host under its root from file metadata (lstat,
-access(2), and directory listings) and sysfs or procfs text only: it opens
-no device node and starts no process (OQ-002). It takes every all-digit
-name in /dev/tenstorrent, in numeric order (the by-id links skipped, as UMD
-skips them; plans/spikes/tt-silicon-executor.md, Finding 1), and refuses
-with DeviceUnavailable, naming the host path (never the root-joined one),
-when: $LASSI_SCRATCH is unset or relative, or a quarantine marker exists
-(below); /dev/tenstorrent is missing or holds no numbered node, or more
-than the sandbox's TENSTORRENT_CARDS_MAX (28), the most PCI directories one
-exposure holds; a node is missing or access(2) refuses this user read and
-write; a card's class directory /sys/class/tenstorrent/tenstorrent!<n> is
-missing, its tt_card_type is not n300, or its tt_serial, tt_fw_bundle_ver,
-or tt_arc_fw_ver is missing or empty (every result records them); its
-device/uevent gives no PCI_SLOT_NAME the sandbox can bind; its
-device/iommu_group/type starts with DMA (Finding 2: the group's link climbs
-out of the card's bind, so UMD inside would read no IOMMU, which would then
-differ from the host's); /sys/module/tenstorrent/version or
+access(2), readlink(2), and directory listings) and sysfs or procfs text
+only: it opens no device node and starts no process (OQ-002). It takes
+every all-digit name in /dev/tenstorrent, in numeric order (the by-id links
+skipped, as UMD skips them; plans/spikes/tt-silicon-executor.md, Finding
+1), and reads each card's IOMMU group (task P17.54): the card's device
+directory, where its /sys/bus/pci/devices/<address> link leads, and the
+group its iommu_group link leads to, /sys/kernel/iommu_groups/<n>, with
+that group's domain type (identity, DMA, DMA-FQ, ...), which device()
+records. A card in a DMA domain is never refused (task P17.53): the
+sandbox shows UMD the card's group as the host does (lassi.executors.sandbox,
+the IOMMU group view), so UMD inside takes the host's IOMMU path. Errors
+that say what a run is missing, each a DeviceUnavailable naming the host
+path (never the root-joined one): $LASSI_SCRATCH is unset or relative, or a
+quarantine marker exists (below); /dev/tenstorrent is missing or holds no
+numbered node, or more than the sandbox's TENSTORRENT_CARDS_MAX (28), the
+most PCI directories one exposure holds; a node is missing or access(2)
+refuses this user read and write; a card's class directory
+/sys/class/tenstorrent/tenstorrent!<n> is missing, its tt_card_type is not
+n300, or its tt_serial, tt_fw_bundle_ver, or tt_arc_fw_ver is missing or
+empty (every result records them); its device/uevent gives no
+PCI_SLOT_NAME the sandbox can bind; its /sys/bus/pci/devices/<address> is
+no link to a device directory below /sys/devices that the sandbox can bind
+at its own path (lassi.executors.sandbox pci_source_problem); its
+iommu_group link leads anywhere but /sys/kernel/iommu_groups/<n>, which
+the sandbox keeps in view; /sys/module/tenstorrent/version or
 /sys/bus/pci/slots is missing; the 1 GiB pool's nr_hugepages is unreadable
-or below PAGES_PER_CARD per card; /dev/hugepages-1G is no directory; or the
-last /proc/mounts line at /dev/hugepages-1G is not hugetlbfs with
-pagesize=1024M, the line UMD looks for (Finding 3). A missing iommu_group
-or tt_eth_fw_ver is accepted. So under OQ-078's option (a), a translating
-(DMA) IOMMU domain for every card, every card is refused until the sandbox
-exposes the card's IOMMU group view (a follow-up, not built).
+or below PAGES_PER_CARD per card (UMD reads it in either IOMMU mode and
+grants each card min(2, nr_hugepages / cards) host-memory channels: umd
+hugepage.cpp:30-45, :47-68); and, while any card is in no DMA domain (a
+pass-through card, whose host memory UMD maps from hugepages: umd
+chip_helpers/silicon_sysmem_manager.cpp:55-61, :93-118), /dev/hugepages-1G
+is no directory or the last /proc/mounts line at /dev/hugepages-1G is not
+hugetlbfs with pagesize=1024M, the line UMD looks for (Finding 3). A
+missing iommu_group (no IOMMU) or tt_eth_fw_ver is accepted, and an
+unreadable group type is recorded as unread. A card counts as in a DMA
+domain exactly when UMD takes it so: its type starts with DMA (umd
+pcie/pci_device.cpp:102-108).
 
 run(artifact, inputs, limits) keeps the ttsim executor's workdir rules (a
 relative artifact, a string of inputs, or a workdir outside the runs root
@@ -65,26 +83,27 @@ is a ValueError) and install rules for the pinned tt-metal tree alone, no
 ttsim library (SandboxUnavailableError naming the tree), all before any
 lock or directory. Then, in order:
 
-1. The lock (OQ-075 (2a)): one file for every card, LOCK_FILE directly
-   under $LASSI_SCRATCH/locks, opened without truncation and taken with
-   flock LOCK_EX | LOCK_NB, never a wait; the holder then writes its pid
-   there. Another holder makes the run refuse at once with
-   SandboxUnavailableError naming the file and the pid that holder wrote
-   (or that it cannot be read; the descriptor is closed either way). The
-   lock is held through the cleanup and released on every path (the pid
-   cleared, then LOCK_UN, then the descriptor closed; a failure to clear or
-   release is passed over, since the close drops the lock, so it hides
-   neither the result nor an exception), and the kernel drops a dead
+1. The lock (OQ-075 (2a), one placement at a time): one file for every
+   card, LOCK_FILE directly under $LASSI_SCRATCH/locks, opened without
+   truncation and tried with flock LOCK_EX | LOCK_NB; the holder then
+   writes its pid there. While another process holds it, the run waits
+   (task P17.53: it waits for free cards rather than refusing), trying
+   again every POLL_INTERVAL_S at most, and refuses only after LOCK_WAIT_S
+   with SandboxUnavailableError naming the file and the pid that holder
+   wrote (or that it cannot be read; the descriptor is closed either way).
+   The lock is held through the cleanup and released on every path (the
+   pid cleared, then LOCK_UN, then the descriptor closed; a failure to
+   clear or release is passed over, since the close drops the lock, so it
+   hides neither the result nor an exception), and the kernel drops a dead
    process's lock; the file stays in place, since removing it would let
-   two processes lock two files. A training run started with
-   `lassi train --silicon` takes the same lock for its whole length
-   (card_lock; task P17.38, OQ-100 (a)), polls with wait_for_cards, and
-   honours and writes the same quarantine marker, so a training run and a
-   silicon run never overlap. The scratch root is always one of the
-   hidden roots, so no program sees the lock or a marker. The default
-   flock is fcntl.flock, imported only when a lock is taken, so this module
-   imports on Windows; LOCK_EX, LOCK_NB, and LOCK_UN are Linux's
-   <sys/file.h> values, which fcntl gives on Linux.
+   two processes lock two files. A training run on a card takes the same
+   lock for its whole length (card_lock; task P17.38), polls with
+   wait_for_cards, and honours and writes the same quarantine marker, so a
+   training run and a silicon run never overlap. The scratch root is
+   always one of the hidden roots, so no program sees the lock or a
+   marker. The default flock is fcntl.flock, imported only when a lock is
+   taken, so this module imports on Windows; LOCK_EX, LOCK_NB, and LOCK_UN
+   are Linux's <sys/file.h> values, which fcntl gives on Linux.
 2. The quarantine check, under the lock: while any entry of
    $LASSI_SCRATCH/locks whose name holds "quarantine" exists, the run
    refuses with SandboxUnavailableError naming it.
@@ -92,15 +111,18 @@ lock or directory. Then, in order:
    few minutes to relieve the cards. Be sure to poll and check first."):
    the cards are busy while another account owns a regular file directly
    in /dev/hugepages-1G or a TT_UMD_LOCK* file in /dev/shm, or while
-   free_hugepages reads fewer than PAGES_PER_CARD pages per card;
-   directories (libvirt's) and this account's own files do not count. It
-   checks, sleeps at most POLL_INTERVAL_S, and checks again until the cards
-   are free or POLL_LIMIT_S has passed, then refuses with
+   free_hugepages reads fewer than PAGES_PER_CARD pages per pass-through
+   card (none are needed when every card is in a DMA domain, where UMD maps
+   no hugepage); directories (libvirt's) and this account's own files do
+   not count. It checks, sleeps at most POLL_INTERVAL_S, and checks again
+   until the cards are free or POLL_LIMIT_S has passed, then refuses with
    SandboxUnavailableError naming what stayed busy. The sandbox never runs
    while a card is busy.
-4. The run's own hugepage directory (hugepages "private-per-run"): a new
-   directory one segment below /dev/hugepages-1G, mode 0700, so it is
-   empty when the program starts and no other account sees its files.
+4. The run's own hugepage directory (hugepages "private-per-run"), while
+   any card is a pass-through card: a new directory one segment below
+   /dev/hugepages-1G, mode 0700, so it is empty when the program starts
+   and no other account sees its files. With every card in a DMA domain
+   there is none, and the exposure's hugepages is None.
    Afterwards, on every path this process lives through (a kill of it
    leaves the directory beside item 6's marker), it is removed with every
    entry in it, links not followed (shutil.rmtree; _remove_tree): an entry
@@ -113,9 +135,10 @@ lock or directory. Then, in order:
 5. One sandboxed run, never retried and never rerun with Watcher, each of
    which would be another placement on cards in an unknown state (Agent
    Rule 9). Its exposure holds every card's node at its own path, each
-   card's PCI directory at /sys/bus/pci/devices/<address> (that bus path is
-   the source too, which the bind follows to the device directory on the
-   host), the run's hugepage directory, and reset_filter. The environment
+   card's device directory (the source, bound at its own path) with
+   /sys/bus/pci/devices/<address> (the target, a link to it inside, as on
+   the host; task P17.54), the run's hugepage directory or None, and
+   reset_filter. The environment
    is the ttsim row's without TT_METAL_SIMULATOR (OQ-075 (8a): slow
    dispatch and TT_METAL_DISABLE_SFPLOADMACRO=1, as the smoke ran), with
    the JIT cache and logs under <workdir>/@tt-silicon (RESERVED_DIR; no
@@ -168,27 +191,36 @@ lock or directory. Then, in order:
    profiler's files lie under RESERVED_DIR, so none is an output file.
 
 device() names "Tenstorrent Wormhole n300 x <N> (silicon)", then each
-card's number, serial, firmware bundle, and ARC firmware in card order, the
-tenstorrent driver's version, and the pinned tt-metal, from what
-construction read, as one line of printable ASCII (any other character
-written "?"), the tt-metal named by its recorded version (5280a9cf-tracy:
-lassi.toolchains.pins recorded_version); never a simulator. `pins` holds
-toolchains/tt-metal.pin's pairs alone, which the runner records (Agent
-Rule 10). Wall times are never performance: wall_s is the whole sandbox
-command's time, setup and copy-back included.
+card's number, serial, firmware bundle, ARC firmware, and IOMMU group with
+its domain type ("IOMMU group <n> <type>", "IOMMU group <n> type unread",
+or "no IOMMU group") in card order, the tenstorrent driver's version, and
+the pinned tt-metal, from what construction read, as one line of printable
+ASCII (any other character written "?"), the tt-metal named by its
+recorded version (5280a9cf-tracy: lassi.toolchains.pins recorded_version);
+never a simulator. The runner records that line as the run's and every
+trial's device. `pins` holds toolchains/tt-metal.pin's pairs alone, which
+the runner records (Agent Rule 10). Wall times are never performance:
+wall_s is the whole sandbox command's time, setup and copy-back included.
 
-Known limits (readings, not runs): the sandbox does not isolate the host
-from a silicon run's program, since under the cards' identity IOMMU domain
-a program can reach host memory through a card's DMA (plans/spikes/
-tt-card-dma.md; OQ-078, open); hugetlb pages count toward no limit the
-sandbox sets, so the program may map every free 1 GiB page while it runs;
-and the poll sees only hugepage files and UMD locks, so a process that
-holds a card without either, or starts after the poll, is not seen.
+Known limits (readings, not runs): under the cards' identity IOMMU domain
+the sandbox does not isolate the host from a silicon run's program, since a
+program can reach host memory through a card's DMA (plans/spikes/
+tt-card-dma.md; OQ-078, answered 2026-10-29: no gate in the software); a
+DMA domain for every card closes that, and the device() line names each
+card's domain; hugetlb pages count toward no limit the sandbox sets, so the
+program may map every free 1 GiB page while it runs, and under a DMA
+domain UMD's anonymous host memory (1 GiB per channel, MAP_POPULATE; umd
+chip_helpers/silicon_sysmem_manager.cpp:284) counts toward the run's
+memory limit instead, so a recipe's sandbox.mem_gb must hold it (an
+inference from the source, not measured); and the poll sees only hugepage
+files and UMD locks, so a process that holds a card without either, or
+starts after the poll, is not seen.
 """
 
 from __future__ import annotations
 
 import os
+import posixpath
 import re
 import secrets
 import shutil
@@ -217,6 +249,7 @@ from lassi.executors.native import (
 from lassi.executors.sandbox import (
     HUGEPAGE_OPTION,
     HUGEPAGE_POINT,
+    PCI_DEVICES,
     PCI_SLOTS,
     SANDBOX_PATH,
     TENSTORRENT_CARDS_MAX,
@@ -227,6 +260,7 @@ from lassi.executors.sandbox import (
     SandboxSpec,
     SandboxUnavailableError,
     TenstorrentExposure,
+    pci_source_problem,
     sandbox_command,
 )
 from lassi.executors.ttsim import TT_METAL_PIN, printable, read_jit_diagnostics
@@ -243,6 +277,15 @@ PAGES_PER_CARD = 2
 # The poll (OQ-075 (5)): how long it waits between checks, and how long the previous user may take, in seconds.
 POLL_INTERVAL_S = 5
 POLL_LIMIT_S = 300
+# How long a run waits for another process's lock, trying every POLL_INTERVAL_S, before it refuses (task P17.53: one
+# placement at a time, waited for rather than refused). Another silicon run holds it for its wall limit and cleanup;
+# a training run on a card holds it for its whole length, so a wait past this is refused, naming the holder's pid.
+LOCK_WAIT_S = 3600
+# Where a card's iommu_group link leads (task P17.54): /sys/kernel/iommu_groups/<n>, which the sandbox keeps in view.
+IOMMU_GROUPS = "/sys/kernel/iommu_groups"
+_IOMMU_GROUP = re.compile(re.escape(IOMMU_GROUPS) + r"/([0-9]+)")
+# The prefix of an IOMMU domain type that UMD takes as a translating IOMMU (umd pcie/pci_device.cpp:105: DMA, DMA-FQ).
+DMA_PREFIX = "DMA"
 # Under $LASSI_SCRATCH: the directory of the lock and the marker, the lock, the marker, and the text every marker's
 # name holds (a human may add a marker of another name to stop silicon runs).
 LOCKS_DIR = "locks"
@@ -275,7 +318,6 @@ DRIVER_VERSION = "/sys/module/tenstorrent/version"
 POOL_DIR = "/sys/kernel/mm/hugepages/hugepages-1048576kB"
 MOUNTS = "/proc/mounts"
 SHM = "/dev/shm"
-PCI_DEVICES = "/sys/bus/pci/devices"
 # UMD's cross-process lock files in /dev/shm start with this (umd utils/robust_mutex.cpp:51; Finding 4).
 UMD_LOCK_PREFIX = "TT_UMD_LOCK"
 # A PCI address the sandbox can bind at /sys/bus/pci/devices/<address> (its exposure check's pattern).
@@ -286,13 +328,34 @@ _RECORDED = ("tt_serial", "tt_fw_bundle_ver", "tt_arc_fw_ver")
 
 @dataclass(frozen=True)
 class Card:
-    """One card as construction read it: its /dev/tenstorrent name, PCI address, serial, and firmware versions."""
+    """One card as construction read it: its /dev/tenstorrent name, PCI address, serial, firmware, and IOMMU group.
+
+    `device_dir` is the card's device directory below /sys/devices, where
+    its /sys/bus/pci/devices/<address> link leads; `iommu_group` the number
+    of the group its iommu_group link leads to ("" without one: no IOMMU);
+    `iommu_type` that group's domain type ("" when unread or without a
+    group).
+    """
 
     name: str
     address: str
     serial: str
     bundle: str
     arc: str
+    device_dir: str = ""
+    iommu_group: str = ""
+    iommu_type: str = ""
+
+    @property
+    def dma(self) -> bool:
+        """Return True when UMD takes the card's domain as a translating IOMMU: its type starts with DMA."""
+        return self.iommu_type.startswith(DMA_PREFIX)
+
+    def iommu_text(self) -> str:
+        """Return the card's IOMMU group as device() records it."""
+        if not self.iommu_group:
+            return "no IOMMU group"
+        return f"IOMMU group {self.iommu_group} {self.iommu_type or 'type unread'}"
 
 
 @dataclass(frozen=True)
@@ -324,6 +387,14 @@ def _count(path: Path) -> int | None:
 def _owner(path: Path) -> int:
     """Return the uid that owns `path`, from lstat, so a link is not followed."""
     return os.lstat(path).st_uid
+
+
+def _link_text(path: Path) -> str | None:
+    """Return the text of the symbolic link at `path` (readlink(2), which opens nothing), or None when it is none."""
+    try:
+        return os.readlink(path)
+    except (OSError, ValueError):
+        return None
 
 
 def _scratch_root() -> Path:
@@ -389,8 +460,12 @@ def _check_nodes(root: Path, names: Sequence[str], access: Callable[[Path], bool
             raise DeviceUnavailable(f"{NODE_DIR}/{name} exists, but this user may not read and write it")
 
 
-def _read_card(root: Path, name: str) -> Card:
-    """Return card `name` from its class directory under `root`, or raise DeviceUnavailable naming what is wrong."""
+def _read_card(root: Path, name: str, link: Callable[[Path], str | None]) -> Card:
+    """Return card `name` from its class directory and links under `root`; DeviceUnavailable naming what is wrong.
+
+    Its IOMMU group and domain type are read and recorded, never refused
+    (tasks P17.53 and P17.54; _device_dir, _iommu_group).
+    """
     where = f"{CLASS_DIR}/tenstorrent!{name}"
     directory = _host(root, where)
     if not directory.is_dir():
@@ -407,14 +482,56 @@ def _read_card(root: Path, name: str) -> Card:
         if not values[attribute]:
             raise DeviceUnavailable(f"{where}/{attribute} is missing or empty, and every silicon result records it")
     address = _pci_address(directory / "device" / "uevent", where)
-    iommu = _value(directory / "device" / "iommu_group" / "type")
-    if iommu.startswith("DMA"):
+    device_dir = _device_dir(root, address, link)
+    group, iommu = _iommu_group(root, device_dir, link)
+    serial, bundle, arc = values["tt_serial"], values["tt_fw_bundle_ver"], values["tt_arc_fw_ver"]
+    return Card(name, address, serial, bundle, arc, device_dir, group, iommu)
+
+
+def _device_dir(root: Path, address: str, link: Callable[[Path], str | None]) -> str:
+    """Return where the card's /sys/bus/pci/devices/<address> link leads, a directory the sandbox binds at its path.
+
+    DeviceUnavailable naming the link when it is none, or leads anywhere
+    the sandbox cannot bind a card's directory at its own path
+    (lassi.executors.sandbox pci_source_problem), or to a directory that
+    does not end in the address.
+    """
+    where = f"{PCI_DEVICES}/{address}"
+    text = link(_host(root, where))
+    if text is None:
+        raise DeviceUnavailable(f"{where} is no link to the card's device directory, which the sandbox binds")
+    resolved = posixpath.normpath(posixpath.join(PCI_DEVICES, text))
+    problem = pci_source_problem(resolved)
+    if problem is None and posixpath.basename(resolved) != address:
+        problem = f"it does not end in {address}"
+    if problem is not None:
         raise DeviceUnavailable(
-            f"{where}/device/iommu_group/type reads {iommu!r}: the group's link climbs out of the card's bind, so "
-            "UMD in the sandbox would read no IOMMU where the host has a DMA one (plans/spikes/"
-            "tt-silicon-executor.md, Finding 2)"
+            f"{where} leads to {resolved!r}, which the sandbox cannot bind as the card's device directory at its "
+            f"own path: {problem}"
         )
-    return Card(name, address, values["tt_serial"], values["tt_fw_bundle_ver"], values["tt_arc_fw_ver"])
+    return resolved
+
+
+def _iommu_group(root: Path, device_dir: str, link: Callable[[Path], str | None]) -> tuple[str, str]:
+    """Return (group number, domain type) of the card's IOMMU group, ("", "") when it has none (no IOMMU).
+
+    The group is where the directory's iommu_group link leads,
+    /sys/kernel/iommu_groups/<n>; the type is that group's type file, ""
+    when it cannot be read. A link that leads anywhere else is
+    DeviceUnavailable, since UMD inside reads the type through that path.
+    """
+    where = f"{device_dir}/iommu_group"
+    text = link(_host(root, where))
+    if text is None:
+        return "", ""
+    resolved = posixpath.normpath(posixpath.join(device_dir, text))
+    found = _IOMMU_GROUP.fullmatch(resolved)
+    if found is None:
+        raise DeviceUnavailable(
+            f"{where} leads to {resolved!r}, not to a group under {IOMMU_GROUPS}, where UMD reads the card's IOMMU "
+            "domain type (umd pcie/pci_device.cpp:102-108) and which the sandbox keeps in view"
+        )
+    return found.group(1), _value(_host(root, f"{resolved}/type"))
 
 
 def _pci_address(uevent: Path, where: str) -> str:
@@ -437,8 +554,14 @@ def _driver_version(root: Path) -> str:
     return version
 
 
-def _check_host(root: Path, cards: int) -> None:
-    """Refuse a host whose slot list, 1 GiB pool, hugepage directory, or hugetlbfs mount cannot serve `cards` cards."""
+def _check_host(root: Path, cards: int, pass_through: int) -> None:
+    """Refuse a host whose slot list or 1 GiB pool cannot serve `cards` cards, or whose hugepage mount cannot serve one.
+
+    The hugepage directory and its hugetlbfs mount are checked only while
+    `pass_through` (the cards in no DMA domain, which UMD gives hugepages)
+    is above 0; the pool's page count always, since UMD grants every card
+    its host-memory channels from it in either mode (hugepage.cpp:47-68).
+    """
     if not _host(root, PCI_SLOTS).is_dir():
         raise DeviceUnavailable(f"{PCI_SLOTS} does not exist on this host; UMD lists it for every card")
     pages, needed = _count(_host(root, f"{POOL_DIR}/nr_hugepages")), PAGES_PER_CARD * cards
@@ -447,8 +570,11 @@ def _check_host(root: Path, cards: int) -> None:
     if pages < needed:
         raise DeviceUnavailable(
             f"{POOL_DIR}/nr_hugepages reads {pages}, fewer than the {needed} 1 GiB pages {cards} cards need "
-            f"({PAGES_PER_CARD} each)"
+            f"({PAGES_PER_CARD} each): UMD grants each card min({PAGES_PER_CARD}, nr_hugepages / cards) host-memory "
+            "channels in either IOMMU mode (umd hugepage.cpp:47-68)"
         )
+    if not pass_through:
+        return
     if not _host(root, HUGEPAGE_POINT).is_dir():
         raise DeviceUnavailable(f"{HUGEPAGE_POINT} is not a directory on this host, so no run can have its own there")
     text = devices._read_text(_host(root, MOUNTS))
@@ -457,7 +583,8 @@ def _check_host(root: Path, cards: int) -> None:
     if not at_point or at_point[-1][2] != "hugetlbfs" or HUGEPAGE_OPTION not in at_point[-1][3].split(","):
         raise DeviceUnavailable(
             f"{MOUNTS} shows no hugetlbfs mount at {HUGEPAGE_POINT} with {HUGEPAGE_OPTION}, the mount UMD maps its "
-            "1 GiB host-memory channels from (plans/spikes/tt-silicon-executor.md, Finding 3)"
+            f"1 GiB host-memory channels from for the {pass_through} card(s) in no DMA IOMMU domain "
+            "(plans/spikes/tt-silicon-executor.md, Finding 3)"
         )
 
 
@@ -656,37 +783,30 @@ def _release(fd: int, flock: Callable[[int, int], object]) -> None:
 
 
 @contextmanager
-def card_lock(locks: Path, flock: Callable[[int, int], object] | None = None) -> Iterator[None]:
-    """Hold the one lock of every card, `locks`/LOCK_FILE, for the block (OQ-075 (2a)).
+def card_lock(
+    locks: Path,
+    flock: Callable[[int, int], object] | None = None,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> Iterator[None]:
+    """Hold the one lock of every card, `locks`/LOCK_FILE, for the block (OQ-075 (2a)), waiting while another holds it.
 
-    The executor's runs and `lassi train --silicon` (task P17.38) share it.
-    The file is opened without truncation and taken with LOCK_EX | LOCK_NB,
-    never a wait: another holder is SandboxUnavailableError naming the file
-    and the pid that holder wrote there (or that it cannot be read), and the
-    descriptor is closed whether or not that read works. Once taken, this
+    The executor's runs and a training run on a card (task P17.38) share it.
+    The file is opened without truncation and tried with LOCK_EX | LOCK_NB;
+    while another process holds it, this one waits (_wait_for_lock: task
+    P17.53), and after LOCK_WAIT_S it is SandboxUnavailableError naming the
+    file and the pid that holder wrote there (or that it cannot be read),
+    the descriptor closed whether or not that read works. Once taken, this
     process's pid is written there; on the way out the pid is cleared and the
     lock released, on every path (_release). `flock` None means fcntl.flock,
-    imported only now.
+    imported only now; `clock` and `sleep` time the wait.
     """
     flock = _kernel_flock() if flock is None else flock
     locks.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = locks / LOCK_FILE
     fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
     try:
-        flock(fd, LOCK_EX | LOCK_NB)
-    except BlockingIOError:
-        try:
-            holder = _recorded_pid(fd)
-        finally:
-            os.close(fd)
-        if holder is None:
-            pid = "the pid it wrote there cannot be read"
-        else:
-            pid = f"pid {holder}, as it wrote there" if holder else "it wrote no pid there"
-        raise SandboxUnavailableError(
-            f"the tt_silicon lock {path} is held by another process ({pid}): one silicon program runs at a time "
-            "(OQ-075 (2a); Agent Rule 9); nothing ran"
-        ) from None
+        _wait_for_lock(fd, path, flock, clock, sleep)
     except BaseException:
         os.close(fd)
         raise
@@ -698,12 +818,44 @@ def card_lock(locks: Path, flock: Callable[[int, int], object] | None = None) ->
         _release(fd, flock)
 
 
+def _wait_for_lock(
+    fd: int, path: Path, flock: Callable[[int, int], object], clock: Callable[[], float],
+    sleep: Callable[[float], None],
+) -> None:
+    """Take the lock on `fd`, trying LOCK_EX | LOCK_NB every POLL_INTERVAL_S at most until LOCK_WAIT_S has passed.
+
+    A lock still held then is SandboxUnavailableError naming `path` and the
+    pid the holder wrote; the caller closes `fd`.
+    """
+    start = clock()
+    while True:
+        try:
+            flock(fd, LOCK_EX | LOCK_NB)
+            return
+        except BlockingIOError:
+            pass
+        left = LOCK_WAIT_S - (clock() - start)
+        if left <= 0:
+            break
+        sleep(min(POLL_INTERVAL_S, left))
+    holder = _recorded_pid(fd)
+    if holder is None:
+        pid = "the pid it wrote there cannot be read"
+    else:
+        pid = f"pid {holder}, as it wrote there" if holder else "it wrote no pid there"
+    raise SandboxUnavailableError(
+        f"the tt_silicon lock {path} stayed held by another process for {LOCK_WAIT_S} s ({pid}): one silicon "
+        "program runs at a time (OQ-075 (2a)); nothing ran"
+    )
+
+
 def busy_reasons(root: Path, uid: int, needed: int, owner: Callable[[Path], int]) -> list[str]:
     """Return why the cards under `root` are busy now: another account's hugepage file or UMD lock, or few pages.
 
     `owner` gives a path's uid (lstat's); a directory, a link, and this
     account's own files do not count, and fewer than `needed` free 1 GiB
-    pages does.
+    pages does (none are read when `needed` is 0: every card is in a DMA
+    domain, where UMD maps no hugepage).
     """
     found: list[str] = []
     for directory, prefix in ((HUGEPAGE_POINT, ""), (SHM, UMD_LOCK_PREFIX)):
@@ -713,6 +865,8 @@ def busy_reasons(root: Path, uid: int, needed: int, owner: Callable[[Path], int]
             holder = owner(path)
             if holder != uid:
                 found.append(f"{directory}/{path.name} belongs to another account (uid {holder})")
+    if needed <= 0:
+        return found
     free = _count(_host(root, f"{POOL_DIR}/free_hugepages"))
     if free is None or free < needed:
         read = "nothing" if free is None else str(free)
@@ -753,11 +907,15 @@ class TtSiliconExecutor:
     default runner). The rest are seams for the tests: `root`, the host
     root every host path is read under; `access`, the read-and-write check
     asked about each card node (access(2), which opens nothing); `owner`, a
-    path's uid (lstat's st_uid); `uid`, this account's (None means
-    os.getuid(), read when the cards are polled); `clock` and `sleep` of the
-    poll; and `flock` (None means fcntl.flock, imported only when a lock is
-    taken). `cards` holds what construction read, `driver` the driver's
-    version, and `pins` toolchains/tt-metal.pin's pairs.
+    path's uid (lstat's st_uid); `link`, a link's text (readlink(2), which
+    opens nothing; None for a path that is no link); `uid`, this account's
+    (None means os.getuid(), read when the cards are polled); `clock` and
+    `sleep` of the poll and of the wait for the lock; and `flock` (None
+    means fcntl.flock, imported only when a lock is taken). `cards` holds
+    what construction read, each card's IOMMU group and domain type
+    included, `pass_through` how many of them are in no DMA domain,
+    `driver` the driver's version, and `pins` toolchains/tt-metal.pin's
+    pairs.
     """
 
     name = "tt_silicon"
@@ -777,6 +935,7 @@ class TtSiliconExecutor:
         root: Path = devices.HOST_ROOT,
         access: Callable[[Path], bool] = devices._accessible,
         owner: Callable[[Path], int] = _owner,
+        link: Callable[[Path], str | None] = _link_text,
         uid: int | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
@@ -810,20 +969,23 @@ class TtSiliconExecutor:
         _refuse_quarantine(self.locks, DeviceUnavailable)
         names = _card_names(self.root)
         _check_nodes(self.root, names, access)
-        self.cards: tuple[Card, ...] = tuple(_read_card(self.root, name) for name in names)
+        self.cards: tuple[Card, ...] = tuple(_read_card(self.root, name, link) for name in names)
+        self.pass_through: int = sum(1 for card in self.cards if not card.dma)
         self.driver: str = _driver_version(self.root)
-        _check_host(self.root, len(self.cards))
+        _check_host(self.root, len(self.cards), self.pass_through)
 
     def device(self) -> str:
-        """Return the cards, their firmware, the driver, and the pinned tt-metal, as construction read them.
+        """Return the cards, their firmware and IOMMU groups, the driver, and the pinned tt-metal, as read when built.
 
         For example "Tenstorrent Wormhole n300 x 8 (silicon): card 0 serial
-        <s>, firmware bundle <b>, ARC firmware <a>; card 1 ...; tenstorrent
-        driver <v>; tt-metal 5280a9cf-tracy": one line of printable ASCII.
-        It reads no file and starts no process.
+        <s>, firmware bundle <b>, ARC firmware <a>, IOMMU group 135
+        identity; card 1 ...; tenstorrent driver <v>; tt-metal
+        5280a9cf-tracy": one line of printable ASCII. It reads no file and
+        starts no process.
         """
         cards = "; ".join(
-            f"card {card.name} serial {card.serial}, firmware bundle {card.bundle}, ARC firmware {card.arc}"
+            f"card {card.name} serial {card.serial}, firmware bundle {card.bundle}, ARC firmware {card.arc}, "
+            f"{card.iommu_text()}"
             for card in self.cards
         )
         text = (
@@ -921,38 +1083,44 @@ class TtSiliconExecutor:
         return _Mounts(hidden_roots=hidden, harness=harness, root=root, tree=tree)
 
     def _lock(self) -> AbstractContextManager[None]:
-        """Return the one lock of every card (card_lock under $LASSI_SCRATCH/locks, with this executor's flock)."""
-        return card_lock(self.locks, self.flock)
+        """Return the one lock of every card (card_lock under $LASSI_SCRATCH/locks, with this executor's seams)."""
+        return card_lock(self.locks, self.flock, self.clock, self.sleep)
 
     def _poll(self) -> None:
-        """Wait until no other account holds every card of the host (wait_for_cards, with this executor's seams)."""
+        """Wait until no other account holds every card of the host (wait_for_cards, with this executor's seams).
+
+        Free 1 GiB pages are needed for the pass-through cards alone.
+        """
         uid = os.getuid() if self.uid is None else self.uid
-        wait_for_cards(self.root, uid, PAGES_PER_CARD * len(self.cards), self.owner, self.clock, self.sleep)
+        wait_for_cards(self.root, uid, PAGES_PER_CARD * self.pass_through, self.owner, self.clock, self.sleep)
 
     def _placed(self, mounts: _Mounts, workdir: Path, argv: list[str], limits: Limits) -> SandboxResult:
-        """Make the run's hugepage directory, run `argv` once in the sandbox under the marker, and clean up.
+        """Make the run's hugepage directory (with a pass-through card), run `argv` once under the marker, clean up.
 
         The spec and the sandbox command are built first, so a ValueError
         there writes no marker; then the run goes through _sandboxed. On
         every path the directory is removed with everything in it
         (_remove_tree); when it cannot be, the marker names it beside any
         ending already recorded, and the run's result or exception stands.
+        With every card in a DMA domain there is no directory.
         """
         for name in (CACHE_DIR, LOGS_DIR):
             (workdir / RESERVED_DIR / name).mkdir(parents=True, exist_ok=True)
         if self.device_profiler == "kernel":
             self._fresh_profiler_dir(workdir / RESERVED_DIR / PROFILER_DIR)
-        run_dir = f"{RUN_DIR_PREFIX}{os.getpid()}-{secrets.token_hex(4)}"
-        local = _host(self.root, HUGEPAGE_POINT) / run_dir
-        local.mkdir(mode=0o700)
+        run_dir = f"{RUN_DIR_PREFIX}{os.getpid()}-{secrets.token_hex(4)}" if self.pass_through else None
+        local = None if run_dir is None else _host(self.root, HUGEPAGE_POINT) / run_dir
+        if local is not None:
+            local.mkdir(mode=0o700)
         endings: list[str] = []
         try:
-            os.chmod(local, 0o700)
+            if local is not None:
+                os.chmod(local, 0o700)
             spec = self._spec(mounts, workdir, run_dir, limits)
             sandbox_command(spec, argv, limits)
             return self._sandboxed(spec, argv, limits, endings)
         finally:
-            left = _remove_tree(local)
+            left = None if local is None else _remove_tree(local)
             if left is not None:
                 endings.append(f"the run's hugepage directory {HUGEPAGE_POINT}/{run_dir} could not be removed: {left}")
                 self._quarantine(endings)
@@ -1002,14 +1170,23 @@ class TtSiliconExecutor:
         endings.append(ending)
         self._quarantine(endings)
 
-    def _spec(self, mounts: _Mounts, workdir: Path, run_dir: str, limits: Limits) -> SandboxSpec:
-        """Return the run's SandboxSpec: the ttsim executor's mounts, the environment, and every card's exposure."""
+    def _spec(self, mounts: _Mounts, workdir: Path, run_dir: str | None, limits: Limits) -> SandboxSpec:
+        """Return the run's SandboxSpec: the ttsim executor's mounts, the environment, and every card's exposure.
+
+        Each card's PCI directory goes from its device directory (bound at
+        its own path) to /sys/bus/pci/devices/<address> (a link to it), so
+        UMD inside reads the card's IOMMU group as the host does (task
+        P17.54); the hugepage directory is None without `run_dir`.
+        """
         nodes = [PurePosixPath(f"{NODE_DIR}/{card.name}") for card in self.cards]
-        pci_dirs = [PurePosixPath(f"{PCI_DEVICES}/{card.address}") for card in self.cards]
+        pci_dirs = [
+            DeviceBind(PurePosixPath(card.device_dir), PurePosixPath(f"{PCI_DEVICES}/{card.address}"))
+            for card in self.cards
+        ]
         exposure = TenstorrentExposure(
             nodes=tuple(DeviceBind(node, node) for node in nodes),
-            pci_dirs=tuple(DeviceBind(directory, directory) for directory in pci_dirs),
-            hugepages=PurePosixPath(HUGEPAGE_POINT) / run_dir,
+            pci_dirs=tuple(pci_dirs),
+            hugepages=None if run_dir is None else PurePosixPath(HUGEPAGE_POINT) / run_dir,
             reset_filter=self.reset_filter,
         )
         environment = program_environment(mounts.tree, workdir, limits)

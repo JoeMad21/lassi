@@ -9,23 +9,16 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    lassi.core.adversary_stage (task P16.5), and lassi.scoring, which
    registers every ScoreProfile);
 2. refuses what it cannot run, before any directory is created or any model
-   is asked: first, right after the recipe loads, a bound executor (the
-   single one, or one bound for any language) that declares `silicon`
+   is asked. A bound executor that declares `silicon`
    (lassi.core.capabilities SILICON, the tt_silicon executor's; task
-   P17.16) when a listed stage declares `computes_reward`, even with the
-   human start; when a listed stage runs model-generated code
-   (`runs_model_code`, as run_loop declares) or an adversary's proposals
-   (`runs_proposals`), even with the human start, naming OQ-078 (the
-   sandbox does not keep a program from host memory under the cards'
-   identity IOMMU domain, so until the owner answers, silicon runs only
-   tracked references a human starts; plans/spikes/tt-card-dma.md); and
-   otherwise unless RunOptions.silicon is True, which only
-   `lassi run <recipe> --silicon` sets: silicon runs are evaluation runs a
-   human starts, and RL rewards never execute on silicon (Agent Rule 9;
-   OQ-075 (6a)). A recipe cannot set it, no environment variable stands in
-   for it, and every refusal comes before any executor is built, so nothing
-   reads the cards' files in a run a human did not start (_check_silicon).
-   Then: arms without a model (the model registry that maps arms to
+   P17.16) is refused for none of that: it runs like any other executor,
+   with no start flag, beside any stage, one that runs model-generated code
+   (`runs_model_code`), an adversary's proposals (`runs_proposals`), or a
+   reward (`computes_reward`) included (task P17.53: the owner's answers of
+   2026-10-29 to OQ-078, "remove all gates", and OQ-099, "It should be like
+   TT-SIM. SIlicon [sic] is there as a final test gate, no human's required", and
+   that evening's "OF COURSE silicon runs should be included in RL
+   rewards"). The refusals are: arms without a model (the model registry that maps arms to
    backends comes later) and arms beside a model; a recipe with no
    llm.sampling.max_tokens or no prompt set, since it never picks a value;
    a fix toggle turned off (faithful: true turns them all off) when no
@@ -117,7 +110,13 @@ run_recipe (bible Project Recipes; Component Interfaces; Result Record):
    toolchain_pins field (pin_field), that give a pin other pairs than a
    toolchain or an earlier executor gives the same pin name, or that put a
    second version in a field another pin name already fills (a build
-   variant beside its source's pin, task P17.48).
+   variant beside its source's pin, task P17.48); and a final_executor
+   section (task P17.55) when no listed stage declares `final_test`
+   (run_loop; _check_final_executor). The final executor is built once,
+   after the trial's executors, its device() and pins checked the same
+   way, its pins serving every target language (_final_executor);
+   provenance.json names it under final_executor, run.md in its Final
+   executor and Final device rows, and each trial's RunContext carries it.
    Right after the stage plan is checked, before any component is built
    (the Oracle and the ScoreProfiles included), it probes the device of
    every binding whose component declares `takes_device` (task P17.2;
@@ -357,12 +356,10 @@ from lassi.core import oracle_stage  # noqa: F401  (registers Stage "oracle" and
 from lassi.core.adversary_stage import ADVERSARY_KIND, RUNS_PROPOSALS, adversary_binding, budget_inputs
 from lassi.core.capabilities import (
     ALIGNS_OUTPUT_FILES,
-    COMPUTES_REWARD,
     DEVICE_KEY,
     LOWERS_SOURCE,
     MODEL_CHECK,
     REASONING_EFFORT,
-    SILICON,
     SIMULATOR,
     SUPPORTS_POWER,
     TAKES_DEVICE,
@@ -403,9 +400,11 @@ from lassi.core.recipe import (
     Recipe,
     RecipeError,
     executor_languages,
+    final_executor_binding,
     load_recipe,
     resolved_data,
     resolved_yaml,
+    run_executor_bindings,
 )
 from lassi.core.record import (
     TOOLCHAIN_PIN_NAMES,
@@ -438,6 +437,7 @@ from lassi.core.stages import (
     RUNS_CODE,
     SANDBOXED,
     SOURCE_MLIR_TEMPLATES,
+    FinalExecutor,
     RunContext,
     pack_parts,
 )
@@ -539,11 +539,9 @@ class RunOptions:
     - probes: the device probes by kind (lassi.core.devices, task P17.2);
       None means lassi.core.devices.DEFAULT_PROBES, the host probes that
       lassi.executors registers.
-    - silicon: the human start of a silicon run (task P17.16; Agent Rule 9;
-      OQ-075 (6a)); only `lassi run --silicon` sets it, never a recipe or
-      an environment variable. False refuses every executor that declares
-      `silicon`, and True still refuses one beside a reward or beside model
-      output (OQ-078; _check_silicon).
+
+    There is no silicon option: a run on the tt_silicon executor needs no
+    start (task P17.53).
     """
 
     runs_root: Path | None = None
@@ -554,7 +552,6 @@ class RunOptions:
     roots: Sequence[Path] | None = None
     observer: Observer | None = None
     probes: Mapping[str, DeviceProbe] | None = None
-    silicon: bool = False
 
 
 # The options run_recipe uses when none are given: every field falls back as RunOptions says.
@@ -674,7 +671,8 @@ class _Run:
     skeleton section. `dialect` is the run's dialect definitions
     (_dialect_defs; task P17.41), or None without a dialect_lookup section,
     and `frontend` its lowering toolchain (_frontend), or None without a
-    source_mlir section.
+    source_mlir section. `final` is the run's final executor (task P17.55;
+    _final_executor), or None without a final_executor section.
     """
 
     recipe: Recipe
@@ -701,6 +699,7 @@ class _Run:
     skeleton: skeleton_files.Skeleton | None = None
     dialect: DialectDefs | None = None
     frontend: BuiltToolchain | None = None
+    final: FinalExecutor | None = None
 
 
 def run_recipe(path: Path, options: RunOptions = _DEFAULT_OPTIONS) -> Path:
@@ -745,7 +744,6 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     """Load and check the recipe, build its components, and create the run directory; RunError before any mkdir."""
     registry = DEFAULT_REGISTRY if options.registry is None else options.registry
     recipe = _load(path, options, registry)
-    _check_silicon(recipe, registry, options.silicon)
     settings = _settings(recipe)
     runs_root = resolve_runs_root(options.runs_root, recipe)
     run_dir = runs_root / RUNS_DIR / run_id_for(options.run_id, started)
@@ -763,6 +761,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     _check_one_role(recipe, registry, devices)
     _check_profiler(recipe, registry, settings, devices)
     _check_oracle(recipe, registry, bench)
+    _check_final_executor(recipe, registry)
     scoring = _scoring(recipe, registry, bench)
     backend = _backend(recipe, registry, settings)
     _check_backend(recipe, settings, backend)
@@ -771,6 +770,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
     frontend = _frontend(recipe, registry, _toolchains_root(options), runs_root)
     toolchains = toolchains if frontend is None else (*toolchains, frontend)
     executors = _executors(recipe, registry, settings)
+    final, executors = _final_executor(recipe, registry, settings, executors)
     profiler = _built_profiler(recipe, registry)
     pins, target_pins = _run_pins(recipe, settings, toolchains, executors)
     commit, dirty = git_state()
@@ -803,6 +803,7 @@ def _prepare(path: Path, options: RunOptions, started: datetime) -> _Run:
         skeleton=skeleton,
         dialect=dialect,
         frontend=frontend,
+        final=final,
     )
 
 
@@ -937,7 +938,7 @@ def _profiled_executors(recipe: Recipe, registry: Registry, settings: _Settings)
     _executors refuses that run, naming executor.<language>, before the
     profiler is built.
     """
-    bindings = [binding for binding in recipe.bindings if binding.interface == "Executor"]
+    bindings = run_executor_bindings(recipe.bindings)
     languages = executor_languages(recipe.data)
     by_language = dict(zip(languages, bindings, strict=True)) if languages else {}
     found: dict[str, tuple[Binding, Entry]] = {}
@@ -1602,65 +1603,6 @@ def _check_sandbox(recipe: Recipe) -> None:
         )
 
 
-def _check_silicon(recipe: Recipe, registry: Registry, silicon: bool) -> None:
-    """Refuse a silicon executor in a run a human did not start, in a run with a reward, or beside model output.
-
-    Each bound executor that declares SILICON, in the single form or for
-    any language, is refused when a listed stage declares COMPUTES_REWARD,
-    or runs model-generated code or an adversary's proposals
-    (_model_output_stage), whatever `silicon` says, and otherwise unless
-    `silicon` (RunOptions, set only by `lassi run --silicon`) is True: RL
-    rewards never execute on silicon, and silicon runs are evaluation runs a
-    human starts (Agent Rule 9; OQ-075 (6a)). Model output waits on OQ-078:
-    under the cards' identity IOMMU domain a program holding a card can
-    reach host memory through the card's DMA, which the sandbox cannot stop
-    (plans/spikes/tt-card-dma.md), so until the owner answers, silicon runs
-    only tracked references a human starts (its recommendation (c)). The
-    runner reads the capabilities and the attribute, never a name (Agent
-    Rule 3), and builds nothing here.
-    """
-    for binding in recipe.bindings:
-        if binding.interface != "Executor" or SILICON not in registry.get("Executor", binding.name).capabilities:
-            continue
-        named = f"Executor {binding.name!r} ({binding.where})"
-        for stage in recipe.data["stages"]:
-            if COMPUTES_REWARD in registry.get("Stage", stage).capabilities:
-                raise RunError(
-                    f"{recipe.path}: stage {stage!r} computes a reward, and {named} runs programs on silicon; RL "
-                    "rewards never execute on silicon, with or without --silicon (Agent Rule 9)"
-                )
-        found = _model_output_stage(recipe, registry)
-        if found is not None:
-            stage, what = found
-            raise RunError(
-                f"{recipe.path}: stage {stage!r} runs {what}, and {named} runs programs on silicon, where the sandbox "
-                "does not keep a program from host memory (a card's DMA under the cards' identity IOMMU domain; "
-                "plans/spikes/tt-card-dma.md); until OQ-078 is answered, silicon runs only tracked references a "
-                "human starts, with or without --silicon"
-            )
-        if not silicon:
-            raise RunError(
-                f"{recipe.path}: {named} runs programs on silicon, and silicon runs are evaluation runs a human starts "
-                "(Agent Rule 9): start this run with `lassi run <recipe> --silicon`, which no recipe can set and no "
-                "unattended session passes"
-            )
-
-
-def _model_output_stage(recipe: Recipe, registry: Registry) -> tuple[str, str] | None:
-    """Return the first listed stage that runs model output, with what it runs, or None when none does.
-
-    A stage runs model output when its factory declares `runs_model_code`
-    (run_loop) or its entry declares RUNS_PROPOSALS (the adversary stage).
-    """
-    for stage in recipe.data["stages"]:
-        entry = registry.get("Stage", stage)
-        if getattr(entry.factory, "runs_model_code", False):
-            return stage, "model-generated code"
-        if RUNS_PROPOSALS in entry.capabilities:
-            return stage, "an adversary's proposals"
-    return None
-
-
 def _check_sandboxed(recipe: Recipe, registry: Registry, binding: Binding, capabilities: frozenset[str]) -> None:
     """Refuse an executor that runs programs outside the sandbox when a listed stage runs model-generated code.
 
@@ -1692,7 +1634,7 @@ def _executors(recipe: Recipe, registry: Registry, settings: _Settings) -> _Exec
     the pins it declares (_declared_pins); RunError before any directory
     exists.
     """
-    bindings = [binding for binding in recipe.bindings if binding.interface == "Executor"]
+    bindings = run_executor_bindings(recipe.bindings)
     languages = executor_languages(recipe.data)
     if languages:
         _check_executor_languages(recipe, registry, settings, set(languages))
@@ -1736,6 +1678,52 @@ def _built_executor(recipe: Recipe, binding: Binding, entry: Entry) -> Executor:
             f"{recipe.path}: {device_path(binding)}: Executor {entry.name!r} ({binding.where}) cannot use its device "
             f"on this host: {error}; a run never falls back to another device"
         ) from None
+
+
+def _check_final_executor(recipe: Recipe, registry: Registry) -> None:
+    """Refuse a final_executor section that no listed stage runs, before anything is built (task P17.55).
+
+    A stage runs the final test when its factory declares `final_test`
+    (run_loop). The loader has already checked the section's executor
+    (runs_code and sandboxed), faithful: false, and
+    loop.correct_on_mismatch true. A recipe without the section passes.
+    """
+    binding = final_executor_binding(recipe.bindings)
+    if binding is None:
+        return
+    for name in recipe.data["stages"]:
+        if getattr(registry.get("Stage", name).factory, "final_test", False):
+            return
+    raise RunError(
+        f"{recipe.path}: {binding.where} binds Executor {binding.name!r}, but no listed stage runs the final test; "
+        "list run_loop, or remove the final_executor section"
+    )
+
+
+def _final_executor(
+    recipe: Recipe, registry: Registry, settings: _Settings, executors: _Executors
+) -> tuple[FinalExecutor | None, _Executors]:
+    """Build the recipe's final executor (task P17.55) and return it with `executors` holding its pins too.
+
+    Without a final_executor section it returns (None, executors). The
+    executor is built as factory(**config) (_built_executor: a
+    DeviceUnavailable, such as the tt_silicon executor's refusal of a host
+    without its cards or with a quarantine marker, is a RunError), asked
+    for its device() once (_checked_device), and read for its pins
+    (_declared_pins), which serve every target language, so the run's and
+    each target's pins record them (Agent Rule 10) and a shared pin must
+    agree with the trial's executor's (_check_shared_pins); RunError
+    before any directory exists.
+    """
+    binding = final_executor_binding(recipe.bindings)
+    if binding is None:
+        return None, executors
+    entry = registry.get("Executor", binding.name)
+    executor = _built_executor(recipe, binding, entry)
+    device = _checked_device(_device(executor), binding)
+    targets = tuple(dict.fromkeys(direction.target for direction in settings.directions))
+    declared = (*executors.declared, _declared_pins(executor, binding, targets))
+    return FinalExecutor(binding.name, executor, device), dataclasses.replace(executors, declared=declared)
 
 
 def _check_executor_languages(recipe: Recipe, registry: Registry, settings: _Settings, bound: set[str]) -> None:
@@ -2534,7 +2522,7 @@ def _check_proposal_executors(recipe: Recipe, registry: Registry, settings: _Set
     language with no executor is left to _executors, which names
     executor.<language>.
     """
-    bindings = [binding for binding in recipe.bindings if binding.interface == "Executor"]
+    bindings = run_executor_bindings(recipe.bindings)
     languages = executor_languages(recipe.data)
     by_language = dict(zip(languages, bindings, strict=True)) if languages else {}
     for direction in settings.directions:
@@ -3263,6 +3251,7 @@ def _context(run: _Run, backend: Any, direction: Direction, item: str) -> RunCon
         skeleton=run.skeleton,
         dialect=run.dialect,
         frontend=None if run.frontend is None else run.frontend.toolchain,
+        final=run.final,
     )
 
 
@@ -3386,6 +3375,9 @@ def _provenance(run: _Run) -> dict[str, Any]:
     joined by "; " (lassi.core.devices.device_driver), null when none names
     one. `serving` holds the backend's serving record when it declares
     model_check (task P17.3; _served_model) and is absent otherwise.
+    `final_executor` holds the final executor's name and device() line
+    when the recipe sets final_executor (task P17.55) and is absent
+    otherwise; each final test also records its device (FinalTest.device).
     """
     pins = dataclasses.asdict(run.pins)
     return {
@@ -3401,6 +3393,7 @@ def _provenance(run: _Run) -> dict[str, Any]:
         "platform": platform.platform(),
         "python": platform.python_version(),
         **run.executors.record,
+        **({} if run.final is None else {"final_executor": {"executor": run.final.name, "device": run.final.device}}),
         "driver": device_driver(run.devices),
         "device_records": [dataclasses.asdict(item) for item in run.devices],
         **({} if run.serving is None else {"serving": dict(run.serving)}),
@@ -3527,12 +3520,20 @@ def _simulated_languages(run: _Run) -> list[str]:
 
 
 def _executor_rows(provenance: Mapping[str, Any]) -> list[tuple[str, str]]:
-    """Return run.md's executor rows: Executor and Device, or, per language, the executors and one Device row each."""
+    """Return run.md's executor rows: Executor and Device, or, per language, the executors and one Device row each.
+
+    A run with a final executor (task P17.55) adds its Final executor and
+    Final device rows.
+    """
+    final = provenance.get("final_executor")
+    tail = [] if final is None else [("Final executor", final["executor"]), ("Final device", fmt_provenance(
+        final["device"]))]
     if "devices" not in provenance:
-        return [("Executor", provenance["executor"]), ("Device", fmt_provenance(provenance["device"]))]
+        return [("Executor", provenance["executor"]), ("Device", fmt_provenance(provenance["device"])), *tail]
     names = "; ".join(f"{language}: {name}" for language, name in sorted(provenance["executor"].items()))
     devices = sorted(provenance["devices"].items())
-    return [("Executor", names), *((f"Device ({language})", fmt_provenance(device)) for language, device in devices)]
+    rows = [(f"Device ({language})", fmt_provenance(device)) for language, device in devices]
+    return [("Executor", names), *rows, *tail]
 
 
 def _serving_rows(provenance: Mapping[str, Any]) -> list[tuple[str, str]]:

@@ -28,6 +28,9 @@ Rate carries them in its label beside the value (Agent Rule 1).
   time follow, labelled as including device open, JIT, transfers, and close.
 - trial_rates(trial, work, ...) checks the trial's device, then gives the
   reference run's rates and each attempt's, in order.
+- final_test_rates(trial, work, ...) gives the rates of each attempt's
+  final test (task P17.55: the run on the Wormhole cards after a pass on
+  ttsim), each checked and labelled with the final test's own device.
 - training_summary(steps, model_flops, device) summarizes a training run's
   steps over those without a graph compile, refusing a simulator device.
 
@@ -196,6 +199,27 @@ def trial_rates(
     rates = run_rates(trial.reference_run, work, device, name="reference", peak=peak, wall=wall)
     for attempt in trial.attempts:
         rates += run_rates(attempt.run, work, device, name=f"attempt {attempt.index}", peak=peak, wall=wall)
+    return rates
+
+
+def final_test_rates(
+    trial: Trial, work: Work, *, peak: Peak | None = WORMHOLE_CHIP_PEAK, wall: bool = False
+) -> list[Rate]:
+    """Return the rates of each attempt's final test (task P17.55), in attempt order, each labelled with its device.
+
+    A final test's run names its own device (FinalTest.device), which may
+    be silicon where the trial's device is ttsim, so each is checked on its
+    own: RateRefused for one that is not silicon (check_silicon), since a
+    rate never comes from a simulator. An attempt without a final test
+    gives none. Each Rate's run reads "attempt <n> final test on <device>".
+    """
+    rates: list[Rate] = []
+    for attempt in trial.attempts:
+        final = attempt.final_test
+        if final is None:
+            continue
+        name = f"attempt {attempt.index} final test on {final.device}"
+        rates += run_rates(final.run, work, final.device, name=name, peak=peak, wall=wall)
     return rates
 
 

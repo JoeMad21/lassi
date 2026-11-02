@@ -496,7 +496,7 @@ def test_a_hanging_worker_is_killed_once_and_raises_a_card_ending(
 
 
 # ---------------------------------------------------------------------------
-# Through the layer: `lassi train --silicon` with the real trainer, a fake worker, and a SYNTHETIC host
+# Through the layer: `lassi train` on a card with the real trainer, a fake worker, and a SYNTHETIC host
 
 
 def layer_recipe(setup: Setup) -> Path:
@@ -519,7 +519,7 @@ def test_lassi_train_silicon_runs_the_trainer_and_records_the_venv_pins(
     setup = Setup(tmp_path / "layer")
     rig = Rig(setup, monkeypatch)
     path = layer_recipe(setup)
-    options = setup.options(registry=ttxla_registry(), probes=rig.probes(), silicon=True,
+    options = setup.options(registry=ttxla_registry(), probes=rig.probes(),
                             silicon_host=rig.host_seams(), synthetic_dir=REPO / "tests" / "fixtures" / "train")
     train_dir = importlib.import_module("lassi.train.run").run_training(path, options)
     record = provenance(train_dir)
@@ -535,9 +535,10 @@ def test_lassi_train_silicon_runs_the_trainer_and_records_the_venv_pins(
     assert not (rig.locks / MARKER).exists() and not rig.flock.held(rig.locks / LOCK)
 
 
-def test_the_layer_refuses_a_ttxla_run_without_the_flag_or_a_card(
+def test_the_layer_refuses_a_ttxla_run_without_a_card(
     env: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # No start flag exists since task P17.53; a host without the card is still refused before any directory.
     class NoCards:
         """A tenstorrent probe on a host without cards."""
 
@@ -552,9 +553,7 @@ def test_the_layer_refuses_a_ttxla_run_without_the_flag_or_a_card(
     path = layer_recipe(setup)
     run = importlib.import_module("lassi.train.run")
     fixtures = REPO / "tests" / "fixtures" / "train"
-    with pytest.raises(RunError, match="--silicon"):
-        run.run_training(path, setup.options(registry=ttxla_registry(), probes=rig.probes(), synthetic_dir=fixtures))
     with pytest.raises(RunError, match="/dev/tenstorrent"):
         run.run_training(path, setup.options(registry=ttxla_registry(), probes={"tenstorrent": NoCards()},
-                                             silicon=True, synthetic_dir=fixtures))
+                                             synthetic_dir=fixtures))
     assert not setup.runs_root.exists() and not rig.locks.exists()

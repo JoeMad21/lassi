@@ -7,7 +7,7 @@ the tenstorrents for that task"; OQ-100 (a) with (s2): training runs of tracked 
 owner; one start runs a sequence of runs, each its own process, spaced, stopping at the first failure or hang.
 `launch` checks the tree and the build host, shows the plan, asks, and starts plans/runs/train-tt/run.sh as one big
 rx job, which installs or checks the tt-xla venv (CPU only), builds the records and fetches the bases (CPU only),
-then runs `lassi --graphics off train <recipe> --silicon` once per recipe, in order. `install` starts the venv's
+then runs `lassi --graphics off train <recipe>` once per recipe, in order. `install` starts the venv's
 install alone. `plan` prints the plan and contacts nothing. Every child process runs with MSYS_NO_PATHCONV=1 and
 PYTHONIOENCODING=utf-8 (plans/LESSONS.md, alpha01). plans/runs/train-tt/README.md is the guide.
 """
@@ -349,7 +349,7 @@ def render_plan(plan: Plan, tree: Tree, now: int) -> str:
               f"  job timeout  {plan.timeout(now)} s (the deadline plus {TIMEOUT_MARGIN_S} s), recomputed at start",
               f"  free space   the preflight needs {FLOOR_GB + MARGIN_GB} GB free on the scratch disk (the gate's "
               f"{FLOOR_GB} GB big-job floor and a {MARGIN_GB} GB margin)",
-              "  devices      Wormhole card 0 through `lassi train --silicon`: one card, one run at a time under the "
+              "  devices      Wormhole card 0 through `lassi train`: one card, one run at a time under the "
               "cards' lock, polled first, quarantined after a hang, kill, or crash; each worker in its own empty "
               "network namespace (trainer.network none); no RNGD card, no GPU",
               f"  output       lassi-wt/{plan.slot} (the job's checkout), {OUTPUT_DIR}/<job id> (pull fetches it), "
@@ -576,7 +576,7 @@ TOP_DESCRIPTION = """Train the small models on a Wormhole card on alpha01 as one
 
 launch checks the tree and the build host, prints the plan, asks, and starts plans/runs/train-tt/run.sh as one big
 rx job: it keeps or installs the tt-xla venv and fetches the records and the bases (CPU only), then runs `lassi
---graphics off train <recipe> --silicon` once per recipe, in order, each its own process, spaced, stopping at the
+--graphics off train <recipe>` once per recipe, in order, each its own process, spaced, stopping at the
 first failure or hang (OQ-100 (s2)). install starts the venv's install alone; plan prints the plan and contacts
 nothing. Every child process runs with MSYS_NO_PATHCONV=1 and PYTHONIOENCODING=utf-8."""
 

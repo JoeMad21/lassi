@@ -21,7 +21,7 @@
 # - Time: with the compile of a 28-layer graph, 20 to 40 minutes by the spike's estimate, 25 to 65 minutes in all;
 #   timeout_s 4500 (75 minutes) ends it as a hang past that.
 base_model: Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca  # a HEAD request read X-Repo-Commit equal to it
-method: sft  # the only method on silicon: RL rewards never execute there (Agent Rule 9)
+method: sft  # the ttxla trainer's one method (lassi.train.ttxla_trainer)
 weights: lora
 lora: {r: 16, targets: all-linear}  # every linear layer but the output layer
 trainer:

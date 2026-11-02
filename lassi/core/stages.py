@@ -272,6 +272,30 @@ The runner checks either kind before any model is asked.
   stderr) under the one count and cap, and left at the cap it ends the
   trial at correction-cap. A gap of any other finding stays a gap.
 
+  The final test (the recipe's final_executor section; task P17.55, the
+  owner's answer to OQ-099: "SIlicon [sic] is there as a final test gate"). An
+  opt-in the loader refuses under faithful: true and without
+  loop.correct_on_mismatch; with it absent nothing here changes. An
+  attempt whose clean run passed the oracle (every output within its
+  threshold) is built again in attemptNN/final with the target's
+  toolchain and run once on the final executor (RunContext.final, such as
+  tt_silicon on the Wormhole cards) on the same held-out inputs, its
+  output files judged by the same oracle against the target reference.
+  Attempt.final_test records that run whole (FinalTest: the executor, its
+  device, the stage, the run with its device timing, the alignment, and
+  passed). A pass ends the loop, so the trial passes on the final
+  executor; a failure (no program, a kernel JIT error, a failed run, or an
+  oracle mismatch) gives the attempt a run-stage error coded final-test
+  and is fed back, after final_lead's words, as a run correction or, for
+  a mismatch, with MISMATCH_PROMPT, under the one count and cap; left at
+  the cap it ends the trial at correction-cap naming the final test. The
+  next attempt runs on the trial's executor first, so the final executor
+  only ever runs a program that compiled and passed there. Its wall limit
+  is at least FINAL_WALL_FLOOR_S, since a timeout on silicon quarantines
+  the cards. TTIR's route (the ttmlir-ttsim executor, which runs a
+  flatbuffer) takes the same section once a silicon executor runs that
+  artifact; nothing here reads the artifact's kind.
+
 Context blocks under a template set (with_context_blocks). Each model
 prompt after summarize_context or verbatim_context (generate.txt, every
 correct.txt, and MISMATCH_PROMPT) gets, before it, the knowledge block,
@@ -483,7 +507,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import cast
+from typing import NamedTuple, cast
 
 from lassi.bench import Direction, Suite, stage_inputs
 from lassi.core import fragments as fragment_text
@@ -491,6 +515,7 @@ from lassi.core.capabilities import (
     ALIGNS_OUTPUT_FILES,
     GUARD_CODE_PREFIX,
     HOST_COMPUTE_GUARD,
+    SILICON,
     SIMULATOR,
     STATIC_TAGS,
     SUPPORTS_POWER,
@@ -545,9 +570,11 @@ from lassi.core.record import (
     NO_PROGRAM,
     NOT_BUILT,
     SIM_GAP_NOTE,
+    Alignment,
     Attempt,
     Diagnostic,
     EndReason,
+    FinalTest,
     Guards,
     OutputStats,
     Profile,
@@ -654,6 +681,15 @@ REFERENCE_WORKDIR_INCOMPLETE = "reference-workdir-incomplete"
 RUN_ERROR = "run-error"
 STALE_OUTPUT = "stale-output"
 ORACLE_MISMATCH = "oracle-mismatch"
+# The run-stage error code an attempt gains when its final test fails (task P17.55): its run on the trial's executor
+# passed, and the run on the recipe's final executor did not. Attempt.final_test keeps that run whole.
+FINAL_TEST_FAILED = "final-test"
+# The final test's own directory, beside the attempt's build directory (attemptNN/final).
+FINAL_DIR = "final"
+# The least wall limit of a final test, in seconds [DESIGN] (task P17.55): a reference run's limit. A run on the
+# Wormhole cards stopped at its wall limit quarantines every card until a person clears them (lassi.executors.
+# tt_silicon), so a final test never gets the attempts' floor; the attempt's own limit applies when it is longer.
+FINAL_WALL_FLOOR_S = REFERENCE_WALL_S
 # The opt-in key of the loop section (lassi.core.recipe LOOP_OPT_INS) that feeds an oracle mismatch back.
 CORRECT_ON_MISMATCH = "correct_on_mismatch"
 # The opt-in key of the loop section that feeds a simulator gap back (OQ-098). The code of the run-stage note it puts
@@ -925,6 +961,9 @@ class RunContext:
     loaded once per run when the recipe sets dialect_lookup, else None.
     `frontend` is the run's lowering toolchain (task P17.41), built once per
     run when the recipe sets source_mlir, else None (lowered_source).
+    `final` is the run's final executor (task P17.55; FinalExecutor), built
+    once per run when the recipe sets final_executor, else None: run_loop
+    gives each attempt that passes the oracle its final test there.
     """
 
     recipe: Recipe
@@ -952,6 +991,20 @@ class RunContext:
     skeleton: Skeleton | None = None
     dialect: DialectDefs | None = None
     frontend: Toolchain | None = None
+    final: FinalExecutor | None = None
+
+
+@dataclass(frozen=True)
+class FinalExecutor:
+    """The run's final executor (task P17.55): its registered name, the built Executor, and its device() line.
+
+    The runner builds it once per run from the recipe's final_executor
+    section, after checking that a listed stage runs the final test.
+    """
+
+    name: str
+    executor: Executor
+    device: str | None
 
 
 def executor_for(context: RunContext, language: str) -> Executor:
@@ -3323,6 +3376,9 @@ class RunLoopStage:
     loop.correct_on_mismatch, and the runner renders it, before any
     directory exists, only when that key is true. It honors
     loop.correct_on_sim_gap too (module docstring, Simulator gaps).
+    `final_test` says it runs the final test of a recipe's final_executor
+    section (task P17.55; _final_test): the runner refuses that section
+    when no listed stage declares it.
     """
 
     name = "run_loop"
@@ -3333,6 +3389,7 @@ class RunLoopStage:
     fragment_keys = RUN_LOOP_KEYS
     reproduces = frozenset({"execution_gate", "fence_tag", "prompt_newlines", "parsed_diagnostics"})
     runs_model_code = True
+    final_test = True
 
     def __init__(self, *, context: RunContext) -> None:
         """Keep the trial's run context, the recipe's Oracle when it compares output files, and the loop opt-ins.
@@ -3363,6 +3420,11 @@ class RunLoopStage:
                 f"{context.recipe.path}: loop.{CORRECT_ON_SIM_GAP} is true, but {context.prompts!r} is a fragment "
                 "prompt set, upstream's prompts, which hold no simulator-gap correction"
             )
+        if context.final is not None and not self.on_mismatch:
+            raise ValueError(
+                f"{context.recipe.path}: final_executor is set, but loop.{CORRECT_ON_MISMATCH} is not true, so no "
+                "clean run is judged by the oracle and no attempt could reach the final test"
+            )
 
     def __call__(self, trial: Trial) -> Trial:
         """Return `trial` with its compiling attempts run and any corrections appended.
@@ -3387,7 +3449,12 @@ class RunLoopStage:
         the mismatch prompt (module docstring, Oracle mismatches). Under
         loop.coord_gap_as_error a gap whose findings hold ttsim's
         coord_to_tile finding is no gap (_gap) but a failed run, corrected
-        with addressing_text (module docstring, Addressing gaps).
+        with addressing_text (module docstring, Addressing gaps). With a
+        final executor (RunContext.final; task P17.55) an attempt whose run
+        passed the oracle gets its final test (_final_test): a pass ends the
+        loop, and a failure is read as a failed run is, with its own text
+        (_FinalFailure), under the same cap, which ends the trial at
+        `correction-cap` naming the final test (_final_cap_end).
         """
         context = self.context
         compile_loop = CompileLoopStage(context=context)
@@ -3409,25 +3476,31 @@ class RunLoopStage:
             if reached == PARSED:
                 trial = compile_loop(trial)
                 continue
-            outputs = None
+            outputs, failure = None, None
             if reached == RAN_CLEAN:
                 trial, outputs = self._judged(trial)
                 if outputs is None:
-                    break
+                    trial, failure = self._final_test(trial)
+                    if failure is None:
+                        break
             elif self._gap(run) is not None and not self.on_gap:
                 return _ended(trial, SIM_GAP, _gap_message(index, str(run.sim_gap)))
             if cap is not None and index >= cap:
-                return _cap_end(trial, cap, outputs, self._gap(run))
-            corrected = self._correction(trial, run, limits, outputs)
+                return _cap_end(trial, cap, outputs, self._gap(run)) if failure is None else _final_cap_end(trial, cap)
+            corrected = self._correction(trial, run, limits, outputs, failure)
             if corrected.final.end_reason is not None:
                 return corrected
             trial = compile_loop(corrected)
         return trial
 
-    def _correction(self, trial: Trial, run: RunResult, limits: Limits, outputs: str | None) -> Trial:
+    def _correction(
+        self, trial: Trial, run: RunResult, limits: Limits, outputs: str | None, failure: _FinalFailure | None = None
+    ) -> Trial:
         """Return `trial` with the correction of its last attempt appended (_corrected), recorded under run_loop.
 
-        With `outputs` None the last run failed: the execute-error prompt,
+        A final test's `failure` (task P17.55) sends its text, with
+        MISMATCH_PROMPT when it was an oracle mismatch there. Otherwise, with
+        `outputs` None the last run failed: the execute-error prompt,
         whose error text is run_error_text's, or, for a run that stopped at
         a simulator gap (read so only under loop.correct_on_sim_gap),
         sim_gap_text's, or, for a coord_to_tile gap under
@@ -3436,6 +3509,9 @@ class RunLoopStage:
         """
         context = self.context
         expected = target_files(context)
+        if failure is not None:
+            text, mismatch = failure.text, failure.mismatch
+            return _corrected(context, trial, self.name, expected, text, run_error=True, mismatch=mismatch)
         if outputs is not None:
             return _corrected(context, trial, self.name, expected, outputs, run_error=True, mismatch=True)
         if run.sim_gap is not None and self._gap(run) is None:
@@ -3486,6 +3562,92 @@ class RunLoopStage:
         trial = dataclasses.replace(trial, attempts=[*trial.attempts[:-1], judged])
         return trial, (mismatch_text(oracle, stats) if failed else None)
 
+    def _final_test(self, trial: Trial) -> tuple[Trial, _FinalFailure | None]:
+        """Return `trial` with its last attempt's final test recorded, and the failure to feed back, or None.
+
+        Nothing runs, and the trial comes back unchanged with None, without a
+        final executor or when the attempt's run was not judged by the
+        oracle (Attempt.alignment.outputs None), since only a pass reaches
+        the final test (task P17.55). Otherwise the attempt's files are
+        built again with the target's toolchain in their own directory,
+        attemptNN/final beside the attempt's build (CompileLoopStage._build),
+        and the program runs once on the final executor on the same held-out
+        inputs, under final_limits; the backend is asked to unload first, as
+        before any run of generated code. The result is Attempt.final_test
+        (_final_record), and a failure also gives the attempt a run-stage
+        FINAL_TEST_FAILED error naming why (_with_final). An executor error,
+        such as the tt_silicon executor's refusal while a quarantine marker
+        exists, propagates and stops the run, as an error of the trial's
+        executor does.
+        """
+        context, final = self.context, self.context.final
+        attempt = trial.attempts[-1]
+        if final is None or attempt.alignment.outputs is None:
+            return trial, None
+        workdir = build_dir(context.build_root, trial.trial_id, attempt.index).parent / FINAL_DIR
+        workdir.mkdir()
+        built = CompileLoopStage(context=context)._build(attempt.files, workdir)
+        if built.artifact is None:
+            why = "its rebuild for the final executor produced no program"
+            text = f"{final_lead(context)}{why}: {diagnostics_text(prompt_diagnostics(built.diagnostics))}"
+            record = FinalTest(
+                executor=final.name, device=final.device, stage_reached=PARSED,
+                diagnostics=list(built.diagnostics), passed=False,
+            )
+            return _with_final(trial, record, final, why), _FinalFailure(text, False, why)
+        artifact = Path(built.artifact)
+        limits = final_limits(context, trial)
+        inputs = stage_inputs(context.suite.item(context.item, purpose=PURPOSE), artifact.parent)
+        unload_before_run(context.backend)
+        run = final.executor.run(artifact, inputs, limits)
+        record, failure = self._final_record(trial, run, limits)
+        trial = _with_final(trial, record, final, None if failure is None else failure.why)
+        notify(context.observer, ATTEMPT, trial, self.name)
+        return trial, failure
+
+    def _final_record(self, trial: Trial, run: RunResult, limits: Limits) -> tuple[FinalTest, _FinalFailure | None]:
+        """Return the FinalTest of the final executor's `run` and its failure, or None when it passed.
+
+        The run is kept as an attempt's run is (_run_info, with its output
+        files and device timing) and reaches the stage run_stage gives. A
+        kernel JIT error (S1) feeds back its jit-stage errors; another
+        failed run (S4) gets a run-error and feeds back run_error_text; a
+        clean run (S5) is judged by the oracle against the target reference,
+        bound as _judged binds it, and a failed output adds an
+        ORACLE_MISMATCH error and feeds back mismatch_text with the mismatch
+        prompt. Each text follows final_lead.
+        """
+        context, final = self.context, cast(FinalExecutor, self.context.final)
+        info = _run_info(context, run, keep_outputs=True)
+        diagnostics = [*run.diagnostics, *_run_flag_warnings(run)]
+        reached, alignment, failure = run_stage(run), Alignment(), None
+        lead = final_lead(context)
+        if reached == PARSED:
+            errors = [item for item in run.diagnostics if item.stage == JIT and item.severity == "error"]
+            why = "its kernels did not compile there"
+            failure = _FinalFailure(f"{lead}{why}: {diagnostics_text(errors)}", False, why)
+        elif reached != RAN_CLEAN:
+            simulator = declares(final.executor, SIMULATOR)
+            why = _run_status(run, limits, simulator=simulator)
+            diagnostics.append(Diagnostic(stage="run", severity="error", code=RUN_ERROR, message=why))
+            failure = _FinalFailure(f"{lead}{run_error_text(run, limits, {}, simulator=simulator)}", False, why)
+        else:
+            oracle = agreement_bound(cast(OutputFileOracle, self.files_oracle), trial)
+            blobs = BlobStore(context.store.root)
+            reference = stored_files(blobs, trial.reference_run.outputs or {})
+            alignment = oracle.alignment(reference, stored_files(blobs, info.outputs or {}))
+            stats = alignment.outputs or []
+            failed = [entry for entry in stats if not entry.passed]
+            if failed:
+                diagnostics.append(_mismatch_error(oracle, failed, len(stats)))
+                why = f"{len(failed)} of {len(stats)} output(s) failed the oracle there"
+                failure = _FinalFailure(f"{lead}{mismatch_text(oracle, stats)}", True, why)
+        record = FinalTest(
+            executor=final.name, device=final.device, stage_reached=reached, diagnostics=diagnostics, run=info,
+            alignment=alignment, passed=failure is None,
+        )
+        return record, failure
+
     def describe(self) -> str:
         """Return a one-line description of the stage."""
         context = self.context
@@ -3505,6 +3667,11 @@ class RunLoopStage:
             mismatch += (
                 f" and each run that stopped at ttsim's coord_to_tile gap, read as an addressing error "
                 f"(loop.{COORD_GAP_AS_ERROR})"
+            )
+        if context.final is not None:
+            mismatch += (
+                f" and each attempt whose run passed the oracle but whose final test, a rebuild run once on the "
+                f"{context.final.name} executor ({context.final.device or 'no device named'}), failed (final_executor)"
             )
         passages = passages_described(context, RETRIEVAL_CORRECT)
         return (
@@ -3762,6 +3929,68 @@ def _cap_end(trial: Trial, cap: int, outputs: str | None, gap: str | None) -> Tr
         return _ended(trial, SIM_GAP, _gap_cap_message(index, gap, cap))
     left = "a run error" if outputs is None else "an oracle mismatch"
     message = f"{left} remained after {cap} correction(s), the cap loop.max_corrections sets"
+    return _ended(trial, CORRECTION_CAP, message)
+
+
+class _FinalFailure(NamedTuple):
+    """A failed final test (task P17.55): the correction's text, whether it is an oracle mismatch, and why, briefly.
+
+    `text` is final_lead and then the error text a failed run of the trial's
+    executor would feed back; `mismatch` sends it with MISMATCH_PROMPT;
+    `why` is the FINAL_TEST_FAILED error's reason.
+    """
+
+    text: str
+    mismatch: bool
+    why: str
+
+
+def final_lead(context: RunContext) -> str:
+    """Return the words a final test's correction starts with: where the program passed, and where it then failed.
+
+    It names the simulator when the trial's executor declares SIMULATOR and
+    the hardware when the final executor declares SILICON, else each
+    executor by role or by name, so a model reads which run failed.
+    """
+    final = cast(FinalExecutor, context.final)
+    passed = "on the simulator" if declares(context.executor, SIMULATOR) else "on the trial's executor"
+    where = "on the hardware" if declares(final.executor, SILICON) else f"on the {final.name} executor"
+    return (
+        f"the program passed the oracle {passed}, but its final test, the same files built again and run once {where} "
+        "on the same inputs, failed: "
+    )
+
+
+def final_limits(context: RunContext, trial: Trial) -> Limits:
+    """Return a final test's limits: an attempt run's (attempt_limits), its wall limit at least FINAL_WALL_FLOOR_S."""
+    limits = attempt_limits(context, trial)
+    return Limits(wall_s=max(limits.wall_s, FINAL_WALL_FLOOR_S), memory_mb=limits.memory_mb, cpus=limits.cpus)
+
+
+def _with_final(trial: Trial, record: FinalTest, final: FinalExecutor, why: str | None) -> Trial:
+    """Return `trial` with `record` as its last attempt's final test; a failure (`why`) adds a FINAL_TEST_FAILED error.
+
+    The error names the final executor (FinalTest.device names its device),
+    so the attempt's own diagnostics say that its passing run did not pass
+    there; the attempt's stage, run, and alignment stay those of the
+    trial's executor.
+    """
+    attempt = trial.attempts[-1]
+    diagnostics = list(attempt.diagnostics)
+    if why is not None:
+        message = f"the run passed the oracle, but the final test on the {final.name} executor failed: {why}"
+        diagnostics.append(Diagnostic(stage="run", severity="error", code=FINAL_TEST_FAILED, message=message))
+    tested = dataclasses.replace(attempt, final_test=record, diagnostics=diagnostics)
+    return dataclasses.replace(trial, attempts=[*trial.attempts[:-1], tested])
+
+
+def _final_cap_end(trial: Trial, cap: int) -> Trial:
+    """Return `trial` ended at CORRECTION_CAP after a failed final test with the cap reached (task P17.55)."""
+    final = trial.attempts[-1].final_test
+    name = "the final executor" if final is None else f"the {final.executor} executor"
+    message = (
+        f"a failed final test on {name} remained after {cap} correction(s), the cap loop.max_corrections sets"
+    )
     return _ended(trial, CORRECTION_CAP, message)
 
 

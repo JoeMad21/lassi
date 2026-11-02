@@ -14,11 +14,12 @@ The interface these tests assume, which task P17.16 adds:
 - lassi.executors.tt_silicon registers TtSiliconExecutor as Executor
   "tt_silicon" with exactly the capabilities runs_code, sandboxed, and
   silicon, and the config keys hugepages, reset_filter, and harness. The
-  capability `silicon` is proposed here as lassi.core.capabilities SILICON:
-  an executor that runs programs on accelerator silicon, which only a human
-  starts (Agent Rule 9), so the runner refuses it without `lassi run
-  --silicon` (tests/core/test_runner_silicon.py). It declares neither
-  simulator nor takes_device: every card is exposed, so there is no card key.
+  capability `silicon` is lassi.core.capabilities SILICON: an executor that
+  runs programs on accelerator silicon, which the runner runs like any
+  other, with no start flag (the owner's answers to OQ-078 and OQ-099,
+  2026-10-29; task P17.53; tests/core/test_runner_silicon.py). It declares
+  neither simulator nor takes_device: every card is exposed, so there is no
+  card key.
 - Settings, each required with no default (OQ-075): hugepages, whose one
   value is "private-per-run" (1b), and reset_filter, a bool (4a). An absent
   value or any other is a ValueError naming the key, raised before any host
@@ -28,62 +29,75 @@ The interface these tests assume, which task P17.16 adds:
   executor's); root, the host root every host path is read under (default
   "/"); access, the read-and-write check asked about each card node
   (default access(2), which opens nothing); owner, a path's uid (default
-  lstat's st_uid); uid, this account's (default os.getuid()); clock and
-  sleep (default time.monotonic and time.sleep); and flock (default None,
-  meaning fcntl.flock, imported only when a lock is taken, so the module
-  imports on Windows). The fakes pass flock Linux's <sys/file.h> values
-  (LOCK_EX 2, LOCK_NB 4, LOCK_UN 8), which fcntl gives on Linux.
-- Construction reads the host under root from file metadata and sysfs or
-  procfs text only, opens no device node, and starts no process. It takes
-  every all-digit name in /dev/tenstorrent, in numeric order (by-id and
-  any other name skipped), and refuses with DeviceUnavailable, naming the
-  host path and never the root-joined one: no card; a node that is missing
-  or that access denies; a card whose class directory
-  /sys/class/tenstorrent/tenstorrent!<n> is missing, whose tt_card_type is
-  not n300, whose tt_serial, tt_fw_bundle_ver, or tt_arc_fw_ver is missing
-  (every result records them), whose device/uevent gives no PCI_SLOT_NAME,
-  or whose device/iommu_group/type starts with DMA (spike, Finding 2: inside
-  the bind UMD would read no IOMMU); no /sys/module/tenstorrent/version, no
+  lstat's st_uid); link, a link's text (default readlink(2), which opens
+  nothing; task P17.54); uid, this account's (default os.getuid()); clock
+  and sleep (default time.monotonic and time.sleep); and flock (default
+  None, meaning fcntl.flock, imported only when a lock is taken, so the
+  module imports on Windows). The fakes pass flock Linux's <sys/file.h>
+  values (LOCK_EX 2, LOCK_NB 4, LOCK_UN 8), which fcntl gives on Linux.
+- Construction reads the host under root from file metadata, link texts,
+  and sysfs or procfs text only, opens no device node, and starts no
+  process. It takes every all-digit name in /dev/tenstorrent, in numeric
+  order (by-id and any other name skipped), and refuses with
+  DeviceUnavailable, naming the host path and never the root-joined one:
+  no card; a node that is missing or that access denies; a card whose class
+  directory /sys/class/tenstorrent/tenstorrent!<n> is missing, whose
+  tt_card_type is not n300, whose tt_serial, tt_fw_bundle_ver, or
+  tt_arc_fw_ver is missing (every result records them), whose device/uevent
+  gives no PCI_SLOT_NAME, whose /sys/bus/pci/devices/<address> is no link
+  to a device directory below /sys/devices that the sandbox can bind at its
+  own path, or whose iommu_group link leads anywhere but
+  /sys/kernel/iommu_groups/<n>; no /sys/module/tenstorrent/version, no
   /sys/bus/pci/slots, no 1 GiB nr_hugepages or fewer than 2 pages per card
-  in it; no /dev/hugepages-1G directory, or no /proc/mounts line of type
-  hugetlbfs at /dev/hugepages-1G with pagesize=1024M; more numbered nodes
-  than the sandbox's TENSTORRENT_CARDS_MAX; and a quarantine marker.
-  $LASSI_SCRATCH unset or relative is refused too, naming it.
+  in it (UMD's host-memory channels in either IOMMU mode); while any card is
+  in no DMA domain (pass-through, UMD's hugepage path), no /dev/hugepages-1G
+  directory, or no /proc/mounts line of type hugetlbfs at /dev/hugepages-1G
+  with pagesize=1024M; more numbered nodes than the sandbox's
+  TENSTORRENT_CARDS_MAX; and a quarantine marker. $LASSI_SCRATCH unset or
+  relative is refused too, naming it. A card in a DMA domain is never
+  refused (task P17.53): each card's IOMMU group and domain type are
+  recorded in device().
 - run(artifact, inputs, limits), with the ttsim executor's workdir and
   install rules (the pinned tt-metal tree only; no ttsim library):
   1. it refuses while a quarantine marker exists (SandboxUnavailableError
      naming it);
   2. the lock (OQ-075 (2a)): one file directly under $LASSI_SCRATCH/locks,
-     which the sandbox hides, taken with flock LOCK_EX | LOCK_NB and held
-     through the cleanup; another holder makes the run refuse with
-     SandboxUnavailableError naming the file and the pid the holder wrote
-     in it, so the file is opened without truncation before the lock is
-     taken; it is released on every path, and the file stays in place
-     between runs (removing it would let two processes lock two files); a
-     holder whose pid cannot be read refuses the run too, its descriptor
-     closed, and a failure to clear the pid never hides the run's own
-     exception;
+     which the sandbox hides, tried with flock LOCK_EX | LOCK_NB and held
+     through the cleanup; while another process holds it the run waits,
+     trying again every POLL_INTERVAL_S at most, and refuses only after
+     LOCK_WAIT_S, with SandboxUnavailableError naming the file and the pid
+     the holder wrote in it, so the file is opened without truncation
+     before the lock is taken (task P17.53: the executor waits for free
+     cards rather than refusing); it is released on every path, and the
+     file stays in place between runs (removing it would let two processes
+     lock two files); a holder whose pid cannot be read is waited for too
+     and refuses the run after the wait, its descriptor closed, and a
+     failure to clear the pid never hides the run's own exception;
   3. the poll (OQ-075 (5)): the cards are busy while another account owns a
      regular file directly in /dev/hugepages-1G or a TT_UMD_LOCK* file in
-     /dev/shm, or while fewer than 2 x <cards> 1 GiB pages are free
-     (free_hugepages); directories (libvirt's) and this account's own files
-     do not count. It checks, then sleeps at most POLL_INTERVAL_S, until the
-     cards are free or POLL_LIMIT_S has passed, and then refuses with
-     SandboxUnavailableError naming what stayed busy. The sandbox never runs
-     while a card is busy;
-  4. the run's own hugepage directory (OQ-075 (1b)): new, one segment below
-     /dev/hugepages-1G, mode 0700, empty when the program starts; afterwards
-     every entry in it is removed, links not followed, and then the
-     directory, on every path, entries the program made read-only included;
-     nothing else in /dev/hugepages-1G changes. When the directory still
-     cannot be removed, the quarantine marker names it, and the run's
-     result or exception stands;
+     /dev/shm, or while fewer than 2 1 GiB pages per pass-through card are
+     free (free_hugepages; none are needed when every card is in a DMA
+     domain, where UMD maps no hugepage); directories (libvirt's) and this
+     account's own files do not count. It checks, then sleeps at most
+     POLL_INTERVAL_S, until the cards are free or POLL_LIMIT_S has passed,
+     and then refuses with SandboxUnavailableError naming what stayed busy.
+     The sandbox never runs while a card is busy;
+  4. the run's own hugepage directory (OQ-075 (1b)), while any card is in
+     no DMA domain: new, one segment below /dev/hugepages-1G, mode 0700,
+     empty when the program starts; afterwards every entry in it is
+     removed, links not followed, and then the directory, on every path,
+     entries the program made read-only included; nothing else in
+     /dev/hugepages-1G changes. When the directory still cannot be removed,
+     the quarantine marker names it, and the run's result or exception
+     stands. With every card in a DMA domain there is none;
   5. one sandboxed run, never retried and never rerun with Watcher (Agent
      Rule 9), whose SandboxSpec holds a TenstorrentExposure: every card's
-     node at its own path; each card's PCI directory at
-     /sys/bus/pci/devices/<address>, from a source under /sys that ends in
-     that address (the bus path itself, which a bind follows on the host, or
-     the directory it resolves to); the run's hugepage directory; and the
+     node at its own path; each card's PCI directory from the card's device
+     directory below /sys/devices (what the host's
+     /sys/bus/pci/devices/<address> link resolves to) to that bus path
+     (task P17.54: the sandbox binds the directory at its own path and
+     links the bus path to it, so UMD inside reads the card's IOMMU group as
+     the host does); the run's hugepage directory, or None; and the
      reset_filter setting. The environment is the ttsim row's without
      TT_METAL_SIMULATOR (OQ-075 (8a)), the JIT cache and logs under a
      reserved directory of the workdir whose name starts with "@", no HOME,
@@ -109,10 +123,11 @@ The interface these tests assume, which task P17.16 adds:
      sim_ub and sim_gap stay None, and the diagnostics are the kernel JIT's
      (lassi.executors.ttsim read_jit_diagnostics).
 - device() names "Tenstorrent Wormhole n300 x <N> (silicon)", each card's
-  serial, firmware bundle, and ARC firmware in card order, the tenstorrent
-  driver's version, and the pinned tt-metal, from what construction read,
-  as one line of printable ASCII; never simulator. pins are tt-metal's
-  alone.
+  serial, firmware bundle, ARC firmware, and IOMMU group with its domain
+  type ("IOMMU group <n> <type>", or "no IOMMU group") in card order, the
+  tenstorrent driver's version, and the pinned tt-metal, from what
+  construction read, as one line of printable ASCII; never simulator. pins
+  are tt-metal's alone.
 
 Every host tree is SYNTHETIC (tt_silicon_fakes), under tmp_path; no test
 reads the real /dev or /sys. No sandbox or process starts (fake Sandboxes
@@ -150,6 +165,7 @@ from tt_silicon_fakes import (
     MOUNTS,
     NODE_DIR,
     OTHER_UID,
+    PCI_DEVICES,
     PRIVATE_PER_RUN,
     SHM,
     SLOTS,
@@ -162,6 +178,8 @@ from tt_silicon_fakes import (
     arc,
     build,
     bundle,
+    device_dir,
+    group,
     identity,
     mounts_text,
     path_identity,
@@ -189,7 +207,7 @@ CONFIG_KEYS = frozenset({"hugepages", "reset_filter", "device_profiler", "harnes
 KEYWORDS = frozenset(
     {
         "hugepages", "reset_filter", "device_profiler", "harness", "hidden_roots", "toolchains", "sandbox", "root",
-        "access", "owner", "uid", "clock", "sleep", "flock",
+        "access", "owner", "link", "uid", "clock", "sleep", "flock",
     }
 )  # fmt: skip
 MISSING = object()
@@ -484,6 +502,7 @@ def test_the_constructor_takes_the_two_settings_and_keyword_seams(module: Module
     assert Path(params["root"].default) == Path("/")
     assert params["access"].default is importlib.import_module("lassi.executors.devices")._accessible
     assert params["clock"].default is time.monotonic and params["sleep"].default is time.sleep
+    assert params["link"].default is module._link_text, "readlink(2), which opens nothing (task P17.54)"
     assert params["flock"].default is None, "None means fcntl.flock, imported only when a lock is taken"
     assert all(params[name].default is None for name in ("harness", "hidden_roots", "toolchains", "sandbox"))
     assert list(inspect.signature(module.TtSiliconExecutor.run).parameters) == ["self", "artifact", "inputs", "limits"]
@@ -611,6 +630,19 @@ def _no_numbered_node(host: Host) -> list[str]:
     return [NODE_DIR]
 
 
+def _relinked(path: Callable[[Host], str], text: str | None) -> Callable[[Host], list[str]]:
+    """Return a change that removes the host's link at `path` (`text` None) or gives it `text`; it names the path."""
+
+    def change(host: Host) -> list[str]:
+        if text is None:
+            del host.links[path(host)]
+        else:
+            host.links[path(host)] = text
+        return [path(host)]
+
+    return change
+
+
 # Each case changes the SYNTHETIC tree and returns the texts the refusal must name (host paths, never root-joined).
 REFUSALS: dict[str, Callable[[Host], list[str]]] = {
     "no-node-directory": _removed(lambda h: h.at(NODE_DIR), lambda h: [NODE_DIR]),
@@ -621,8 +653,15 @@ REFUSALS: dict[str, Callable[[Host], list[str]]] = {
     "not-an-n300": _written(
         lambda h: h.class_dir(1) / "tt_card_type", "SYNTHETIC-p150\n", lambda h: [h.class_path(1), "SYNTHETIC-p150"]
     ),
-    "dma-iommu": _written(
-        lambda h: h.class_dir(4) / "device" / "iommu_group" / "type", "DMA-FQ\n", lambda h: [h.class_path(4), "DMA"]
+    "no-bus-link": _relinked(lambda h: f"{PCI_DEVICES}/{address(2)}", None),
+    "bus-link-outside-the-device-tree": _relinked(
+        lambda h: f"{PCI_DEVICES}/{address(5)}", f"../../../class/SYNTHETIC/{address(5)}"
+    ),
+    "bus-link-under-the-uncovered-system-entry": _relinked(
+        lambda h: f"{PCI_DEVICES}/{address(1)}", f"../../../devices/system/{address(1)}"
+    ),
+    "group-link-outside-the-groups": _relinked(
+        lambda h: f"{device_dir(3)}/iommu_group", "../../../../../../../../kernel/SYNTHETIC/138"
     ),
     "no-serial": _removed(lambda h: h.class_dir(6) / "tt_serial", lambda h: [h.class_path(6), "tt_serial"]),
     "no-firmware-bundle": _removed(
@@ -671,9 +710,69 @@ def test_a_denied_node_is_refused_and_access_is_asked_only_about_nodes_that_exis
 
 
 def test_a_card_without_an_iommu_group_or_an_eth_version_is_accepted(module: ModuleType, host: Host) -> None:
-    remove(host.class_dir(0) / "device" / "iommu_group")
+    del host.links[f"{device_dir(0)}/iommu_group"]
     remove(host.class_dir(1) / "tt_eth_fw_ver")
+    line = build(module, host, sandbox=ExplodingSandbox()).device()
+    assert "(silicon)" in line and f"ARC firmware {arc(0)}, no IOMMU group;" in line, line
+
+
+# ---------------------------------------------------------------------------
+# Each card's IOMMU group and domain type: recorded, never refused (tasks P17.53 and P17.54)
+
+
+@pytest.mark.parametrize("mode", ["identity", "DMA", "DMA-FQ"])
+def test_every_cards_iommu_group_and_domain_type_are_recorded_and_none_is_refused(
+    module: ModuleType, tmp_path: Path, mode: str
+) -> None:
+    host = write_host(tmp_path / mode, iommu=mode)
+    executor = build(module, host, sandbox=ExplodingSandbox())
+    line = executor.device()
+    for card in host.cards:
+        assert f"ARC firmware {arc(card)}, IOMMU group {group(card)} {mode}" in line, (card, line)
+    assert [card.iommu_group for card in executor.cards] == [str(group(card)) for card in host.cards]
+    assert [card.iommu_type for card in executor.cards] == [mode] * len(host.cards)
+    assert [card.device_dir for card in executor.cards] == [device_dir(card) for card in host.cards]
+
+
+def test_a_mixed_host_records_each_cards_own_domain(module: ModuleType, tmp_path: Path) -> None:
+    host = write_host(tmp_path / "mixed", iommu={0: "DMA-FQ", 3: "DMA"})
+    line = build(module, host, sandbox=ExplodingSandbox()).device()
+    assert f"IOMMU group {group(0)} DMA-FQ" in line and f"IOMMU group {group(3)} DMA;" in line, line
+    assert f"IOMMU group {group(1)} identity" in line, line
+
+
+def test_an_unreadable_group_type_is_recorded_as_unread(module: ModuleType, host: Host) -> None:
+    remove(host.group_type(2))
+    line = build(module, host, sandbox=ExplodingSandbox()).device()
+    assert f"IOMMU group {group(2)} type unread" in line, line
+
+
+@pytest.mark.parametrize("mode", ["DMA", "DMA-FQ"])
+def test_with_every_card_in_a_dma_domain_no_hugepage_mount_is_needed(
+    module: ModuleType, tmp_path: Path, mode: str
+) -> None:
+    # Under a DMA domain UMD maps its host memory without hugepages (umd chip_helpers/silicon_sysmem_manager.cpp:55-61,
+    # :260-284), so the mount and the directory are needed only while a card is in no DMA domain.
+    host = write_host(tmp_path / mode, iommu=mode)
+    remove(host.at(HUGEPAGE_POINT))
+    write_text(host.at(MOUNTS), mounts_text("tmpfs /run tmpfs rw 0 0"))
     assert "(silicon)" in build(module, host, sandbox=ExplodingSandbox()).device()
+    mixed = write_host(tmp_path / f"{mode}-one-pass-through", iommu={card: mode for card in range(1, 8)})
+    remove(mixed.at(HUGEPAGE_POINT))
+    with pytest.raises(DeviceUnavailable) as caught:
+        build(module, mixed, sandbox=ExplodingSandbox())
+    assert HUGEPAGE_POINT in str(caught.value), "one pass-through card needs UMD's hugepage path"
+
+
+def test_with_every_card_in_a_dma_domain_the_page_count_still_sets_umds_channels(
+    module: ModuleType, tmp_path: Path
+) -> None:
+    # UMD grants each card min(asked, max(1, nr_hugepages / cards)) host-memory channels in either mode (umd
+    # hugepage.cpp:47-68), so fewer than two pages a card gives an n300 too few channels under a DMA domain too.
+    host = write_host(tmp_path / "dma", iommu="DMA", pages=15)
+    with pytest.raises(DeviceUnavailable) as caught:
+        build(module, host, sandbox=ExplodingSandbox())
+    assert "nr_hugepages" in str(caught.value) and str(host.needed_pages()) in str(caught.value), str(caught.value)
 
 
 def test_more_cards_than_the_sandbox_can_expose_are_refused_at_construction(
@@ -796,16 +895,44 @@ def test_the_exposure_gives_every_card_its_pci_directory_and_the_runs_hugepages(
     assert isinstance(exposure, sandbox_module.TenstorrentExposure)
     nodes = [f"{NODE_DIR}/{card}" for card in host.cards]
     assert pairs(exposure.nodes) == [(node, node) for node in nodes], "every card, each at its own path; no by-id"
-    targets = [posix(bind.target) for bind in exposure.pci_dirs]
-    assert targets == [f"/sys/bus/pci/devices/{address(card)}" for card in host.cards]
-    for bind, card in zip(exposure.pci_dirs, host.cards, strict=True):
-        source = posix(bind.source)
-        assert source.startswith("/sys/") and source.rsplit("/", 1)[1] == address(card), source
+    expected = [(device_dir(card), f"{PCI_DEVICES}/{address(card)}") for card in host.cards]
+    assert pairs(exposure.pci_dirs) == expected, "each card's device directory, as its bus link resolves it"
     hugepages = PurePosixPath(posix(exposure.hugepages))
     assert hugepages.parent == PurePosixPath(HUGEPAGE_POINT) and len(hugepages.parts) == 4, hugepages
     assert exposure.reset_filter is reset_filter
     command = sandbox_module.sandbox_command(spec, argv, limits)
-    assert script_of(command) == sandbox_module.TENSTORRENT_SETUP_SCRIPTS[reset_filter]
+    assert script_of(command) == sandbox_module.TENSTORRENT_SETUP_SCRIPTS[(reset_filter, True)]
+
+
+def test_with_every_card_in_a_dma_domain_a_run_takes_no_hugepage_and_needs_no_free_page(
+    module: ModuleType, tmp_path: Path, install: Any, roots: Roots
+) -> None:
+    host = write_host(tmp_path / "dma", iommu="DMA-FQ", free=0)
+    before, clock = tree(host.at(HUGEPAGE_POINT)), Clock()
+    executor, fake = silicon(module, host, install, clock=clock)
+    executor.run(make_artifact(roots.runs), INPUTS, LIMITS)
+    ((spec, argv, limits),) = [(call.spec, call.argv, call.limits) for call in fake.calls]
+    assert spec.devices.hugepages is None, "UMD maps no hugepage under a DMA domain"
+    assert pairs(spec.devices.pci_dirs) == [(device_dir(card), f"{PCI_DEVICES}/{address(card)}") for card in host.cards]
+    command = sandbox_module.sandbox_command(spec, argv, limits)
+    assert script_of(command) == sandbox_module.TENSTORRENT_SETUP_SCRIPTS[(True, False)]
+    assert clock.sleeps == [], "no free 1 GiB page is needed, so the cards are free at once"
+    assert tree(host.at(HUGEPAGE_POINT)) == before and markers(roots) == []
+
+
+def test_a_mixed_host_takes_the_hugepage_directory_and_free_pages_for_its_pass_through_cards(
+    module: ModuleType, tmp_path: Path, install: Any, roots: Roots
+) -> None:
+    # Two pass-through cards need 2 x 2 free pages; the six in DMA domains need none.
+    host = write_host(tmp_path / "mixed", iommu={card: "DMA" for card in range(2, 8)}, free=4)
+    clock, artifact = Clock(), make_artifact(roots.runs)
+    executor, fake = silicon(module, host, install, clock=clock)
+    executor.run(artifact, INPUTS, LIMITS)
+    assert fake.calls[0].spec.devices.hugepages is not None and clock.sleeps == []
+    write_text(host.pool("free_hugepages"), "3\n")
+    with pytest.raises(SandboxUnavailableError) as caught:
+        executor.run(artifact, INPUTS, LIMITS)
+    assert "free_hugepages reads 3" in str(caught.value) and "4" in str(caught.value), str(caught.value)
 
 
 def test_nodes_are_taken_in_numeric_order(module: ModuleType, tmp_path: Path, install: Any, roots: Roots) -> None:
@@ -933,13 +1060,21 @@ def test_every_ending_releases_the_lock_and_removes_the_runs_hugepage_directory(
     assert tree(host.at(HUGEPAGE_POINT)) == before, f"{case}: the hugepage directory is not as it was"
 
 
-def test_a_lock_another_process_holds_refuses_the_run_naming_the_file_and_its_pid(
+def test_the_lock_wait_is_bounded_and_longer_than_the_card_poll(module: ModuleType) -> None:
+    wait = attribute(module, "LOCK_WAIT_S")
+    assert isinstance(wait, (int, float)) and wait >= module.POLL_LIMIT_S > module.POLL_INTERVAL_S, wait
+    assert "LOCK_WAIT_S" in (module.__doc__ or ""), "the docstring says how long a run waits for the lock"
+
+
+def test_a_lock_another_process_holds_is_waited_for_then_refused_naming_the_file_and_its_pid(
     module: ModuleType, host: Host, install: Any, roots: Roots
 ) -> None:
-    flock = FakeFlock()
+    flock, clock = FakeFlock(), Clock()
     files: list[Path] = []
     effects = [lambda spec, argv: files.extend(flock.held_files(roots.locks)), None]
-    executor, fake = silicon(module, host, install, flock=flock, results=[canned(), canned()], effects=effects)
+    executor, fake = silicon(
+        module, host, install, flock=flock, clock=clock, results=[canned(), canned()], effects=effects
+    )
     artifact = make_artifact(roots.runs)
     executor.run(artifact, INPUTS, LIMITS)
     (lock,) = files
@@ -953,10 +1088,40 @@ def test_a_lock_another_process_holds_refuses_the_run_naming_the_file_and_its_pi
         message = str(caught.value)
         assert names_path(message, lock) and "424242" in message, message
         assert len(fake.calls) == 1, "no program runs while another process holds the lock"
+        wait, interval = module.LOCK_WAIT_S, module.POLL_INTERVAL_S
+        assert wait <= sum(clock.sleeps) <= wait + interval, "it waited for the lock, then refused"
+        assert all(0 < seconds <= interval for seconds in clock.sleeps), clock.sleeps
+        assert markers(roots) == [], "a run that never took the lock marks nothing"
     finally:
         os.close(holder)
     executor.run(artifact, INPUTS, LIMITS)
     assert len(fake.calls) == 2, "once the holder is gone, the next run goes ahead"
+
+
+def test_a_held_lock_is_waited_for_and_the_run_starts_once_it_is_released(
+    module: ModuleType, host: Host, install: Any, roots: Roots
+) -> None:
+    flock, clock = FakeFlock(), Clock()
+    artifact, lock, holder = _held_lock(module, host, install, roots, flock)
+    released: list[int] = []
+
+    def release_on_second(count: int) -> None:
+        if count == 2:
+            os.close(holder)
+            released.append(count)
+
+    clock.on_sleep = release_on_second
+    starts: list[int] = []
+    executor, fake = silicon(
+        module, host, install, flock=flock, clock=clock, effects=[lambda spec, argv: starts.append(len(clock.sleeps))]
+    )
+    try:
+        executor.run(artifact, INPUTS, LIMITS)
+    finally:
+        if not released:
+            os.close(holder)
+    assert released == [2] and starts == [2], "the program started once the holder let the lock go"
+    assert len(fake.calls) == 1 and flock.held_files(roots.locks) == []
 
 
 def _lock_fds(monkeypatch: pytest.MonkeyPatch, lock: Path) -> list[int]:

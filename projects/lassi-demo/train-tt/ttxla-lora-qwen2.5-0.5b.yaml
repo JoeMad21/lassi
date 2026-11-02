@@ -26,7 +26,7 @@
 # - Time: the compile of a 24-layer training graph at 3,104 tokens is the larger unknown, 20 to 40 minutes by the
 #   spike's estimate; so 25 to 60 minutes in all, and timeout_s 4500 (75 minutes) ends it as a hang past that.
 base_model: Qwen/Qwen2.5-0.5B@060db6499f32faf8b98477b0a26969ef7d8b9987  # the Hub API's sha on 2026-10-26 (the spike)
-method: sft  # the only method on silicon: RL rewards never execute there (Agent Rule 9)
+method: sft  # the ttxla trainer's one method (lassi.train.ttxla_trainer)
 weights: lora
 lora: {r: 16, targets: all-linear}  # every linear layer but the output layer
 trainer:

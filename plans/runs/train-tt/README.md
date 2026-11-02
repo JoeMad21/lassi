@@ -6,7 +6,7 @@ no session once started, and follows, stops, and pulls it. Every command has `--
 What it runs, and why it may: OQ-100 (a) with (s2) (the owner, 2026-10-26: "Yes, approved on both fronts."):
 training runs of tracked code on the cards, started by the owner; one start runs a sequence of runs, each its own
 process, spaced, stopping at the first failure or hang. Every run is sft through the tt-xla wheel (the ttxla
-trainer; plans/spikes/tt-training.md, Finding 3): no reward, so RL never touches silicon, and nothing
+trainer; plans/spikes/tt-training.md, Finding 3), with no reward, and nothing
 model-generated runs on a card. Each run holds the cards' lock for its whole length, polls the cards first, and
 leaves the tt_silicon quarantine marker after a hang, a kill, or a crash; nothing is retried. Each worker runs in
 its own empty network namespace (`trainer.network: none` in every recipe; `unshare --user --map-root-user --net`),
@@ -60,7 +60,7 @@ quarantine it. `uv run tools/train_tt.py stop --clear` removes the STOP file, wi
 ## A quarantine
 
 After a hang, a kill, or a crash, `$LASSI_SCRATCH/locks/tt-silicon.quarantine` names the ending and the card. Every
-later silicon run, `lassi run --silicon` or `lassi train --silicon`, is refused until a person checks the card (a
+later silicon run, of `lassi run` or `lassi train`, is refused until a person checks the card (a
 reset, if one is needed, is the owner's: agents have no SMI tool and the gate refuses its name) and removes the
 file. A failure of the compile or a refused record ends cleanly and leaves no marker.
 

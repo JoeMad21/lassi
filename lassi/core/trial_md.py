@@ -453,14 +453,44 @@ def _measurement_blocks(attempt: Attempt, simulator: bool = False) -> list[str]:
     ]
 
 
+def _final_test_blocks(attempt: Attempt) -> list[str]:
+    """Return the attempt's Final test section (task P17.55); nothing when it has no final test.
+
+    It shows the final executor, its device, the stage, and whether it
+    passed, then that run (its wall_s never labelled a simulator's, and its
+    device time when measured), its alignment, and its diagnostics.
+    """
+    final = attempt.final_test
+    if final is None:
+        return []
+    fields = ("Field", "Value")
+    rows = [("executor", final.executor), ("device", fmt_provenance(final.device)),
+            ("stage_reached", final.stage_reached), ("passed", fmt(final.passed))]
+    alignment = final.alignment
+    per_input = ", ".join(fmt(value) for value in alignment.per_input) or PLACEHOLDER
+    stats = [] if alignment.outputs is None else ["#### Final test per output\n", *_stats_blocks(alignment.outputs)]
+    return [
+        "### Final test\n",
+        _table(fields, rows),
+        "#### Final test run\n",
+        _table(fields, _run_rows(final.run, False)),
+        *_output_file_blocks(final.run),
+        "#### Final test alignment\n",
+        _table(fields, [("per_input", per_input), ("mean", fmt(alignment.mean))]),
+        *stats,
+        *_diagnostic_blocks(final.diagnostics, "####"),
+    ]
+
+
 def _attempt_blocks(attempt: Attempt, store: TextStore, simulator: bool = False) -> list[str]:
-    """Return the whole section of one attempt; `simulator` labels its run's wall_s."""
+    """Return the whole section of one attempt; `simulator` labels its run's wall_s; a final test follows it."""
     blocks = [f"## Attempt {attempt.index}\n", f"Stage reached: {attempt.stage_reached}\n"]
     blocks += _prompt_blocks(attempt, store)
     blocks += _code_blocks(attempt.files)
     blocks += _diff_blocks(attempt)
     blocks += _diagnostic_blocks(attempt.diagnostics)
     blocks += _measurement_blocks(attempt, simulator)
+    blocks += _final_test_blocks(attempt)
     return blocks
 
 

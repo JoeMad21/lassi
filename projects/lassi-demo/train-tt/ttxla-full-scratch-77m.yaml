@@ -24,7 +24,7 @@
 # - Time: with the compile of a 12-layer graph, 15 to 40 minutes (the spike's estimate, scaled down; not read from
 #   any run), 20 to 50 minutes in all; timeout_s 3600 (60 minutes) ends it as a hang past that.
 base_model: scratch:qwen3-77m  # assets/train/scratch/qwen3-77m/: config.json and tokenizer-pin.json
-method: sft  # the only method on silicon: RL rewards never execute there (Agent Rule 9)
+method: sft  # the ttxla trainer's one method (lassi.train.ttxla_trainer)
 weights: full  # a scratch base trains full weights only
 trainer:
   kind: ttxla

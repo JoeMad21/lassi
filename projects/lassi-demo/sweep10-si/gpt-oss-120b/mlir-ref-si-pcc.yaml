@@ -1,0 +1,20 @@
+# sweep10-si, silicon as the correction loop's final test (task P17.56; the owner's answers of 2026-10-29 to OQ-078
+# and OQ-099: "It should be like TT-SIM. SIlicon [sic] is there as a final test gate, no human's required"): cpp -> ttkernel
+# on tt-pairs-v0-ttkernel, the pcc items: the matmuls, combo ref (the exact API reference of the dialect in place of
+# the model's card), as sweep10/gpt-oss-120b/mlir-ref-pcc.yaml, which this extends and whose comments hold. The MLIR
+# path only, under the owner's MLIR-only direction of 2026-10-29. What it adds (task P17.55): every attempt still
+# builds and runs on ttsim, a simulator, first; one whose run there passes the oracle on the held-out inputs is built
+# once more and run once on the Wormhole cards through the sandboxed tt_silicon executor (one placement at a time
+# under the cards' lock, never retried, the quarantine after a hang), its outputs judged by the same oracle. A pass
+# there passes the trial; a failure or a mismatch there is fed back as a run correction within the one cap of 8. The
+# final test's device time comes from tt-metal's device profiler (device_profiler kernel, the pin built with Tracy on,
+# OQ-105 (b)), labelled with the cards' device line. sandbox.mem_gb 32 (PROJECTED, from the source, not measured):
+# under a translating (DMA) IOMMU domain UMD maps each card's host-memory channels as anonymous memory, 1 GiB each and
+# two per card for alpha01's eight cards, 16 GiB, which counts toward the run's memory limit
+# (lassi.executors.tt_silicon, Known limits), so the base's 16 GB would not hold it; the ttsim runs get the same
+# limit. Launch only as plans/runs/silicon-launch.md says: every card's IOMMU domain read as DMA first, the gate's
+# tt_silicon class enabled by the owner, and Agent Rule 9 in the owner's words. Exploratory; tt-pairs-v0 is a
+# development set (OQ-083 (b)).
+extends: ../../sweep10/gpt-oss-120b/mlir-ref-pcc.yaml
+final_executor: {kind: tt_silicon, hugepages: private-per-run, reset_filter: true, device_profiler: kernel}
+sandbox: {mem_gb: 32}

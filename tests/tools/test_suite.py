@@ -24,7 +24,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
@@ -42,7 +42,7 @@ JOB_ID = "20261026-170035-suite-ab12"  # PLACEHOLDER job id in the gate's format
 HEAD = "0123456789abcdef0123456789abcdef01234567"  # PLACEHOLDER commit
 
 LAUNCH_OPTIONS = ("--models", "--table", "--sweep", "--only", "--hours", "--until", "--skip-download", "--name",
-                  "--slot", "--yes", "--allow-dirty", "--silicon")
+                  "--slot", "--yes", "--allow-dirty")
 PLAN_OPTIONS = tuple(option for option in LAUNCH_OPTIONS if option != "--yes")
 SUBCOMMAND_OPTIONS = {
     "plan": PLAN_OPTIONS,
@@ -322,14 +322,53 @@ def test_a_deadline_past_the_gate_limit_is_refused(suite: ModuleType, host: Fake
 # ---------------------------------------------------------------- silicon
 
 
-@pytest.mark.parametrize("name", ["plan", "launch"])
-def test_silicon_is_refused(suite: ModuleType, host: FakeHost, capsys: pytest.CaptureFixture[str],
-                            name: str) -> None:
-    assert suite.main([name, "--silicon", "--hours", "6"]) == 2
-    err = capsys.readouterr().err
-    assert "docs/tt-silicon-iommu.md" in err and "OQ-078" in err and "OQ-099" in err
-    assert "Wormhole" in err
+# Task P17.53 (the owner's answers of 2026-10-29 to OQ-078 and OQ-099): --silicon is gone, and a recipe set that
+# binds tt_silicon launches like any other, the plan naming its recipes.
+
+
+def test_there_is_no_silicon_option(suite: ModuleType, host: FakeHost,
+                                    capsys: pytest.CaptureFixture[str]) -> None:
+    assert suite.main(["plan", "--sweep", SWEEP7, "--hours", "6"]) == 0
+    assert "no Wormhole card" in capsys.readouterr().out, "sweep7 binds no silicon executor"
+    with pytest.raises(SystemExit) as exit_:
+        suite.main(["plan", "--sweep", SWEEP7, "--hours", "6", "--silicon"])
+    assert exit_.value.code == 2 and "--silicon" in capsys.readouterr().err
     assert host.rx_calls() == []
+
+
+def test_binds_silicon_reads_the_executors_capability(suite: ModuleType) -> None:
+    def recipe(*executors: str) -> SimpleNamespace:
+        return SimpleNamespace(bindings=[SimpleNamespace(interface="Executor", name=name) for name in executors])
+
+    assert suite.binds_silicon(recipe("ttsim", "tt_silicon"))
+    assert not suite.binds_silicon(recipe("ttsim", "native"))
+    assert not suite.binds_silicon(recipe("no-such-executor"))
+    toolchain = SimpleNamespace(interface="Toolchain", name="tt_silicon")
+    assert not suite.binds_silicon(SimpleNamespace(bindings=[toolchain])), "an executor's binding alone counts"
+
+
+def test_a_recipe_set_that_binds_tt_silicon_is_named_in_the_plan_and_launches(
+        suite: ModuleType, host: FakeHost, capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(suite, "binds_silicon", lambda recipe: True)
+    assert suite.main(["launch", "--sweep", SWEEP7, "--hours", "6", "--yes"]) == 0
+    out = capsys.readouterr().out
+    assert "the Wormhole cards, one placement at a time" in out and f"{SWEEP7}/" in out, out
+    assert "no Wormhole card" not in out
+    assert [argv for argv in host.rx_calls() if argv[:2] == ["job", "start"]], "the job starts as any other"
+
+
+def test_the_silicon_launch_kit_plans_the_sweep10_si_set(suite: ModuleType, host: FakeHost,
+                                                         capsys: pytest.CaptureFixture[str]) -> None:
+    # Task P17.56: the dry run of plans/runs/silicon-launch.md, step 8; the final_executor binding is what the plan
+    # reads as silicon (task P17.55). plan contacts nothing.
+    sweep = "projects/lassi-demo/sweep10-si"
+    assert suite.main(["plan", "--models", "gpt-oss-120b", "--sweep", sweep, "--hours", "6", "--skip-download"]) == 0
+    out = capsys.readouterr().out
+    assert "for the 4 recipe(s) that bind tt_silicon" in out, out
+    for name in ("mlir-ref-si-maxabs", "mlir-ref-si-pcc", "mlir-rag-si-maxabs", "mlir-rag-si-pcc"):
+        assert f"{sweep}/gpt-oss-120b/{name}" in out
+    assert host.rx_calls() == [], "plan contacts nothing"
 
 
 # ---------------------------------------------------------------- launch

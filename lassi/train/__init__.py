@@ -13,7 +13,7 @@ lassi.train.fixture_reward, and reads its base models through
 lassi.train.bases (2026-10-23); and "ttxla" (lassi.train.ttxla_trainer;
 task P17.38), which trains sft on a Tenstorrent card through the tt-xla
 wheel, running lassi/train/ttxla_worker.py in the wheel's own venv, under
-the card guard of `lassi train --silicon` (lassi.train.silicon).
+the card guard of a training run on a Tenstorrent card (lassi.train.silicon).
 lassi.train.prepare is the separate step that downloads a Hub base into
 $HF_HOME/hub (tools/prepare_train.py).
 """

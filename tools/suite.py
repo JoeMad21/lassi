@@ -5,10 +5,11 @@ The owner's tool, so the owner can launch the full suite unattended, with a help
 (the owner's direction of 2026-10-26). `launch` checks the tree and the build
 host, shows the plan, asks, and starts plans/runs/suite/run-suite.sh as one big rx job, which downloads the
 models, builds the TT assets, runs plans/runs/rngd-sweep/run.sh once per model and recipe directory (one model
-served at a time on RNGD cards, every TT program on ttsim, a simulator), and writes the tables. `plan` prints
+served at a time on RNGD cards, TT programs on ttsim, a simulator, and, for a recipe that binds the tt_silicon
+executor, on the Wormhole cards too, launched like any other recipe: task P17.53), and writes the tables. `plan` prints
 the same plan and contacts nothing. Every child process runs with MSYS_NO_PATHCONV=1, so Git Bash never rewrites
 an argument that looks like a POSIX path, and PYTHONIOENCODING=utf-8 (plans/LESSONS.md, alpha01). Standard
-library only, apart from the repository's recipe loader. plans/runs/suite/README.md is the guide.
+library only, apart from the repository's recipe loader and component registry. plans/runs/suite/README.md is the guide.
 """
 
 from __future__ import annotations
@@ -54,14 +55,9 @@ GLOB_RE = re.compile(r"^[A-Za-z0-9._*?\[\]-]+$")
 PATH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 # The gate refuses a command naming these while Tenstorrent silicon is present and disabled (gate.py, tt_guard).
 TT_GUARD = re.compile(r"tt-metal|tt_metal|ttnn|metal_example|TT_METAL")
-SILICON_MESSAGE = (
-    "--silicon is refused: this launcher never runs model-generated programs on the Wormhole cards. On alpha01 the "
-    "cards' IOMMU groups run in identity (pass-through) mode, in which a program that holds a card can make it read "
-    "or write any host memory with ordinary memory stores the sandbox's system-call filter cannot see "
-    "(docs/tt-silicon-iommu.md; OQ-078, open). Running candidates on silicon inside the correction loop also needs "
-    "an owner-worded change to Agent Rule 9 and its prerequisites (OQ-099, open). Every TT program of this suite "
-    "runs on ttsim, a simulator."
-)
+# The capability of an executor that runs programs on silicon (lassi.core.capabilities SILICON, the tt_silicon
+# executor's), by which the plan names the recipes that use the Wormhole cards.
+SILICON_CAPABILITY = "silicon"
 
 
 class Refusal(Exception):
@@ -292,10 +288,26 @@ def sweeps_of(args: argparse.Namespace) -> list[str]:
     return list(args.sweep) if args.sweep else [DEFAULT_SWEEP]
 
 
-def load_sweep(sweep: str, rows: list[ModelRow], only: list[str]) -> dict[str, list[str]]:
+def binds_silicon(recipe: object) -> bool:
+    """Return True when a loaded recipe binds an executor that runs programs on silicon (the tt_silicon executor).
+
+    It reads each Executor binding's registered capabilities, never the name: the executor section's and the
+    final_executor section's (task P17.55, silicon as the loop's final test) alike.
+    """
+    from lassi.core.registry import DEFAULT_REGISTRY
+
+    for binding in getattr(recipe, "bindings", ()):
+        if binding.interface == "Executor" and binding.name in DEFAULT_REGISTRY.names("Executor"):
+            if SILICON_CAPABILITY in DEFAULT_REGISTRY.get("Executor", binding.name).capabilities:
+                return True
+    return False
+
+
+def load_sweep(sweep: str, rows: list[ModelRow], only: list[str]) -> tuple[dict[str, list[str]], list[str]]:
     """Load every recipe under `sweep` with the repository's loader; return each model's selected recipe names.
 
-    A recipe that does not load, or a selected one whose model id is not the table's, is refused.
+    Also returns the selected recipes that bind a silicon executor, as <sweep>/<slug>/<name>, which launch like any
+    other (task P17.53). A recipe that does not load, or a selected one whose model id is not the table's, is refused.
     """
     from lassi.core import runner  # noqa: F401  (importing the runner registers every component)
     from lassi.core.recipe import RecipeError, load_recipe
@@ -310,7 +322,7 @@ def load_sweep(sweep: str, rows: list[ModelRow], only: list[str]) -> dict[str, l
         except RecipeError as exc:
             shown = path.relative_to(REPO).as_posix()
             raise Refusal(f"{shown} does not load with the repository's recipe loader: {exc}", 2) from None
-    selected = {}
+    selected, silicon = {}, []
     for row in rows:
         names = []
         for path in sorted((root / row.slug).glob("*.yaml")):
@@ -321,8 +333,10 @@ def load_sweep(sweep: str, rows: list[ModelRow], only: list[str]) -> dict[str, l
                 raise Refusal(f"{path.relative_to(REPO).as_posix()} names model {named}, but the table serves "
                               f"{row.model} as {row.slug}", 2)
             names.append(path.stem)
+            if binds_silicon(loaded[path]):
+                silicon.append(f"{sweep}/{row.slug}/{path.stem}")
         selected[row.slug] = names
-    return selected
+    return selected, silicon
 
 
 @dataclass(frozen=True)
@@ -338,6 +352,7 @@ class Plan:
     slot: str
     name: str
     skip_download: bool
+    silicon: tuple[str, ...] = ()  # the selected recipes that bind a silicon executor, as <sweep>/<slug>/<name>
 
     @property
     def count(self) -> int:
@@ -409,17 +424,21 @@ def check_words(args: argparse.Namespace) -> list[str]:
 
 
 def build_plan(args: argparse.Namespace) -> Plan:
-    """Check every launch option against the repository and return the plan; raise Refusal on any problem."""
-    if args.silicon:
-        raise Refusal(SILICON_MESSAGE, 2)
+    """Check every launch option against the repository and return the plan; raise Refusal on any problem.
+
+    A recipe set that binds the tt_silicon executor launches like any other (task P17.53), with no option for it.
+    """
     now = now_epoch()
     table = repo_path(args.table, "model table")
     rows = select_models(read_table(REPO / table, table), args.models, table)
     sweeps = [repo_path(sweep, "recipe directory") for sweep in sweeps_of(args)]
     only = check_words(args)
     recipes: dict[tuple[str, str], list[str]] = {}
+    silicon: list[str] = []
     for sweep in sweeps:
-        for slug, names in load_sweep(sweep, rows, only).items():
+        selected, on_silicon = load_sweep(sweep, rows, only)
+        silicon += on_silicon
+        for slug, names in selected.items():
             if names:
                 recipes[(slug, sweep)] = names
     for row in rows:
@@ -431,11 +450,21 @@ def build_plan(args: argparse.Namespace) -> Plan:
     deadline = now + round(args.hours * 3600) if args.hours is not None else parse_deadline(args.until, now)
     check_deadline(deadline, now, len(recipes))
     plan = Plan(rows=tuple(rows), table=table, sweeps=tuple(sweeps), only=tuple(only), recipes=recipes,
-                deadline=deadline, slot=args.slot, name=args.name, skip_download=args.skip_download)
+                deadline=deadline, slot=args.slot, name=args.name, skip_download=args.skip_download,
+                silicon=tuple(silicon))
     if TT_GUARD.search(plan.remote_command()):
         raise Refusal("the remote command names tt-metal words the gate refuses while silicon is disabled; rename "
                       "the recipe directory or table", 2)
     return plan
+
+
+def devices_line(plan: Plan) -> str:
+    """Return the plan's devices line: the RNGD cards, ttsim, and the Wormhole cards when a recipe binds tt_silicon."""
+    line = "RNGD cards claimed only at 0.00 GiB, served on port 8123; TT programs on ttsim, a simulator"
+    if not plan.silicon:
+        return line + "; no Wormhole card"
+    return (f"{line}; the Wormhole cards, one placement at a time, for the {len(plan.silicon)} recipe(s) that bind "
+            f"tt_silicon: {', '.join(plan.silicon)}")
 
 
 def render_plan(plan: Plan, tree: Tree, now: int) -> str:
@@ -463,8 +492,7 @@ def render_plan(plan: Plan, tree: Tree, now: int) -> str:
               f"  job timeout  {plan.timeout(now)} s (the deadline plus {TIMEOUT_MARGIN_S} s), recomputed at start",
               f"  free space   the preflight needs {plan.need_gb} GB free on the scratch disk (the gate's {FLOOR_GB} "
               f"GB big-job floor and a {MARGIN_GB} GB margin); downloads: {downloads}",
-              "  devices      RNGD cards claimed only at 0.00 GiB, served on port 8123; every TT program on ttsim, a "
-              "simulator; no Wormhole card",
+              f"  devices      {devices_line(plan)}",
               f"  output       lassi-wt/{plan.slot} (the job's checkout), {OUTPUT_DIR}/<job id> (pull fetches it), "
               "lassi-runs/rngd-sweep/<pass>, lassi-runs/runs/sweep-<pass>-*",
               f"  remote       {plan.remote_command()}",
@@ -745,9 +773,10 @@ TOP_DESCRIPTION = """Start LASSI's full RNGD suite on alpha01 as one rx job, the
 
 launch checks the tree and the build host, prints the plan, asks, and starts plans/runs/suite/run-suite.sh as
 one big rx job: it downloads the models, builds the TT assets, runs plans/runs/rngd-sweep/run.sh once per model
-and recipe directory (one model served at a time on RNGD cards; every TT program on ttsim, a simulator, never a
-Wormhole card), and writes the tables. plan prints the same plan and contacts nothing. Every child process runs
-with MSYS_NO_PATHCONV=1 and PYTHONIOENCODING=utf-8."""
+and recipe directory (one model served at a time on RNGD cards; TT programs on ttsim, a simulator, and on the
+Wormhole cards for a recipe that binds tt_silicon, which launches like any other), and writes the tables. plan
+prints the same plan and contacts nothing. Every child process runs with MSYS_NO_PATHCONV=1 and
+PYTHONIOENCODING=utf-8."""
 
 TOP_EPILOG = """Examples:
   uv run tools/suite.py plan --until 01:45
@@ -798,8 +827,6 @@ def add_run_options(parser: argparse.ArgumentParser) -> None:
                         "alpha01? [y/N]' (plan ignores it)")
     parser.add_argument("--allow-dirty", action="store_true", help="launch even from a dirty tree or a commit on "
                         "no origin branch; such a run is exploratory, never [MEASURED] (default: refuse)")
-    parser.add_argument("--silicon", action="store_true", help="refused, exit 2: model-generated programs do not "
-                        "run on the Wormhole cards from this launcher (docs/tt-silicon-iommu.md, OQ-078, OQ-099)")
 
 
 class HelpFormatter(argparse.RawDescriptionHelpFormatter):

@@ -255,46 +255,88 @@ v5.15 mm/shmem.c:3572-3577 and :3398-3405; with a source and a point,
 context.c:2498 reads no table). This was seen in WSL, not measured on
 alpha01.
 
-Tenstorrent access (task P17.15; bible Sandbox and Execution Backends, the
-tt_silicon row; OQ-072, OQ-075; plans/spikes/tt-silicon-executor.md,
-Findings 1 to 5). A silicon run's spec sets devices to a
-TenstorrentExposure, which the tt_silicon executor (task P17.16) is to
-build: every card's node, bound at its numbered path /dev/tenstorrent/<n>,
-since UMD opens each numbered node it lists there (Finding 1); each card's
-PCI directory, bound read-only at /sys/bus/pci/devices/<address>, beside
-the host's slot list PCI_SLOTS at its own path, both of which UMD and
-hwloc read (Finding 2); the run's own hugepage directory, strictly under
-HUGEPAGE_POINT, where UMD makes its 1 GiB files (Finding 3; OQ-075 (1b));
-and reset_filter, an explicit setting (OQ-075 (4a)). A PCI directory's
-source must end in its target's address. A node's source may be any path
-under /dev, so the remote tests can bind stand-ins; the executor is to
-bind each card's node at its own path. The driver version and the 1 GiB
-page count stay in view on the host's /sys, read-only, as in every run.
-Such a spec runs TENSTORRENT_SETUP_SCRIPTS[reset_filter]:
-DEVICE_SETUP_SCRIPT with HUGEPAGE_STEP after DEVICE_NODES_STEP, which binds
-the directory on a directory hugepages-1G in the private /dev, fails the
-setup closed (exit 2) unless the running user owns that bind's root, and
-makes that one bind writable with
+Tenstorrent access (tasks P17.15 and P17.54; bible Sandbox and Execution
+Backends, the tt_silicon row; OQ-072, OQ-075; plans/spikes/
+tt-silicon-executor.md, Findings 1 to 5). A silicon run's spec sets
+devices to a TenstorrentExposure, which the tt_silicon executor (task
+P17.16) builds: every card's node, bound at its numbered path
+/dev/tenstorrent/<n>, since UMD opens each numbered node it lists there
+(Finding 1); each card's PCI directory, beside the host's slot list
+PCI_SLOTS at its own path, both of which UMD and hwloc read (Finding 2);
+the run's own hugepage directory, strictly under HUGEPAGE_POINT, where UMD
+makes its 1 GiB files under pass-through (Finding 3; OQ-075 (1b)), or None
+for a run whose every card is in a DMA (translating) IOMMU domain, where
+UMD maps its host memory without hugepages (umd
+chip_helpers/silicon_sysmem_manager.cpp:55-61, :260-284); and
+reset_filter, an explicit setting (OQ-075 (4a)). A node's source may be
+any path under /dev, so the remote tests can bind stand-ins; the executor
+binds each card's node at its own path. The driver version, the 1 GiB page
+count, and /sys/kernel/iommu_groups stay in view on the host's /sys,
+read-only, as in every run.
+
+The IOMMU group view (task P17.54). UMD decides each card's IOMMU mode from
+one file: PCIDevice's constructor calls detect_iommu (umd
+pcie/pci_device.cpp:361), which reads the attribute iommu_group/type
+through try_read_sysfs (:102-108, the attribute at :103) and counts a value
+that starts with DMA as an IOMMU (:105); try_read_sysfs opens
+/sys/bus/pci/devices/<domain>:<bus>:<device>.<function>/<attribute> (:47-77,
+the path at :49-55, the open at :56), and a file it cannot open reads as no
+IOMMU. On the host that bus path is a link to the card's device directory
+below /sys/devices, whose iommu_group is a relative link that climbs as
+many levels as the directory lies below /sys, to
+/sys/kernel/iommu_groups/<n> (eight levels on alpha01; Finding 2, and the
+read-only probe rx 20261029-191025-exec-99dd). A directory bound at the bus
+path, four levels below /sys, made that link climb past the root, so UMD
+inside read no IOMMU whatever the host's domain. So a PCI directory is a
+DeviceBind whose source is the card's device directory, a path strictly
+below a /sys/devices entry other than system that ends in the card's
+address (what the host's bus link resolves to), and whose target is
+/sys/bus/pci/devices/<address>: the setup binds the source read-only at
+its own path, below its /sys/devices cover, and makes the target a
+symbolic link with the host's text, pci_link_text (`../../../devices/`
+and the source below /sys/devices). The walk of UMD's path then follows
+that link to the bound directory, and the group link climbs from there,
+mount point by mount point, to /sys/kernel/iommu_groups/<n>, which the
+setup never covers: UMD inside reads the domain type the host reads, under
+identity and DMA domains alike, and the group's devices list too.
+
+Such a spec runs TENSTORRENT_SETUP_SCRIPTS[(reset_filter, hugepages)],
+hugepages being whether the exposure has a hugepage directory:
+DEVICE_SETUP_SCRIPT with, when it has one, HUGEPAGE_STEP after
+DEVICE_NODES_STEP, which binds the directory on a directory hugepages-1G in
+the private /dev, fails the setup closed (exit 2) unless the running user
+owns that bind's root, and makes that one bind writable with
 `mount -o remount,bind,rw,nosuid,nodev,noexec` (the user namespace locks
 the host mount's nosuid and nodev, and a remount that dropped them would
-fail with EPERM; Finding 5 item 3); BUS_COVER_STEP before DEVICE_SYS_STEP,
-which raises the /sys/bus cover's inode cap to TENSTORRENT_BUS_INODES,
-read-only, so the cover holds the directories for every card, where the 8
-inodes of every cover hold only four cards; its own mount check,
+fail with EPERM; Finding 5 item 3); then, before DEVICE_SYS_STEP,
+BUS_COVER_STEP, which raises the /sys/bus cover's inode cap to
+TENSTORRENT_BUS_INODES and its size to TENSTORRENT_BUS_SIZE, read-only, so
+the cover holds the slot list's directory and every card's link, where the
+8 inodes of every cover hold only four cards, and PCI_COVERS_STEP, which
+raises each /sys/devices cover a card lies under to the inodes its
+directories need (its root and every directory down to each card: 23 for
+alpha01's eight cards below /sys/devices/pci0000:e2), read-only; after
+DEVICE_SYS_STEP, PCI_LINK_STEP, which makes each card's link below the
+/sys/bus cover, the cover reopened for it and made read-only again. With a
+hugepage directory the script has its own mount check,
 TENSTORRENT_MOUNT_CHECK, which trusts exactly one writable hugetlbfs mount
 at HUGEPAGE_POINT whose root in its filesystem is the run's directory and
 whose superblock has 1 GiB pages (HUGEPAGE_OPTION), and refuses every
 other writable host mount, so a plain directory bound there fails the
-setup closed; and the confinement confine_program(reset_filter), whose
-filter with reset_filter set also refuses ioctl(2) with the driver's reset
-request RESET_IOCTL, _IO(0xFA, 6) (Finding 5 item 1). Its layout is
+setup closed; without one it keeps MOUNT_CHECK, which trusts none. Every
+form has the confinement confine_program(reset_filter), whose filter with
+reset_filter set also refuses ioctl(2) with the driver's reset request
+RESET_IOCTL, _IO(0xFA, 6) (Finding 5 item 1). Its layout is
 DEVICE_SETUP_SCRIPT's with the hugepage pair, the directory and that root,
-after the /sys sources (_tenstorrent_layout). None of this was measured:
-the remote tests (tests/executors/test_sandbox_tenstorrent_remote.py) bind
-stand-ins and open no device. None of it isolates the host from a
-silicon run's program: on alpha01 a card's DMA can reach host memory, and
+after the /sys sources when there is one, the covers block before the /sys
+targets, and the links block after them (_tenstorrent_layout). None of
+this was measured: the remote tests
+(tests/executors/test_sandbox_tenstorrent_remote.py) bind stand-ins and
+open no device. Under the cards' identity domain nothing here isolates the
+host from a silicon run's program: a card's DMA can reach host memory, and
 the reset filter does not stop it (a reading, not run; Known limits;
-OQ-078).
+OQ-078); a DMA domain for every card closes that, and the sandbox works
+under it.
 
 Setup took 88 to 107 ms in the composite probes (I1, J2b, J3). Not measured:
 the backstop, TasksMax, the IPC and UTS namespaces, and the kernel warning
@@ -392,12 +434,22 @@ Known limits:
   capability), and the reset filter refuses only the reset ioctl, not a
   reset through a register. Hugetlb pages count toward neither MemoryMax
   nor --fsize, so the program may map every free 1 GiB page while it
-  runs; the P17.16 executor is to empty the run's directory before and
-  after it. UMD's per-card locks live in /dev/shm, which stays private, so
-  they do not reach other processes. Each card's iommu_group link climbs
-  out of its bind, so UMD reads "no IOMMU" inside.
-- The sandbox does not isolate the host from a silicon run's program
-  (reading, not run; plans/spikes/tt-card-dma.md; OQ-078, open):
+  runs; the P17.16 executor empties the run's directory before and after
+  it. Under a DMA domain UMD maps its host memory as anonymous memory
+  instead (umd chip_helpers/silicon_sysmem_manager.cpp:284, MAP_POPULATE,
+  a channel of 1 GiB each, umd hugepage.cpp:47-68), which counts toward
+  MemoryMax (an inference from the source, not measured). UMD's per-card
+  locks live in /dev/shm, which stays private, so they do not reach other
+  processes. Each card's iommu_group link resolves inside as on the host
+  (the IOMMU group view, above); a tmpfs link of 128 bytes or more, its
+  NUL included, takes a page of its cover (Linux v6.6 mm/shmem.c:97,
+  :3470-3480), which TENSTORRENT_BUS_SIZE leaves room for.
+- Under the cards' identity (pass-through) IOMMU domain the sandbox does
+  not isolate the host from a silicon run's program (reading, not run;
+  plans/spikes/tt-card-dma.md; OQ-078, answered on 2026-10-29: no gate in
+  the software, task P17.53; agents do not launch model-generated programs
+  on the cards while the domain is identity, a practice nothing here
+  enforces):
   - on alpha01, card 0's IOMMU domain type reads identity
     (tt-silicon-executor.md, Finding 2, probe 59e3; the other cards' were
     not read), the passthrough type that iommu=pt gives (neither spike
@@ -417,7 +469,8 @@ Known limits:
     another card (tt-card-dma.md, Finding 4), where the one-card design of
     the sibling spike's Finding 5 item 1 left it none.
   Only a translating (DMA) IOMMU domain for the cards closes this, a host
-  change outside the sandbox (tt-card-dma.md, Finding 5; OQ-078).
+  change outside the sandbox (tt-card-dma.md, Finding 5; OQ-078); the
+  sandbox gives UMD the same view of that domain as the host (task P17.54).
 """
 
 from __future__ import annotations
@@ -552,6 +605,14 @@ PCI_SLOTS = "/sys/bus/pci/slots"
 # TENSTORRENT_CARDS_MAX = 28 cards' PCI directories; SandboxSpec refuses more.
 TENSTORRENT_BUS_INODES = 32
 TENSTORRENT_CARDS_MAX = TENSTORRENT_BUS_INODES - 4
+# The /sys/bus cover's size in a Tenstorrent run (BUS_COVER_STEP), where every cover gets 4k: a page for each inode it
+# may hold, since a card's link of 128 bytes or more, its NUL included, takes a page of its tmpfs (Linux v6.6
+# mm/shmem.c:97, :3470-3480; task P17.54).
+TENSTORRENT_BUS_SIZE = f"{4 * TENSTORRENT_BUS_INODES}k"
+# The host's PCI device list, where a Tenstorrent run gets each card's link, and the device tree the links point
+# into, where it gets each card's directory at its own path (task P17.54; the IOMMU group view, module docstring).
+PCI_DEVICES = "/sys/bus/pci/devices"
+SYS_DEVICES = "/sys/devices"
 # The tenstorrent driver's reset ioctl request, _IO(0xFA, 6) (umd pcie/ioctl.h:24; Finding 5 item 1), which the
 # filter of confine_program(True) refuses.
 RESET_IOCTL = 0xFA06
@@ -1120,12 +1181,56 @@ mount -o remount,bind,rw,nosuid,nodev,noexec /tmp/dev/hugepages-1G
 """
 
 # A Tenstorrent run's step right before DEVICE_SYS_STEP: it raises the /sys/bus cover's inode cap from 8 to
-# TENSTORRENT_BUS_INODES and keeps it read-only, so DEVICE_SYS_STEP can make the slot list's and every card's
-# directories below it. It names the cover's type and source, as DEVICE_SYS_STEP's remounts do (module docstring,
-# Device access); tmpfs takes a new inode cap on remount (Linux v6.6 mm/shmem.c:4172-4175, shmem_reconfigure; read
-# at v6.6, alpha01's kernel base, where the Device access paragraph reads v5.15).
-BUS_COVER_STEP = """mount -t tmpfs -o remount,ro,nr_inodes=@INODES@ lassi-sys /sys/bus
-""".replace("@INODES@", str(TENSTORRENT_BUS_INODES))
+# TENSTORRENT_BUS_INODES and its size from 4k to TENSTORRENT_BUS_SIZE and keeps it read-only, so DEVICE_SYS_STEP can
+# make the slot list's directory and PCI_LINK_STEP every card's link below it. It names the cover's type and source,
+# as DEVICE_SYS_STEP's remounts do (module docstring, Device access); tmpfs takes a new inode cap and size on remount
+# (Linux v6.6 mm/shmem.c:4170-4175, shmem_reconfigure; read at v6.6, alpha01's kernel base, where the Device access
+# paragraph reads v5.15).
+BUS_COVER_STEP = (
+    """mount -t tmpfs -o remount,ro,nr_inodes=@INODES@,size=@SIZE@ lassi-sys /sys/bus
+""".replace("@INODES@", str(TENSTORRENT_BUS_INODES)).replace("@SIZE@", TENSTORRENT_BUS_SIZE)
+)
+
+# A Tenstorrent run's step right after BUS_COVER_STEP (task P17.54): it reads the covers block (a count, then cover and
+# inode-count pairs; _pci_covers) and raises each /sys/devices cover a card's directory lies under to that many inodes,
+# read-only, so DEVICE_SYS_STEP can make the path down to every card's directory below it. A count or an inode count
+# that is empty, padded with a zero, or not digits exits 2 before that cover is remounted, and the -o string holds
+# only the checked number.
+PCI_COVERS_STEP = r"""covers=$1
+shift
+case $covers in
+  '' | 0?* | *[!0-9]*) exit 2 ;;
+esac
+seen=
+while [ "${#seen}" -lt "$covers" ]; do
+  case $2 in
+    '' | 0* | *[!0-9]*) exit 2 ;;
+  esac
+  mount -t tmpfs -o "remount,ro,nr_inodes=$2" lassi-sys "$1"
+  shift 2
+  seen="${seen}x"
+done
+"""
+
+# A Tenstorrent run's step right after DEVICE_SYS_STEP (task P17.54): it reads the links block (a count, then link,
+# text, and cover triples) and, for each, reopens the cover read-write, makes the link's parent, makes the link with
+# that text (each card's /sys/bus/pci/devices/<address>, pointing at its directory as the host's does; pci_link_text),
+# and makes the cover read-only again. A bad count exits 2 before any cover is reopened.
+PCI_LINK_STEP = r"""links=$1
+shift
+case $links in
+  '' | 0?* | *[!0-9]*) exit 2 ;;
+esac
+seen=
+while [ "${#seen}" -lt "$links" ]; do
+  seen="${seen}x"
+  mount -t tmpfs -o remount,rw lassi-sys "$3"
+  mkdir -p "${1%/*}"
+  ln -s "$2" "$1"
+  mount -t tmpfs -o remount,ro lassi-sys "$3"
+  shift 3
+done
+"""
 
 # The setup's mount check call, and a Tenstorrent run's, which hands TENSTORRENT_MOUNT_CHECK the expected root of
 # the hugepage bind as an awk variable, one argv element (its segments hold no backslash for awk to unescape).
@@ -1162,23 +1267,35 @@ def _setup_script(device_steps: bool) -> str:
     return _compose(*steps, _CHECK_CALL, MOUNT_CHECK, CONFINE_PROGRAM)
 
 
-def _tenstorrent_script(reset_filter: bool) -> str:
-    """Return a Tenstorrent run's script: the device steps with HUGEPAGE_STEP and BUS_COVER_STEP, and its own check.
+def _tenstorrent_script(reset_filter: bool, hugepages: bool) -> str:
+    """Return a Tenstorrent run's script: the device steps with the cover, PCI, and (with `hugepages`) hugepage steps.
 
-    It embeds TENSTORRENT_MOUNT_CHECK and confine_program(reset_filter).
+    With `hugepages` it has HUGEPAGE_STEP and embeds TENSTORRENT_MOUNT_CHECK;
+    without, neither, and it keeps MOUNT_CHECK. Either way it has
+    BUS_COVER_STEP, PCI_COVERS_STEP, DEVICE_SYS_STEP, and PCI_LINK_STEP, and
+    embeds confine_program(reset_filter).
     """
-    nodes_step, sys_step = DEVICE_NODES_STEP + HUGEPAGE_STEP, BUS_COVER_STEP + DEVICE_SYS_STEP
-    check, confine = TENSTORRENT_MOUNT_CHECK, confine_program(reset_filter)
-    return _compose(nodes_step, sys_step, _TENSTORRENT_CHECK_CALL, check, confine)
+    nodes_step = DEVICE_NODES_STEP + (HUGEPAGE_STEP if hugepages else "")
+    sys_step = BUS_COVER_STEP + PCI_COVERS_STEP + DEVICE_SYS_STEP + PCI_LINK_STEP
+    if hugepages:
+        check_call, check = _TENSTORRENT_CHECK_CALL, TENSTORRENT_MOUNT_CHECK
+    else:
+        check_call, check = _CHECK_CALL, MOUNT_CHECK
+    return _compose(nodes_step, sys_step, check_call, check, confine_program(reset_filter))
 
 
 # The script of every run without a device exposure: byte for byte the script before task P17.5.
 SETUP_SCRIPT = _setup_script(device_steps=False)
 # The script of a run with a device exposure (only the gpu executor's): SETUP_SCRIPT with the two device steps.
 DEVICE_SETUP_SCRIPT = _setup_script(device_steps=True)
-# The scripts of a run with a TenstorrentExposure (task P17.15), by its reset_filter setting.
-TENSTORRENT_SETUP_SCRIPTS: Mapping[bool, str] = MappingProxyType(
-    {reset_filter: _tenstorrent_script(reset_filter) for reset_filter in (False, True)}
+# The scripts of a run with a TenstorrentExposure (tasks P17.15 and P17.54), by (reset_filter, whether the exposure
+# has a hugepage directory).
+TENSTORRENT_SETUP_SCRIPTS: Mapping[tuple[bool, bool], str] = MappingProxyType(
+    {
+        (reset_filter, hugepages): _tenstorrent_script(reset_filter, hugepages)
+        for reset_filter in (False, True)
+        for hugepages in (False, True)
+    }
 )
 
 
@@ -1387,22 +1504,27 @@ class TenstorrentExposure:
     `nodes` are the cards' device nodes, each bound at its numbered path
     /dev/tenstorrent/<n> in the private /dev (a source may be any path
     under /dev, so the remote tests can bind stand-ins; the P17.16
-    executor is to bind each card's node at its own path); `pci_dirs` are
-    the cards' PCI sysfs directories, each bound read-only at
-    /sys/bus/pci/devices/<address> below the /sys/bus cover, its source's
-    last segment being that address, beside the host's slot list
-    PCI_SLOTS, which such a run always gets read-only at its own path;
-    `hugepages` is the run's own hugepage directory, strictly under
-    HUGEPAGE_POINT, bound there writable (OQ-075 (1b)); `reset_filter` is
-    True when the seccomp filter refuses the driver's reset ioctl (OQ-075
-    (4a); confine_program), an explicit setting with no default. Both
-    sequences are kept as tuples; SandboxSpec checks every field
+    executor binds each card's node at its own path); `pci_dirs` are the
+    cards' PCI sysfs directories (task P17.54): each source is the card's
+    device directory, strictly below a /sys/devices entry other than
+    system and ending in the card's address, bound read-only at its own
+    path, and each target /sys/bus/pci/devices/<address>, made a link to
+    it with the host's text (pci_link_text), so UMD reads the card's IOMMU
+    group as the host does (module docstring, the IOMMU group view),
+    beside the host's slot list PCI_SLOTS, which such a run always gets
+    read-only at its own path; `hugepages` is the run's own hugepage
+    directory, strictly under HUGEPAGE_POINT, bound there writable (OQ-075
+    (1b)), or None for a run whose every card is in a DMA domain, where
+    UMD maps no hugepage; `reset_filter` is True when the seccomp filter
+    refuses the driver's reset ioctl (OQ-075 (4a); confine_program), an
+    explicit setting with no default. hugepages has no default either.
+    Both sequences are kept as tuples; SandboxSpec checks every field
     (_check_tenstorrent).
     """
 
     nodes: tuple[DeviceBind, ...]
     pci_dirs: tuple[DeviceBind, ...]
-    hugepages: PurePosixPath
+    hugepages: PurePosixPath | None
     reset_filter: bool
 
     def __post_init__(self) -> None:
@@ -1456,18 +1578,66 @@ def _hugepage_root(path: object) -> str:
     return below
 
 
+def pci_source_problem(source: str) -> str | None:
+    """Return why a card's device directory cannot be bound at its own path, or None when it can (task P17.54).
+
+    It must lie strictly below a /sys/devices entry other than system (one
+    the setup covers; sys_cover), every segment matching _DEVICE_SEGMENT.
+    """
+    text = PurePosixPath(source).as_posix()
+    if not text.startswith(SYS_DEVICES + "/"):
+        return f"{text!r} does not lie below {SYS_DEVICES}"
+    try:
+        _bind_text("pci_dirs source", PurePosixPath(text), "sys")
+        sys_cover(PurePosixPath(text))
+    except ValueError as error:
+        return str(error)
+    return None
+
+
+def pci_link_text(source: PurePosixPath) -> str:
+    """Return the text of a card's /sys/bus/pci/devices/<address> link to its device directory `source` (P17.54).
+
+    It is the host's form, relative from /sys/bus/pci/devices: up three
+    levels to /sys, then the source below it (`../../../devices/...`).
+    ValueError when `source` does not lie below /sys/devices.
+    """
+    text = PurePosixPath(source).as_posix()
+    if not text.startswith(SYS_DEVICES + "/"):
+        raise ValueError(f"a card's device directory lies below {SYS_DEVICES}, got {text!r}")
+    return "../../.." + text[len("/sys") :]
+
+
+def _check_pci_sources(binds: tuple[DeviceBind, ...]) -> None:
+    """Raise ValueError naming pci_dirs unless every source can be bound at its own path and none lies under another."""
+    sources = [bind.source.as_posix() for bind in binds]
+    for text in sources:
+        problem = pci_source_problem(text)
+        if problem is not None:
+            raise ValueError(
+                f"the Tenstorrent exposure's pci_dirs source {text!r} cannot be bound at its own path: {problem}; it "
+                f"must be the card's device directory, strictly below a {SYS_DEVICES} entry other than system "
+                "(task P17.54)"
+            )
+        under = [other for other in sources if text.startswith(other + "/")]
+        if under:
+            raise ValueError(f"the Tenstorrent exposure's pci_dirs source {text!r} lies under another, {under[0]!r}")
+
+
 def _check_tenstorrent(devices: TenstorrentExposure) -> None:
     """Raise ValueError, naming the field, unless the Tenstorrent exposure `devices` is one the setup can apply.
 
     nodes: at least one, each a DeviceBind of a source under /dev at a
     target /dev/tenstorrent/<n>, n in decimal without a leading zero, no
     target twice; the source may be any path under /dev (the remote tests'
-    stand-ins), and the P17.16 executor is to bind each card's node at its
-    own path. pci_dirs: at most TENSTORRENT_CARDS_MAX, each a DeviceBind of
-    a source under /sys whose last segment is its target's address, at a
-    target /sys/bus/pci/devices/<address>, no target twice. hugepages: as
-    _hugepage_root takes it, so never the host's whole HUGEPAGE_POINT.
-    reset_filter: a bool.
+    stand-ins), and the P17.16 executor binds each card's node at its own
+    path. pci_dirs: at most TENSTORRENT_CARDS_MAX, each a DeviceBind of a
+    source whose last segment is its target's address, at a target
+    /sys/bus/pci/devices/<address>, no target twice; each source a card's
+    device directory the setup can bind at its own path, none under
+    another (_check_pci_sources). hugepages: None, or as _hugepage_root
+    takes it, so never the host's whole HUGEPAGE_POINT. reset_filter: a
+    bool.
     """
     if not devices.nodes:
         raise ValueError("the Tenstorrent exposure's nodes need at least one card node")
@@ -1478,7 +1648,9 @@ def _check_tenstorrent(devices: TenstorrentExposure) -> None:
             f"holds at most {TENSTORRENT_CARDS_MAX}"
         )
     _check_card_binds("pci_dirs", devices.pci_dirs, "sys", _PCI_DIRECTORY, same_name=True)
-    _hugepage_root(devices.hugepages)
+    _check_pci_sources(devices.pci_dirs)
+    if devices.hugepages is not None:
+        _hugepage_root(devices.hugepages)
     if not isinstance(devices.reset_filter, bool):
         raise ValueError(f"the Tenstorrent exposure's reset_filter must be True or False, got {devices.reset_filter!r}")
 
@@ -1506,7 +1678,8 @@ class SandboxSpec:
     None, the default, exposes nothing beyond the private /dev's six nodes
     and runs SETUP_SCRIPT; a DeviceExposure runs DEVICE_SETUP_SCRIPT, and
     only then may the environment hold any of GPU_VISIBILITY_NAMES; a
-    TenstorrentExposure runs TENSTORRENT_SETUP_SCRIPTS[reset_filter], and
+    TenstorrentExposure runs TENSTORRENT_SETUP_SCRIPTS[(reset_filter,
+    whether it has a hugepage directory)], and
     only then may the environment hold any of TT_PROFILER_NAMES (task
     P17.42). ValueError is raised for an exposure _check_devices or
     _check_tenstorrent refuses, for a visibility name without a DeviceExposure,
@@ -1708,9 +1881,11 @@ def sandbox_command(spec: SandboxSpec, argv: Sequence[str], limits: Limits) -> l
     DEVICE_SETUP_SCRIPT and the device blocks (_device_layout) go into the
     layout: the nodes and the /sys sources after the root count, the /sys
     targets after the hidden roots; with a TenstorrentExposure the script is
-    TENSTORRENT_SETUP_SCRIPTS[reset_filter] and the layout the same with
-    the hugepage pair after the /sys sources (_tenstorrent_layout); without
-    an exposure the command is exactly the one before task P17.5. Raise
+    TENSTORRENT_SETUP_SCRIPTS[(reset_filter, hugepages)] and the layout the
+    same with the hugepage pair (when there is a hugepage directory) after
+    the /sys sources, the covers block before the /sys targets, and the
+    links block after them (_tenstorrent_layout); without an exposure the
+    command is exactly the one before task P17.5. Raise
     ValueError when argv is empty or names the program
     as _check_request refuses, or wall_s is not > 0, or memory_mb or cpus
     is below 1.
@@ -1745,23 +1920,69 @@ def _script_and_layout(
     if devices is None:
         return SETUP_SCRIPT, [*head, *roots]
     if isinstance(devices, TenstorrentExposure):
-        nodes, sources, hugepages, targets = _tenstorrent_layout(devices)
-        return TENSTORRENT_SETUP_SCRIPTS[devices.reset_filter], [*head, *nodes, *sources, *hugepages, *roots, *targets]
+        blocks = _tenstorrent_layout(devices)
+        script = TENSTORRENT_SETUP_SCRIPTS[(devices.reset_filter, devices.hugepages is not None)]
+        before = [*blocks.nodes, *blocks.sources, *blocks.hugepages]
+        return script, [*head, *before, *roots, *blocks.covers, *blocks.targets, *blocks.links]
     nodes, sources, targets = _device_layout(devices)
     return DEVICE_SETUP_SCRIPT, [*head, *nodes, *sources, *roots, *targets]
 
 
-def _tenstorrent_layout(devices: TenstorrentExposure) -> tuple[list[str], list[str], list[str], list[str]]:
-    """Return a Tenstorrent run's four blocks: the nodes, the /sys sources, the hugepage pair, and the /sys targets.
+@dataclass(frozen=True)
+class _TenstorrentBlocks:
+    """A Tenstorrent run's layout blocks, each a list of positional elements (_tenstorrent_layout)."""
+
+    nodes: list[str]
+    sources: list[str]
+    hugepages: list[str]
+    covers: list[str]
+    targets: list[str]
+    links: list[str]
+
+
+def _tenstorrent_layout(devices: TenstorrentExposure) -> _TenstorrentBlocks:
+    """Return a Tenstorrent run's blocks: nodes, /sys sources, hugepage pair, covers, /sys targets, and links.
 
     The nodes and both /sys blocks are _device_layout's for the nodes and
-    the /sys directories PCI_SLOTS (at its own path) and then each PCI
-    directory, all under the /sys/bus cover. The hugepage pair is the run's
-    directory and the root a bind of it shows in mountinfo (_hugepage_root).
+    the /sys directories PCI_SLOTS (at its own path, under the /sys/bus
+    cover) and then each card's device directory at its own path, under
+    its /sys/devices cover (task P17.54). The hugepage pair is the run's
+    directory and the root a bind of it shows in mountinfo (_hugepage_root),
+    and empty without a hugepage directory. The covers block is
+    _pci_covers'; the links block a count, then each card's
+    /sys/bus/pci/devices/<address>, its pci_link_text, and the /sys/bus
+    cover.
     """
     slots = DeviceBind(PurePosixPath(PCI_SLOTS), PurePosixPath(PCI_SLOTS))
-    nodes, sources, targets = _device_layout(DeviceExposure(nodes=devices.nodes, sys_dirs=(slots, *devices.pci_dirs)))
-    return nodes, sources, [devices.hugepages.as_posix(), _hugepage_root(devices.hugepages)], targets
+    mirrored = tuple(DeviceBind(bind.source, bind.source) for bind in devices.pci_dirs)
+    nodes, sources, targets = _device_layout(DeviceExposure(nodes=devices.nodes, sys_dirs=(slots, *mirrored)))
+    hugepages = [] if devices.hugepages is None else [devices.hugepages.as_posix(), _hugepage_root(devices.hugepages)]
+    links = [str(len(devices.pci_dirs))]
+    for bind in devices.pci_dirs:
+        links += [bind.target.as_posix(), pci_link_text(bind.source), sys_cover(bind.target)]
+    covers = _pci_covers([bind.source.as_posix() for bind in devices.pci_dirs])
+    return _TenstorrentBlocks(nodes, sources, hugepages, covers, targets, links)
+
+
+def _pci_covers(sources: Sequence[str]) -> list[str]:
+    """Return the covers block: a count, then each /sys/devices cover the sources lie under and the inodes it needs.
+
+    A cover needs one inode for its root and one for every directory from
+    it down to each source, the bind's mount point included, each counted
+    once; the covers come in the order their first source does.
+    """
+    needed: dict[str, set[str]] = {}
+    for source in sources:
+        cover = sys_cover(PurePosixPath(source))
+        directories = needed.setdefault(cover, set())
+        path = source
+        while path != cover:
+            directories.add(path)
+            path = posixpath.dirname(path)
+    block = [str(len(needed))]
+    for cover, directories in needed.items():
+        block += [cover, str(1 + len(directories))]
+    return block
 
 
 def _device_layout(devices: DeviceExposure) -> tuple[list[str], list[str], list[str]]:

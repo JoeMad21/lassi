@@ -365,7 +365,7 @@ def test_the_remote_script_parses_as_bash_and_holds_the_rules() -> None:
     text = SCRIPT.read_text(encoding="ascii")
     assert "\r" not in text
     assert "prlimit --pid $$ --core=1:1" in text, "the 1-byte core limit, read back as (1, 1)"
-    assert "--silicon" in text and "--graphics off train" in text
+    assert "--graphics off train" in text and "--silicon" not in text, "lassi train takes no --silicon (P17.53)"
     assert "STOP" in text and "toolchains/tt-xla.sh" in text
     assert "sudo" not in text
     bash = shutil.which("bash")

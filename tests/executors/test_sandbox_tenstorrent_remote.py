@@ -29,12 +29,16 @@ The stand-ins:
   takes any node under /dev as a source; the P17.16 executor is to bind
   each card's node at its own path);
 - the cards' PCI directories: the first PCI devices the host lists under
-  /sys/bus/pci/devices that the tenstorrent driver has not bound
-  (pci_standins; only each device's driver link is read, so no file of a
-  card is opened), each the directory its link resolves to, bound at its
-  own /sys/bus/pci/devices/<address>, since the spec takes only a source
-  whose last segment is its target's address. Eight of them under the
-  /sys/bus cover check that the cover has room for every card's directory;
+  /sys/bus/pci/devices that the tenstorrent driver has not bound, none
+  below another (pci_standins; only each device's driver link is read, so
+  no file of a card is opened), each the directory its link resolves to,
+  bound at its own path, with /sys/bus/pci/devices/<address> a link to it
+  (task P17.54), since the spec takes only a source whose last segment is
+  its target's address. Eight of them check that the /sys/bus cover has
+  room for every card's link and each /sys/devices cover for the
+  directories down to every card's; and
+  test_each_stand_in_reads_its_iommu_group_inside_as_on_the_host reads
+  each one's iommu_group/type inside, as UMD does, and on the host;
 - /sys/bus/pci/slots, /sys/module/tenstorrent/version, and the 1 GiB
   nr_hugepages file are the host's own, compared with what the host lists
   or reads (a missing file must be missing inside too);
@@ -71,7 +75,9 @@ $LASSI_SCRATCH/tmp. No value here is a measurement.
 
 from __future__ import annotations
 
+import contextlib
 import errno
+import io
 import json
 import os
 import posixpath
@@ -200,8 +206,11 @@ def pci_standins(count: int) -> tuple[tuple[str, str], ...]:
 
     The target is the device's /sys/bus/pci/devices/<address> link and the
     source the directory it resolves to, whose last segment is that
-    address. A device the tenstorrent driver has bound is left out; only
-    its driver link is read (readlink), so no file of a card is opened.
+    address, below a /sys/devices entry other than system, and neither
+    below nor above a source already taken (the spec binds each at its own
+    path, task P17.54). A device the tenstorrent driver has bound is left
+    out; only its driver link is read (readlink), so no file of a card is
+    opened.
     """
     if not os.path.isdir(PCI_DEVICES):
         return ()
@@ -212,8 +221,10 @@ def pci_standins(count: int) -> tuple[tuple[str, str], ...]:
         bound = os.path.basename(os.readlink(driver)) if os.path.islink(driver) else ""
         source = os.path.realpath(target)
         parts = source.split("/")[1:]
-        usable = PCI_ADDRESS.fullmatch(address) and parts[0] == "sys" and parts[-1] == address
-        if bound != "tenstorrent" and usable and all(SEGMENT.fullmatch(part) for part in parts):
+        usable = PCI_ADDRESS.fullmatch(address) and parts[:2] == ["sys", "devices"] and parts[-1] == address
+        usable = usable and len(parts) > 3 and parts[2] != "system"
+        nested = any(source.startswith(taken + "/") or taken.startswith(source + "/") for taken, _target in found)
+        if bound != "tenstorrent" and usable and not nested and all(SEGMENT.fullmatch(part) for part in parts):
             found.append((source, target))
         if len(found) == count:
             break
@@ -293,18 +304,18 @@ def hugepage_dir() -> Iterator[tuple[Path, str]]:
 
 def tt_exposure(
     sandbox: ModuleType,
-    hugepages: str,
+    hugepages: str | None,
     *,
     reset_filter: bool,
     pci: Sequence[tuple[str, str]],
     cards: Sequence[tuple[str, str]] = CARDS,
 ) -> Any:
-    """Return a TenstorrentExposure of the stand-ins and `hugepages`, from (host source, path inside) pairs."""
+    """Return a TenstorrentExposure of the stand-ins and `hugepages` (None: none), from (host source, path) pairs."""
     bind = sandbox.DeviceBind
     return sandbox.TenstorrentExposure(
         nodes=tuple(bind(PurePosixPath(source), PurePosixPath(target)) for source, target in cards),
         pci_dirs=tuple(bind(PurePosixPath(source), PurePosixPath(target)) for source, target in pci),
-        hugepages=PurePosixPath(hugepages),
+        hugepages=None if hugepages is None else PurePosixPath(hugepages),
         reset_filter=reset_filter,
     )
 
@@ -544,6 +555,48 @@ def test_a_plain_directory_cannot_stand_in_for_the_hugepage_mount(sandbox: Modul
     assert swapped and swapped[0] >= 1, swapped
     # The setup failed closed: the program never ran, so neither the stand-in nor the workdir holds its files.
     assert list(standin.iterdir()) == [] and not (layout.workdir / "ran").exists()
+
+
+# Prints, for each address in argv[1] (JSON), what UMD's detect_iommu reads (umd pcie/pci_device.cpp:47-77, :102-108):
+# /sys/bus/pci/devices/<address>/iommu_group/type's text, or "error:<name>" when it cannot be opened (UMD: no IOMMU),
+# beside where the bus path and its iommu_group lead (realpath). Run inside and, as host_iommu, on the host.
+IOMMU_REPORT = """from __future__ import annotations
+import errno, json, os, sys
+out = {}
+for address in json.loads(sys.argv[1]):
+    base = "/sys/bus/pci/devices/" + address
+    try:
+        with open(base + "/iommu_group/type", encoding="ascii") as handle:
+            kind = handle.read()
+    except OSError as exc:
+        kind = "error:" + errno.errorcode.get(exc.errno or 0, str(exc.errno))
+    out[address] = [os.path.realpath(base), os.path.realpath(base + "/iommu_group"), kind]
+print(json.dumps(out))
+"""
+
+
+def test_each_stand_in_reads_its_iommu_group_inside_as_on_the_host(sandbox: ModuleType, layout: Layout) -> None:
+    # Task P17.54: inside, UMD's path to a card's IOMMU domain type leads where it does on the host, so UMD reads the
+    # host's mode, identity or DMA alike. No hugepage directory (a DMA-domain run's exposure), so no host mount is
+    # written. Only sysfs attributes and links are read; no device file is opened.
+    pci = need_standins()
+    addresses = [target.rsplit("/", 1)[1] for _source, target in pci]
+    spec = spec_with(sandbox, layout, tt_exposure(sandbox, None, reset_filter=True, pci=pci))
+    inside = run_json(sandbox, spec, IOMMU_REPORT, json.dumps(addresses))
+    on_host = json.loads(on_the_host(IOMMU_REPORT, json.dumps(addresses)))
+    assert inside == on_host, (inside, on_host)
+
+
+def on_the_host(program: str, argument: str) -> str:
+    """Run a report program in this process, outside any sandbox, with argv[1] set to `argument`; return its output."""
+    saved, buffer = sys.argv, io.StringIO()
+    sys.argv = ["report", argument]
+    try:
+        with contextlib.redirect_stdout(buffer):
+            exec(program, {"__name__": "lassi_host_report"})
+    finally:
+        sys.argv = saved
+    return buffer.getvalue()
 
 
 def test_a_run_without_the_exposure_sees_no_card_and_no_hugepage_directory(sandbox: ModuleType, layout: Layout) -> None:

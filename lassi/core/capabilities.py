@@ -65,14 +65,14 @@ WATCHER_CODE = "watcher"
 # naming a toolchain without it, and the stages read the capability, never the toolchain's name.
 LOWERS_SOURCE = "lowers_source"
 
-# The capability of an Executor that runs programs on accelerator silicon (task P17.16; the tt_silicon executor), which
-# only a human starts (Agent Rule 9). The runner reads it, never the executor's name: it refuses such an executor
-# unless RunOptions.silicon is True, which only `lassi run --silicon` sets, and the train layer refuses a reward that
-# names one. It is not SIMULATOR, so no stage or page labels its runs as simulator runs.
+# The capability of an Executor that runs programs on accelerator silicon (task P17.16; the tt_silicon executor). It is
+# not SIMULATOR, so no stage or page labels its runs as simulator runs. Nothing refuses such an executor or needs a
+# start for it: it runs like any other, beside any stage (task P17.53; the owner's answers of 2026-10-29 to OQ-078 and
+# OQ-099).
 SILICON = "silicon"
-# The capability of a Stage that computes a training reward (a name for the reward stages of later phases). A run that
-# lists such a stage refuses every Executor that declares SILICON, with the human start too: RL rewards never execute
-# on silicon (Agent Rule 9).
+# The capability of a Stage that computes a training reward (a name for the reward stages of later phases). Such a
+# stage may run beside an Executor that declares SILICON (task P17.53; the owner, 2026-10-29: "OF COURSE silicon runs
+# should be included in RL rewards").
 COMPUTES_REWARD = "computes_reward"
 
 # The capability of an Oracle that compares a run's output files (RunResult.output_files, one lassi_io array per

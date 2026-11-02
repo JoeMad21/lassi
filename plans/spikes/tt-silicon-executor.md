@@ -702,3 +702,52 @@ Answer:
 - Until the executor passes its qualification, TT programs from a model run on ttsim only.
 - A silicon run of a tracked reference should also go through the executor once it exists. Outside the sandbox, UMD
   opens every card's node (Finding 1), which the sandbox's single bound node prevents.
+
+## Follow-up (task P17.54): each card's IOMMU group, 2026-10-29
+
+Question: under a translating (DMA) IOMMU domain, UMD inside the sandbox must read the card's IOMMU domain type as the
+host does (Finding 2, Known limit), so where does each card's iommu_group link lead on alpha01, and what does each
+group hold?
+
+Command (one read-only exec on alpha01, files and links only, no device node opened, no process but the shell and
+its coreutils; run from the scratch root without a checkout):
+
+```
+uv run tools/rx.py exec -- 'for d in /sys/class/tenstorrent/tenstorrent!*; do n=${d##*!}; a=$(basename "$(readlink "$d/device")"); p=$(readlink "/sys/bus/pci/devices/$a"); g=$(readlink "/sys/bus/pci/devices/$a/iommu_group"); t=$(cat "/sys/bus/pci/devices/$a/iommu_group/type" 2>&1); m=$(ls "/sys/bus/pci/devices/$a/iommu_group/devices" 2>&1 | tr "\n" " "); echo "card=$n pci=$a link=$p iommu_group=$g type=$t members=$m"; done'
+```
+
+Output (rx 20261029-191025-exec-99dd, rc 0, alpha01, 2026-10-29):
+
+```
+card=0 pci=0000:e8:00.0 link=../../../devices/pci0000:e2/0000:e2:01.1/0000:e3:00.0/0000:e4:00.0/0000:e5:00.0/0000:e6:01.0/0000:e8:00.0 iommu_group=../../../../../../../../kernel/iommu_groups/135 type=identity members=0000:e8:00.0
+card=1 pci=0000:e9:00.0 link=../../../devices/pci0000:e2/0000:e2:01.1/0000:e3:00.0/0000:e4:00.0/0000:e5:00.0/0000:e6:02.0/0000:e9:00.0 iommu_group=../../../../../../../../kernel/iommu_groups/136 type=identity members=0000:e9:00.0
+card=2 pci=0000:ea:00.0 link=../../../devices/pci0000:e2/0000:e2:01.1/0000:e3:00.0/0000:e4:00.0/0000:e5:00.0/0000:e6:03.0/0000:ea:00.0 iommu_group=../../../../../../../../kernel/iommu_groups/137 type=identity members=0000:ea:00.0
+card=3 pci=0000:eb:00.0 link=../../../devices/pci0000:e2/0000:e2:01.1/0000:e3:00.0/0000:e4:00.0/0000:e5:00.0/0000:e6:04.0/0000:eb:00.0 iommu_group=../../../../../../../../kernel/iommu_groups/138 type=identity members=0000:eb:00.0
+card=4 pci=0000:f1:00.0 link=../../../devices/pci0000:e2/0000:e2:01.1/0000:e3:00.0/0000:e4:01.0/0000:ee:00.0/0000:ef:01.0/0000:f1:00.0 iommu_group=../../../../../../../../kernel/iommu_groups/150 type=identity members=0000:f1:00.0
+card=5 pci=0000:f2:00.0 link=../../../devices/pci0000:e2/0000:e2:01.1/0000:e3:00.0/0000:e4:01.0/0000:ee:00.0/0000:ef:02.0/0000:f2:00.0 iommu_group=../../../../../../../../kernel/iommu_groups/151 type=identity members=0000:f2:00.0
+card=6 pci=0000:f3:00.0 link=../../../devices/pci0000:e2/0000:e2:01.1/0000:e3:00.0/0000:e4:01.0/0000:ee:00.0/0000:ef:03.0/0000:f3:00.0 iommu_group=../../../../../../../../kernel/iommu_groups/152 type=identity members=0000:f3:00.0
+card=7 pci=0000:f4:00.0 link=../../../devices/pci0000:e2/0000:e2:01.1/0000:e3:00.0/0000:e4:01.0/0000:ee:00.0/0000:ef:04.0/0000:f4:00.0 iommu_group=../../../../../../../../kernel/iommu_groups/153 type=identity members=0000:f4:00.0
+```
+
+What it shows [MEASURED 2026-10-29, alpha01, rx 20261029-191025-exec-99dd; sysfs text read with no card opened]:
+
+- All eight cards sit in an identity (pass-through) domain, each in an IOMMU group of its own (135 to 138 and 150 to
+  153, one member each), below two switches of root port 0000:e2:01.1. Finding 2 had read card 0's type alone.
+- Each card's iommu_group link is relative and climbs eight levels, from its device directory below
+  /sys/devices/pci0000:e2 to /sys, then into /sys/kernel/iommu_groups/<n>. So any bind of the device directory at a
+  path that is not its own (the bus path, four levels below /sys) breaks the link, which is why UMD inside read no
+  IOMMU.
+
+What the sandbox does with it (task P17.54; lassi.executors.sandbox, the IOMMU group view; lassi.executors.tt_silicon,
+_device_dir and _iommu_group): the executor reads each card's bus link and group link with readlink(2), refusing a
+card whose device directory the sandbox cannot bind at its own path or whose group lies anywhere but
+/sys/kernel/iommu_groups/<n>; the sandbox binds the device directory read-only at its own path below its
+/sys/devices cover and makes /sys/bus/pci/devices/<address> a link with the host's text, and /sys/kernel stays in
+view, so the group link resolves inside as outside: UMD reads identity on alpha01 today and would read DMA under a
+translating domain. A card in a DMA domain is no longer refused (task P17.53); the device record names each card's
+group and type. tests/executors/test_sandbox_iommu.py walks UMD's path in a SYNTHETIC tree of this shape under both
+domain types. Not measured: a run inside the sandbox on the cards, under either domain, and tt-metal end to end under
+the DMA path at the pin.
+
+The read-only check before a launch (plans/runs/silicon-launch.md) runs the same command and requires every type to
+start with DMA.

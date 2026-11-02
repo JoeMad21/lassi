@@ -3,20 +3,18 @@
 run_training(path, options) loads a train recipe (lassi.core.recipe
 load_train_recipe) and, before any directory exists, refuses:
 
-- a reward whose reward.executor names an Executor that declares `silicon`
-  (lassi.core.capabilities SILICON, the tt_silicon executor's; task P17.16),
-  naming it and Agent Rule 9, first, so the refusal stands once the reward
-  is carried out: RL rewards never execute on silicon (Agent Rule 9;
-  Training Module, Safeguards). The registry entry is read, never the name,
-  and nothing is built;
 - a key this layer does not carry out yet (NOT_CARRIED_OUT), naming every
-  one the recipe sets, in that order;
+  one the recipe sets, in that order; a reward whose reward.executor names
+  an Executor that declares `silicon` meets that refusal alone, as any
+  reward does, since the owner directed removed the rule that RL rewards never
+  execute on silicon (Agent Rule 9's current text stands until the owner's
+  revision, OQ-099) (2026-10-29: "OF COURSE silicon runs should be
+  included in RL rewards"; task P17.53);
 - a trainer.device on silicon (lassi.train.silicon SILICON_KINDS, a
-  Tenstorrent card; task P17.38) without TrainOptions.silicon, the human
-  start only `lassi train --silicon` sets, with a method other than sft
-  (naming Agent Rule 9 as OQ-100 (a) amends it), or without
-  trainer.network none (the worker in its own empty network namespace;
-  plans/spikes/tt-perf.md);
+  Tenstorrent card; task P17.38) without trainer.network none (the worker
+  in its own empty network namespace, OQ-107 (a);
+  plans/spikes/tt-perf.md). It needs no start flag, and any method its
+  Trainer declares trains there (task P17.53);
 - a runs root or train directory outside the run tree's location rules
   (lassi.core.runner resolve_runs_root, run_id_for, check_location; Agent
   Rule 7) and a train directory that exists;
@@ -73,7 +71,7 @@ from functools import partial
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
-from lassi.core.capabilities import DEVICE_KEY, SILICON
+from lassi.core.capabilities import DEVICE_KEY
 from lassi.core.devices import DEFAULT_PROBES, DeviceProbe, FrameworkBuild, device_driver, parse_device
 from lassi.core.digest import tree_sha256
 from lassi.core.interfaces import TrainData, TrainJob, TrainResult
@@ -128,11 +126,11 @@ class TrainOptions:
     - corpus_manifests: where data.corpus's tracked manifest directory is;
       None means lassi.train.data.CORPUS_DIR. The held-out suite a corpus
       manifest names is read from suites_dir.
-    - silicon: the human start of a training run on a card (task P17.38;
-      OQ-100 (a)); only `lassi train --silicon` sets it, never a recipe or
-      a variable. False refuses a silicon trainer.device.
     - silicon_host: the host seams of the card guard
       (lassi.train.silicon SiliconHost); None means the real host.
+
+    There is no silicon option: training on a card needs no start (task
+    P17.53).
     """
 
     runs_root: Path | None = None
@@ -144,7 +142,6 @@ class TrainOptions:
     synthetic_dir: Path | None = None
     corpus_root: Path | None = None
     corpus_manifests: Path | None = None
-    silicon: bool = False
     silicon_host: silicon_guard.SiliconHost | None = None
 
 
@@ -229,9 +226,8 @@ def _prepare(path: Path, options: TrainOptions, started: datetime) -> _Training:
     """
     registry = DEFAULT_REGISTRY if options.registry is None else options.registry
     recipe = load_train_recipe(path, roots=options.roots, registry=registry)
-    _check_reward_executor(recipe, registry)
     _check_carried_out(recipe)
-    _check_silicon_start(recipe, options.silicon)
+    _check_silicon_settings(recipe)
     runs_root = resolve_runs_root(options.runs_root, recipe)
     train_dir = runs_root / TRAIN_DIR / run_id_for(options.train_id, started)
     check_location(train_dir, f"the train directory {train_dir}")
@@ -267,34 +263,19 @@ def _make_train_dir(train_dir: Path) -> None:
         raise RunError(f"the train directory {train_dir} already exists; choose another train id") from None
 
 
-def _check_reward_executor(recipe: Recipe, registry: Registry) -> None:
-    """Refuse a reward on an Executor that declares SILICON, naming it and Agent Rule 9; nothing is built.
-
-    An executor the registry does not hold is left to the other refusals.
-    """
-    reward = recipe.data.get("reward")
-    name = reward.get("executor") if isinstance(reward, Mapping) else None
-    if not isinstance(name, str) or name not in registry.names("Executor"):
-        return
-    if SILICON in registry.get("Executor", name).capabilities:
-        raise RunError(
-            f"{recipe.path}: reward.executor names Executor {name!r}, which runs programs on silicon; RL rewards "
-            "never execute on silicon (Agent Rule 9; Training Module, Safeguards), so name ttsim or native"
-        )
-
-
-def _check_silicon_start(recipe: Recipe, silicon: bool) -> None:
-    """Refuse a silicon trainer.device without the human start, or with a method other than sft (Agent Rule 9).
+def _check_silicon_settings(recipe: Recipe) -> None:
+    """Refuse a silicon trainer.device whose network is not none; no start is needed, and any declared method runs.
 
     The device section was checked at load (parse_device); a binding without
-    one is left to the device probe's refusals.
+    one is left to the device probe's refusals (lassi.train.silicon
+    check_start).
     """
     section = recipe.bindings[0].config.get(DEVICE_KEY)
     if not isinstance(section, Mapping):
         return
     spec = parse_device(dict(section), "trainer.device")
     network = recipe.bindings[0].config.get("network")
-    silicon_guard.check_start(str(recipe.path), spec.kind, recipe.data.get("method"), network, silicon)
+    silicon_guard.check_start(str(recipe.path), spec.kind, network)
 
 
 def _check_carried_out(recipe: Recipe) -> None:

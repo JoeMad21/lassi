@@ -27,7 +27,9 @@ Components of a trial (task P2.7), each a float, or None with a note:
   False, and no undefined behavior, RunInfo.sim_ub not True) of an attempt
   that reached S4 or S5 (a kernel JIT failure leaves it at S1, never clean)
   that the oracle aligned at 1.0. 0.0 when that run was not clean, when the oracle
-  gave less than 1.0, or when no output stands. None in four cases, each
+  gave less than 1.0, when that attempt's final test on the recipe's final
+  executor did not pass (Attempt.final_test; task P17.55), or when no
+  output stands. None in four cases, each
   with its note: a trial with no attempt that ended at the baseline
   (BASELINE_ENDS: baseline-compile, baseline-run, baseline-disagree, or
   sim-gap; the model was never asked); a trial with attempts that ended at
@@ -221,6 +223,8 @@ def correct_value(trial: Trial, notes: Mapping[str, str]) -> tuple[float | None,
     if gap_noted(standing):
         return None, notes[GAP]
     if standing.stage_reached not in COMPILED_STAGES or not clean_run(standing.run):
+        return 0.0, None
+    if standing.final_test is not None and not standing.final_test.passed:
         return 0.0, None
     if standing.alignment.mean is None:
         return None, notes[NOT_ALIGNED]

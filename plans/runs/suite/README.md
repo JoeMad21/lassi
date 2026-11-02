@@ -69,7 +69,6 @@ required.
 | `--slot SLOT` | `suite` | The rx worktree slot on alpha01. |
 | `--yes` | off | Start without asking. |
 | `--allow-dirty` | off | Launch from a dirty tree or an unpushed commit; the run is exploratory, never [MEASURED]. |
-| `--silicon` | - | Refused with exit status 2 (see Silicon). |
 
 The rx job's timeout is the deadline plus 900 seconds, the night's margin (deadline 01:45, timeout at 02:00), and
 it is computed again when the job starts. A deadline that leaves under 30 minutes for each run.sh call (run.sh
@@ -107,7 +106,8 @@ its log). Clear it with `uv run tools/suite.py stop --clear` before the next lau
 - The RNGD cards and port 8123: run.sh claims only cards that read 0.00 GiB in `furiosa-smi status`, polling
   `furiosa-smi ps` and status every 60 s, serves one model at a time, checks that `/v1/models` lists it, and waits
   for the server's full exit and the port to close before the next (Agent Rule 8).
-- ttsim and the tt-metal install under `$LASSI_TOOLCHAINS`. No Wormhole card is opened.
+- ttsim and the tt-metal install under `$LASSI_TOOLCHAINS`. The Wormhole cards only for a recipe that binds the
+  tt_silicon executor, which the plan names (see Silicon); otherwise no Wormhole card is opened.
 - The STOP file `$LASSI_RUNS_ROOT/rngd-sweep/STOP`, only through `stop`.
 
 The job's output directory holds `recipes.tsv` (every recipe of the run with its recipe_hash, model id, and the
@@ -142,10 +142,13 @@ ttsim is a simulator: its results are never silicon results and its timing is ne
 
 ## Silicon
 
-`--silicon` is accepted and always refused: this launcher never runs model-generated programs on the Wormhole
-cards. Under alpha01's identity IOMMU domains a program that holds a card can make it read or write any host
-memory (docs/tt-silicon-iommu.md; OQ-078), and silicon in the correction loop also waits on an Agent Rule 9
-change worded by the owner (OQ-099).
+A recipe set that binds the tt_silicon executor launches like any other (task P17.53; the owner's answers of
+2026-10-29 to OQ-078 and OQ-099): the plan's devices line names each such recipe, and its programs run on the
+Wormhole cards through the sandboxed executor, one placement at a time, beside the RNGD serving; no option starts
+it. The job's own command names no tt-metal word, so the gate's tt_guard does not stop it;
+the gate's tt_silicon device class is the owner's switch for silicon work on alpha01 (AGENTS.md, Remote Execution),
+and the launcher does not check it. Agents do not launch model-generated programs on the cards while their IOMMU
+domains are identity (docs/tt-silicon-iommu.md; OQ-078), a practice the launcher does not enforce.
 
 ## Files
 

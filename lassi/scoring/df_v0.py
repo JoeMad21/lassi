@@ -25,6 +25,14 @@ Readings of the Result Record (task P2.6):
   never aligned (mean None, as when the reference stdout was cut) holds no
   evidence of correct output: its alignment term is 0.0 and its component
   alignment_missing is 1.0 (0.0 on every other attempt).
+- An attempt with a final test (Attempt.final_test; task P17.55) is scored
+  by that run: s is FinalTest.stage_reached and A its alignment mean
+  (scored_run), W still the attempt's own compile warnings. Only an
+  attempt that compiled and passed the oracle on the trial's executor
+  (ttsim, a simulator, for a TT target) reaches a final test, so a reward
+  reads the Wormhole cards only after the compiler and ttsim (the owner,
+  2026-10-29: "OF COURSE silicon runs should be included in RL rewards
+  ... they have to pass the simulator and compiler first").
 - The guard component is 1.0 when any guard outcome (GUARD_OUTCOMES) is
   True, 0.0 when every outcome is False, and None otherwise: a None outcome
   was not checked; host_compute_not_checked is never read (task P17.14).
@@ -167,6 +175,19 @@ def load_weights(path: str | Path) -> Weights:
     return Weights(stage_base=MappingProxyType(base), **numbers)
 
 
+def scored_run(attempt: Attempt) -> tuple[str, float | None]:
+    """Return the stage and the alignment mean df-v0 scores `attempt` by (the module docstring).
+
+    The attempt's own, or, when it has a final test (task P17.55), that
+    test's: the run on the final executor after the attempt passed the
+    compiler and the oracle on the trial's executor.
+    """
+    final = attempt.final_test
+    if final is None:
+        return attempt.stage_reached, attempt.alignment.mean
+    return final.stage_reached, final.alignment.mean
+
+
 def warning_count(attempt: Attempt) -> int:
     """Return W: the attempt's compile- and jit-stage warnings unique by (code, file, line, column); 0 below S4."""
     if STAGES.index(attempt.stage_reached) < STAGES.index(COMPILED):
@@ -238,9 +259,8 @@ class DfV0Profile:
         trial uses it.
         """
         weights = self.weights
-        stage = attempt.stage_reached
+        stage, mean = scored_run(attempt)
         count = warning_count(attempt)
-        mean = attempt.alignment.mean
         clean_run = stage == CLEAN_RUN
         term = weights.alignment_weight * mean if clean_run and mean is not None else 0.0
         guard = guard_state(attempt.guards)

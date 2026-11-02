@@ -1,26 +1,22 @@
-"""Tests that no reward of a training run reaches Tenstorrent silicon (task P17.16).
+"""Tests that a reward on a silicon executor meets no silicon refusal (tasks P17.16 and P17.53).
 
-Bible: Agent Rule 9 ("RL rewards never execute on silicon"); Training
-Module, Safeguards ("Rewards execute on ttsim or native only, inside the
-sandbox; never on Tenstorrent silicon"); OQ-075 (6a), approved: training
-methods and reward stages refuse tt_silicon outright; plans/p17-portable.md,
-task P17.16, Human start.
+Bible: Training Module, Safeguards; Component Interfaces, the Executor
+bullet. The owner, 2026-10-29, directing removed the rule that RL rewards never
+execute on silicon (Agent Rule 9's current text stands until the owner's
+revision, OQ-099): "OF COURSE silicon runs should be included in RL
+rewards. Remove that rule that says RL rewards must never come from
+silicon. It's fine, they have to pass the simulator and compiler first."
+plans/p17-portable.md, task P17.53.
 
 The contract these tests fix (lassi.train.run):
 
-- Since task P17.38 (OQ-100 (a)) `lassi train --silicon` starts an sft
-  training run of tracked code on a card (tests/train/
-  test_train_silicon_guard.py); the human start never covers a reward.
 - A train recipe whose reward.executor names an Executor that declares
   `silicon` (lassi.core.capabilities SILICON; the real tt_silicon executor,
-  or any other that declares it) is refused before any directory exists and
-  before the Trainer is built, and the refusal names that executor and
-  Agent Rule 9. Today the layer refuses every reward section as a key it
-  does not carry out (NOT_CARRIED_OUT, for P7 and P8); the silicon refusal
-  must name the rule itself, so it stands once the reward is carried out.
-  The check reads the Executor's registry entry, never its name (Agent
-  Rule 3): an executor that does not declare the capability gets only the
-  not-carried-out refusal.
+  or any other that declares it) is treated as a reward on any executor:
+  today the layer refuses every reward section as a key it does not carry
+  out (NOT_CARRIED_OUT, for P7 and P8), before any directory exists and
+  before the Trainer is built, and that refusal names neither silicon nor
+  Agent Rule 9. Nothing reads the capability for a reward any more.
 
 Every component is the train layer's fake Trainer (train_fakes) in a test
 Registry, beside the real tt_silicon executor class, which is never built.
@@ -31,7 +27,6 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
@@ -48,14 +43,6 @@ SILICON = "silicon"
 def setup(tmp_path: Path) -> Setup:
     """Return the test's directories and log."""
     return Setup(tmp_path)
-
-
-def tt_silicon_module() -> ModuleType:
-    """Import lassi.executors.tt_silicon, failing the test clearly while it does not exist."""
-    try:
-        return importlib.import_module("lassi.executors.tt_silicon")
-    except ModuleNotFoundError as error:
-        pytest.fail(f"lassi.executors.tt_silicon does not exist yet (task P17.16): {error}")
 
 
 def never_built(name: str, capabilities: frozenset[str]) -> type:
@@ -90,20 +77,19 @@ def refusal(setup: Setup, registry: Registry, executor: str) -> str:
     return str(refused.value)
 
 
-def test_a_reward_on_the_tt_silicon_executor_is_refused_naming_agent_rule_9(setup: Setup) -> None:
-    module = tt_silicon_module()
+def test_a_reward_on_the_tt_silicon_executor_meets_only_the_not_carried_out_refusal(setup: Setup) -> None:
+    module = importlib.import_module("lassi.executors.tt_silicon")
     registry = registry_with(setup.log, ("tt_silicon", module.TtSiliconExecutor))
     message = refusal(setup, registry, "tt_silicon")
-    assert "tt_silicon" in message and "Agent Rule 9" in message, message
+    assert "reward" in message and "Agent Rule 9" not in message and "runs programs on silicon" not in message, message
 
 
-def test_the_train_refusal_reads_the_capability_never_the_name(setup: Setup) -> None:
+def test_a_reward_on_any_executor_meets_the_same_refusal(setup: Setup) -> None:
     registry = registry_with(
         setup.log,
         ("renamed", never_built("renamed", frozenset({"runs_code", "sandboxed", SILICON}))),
-        ("tt_silicon", never_built("tt_silicon", frozenset({"runs_code", "sandboxed"}))),
+        ("plain", never_built("plain", frozenset({"runs_code", "sandboxed"}))),
     )
-    message = refusal(setup, registry, "renamed")
-    assert "renamed" in message and "Agent Rule 9" in message, message
-    plain = refusal(setup, registry, "tt_silicon")
-    assert "reward" in plain and "Agent Rule 9" not in plain, "no capability, only the not-carried-out refusal"
+    on_silicon, plain = refusal(setup, registry, "renamed"), refusal(setup, registry, "plain")
+    assert on_silicon == plain, (on_silicon, plain)
+    assert not hasattr(importlib.import_module("lassi.train.run"), "_check_reward_executor"), "the refusal is gone"

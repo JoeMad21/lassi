@@ -1,26 +1,35 @@
-"""The guard of `lassi train --silicon`: a training run on a Tenstorrent card, started by a human (task P17.38).
+"""The card guard of a training run on a Tenstorrent card (tasks P17.38 and P17.53).
 
-Bible: Agent Rule 9 as OQ-100 (a) amends it ("silicon runs are evaluation
-runs, or training runs of tracked code, that a human starts"; RL rewards
-never execute on silicon); OQ-100 (s2); OQ-075 (2a), (3a), and (5), the
-tt_silicon executor's lock, quarantine marker, and poll, which a training
-run shares (lassi.executors.tt_silicon card_lock, quarantine_markers, and
-wait_for_cards); Training Module, Safeguards.
+Bible: Agent Rule 9 (the owner's text; its current text stands until the
+owner's revision, OQ-099); OQ-100 (a) with (s2); the owner's
+answers of 2026-10-29 to OQ-078 and OQ-099 (no gate on silicon use in
+LASSI's software and no human start; task P17.53) and that evening's
+refinement, which kept one placement at a time, the quarantine after a
+hang, and no network for training (OQ-107 (a)); OQ-075 (2a), (3a), and
+(5), the tt_silicon executor's lock, quarantine marker, and poll, which a
+training run shares (lassi.executors.tt_silicon card_lock,
+quarantine_markers, and wait_for_cards); Training Module, Safeguards.
 
 A train recipe whose trainer.device names a kind in SILICON_KINDS is a
-silicon run. lassi.train.run refuses it, before any directory exists,
-unless TrainOptions.silicon is True (`lassi train --silicon`, the human
-start no recipe can set), unless its method is sft (SILICON_METHODS: no
-reward, so RL never touches silicon), and unless trainer.network is none
-(SILICON_NETWORK, no default: the worker runs in its own empty network
-namespace, since the training stack's Tracy client listens and broadcasts
-from library load; plans/spikes/tt-perf.md), which provenance.json records. card_guard() builds its CardGuard,
-refusing an unset or relative $LASSI_SCRATCH, which holds the lock.
+silicon run. It needs no start flag (task P17.53), and any method its
+Trainer declares may train there: the sft-only refusal went with the rule
+it cited, that RL rewards never execute on silicon, which the owner directed removed
+on 2026-10-29 (Agent Rule 9's current text stands until the owner's
+revision, OQ-099) ("OF COURSE silicon runs should be included in RL rewards"),
+so the Trainer's own methods bound it (the ttxla trainer declares sft
+alone; lassi.core.recipe refuses any other). lassi.train.run refuses it,
+before any directory exists, unless trainer.network is none
+(SILICON_NETWORK, no default, OQ-107 (a), which the owner kept: the worker
+runs in its own empty network namespace, since the training stack's Tracy
+client listens and broadcasts from library load; plans/spikes/tt-perf.md),
+which provenance.json records. card_guard() builds its CardGuard, refusing
+an unset or relative $LASSI_SCRATCH, which holds the lock.
 
 CardGuard.held() is entered after every other refusal and before any
 directory exists, and left after the final provenance.json: it takes the
-one lock of every card (never a wait: another holder is refused at once),
-refuses while any quarantine marker exists under $LASSI_SCRATCH/locks, and
+one lock of every card (waiting while another process holds it, and
+refused after LOCK_WAIT_S; task P17.53), refuses while any quarantine
+marker exists under $LASSI_SCRATCH/locks, and
 polls until no other account holds the cards (the executor's poll, for
 every card of the host, since which chips the framework opens is not
 known), each refusal a RunError. CardGuard.run(call) then writes the
@@ -63,10 +72,9 @@ from lassi.executors import tt_silicon
 from lassi.executors.sandbox import SandboxUnavailableError
 from lassi.executors.ttsim import printable
 
-# The device kinds a training run reaches silicon through, the methods it may run there (no reward), and the one
-# trainer.network a run there may name: none, its worker in its own empty network namespace.
+# The device kinds a training run reaches silicon through, and the one trainer.network a run there may name: none,
+# its worker in its own empty network namespace (OQ-107 (a)).
 SILICON_KINDS = ("tenstorrent",)
-SILICON_METHODS = ("sft",)
 SILICON_NETWORK = "none"
 # The ending a marker names from before train() is called until its ending replaces it or a clean one removes it.
 UNRECORDED = (
@@ -116,27 +124,16 @@ def is_silicon(device: DeviceRecord) -> bool:
     return device.kind in SILICON_KINDS
 
 
-def check_start(where: str, kind: str, method: Any, network: Any, silicon: bool) -> None:
-    """Refuse a silicon device without the human start, or with a method other than sft or a network other than none.
+def check_start(where: str, kind: str, network: Any) -> None:
+    """Refuse a silicon device whose trainer.network is not none; no start is needed, and any method is taken.
 
-    Each refusal is a RunError naming why. trainer.network has no default:
+    The refusal is a RunError naming why. trainer.network has no default:
     the training stack's Tracy client listens on TCP and broadcasts on UDP
     from library load (plans/spikes/tt-perf.md), so the trainer names
-    network none and runs its worker with no network.
+    network none and runs its worker with no network (OQ-107 (a)).
     """
     if kind not in SILICON_KINDS:
         return
-    if not silicon:
-        raise RunError(
-            f"{where}: trainer.device is a {kind} card, and training runs on silicon are runs a human starts (Agent "
-            "Rule 9, as OQ-100 (a) amends it): start this run with `lassi train <recipe> --silicon`, which no recipe "
-            "can set and no unattended session passes"
-        )
-    if method not in SILICON_METHODS:
-        raise RunError(
-            f"{where}: method {method!r} on a {kind} card: only {', '.join(SILICON_METHODS)} trains on silicon, since "
-            "RL rewards never execute on silicon (Agent Rule 9)"
-        )
     if network != SILICON_NETWORK:
         raise RunError(
             f"{where}: trainer.network is {network!r} on a {kind} card; it must be {SILICON_NETWORK!r}, with no "
@@ -173,7 +170,8 @@ class CardGuard:
         """Hold the lock for the block, after the quarantine check and the poll; each refusal a RunError."""
         with ExitStack() as stack:
             try:
-                stack.enter_context(tt_silicon.card_lock(self.locks, self.host.flock))
+                lock = tt_silicon.card_lock(self.locks, self.host.flock, self.host.clock, self.host.sleep)
+                stack.enter_context(lock)
             except SandboxUnavailableError as error:
                 raise RunError(f"{error}; no train directory was made") from None
             self._check_free()
@@ -219,12 +217,12 @@ class CardGuard:
         """Write the quarantine marker naming the endings, the run, and its cards (OQ-075 (3a))."""
         written = datetime.now(timezone.utc).isoformat(timespec="seconds")
         lines = [
-            f"tt_silicon quarantine (OQ-075 (3a)), written {written} by pid {os.getpid()}: lassi train --silicon, "
+            f"tt_silicon quarantine (OQ-075 (3a)), written {written} by pid {os.getpid()}: lassi train, "
             f"train id {self.train_id}, trainer {self.trainer}",
             *(f"ending: {ending}" for ending in endings),
             *self.card_lines,
-            "Every later silicon run, lassi run --silicon or lassi train --silicon, is refused until a human checks "
-            "these cards and removes this file.",
+            "Every later silicon run, of lassi run or lassi train, is refused until a human checks these cards and "
+            "removes this file.",
         ]
         self.locks.mkdir(mode=0o700, parents=True, exist_ok=True)
         text = "".join(f"{printable(line)}\n" for line in lines)

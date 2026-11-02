@@ -15,8 +15,9 @@ lassi.core.registry.DEFAULT_REGISTRY:
   (task P17.5).
 - "tt_silicon" (tt_silicon.TtSiliconExecutor): runs a TT host program on
   every Wormhole card of the host, with every card exposed in the
-  sandbox; only a run a human starts with `lassi run --silicon` builds
-  it (task P17.16; Agent Rule 9).
+  sandbox, each card's IOMMU group in view as on the host (task P17.16;
+  task P17.54); the runner runs it like any other executor, with no start
+  flag (task P17.53).
 
 Each executor names the device its programs run on with device(), one
 non-empty line of printable ASCII with no leading or trailing blank, which
@@ -25,8 +26,9 @@ CPU with its model for native; ttsim with its pin and the pinned
 tt-metal, as a simulator, for ttsim; ttsim, the tt-mlir runtime, and the
 driver, as a simulator, for ttmlir-ttsim; and the kind, each GPU's index and
 name, and the driver, read at construction, for gpu; and the cards, each
-card's serial and firmware, the driver, and the pinned tt-metal, read at
-construction, as silicon, for tt_silicon.
+card's serial, firmware, and IOMMU group with its domain type, the
+driver, and the pinned tt-metal, read at construction, as silicon, for
+tt_silicon.
 
 Importing it also registers the host device probes (devices.CpuProbe,
 RocmProbe, and CudaProbe; task P17.2) in lassi.core.devices.DEFAULT_PROBES

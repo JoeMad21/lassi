@@ -586,8 +586,54 @@ class Request:
 
 
 @dataclass(frozen=True, kw_only=True)
+class FinalTest:
+    """An attempt's final test on the recipe's final executor (task P17.55; lassi.core.stages, run_loop).
+
+    run_loop gives one to an attempt whose run passed the oracle on the
+    trial's executor (ttsim, a simulator, for a TT target): the attempt's
+    files are built once more, in their own directory, and run once on the
+    final executor (the Wormhole cards through tt_silicon) on the same
+    held-out inputs. `executor` is that executor's registered name and
+    `device` its device() line, the one that names the run's device (Agent
+    Rule 2), None when it names none. `stage_reached` is the stage that run
+    reaches (S5 clean, S4 a failed run, S1 a kernel JIT error, or S1 when the
+    rebuild gave no program), `diagnostics` what the rebuild and the run
+    noted (a run-error, an oracle mismatch, a device-timing note), `run`
+    the run with its output files and device timing (RunInfo.device_timing,
+    the silicon run's device time when the executor's profiler is on), and
+    `alignment` the oracle's statistics of its outputs against the target
+    reference's, empty when the run was not clean. `passed` is True exactly
+    when the run was clean and every output met its threshold: a pass
+    passes the trial, and a failure is fed back as a correction within the
+    one correction cap.
+    """
+
+    executor: str
+    device: str | None
+    stage_reached: str
+    diagnostics: list[Diagnostic] = field(default_factory=list)
+    run: RunInfo = field(default_factory=RunInfo)
+    alignment: Alignment = field(default_factory=Alignment)
+    passed: bool
+
+    def __post_init__(self) -> None:
+        """Check the field types, the executor name, a known device, and the stage reached."""
+        _check_fields(self)
+        _check_non_empty("FinalTest", "executor", self.executor)
+        if self.device is not None:
+            _check_non_empty("FinalTest", "device", self.device)
+        _check_choice("FinalTest", "stage_reached", self.stage_reached, STAGES)
+
+
+@dataclass(frozen=True, kw_only=True)
 class Attempt:
-    """One generation: index 0 is the initial one, then one per correction."""
+    """One generation: index 0 is the initial one, then one per correction.
+
+    `final_test` (task P17.55) is the attempt's final test on the recipe's
+    final executor (FinalTest); None means none ran, as for every attempt
+    of a recipe without a final_executor section and in a trial.json
+    written before the field existed.
+    """
 
     index: int
     prompt_ref: TextRef | None = None
@@ -601,6 +647,7 @@ class Attempt:
     profile: Profile = field(default_factory=Profile)
     guards: Guards = field(default_factory=Guards)
     score: ScoreBreakdown = field(default_factory=ScoreBreakdown)
+    final_test: FinalTest | None = None
 
     def __post_init__(self) -> None:
         """Check the field types, the index, and the stage reached."""
