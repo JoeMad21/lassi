@@ -1,9 +1,10 @@
 # sweep18, RUN ON TTSIM WITH THE OUTPUT CHECK: cpp -> d2m on tt-pairs-v0-d2m for Llama-3.3-70B-Instruct-FP8-dynamic
 # (v2026.4, 4 RNGD cards) with the fewest features that reached the correction loop for TTIR (the bare loop with the
-# D2M API reference), as sweep17's d2m-min for gpt-oss-120b, with Llama's own sampling settings and no reasoning
+# D2M API reference), as sweep19's d2m-min-gap for gpt-oss-120b, with Llama's own sampling settings and no reasoning
 # setting (the owner, 2026-11-01: "consider minimum features tests for 70B"). Each D2M module compiles for the
 # recorded ttsim descriptor and runs through the driver on ttsim, a simulator (never performance); outputs are checked
-# against the item's declared tolerance. Exploratory.
+# against the item's declared tolerance, and run errors, mismatches, and simulator gaps come back as corrections
+# within the cap of 8. Exploratory.
 extends: ../../../base.yaml  # projects/base.yaml: runs root, sandbox, and report choices
 faithful: false  # an exploratory arm of this project; nothing reproduces an upstream run
 model:
@@ -22,7 +23,7 @@ bench:
   split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
   items: [eltwise_binary, eltwise_sfpu, loopback, matmul_multi_core]  # each judged by its declared tolerance
 directions: [{source: cpp, target: d2m}]
-prompts: tt-d2m-bare-v1  # the bare loop for D2M, with run-failure and mismatch corrections
+prompts: tt-d2m-bare-v1  # the bare loop for D2M, with run-failure (simulator gaps included) and mismatch corrections
 context: [d2m-ref-5f396fd6]  # the exact API reference of the D2M dialect at the pin
 toolchain:
   d2m: d2m-ttmetal-ttsim  # the runtime build's tools, lowering for the recorded ttsim descriptor
@@ -37,4 +38,4 @@ executor:
   d2m: {kind: ttmlir-ttsim, arch: wormhole_b0, dispatch: slow}  # each flatbuffer runs through the driver on ttsim
 oracle: {kind: binary_io, metric: from_item, threshold: from_item, shape: elements}  # the item's declared tolerance
 trials: {n: 2}
-loop: {max_corrections: 8, correct_on_mismatch: true}  # rung l1's cap; mismatches come back as corrections
+loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true}  # rung l1's cap; as sweep19

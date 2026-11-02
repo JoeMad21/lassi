@@ -2,7 +2,8 @@
 
 The owner reserved the Tenstorrent and RNGD cards on 2026-11-01 from 18:00 to 21:00 EST and on 2026-11-02 from 03:00 to
 09:00 EST ("Keep working. Finish any interesting experiments on the 120B model so that we can move to promising 70B
-models."). Every run below is a development result on tt-pairs-v0's unassigned items (OQ-083 (b)). Each run compiles,
+models."). Testing in the second window ends at 08:30 (changed at 23:15 on 2026-11-01; see below). Every run below is
+a development result on tt-pairs-v0's unassigned items (OQ-083 (b)). Each run compiles,
 runs on ttsim (a simulator: nothing measures performance), and checks outputs against the item's declared tolerance;
 none runs on silicon (the IOMMU read pass-through at its last reading, 2026-10-22, OQ-078, and Agent Rule 9 stands as written).
 
@@ -28,14 +29,19 @@ Changed at 17:50 (the owner: "I have some TurboQuant code for you to check and r
   not gated, the Hub's API for that revision read 2026-11-01, sha c3dddd674db6e22cc6a91a9a7e1336bf67a7a8ff) into $LASSI_SCRATCH/.cache/huggingface, the cache run.sh serves from, and the snapshot is confirmed before
   03:00 (the owner: "Plan to download the Llama model once we delete GPT OSS").
 
-## 2026-11-02, 03:00 to 09:00: Llama-3.3-70B
+## 2026-11-02, 03:00 to 08:30: Llama-3.3-70B
+
+Changed at 23:15 on 2026-11-01 (the owner: "A quick note, we must suspend testing 30 minutes earlier than I reported."):
+testing in this window ends at 08:30, not 09:00, so sweep18's deadline is 08:15, which with the suite's 900 s backstop
+ends every call by 08:30.
 
 - sweep18 (task P17.61): the TTIR ladder on ttsim, l0 (the bare loop) to l3 (plus the API reference, retrieval, and
   the cgeist affine source), and d2m-min, with Llama's own sampling (temperature 0.6, top_p 0.9, from
   https://huggingface.co/furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic/raw/v2026.4/generation_config.json, read
   2026-11-01) and no reasoning setting (the owner: "consider minimum features tests for 70B. May be the case that the model needs more features to
-  converge."). l1 and d2m-min match sweep17's gpt-oss-120b arms but for the model. Deadline 08:45; passes chained as
-  above.
+  converge."). l1, l3, and d2m-min match sweep19's gpt-oss-120b arms (ttir-min-gap, ttir-full-gap, d2m-min-gap) but
+  for the model, and every recipe feeds simulator gaps back as corrections, as sweep19 does. Deadline 08:15; passes
+  chained as above.
 - TurboQuant testing (the owner, 2026-11-01: "Set a reminder to also do TurboQuant testing during one of the windows"):
   a candidate for the end of this window or a later one. TurboQuant is P18, deferred and outside the work order
   (OQ-066), so what "testing" runs needs the owner's scope first (to be asked in the attended session); plans/spikes/p5-tier-b.md and results/p5-tier-b

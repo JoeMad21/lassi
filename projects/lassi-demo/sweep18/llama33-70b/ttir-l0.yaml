@@ -2,10 +2,11 @@
 # (v2026.4, 4 RNGD cards), rung l0, the bare LASSI loop (task P17.61; the owner, 2026-11-01: "consider minimum
 # features tests for 70B. May be the case that the model needs more features to converge."). Each TTIR module compiles
 # with the runtime build's tools for the recorded ttsim descriptor and runs through the driver on ttsim, a simulator
-# (never performance); its outputs are checked against the item's declared tolerance, and run errors and mismatches
-# come back as corrections within the cap of 8. Exploratory. The ladder: l0 the bare loop (tt-ttir-bare-v1); l1 adds
-# the TTIR API reference; l2 adds retrieval over tt-mlir's TTIR tests; l3 adds the cgeist affine source. Everything
-# else is sweep17's gpt-oss-120b arms, with Llama's own sampling settings and no reasoning setting.
+# (never performance); its outputs are checked against the item's declared tolerance, and run errors, mismatches, and
+# simulator gaps come back as corrections within the cap of 8. Exploratory. The ladder: l0 the bare loop
+# (tt-ttir-bare-v1); l1 adds the TTIR API reference; l2 adds retrieval over tt-mlir's TTIR tests; l3 adds the cgeist
+# affine source. Everything else is sweep19's gpt-oss-120b arms (sweep17's, with simulator gaps fed back), with Llama's
+# own sampling settings and no reasoning setting.
 extends: ../../../base.yaml  # projects/base.yaml: runs root, sandbox, and report choices
 faithful: false  # an exploratory arm of this project; nothing reproduces an upstream run
 model:
@@ -24,7 +25,7 @@ bench:
   split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
   items: [eltwise_binary, eltwise_sfpu, matmul_multi_core]  # each judged by its declared tolerance
 directions: [{source: cpp, target: ttir}]
-prompts: tt-ttir-bare-v1  # the bare loop, with run-failure and mismatch corrections
+prompts: tt-ttir-bare-v1  # the bare loop, with run-failure (simulator gaps included) and mismatch corrections
 toolchain:
   ttir: ttir-ttmetal-ttsim  # the runtime build's tools, lowering for the recorded ttsim descriptor
   tt: ttmetal-host  # the tt reference's toolchain (reference: tt)
@@ -38,4 +39,4 @@ executor:
   ttir: {kind: ttmlir-ttsim, arch: wormhole_b0, dispatch: slow}  # each flatbuffer runs through the driver on ttsim
 oracle: {kind: binary_io, metric: from_item, threshold: from_item, shape: elements}  # the item's declared tolerance
 trials: {n: 2}
-loop: {max_corrections: 8, correct_on_mismatch: true}  # LASSI's correction loop; mismatches come back as corrections
+loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true}  # mismatches and gaps come back too

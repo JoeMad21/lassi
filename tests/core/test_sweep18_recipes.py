@@ -11,8 +11,9 @@ What they fix for projects/lassi-demo/sweep18/llama33-70b/:
 - Each ladder rung adds exactly one feature to the rung below: l1 the API
   reference (with verbatim_context), l2 retrieval, l3 the cgeist affine
   source; l0 is the bare loop.
-- l1 and d2m-min are sweep17's gpt-oss-120b ttir-min and d2m-min but for the
-  model and its sampling, so the two models compare arm for arm.
+- l1, l3, and d2m-min are sweep19's gpt-oss-120b ttir-min-gap, ttir-full-gap,
+  and d2m-min-gap but for the model and its sampling, so the two models
+  compare arm for arm; every recipe feeds simulator gaps back as corrections.
 - The model is Llama-3.3-70B-Instruct-FP8-dynamic with the sampling of its own
   generation_config.json (temperature 0.6, top_p 0.9), 8192 tokens, and no
   reasoning setting.
@@ -30,7 +31,7 @@ from lassi.core.recipe import load_recipe
 
 REPO = Path(__file__).resolve().parents[2]
 RECIPES = REPO / "projects" / "lassi-demo" / "sweep18" / "llama33-70b"
-SWEEP17 = REPO / "projects" / "lassi-demo" / "sweep17" / "gpt-oss-120b"
+SWEEP19 = REPO / "projects" / "lassi-demo" / "sweep19" / "gpt-oss-120b"
 NAMES = ["d2m-min", "ttir-l0", "ttir-l1", "ttir-l2", "ttir-l3"]
 ADDED = {1: {"context", "stages"}, 2: {"retrieval"}, 3: {"source_mlir"}}
 MODEL = "furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic"
@@ -57,7 +58,8 @@ def test_each_recipe_runs_on_ttsim_with_the_item_tolerance_and_says_so(name: str
     assert data["executor"][language]["kind"] == "ttmlir-ttsim"
     assert data["oracle"] == {"kind": "binary_io", "metric": "from_item", "threshold": "from_item", "shape": "elements"}
     assert data["stages"][-3:] == ["compile_loop", "run_loop", "oracle"] and data["stages"][0] == "baseline"
-    assert data["loop"] == {"max_corrections": 8, "correct_on_mismatch": True} and data["trials"] == {"n": 2}
+    assert data["loop"] == {"max_corrections": 8, "correct_on_mismatch": True, "correct_on_sim_gap": True}
+    assert data["trials"] == {"n": 2}
     text = (RECIPES / f"{name}.yaml").read_text(encoding="ascii")
     header = " ".join(line.lstrip("# ") for line in text.split("\nextends:")[0].split("\n"))
     assert "RUN ON TTSIM WITH THE OUTPUT CHECK" in header and "a simulator" in header
@@ -83,9 +85,9 @@ def test_the_bottom_rung_is_the_bare_loop() -> None:
         assert key not in data, key
 
 
-PAIRS = [("ttir-l1", "ttir-min"), ("ttir-l3", "ttir-full"), ("d2m-min", "d2m-min")]
+PAIRS = [("ttir-l1", "ttir-min-gap"), ("ttir-l3", "ttir-full-gap"), ("d2m-min", "d2m-min-gap")]
 
 
 @pytest.mark.parametrize(("ours", "theirs"), PAIRS)
-def test_the_arms_match_sweep17_but_for_the_model(ours: str, theirs: str) -> None:
-    assert changed(load(RECIPES / f"{ours}.yaml"), load(SWEEP17 / f"{theirs}.yaml")) == {"model", "llm"}
+def test_the_arms_match_sweep19_but_for_the_model(ours: str, theirs: str) -> None:
+    assert changed(load(RECIPES / f"{ours}.yaml"), load(SWEEP19 / f"{theirs}.yaml")) == {"model", "llm"}
