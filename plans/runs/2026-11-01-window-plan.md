@@ -43,7 +43,7 @@ ends every call by 08:30.
   for the model, and every recipe feeds simulator gaps back as corrections, as sweep19 does. Deadline 08:15.
   Changed at 00:40 on 2026-11-02 (the owner: "I'm going to bed, you're good to handle testing right? Consider updating
   the background program in case you run out of usage."): the passes are chained on alpha01, not from the
-  workstation. One rx job, started about 01:00, runs plans/runs/suite/run-passes.sh, which waits on the host until
+  workstation. One rx job (20261101-214439-suite18-7433, started at 00:44:39) runs plans/runs/suite/run-passes.sh, which waits on the host until
   03:00, runs run-suite.sh, and runs it again after each pass that ends early while at least 31 minutes remain to
   08:15, so no session or workstation is needed once it starts.
 - TurboQuant testing (the owner, 2026-11-01: "Set a reminder to also do TurboQuant testing during one of the windows"):

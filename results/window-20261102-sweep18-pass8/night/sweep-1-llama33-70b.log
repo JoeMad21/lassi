@@ -1,0 +1,77 @@
+2026-11-02T03:32:35-0800 sweep 20261102-0332: deadline 05:15:00, 6145 s left, output /mnt/nvme10/joseph_ufl/lassi-runs/rngd-sweep/20261102-0332
+2026-11-02T03:32:36-0800 START llama33-70b: furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-02T03:33:01-0800 READY llama33-70b: running 5 recipes side by side for at most 5519 s
+2026-11-02T03:57:14-0800 llama33-70b run 551843 ended rc=0
+2026-11-02T03:57:14-0800 llama33-70b run 551845 ended rc=0
+2026-11-02T03:57:14-0800 llama33-70b run 551846 ended rc=0
+2026-11-02T03:57:14-0800 llama33-70b run 551847 ended rc=0
+2026-11-02T03:57:14-0800 llama33-70b run 551848 ended rc=0
+llama33-70b--d2m-min	cpp-d2m/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/loopback/run01	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/loopback/run02	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l2	cpp-ttir/eltwise_binary/run01	S5	1.0	0	-	1
+llama33-70b--ttir-l2	cpp-ttir/eltwise_binary/run02	S5	1.0	0	-	1
+llama33-70b--ttir-l2	cpp-ttir/eltwise_sfpu/run01	S5	1.0	0	-	1
+llama33-70b--ttir-l2	cpp-ttir/eltwise_sfpu/run02	S5	1.0	0	-	1
+llama33-70b--ttir-l2	cpp-ttir/matmul_multi_core/run01	S5	1.0	0	-	1
+llama33-70b--ttir-l2	cpp-ttir/matmul_multi_core/run02	S5	1.0	0	-	1
+llama33-70b--ttir-l3	cpp-ttir/eltwise_binary/run01	S5	1.0	0	-	1
+llama33-70b--ttir-l3	cpp-ttir/eltwise_binary/run02	S5	1.0	0	-	1
+llama33-70b--ttir-l3	cpp-ttir/eltwise_sfpu/run01	S5	1.0	0	-	1
+llama33-70b--ttir-l3	cpp-ttir/eltwise_sfpu/run02	S5	1.0	0	-	1
+llama33-70b--ttir-l3	cpp-ttir/matmul_multi_core/run01	S5	1.0	1	-	2
+llama33-70b--ttir-l3	cpp-ttir/matmul_multi_core/run02	S5	1.0	1	-	2
+2026-11-02T03:57:15-0800 server 529675 exited
+2026-11-02T03:57:16-0800 DONE llama33-70b; free cards now 8; 4664 s left
+2026-11-02T03:57:16-0800 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+llama33-70b--d2m-min	cpp-d2m/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/loopback/run01	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/loopback/run02	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--d2m-min	cpp-d2m/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l0	cpp-ttir/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/eltwise_binary/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/eltwise_binary/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/eltwise_sfpu/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/eltwise_sfpu/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/matmul_multi_core/run01	S1	None	8	correction-cap	9
+llama33-70b--ttir-l1	cpp-ttir/matmul_multi_core/run02	S1	None	8	correction-cap	9
+llama33-70b--ttir-l2	cpp-ttir/eltwise_binary/run01	S5	1.0	0	-	1
+llama33-70b--ttir-l2	cpp-ttir/eltwise_binary/run02	S5	1.0	0	-	1
+llama33-70b--ttir-l2	cpp-ttir/eltwise_sfpu/run01	S5	1.0	0	-	1
+llama33-70b--ttir-l2	cpp-ttir/eltwise_sfpu/run02	S5	1.0	0	-	1
+llama33-70b--ttir-l2	cpp-ttir/matmul_multi_core/run01	S5	1.0	0	-	1
+llama33-70b--ttir-l2	cpp-ttir/matmul_multi_core/run02	S5	1.0	0	-	1
+llama33-70b--ttir-l3	cpp-ttir/eltwise_binary/run01	S5	1.0	0	-	1
+llama33-70b--ttir-l3	cpp-ttir/eltwise_binary/run02	S5	1.0	0	-	1
+llama33-70b--ttir-l3	cpp-ttir/eltwise_sfpu/run01	S5	1.0	0	-	1
+llama33-70b--ttir-l3	cpp-ttir/eltwise_sfpu/run02	S5	1.0	0	-	1
+llama33-70b--ttir-l3	cpp-ttir/matmul_multi_core/run01	S5	1.0	1	-	2
+llama33-70b--ttir-l3	cpp-ttir/matmul_multi_core/run02	S5	1.0	1	-	2
+2026-11-02T03:57:16-0800 sweep ended

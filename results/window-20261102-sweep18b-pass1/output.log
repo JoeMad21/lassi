@@ -1,0 +1,61 @@
+2026-11-02T03:59:24-0800 run-passes 20261102-035924-suite18b-75cd: start 2026-11-02 03:59:20 -0800, deadline 2026-11-02 05:15:00 -0800, at most 8 pass(es) of plans/runs/suite/run-suite.sh --table plans/runs/suite/models.tsv --models llama33-70b --sweep projects/lassi-demo/sweep18 --skip-download
+2026-11-02T03:59:24-0800 pass 1 as 20261102-035924-suite18b-75cd, 4536 s to the deadline
+2026-11-02T03:59:24-0800 run-suite 20261102-035924-suite18b-75cd: deadline 2026-11-02 05:15:00 -0800, 4536 s left
+2026-11-02T03:59:24-0800 models llama33-70b; sweeps projects/lassi-demo/sweep18; only (every recipe); table plans/runs/suite/models.tsv; output /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd
+2026-11-02T03:59:24-0800 commit b47bd6080945237dac143bf305a8cd1d0a8e48f6, 0 changed paths
+2026-11-02T03:59:24-0800 scratch disk: 257 GB free; scratch root 157G
+recipes.py: 5 recipes listed, 5 selected, into /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd/recipes.tsv
+2026-11-02T03:59:35-0800 context:d2m-ref-5f396fd6 built; its manifest equals the tracked one
+2026-11-02T03:59:37-0800 context:ttir-ref-5f396fd6 built; its manifest equals the tracked one
+2026-11-02T03:59:38-0800 retrieval:tt-mlir-ttir-tests built; its manifest equals the tracked one
+2026-11-02T03:59:38-0800 tt-pairs-v0-ttir sources fetched and checked
+2026-11-02T03:59:39-0800 tt-pairs-v0-d2m sources fetched and checked
+2026-11-02T03:59:39-0800 1 run.sh call(s): llama33-70b
+2026-11-02T03:59:39-0800 call 1 of 1: llama33-70b over projects/lassi-demo/sweep18, 5 recipe(s), until 05:15:00
+2026-11-02T04:24:31-0800 call 1 ended rc=0, pass 20261102-0359; its log: /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd/sweep-1-llama33-70b.log
+2026-11-02T03:59:39-0800 START llama33-70b: furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-02T04:00:04-0800 READY llama33-70b: running 5 recipes side by side for at most 3896 s
+2026-11-02T04:24:29-0800 llama33-70b run 545003 ended rc=0
+2026-11-02T04:24:29-0800 llama33-70b run 545004 ended rc=0
+2026-11-02T04:24:29-0800 llama33-70b run 545009 ended rc=0
+2026-11-02T04:24:29-0800 llama33-70b run 545011 ended rc=0
+2026-11-02T04:24:29-0800 llama33-70b run 545013 ended rc=0
+2026-11-02T04:24:31-0800 sweep ended
+2026-11-02T04:24:35-0800 tabulate rc=0: 753 trials from 41 pass-model pairs into /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd/tables
+32 trials into /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd/features-20261102-0359.tsv
+2026-11-02T04:24:35-0800 count_features 20261102-0359 rc=0
+2026-11-02T04:24:39-0800 classify rc=0
+2026-11-02T04:24:39-0800 scratch disk at the end: 256 GB free; scratch root 158G
+2026-11-02T04:24:49-0800 run-suite ended
+2026-11-02T04:24:49-0800 pass 1 ended rc=0 after 1525 s; its output: /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd
+2026-11-02T04:25:49-0800 pass 2 as 20261102-035924-suite18b-75cd-p2, 2951 s to the deadline
+2026-11-02T04:25:49-0800 run-suite 20261102-035924-suite18b-75cd-p2: deadline 2026-11-02 05:15:00 -0800, 2951 s left
+2026-11-02T04:25:49-0800 models llama33-70b; sweeps projects/lassi-demo/sweep18; only (every recipe); table plans/runs/suite/models.tsv; output /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd-p2
+2026-11-02T04:25:49-0800 commit b47bd6080945237dac143bf305a8cd1d0a8e48f6, 0 changed paths
+2026-11-02T04:25:49-0800 scratch disk: 256 GB free; scratch root 158G
+recipes.py: 5 recipes listed, 5 selected, into /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd-p2/recipes.tsv
+2026-11-02T04:26:00-0800 context:d2m-ref-5f396fd6 built; its manifest equals the tracked one
+2026-11-02T04:26:01-0800 context:ttir-ref-5f396fd6 built; its manifest equals the tracked one
+2026-11-02T04:26:03-0800 retrieval:tt-mlir-ttir-tests built; its manifest equals the tracked one
+2026-11-02T04:26:03-0800 tt-pairs-v0-ttir sources fetched and checked
+2026-11-02T04:26:03-0800 tt-pairs-v0-d2m sources fetched and checked
+2026-11-02T04:26:03-0800 1 run.sh call(s): llama33-70b
+2026-11-02T04:26:03-0800 call 1 of 1: llama33-70b over projects/lassi-demo/sweep18, 5 recipe(s), until 05:15:00
+2026-11-02T04:55:04-0800 call 1 ended rc=0, pass 20261102-0426; its log: /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd-p2/sweep-1-llama33-70b.log
+2026-11-02T04:26:04-0800 START llama33-70b: furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-02T04:26:29-0800 READY llama33-70b: running 5 recipes side by side for at most 2311 s
+2026-11-02T04:55:01-0800 llama33-70b run 97454 ended rc=0
+2026-11-02T04:55:01-0800 llama33-70b run 97455 ended rc=0
+2026-11-02T04:55:01-0800 llama33-70b run 97456 ended rc=0
+2026-11-02T04:55:01-0800 llama33-70b run 97457 ended rc=0
+2026-11-02T04:55:01-0800 llama33-70b run 97458 ended rc=0
+2026-11-02T04:55:04-0800 sweep ended
+2026-11-02T04:55:08-0800 tabulate rc=0: 785 trials from 42 pass-model pairs into /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd-p2/tables
+32 trials into /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd-p2/features-20261102-0426.tsv
+2026-11-02T04:55:08-0800 count_features 20261102-0426 rc=0
+2026-11-02T04:55:12-0800 classify rc=0
+2026-11-02T04:55:12-0800 scratch disk at the end: 256 GB free; scratch root 159G
+2026-11-02T04:55:22-0800 run-suite ended
+2026-11-02T04:55:22-0800 pass 2 ended rc=0 after 1773 s; its output: /mnt/nvme10/joseph_ufl/lassi-runs/suite/20261102-035924-suite18b-75cd-p2
+2026-11-02T04:56:22-0800 1118 s to the deadline, under 1860: no more passes
+2026-11-02T04:56:22-0800 run-passes ended after 2 pass(es)

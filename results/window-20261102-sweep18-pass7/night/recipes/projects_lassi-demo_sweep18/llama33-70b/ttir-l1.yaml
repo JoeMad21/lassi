@@ -1,0 +1,76 @@
+# Resolved recipe ttir-l1 (chain: base -> ttir-l0 -> ttir-l1)
+# recipe_hash: 39d53074013da059aaf6034efae82520680ea00152c8495e1643fffd697ec2b0 is the sha256 of the YAML below these comment lines
+bench:
+  items:
+  - eltwise_binary
+  - eltwise_sfpu
+  - matmul_multi_core
+  split: unassigned
+  suite: tt-pairs-v0-ttir
+context:
+- ttir-ref-5f396fd6
+directions:
+- source: cpp
+  target: ttir
+executor:
+  cpp:
+    kind: native
+  tt:
+    arch: wormhole_b0
+    dispatch: slow
+    kind: ttsim
+  ttir:
+    arch: wormhole_b0
+    dispatch: slow
+    kind: ttmlir-ttsim
+extract:
+  unfenced_file_lines: true
+faithful: false
+fixes:
+  baseline_both: true
+  execution_gate: true
+  fence_tag: true
+  parsed_diagnostics: true
+  prompt_newlines: true
+  prompt_spaces: true
+llm:
+  sampling:
+    max_tokens: 8192
+    temperature: 0.6
+    top_p: 0.9
+loop:
+  correct_on_mismatch: true
+  correct_on_sim_gap: true
+  max_corrections: 8
+model:
+  backend: openai_compat
+  id: furiosa-ai/Llama-3.3-70B-Instruct-FP8-dynamic
+  timeout_s: 1800
+oracle:
+  kind: binary_io
+  metric: from_item
+  shape: elements
+  threshold: from_item
+project: ttir-l1
+prompts: tt-ttir-bare-v1
+report:
+  parquet: true
+  trial_md: true
+runs_root: /mnt/nvme10/joseph_ufl/lassi-runs
+sandbox:
+  mem_gb: 16
+  network: false
+  wall_s: baseline_x10
+stages:
+- baseline
+- verbatim_context
+- generate
+- compile_loop
+- run_loop
+- oracle
+toolchain:
+  cpp: gcc-native
+  tt: ttmetal-host
+  ttir: ttir-ttmetal-ttsim
+trials:
+  n: 2
