@@ -1,0 +1,14 @@
+# The 30B-class models of the owner's window of 2026-11-09 (05:00 to 10:00 EST), each a furiosa-ai build at
+# the v2026.4 tag served from furiosa-venv-2026.4 on 4 RNGD cards with no --reasoning-parser, in serving
+# order (the EXAONE models last: a later pass reaches only the tail of the order). The last column is the
+# revision's size in bytes, the sum of every file's size in the Hub's tree API
+# (https://huggingface.co/api/models/<model>/tree/v2026.4?recursive=1), read 2026-11-09.
+# EXAONE-3.5-32B-Instruct is left out: furiosa-ai publishes it only at v2025.3.0 tags, which furiosa-llm
+# 2026.4 does not load.
+# slug	model	revision	cards	reasoning_parser	venv (under the scratch root)	bytes
+qwen3-coder-30b	furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8	v2026.4	4	-	furiosa-venv-2026.4	33257721305
+qwen3-30b-instruct	furiosa-ai/Qwen3-30B-A3B-Instruct-2507-FP8	v2026.4	4	-	furiosa-venv-2026.4	33257679779
+qwen3-32b	furiosa-ai/Qwen3-32B-FP8	v2026.4	4	-	furiosa-venv-2026.4	35964265856
+gemma4-31b	furiosa-ai/gemma-4-31B-it-FP8-block	v2026.4	4	-	furiosa-venv-2026.4	34966920152
+exaone4-32b	furiosa-ai/EXAONE-4.0-32B-FP8	v2026.4	4	-	furiosa-venv-2026.4	35037159883
+exaone45-33b	furiosa-ai/EXAONE-4.5-33B-FP8	v2026.4	4	-	furiosa-venv-2026.4	43907298641

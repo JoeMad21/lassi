@@ -1,0 +1,12 @@
+# sweep20, RUN ON TTSIM WITH THE OUTPUT CHECK: sweep18's TTIR ladder, rung l3, ttir-l2.yaml plus the cgeist affine
+# source, for furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8 (v2026.4, 4 RNGD cards), in the owner's window of
+# 2026-11-09, 05:00 to 10:00 EST (the owner: "Starting at 5am, you will have 5 hours to conduct LASSI testing with a
+# 30B model to compare to the 120B and 70B work. I would like to see the EXAONE models as well as any other 30B models
+# we discussed be tested."). Every setting is projects/lassi-demo/sweep18/llama33-70b/ttir-l3.yaml's but the model and
+# its sampling, so each arm compares with Llama-3.3-70B's sweep18 arm and, for l1, l3, and d2m-min, with
+# gpt-oss-120b's sweep19 arm. Its settings come from the file it extends. Each module compiles for the recorded ttsim
+# descriptor and runs through the driver on ttsim, a simulator (never performance); outputs are checked against the
+# item's declared tolerance, and run errors, mismatches, and simulator gaps come back as corrections within the cap of
+# 8. Exploratory.
+extends: ttir-l2.yaml
+source_mlir: {toolchain: cgeist-affine, max_chars: 24000}

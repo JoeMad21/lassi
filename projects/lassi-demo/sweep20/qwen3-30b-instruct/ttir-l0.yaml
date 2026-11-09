@@ -1,0 +1,46 @@
+# sweep20, RUN ON TTSIM WITH THE OUTPUT CHECK: sweep18's TTIR ladder, rung l0, the bare LASSI loop, for
+# furiosa-ai/Qwen3-30B-A3B-Instruct-2507-FP8 (v2026.4, 4 RNGD cards), in the owner's window of 2026-11-09, 05:00 to
+# 10:00 EST (the owner: "Starting at 5am, you will have 5 hours to conduct LASSI testing with a 30B model to compare
+# to the 120B and 70B work. I would like to see the EXAONE models as well as any other 30B models we discussed be
+# tested."). Every setting is projects/lassi-demo/sweep18/llama33-70b/ttir-l0.yaml's but the model and its sampling,
+# so each arm compares with Llama-3.3-70B's sweep18 arm and, for l1, l3, and d2m-min, with gpt-oss-120b's sweep19 arm.
+# The ladder: l0 the bare loop (tt-ttir-bare-v1); l1 adds the TTIR API reference; l2 adds retrieval over tt-mlir's
+# TTIR tests; l3 adds the cgeist affine source; d2m-min is cpp -> d2m with the D2M API reference. Sampling is read
+# from https://huggingface.co/furiosa-ai/Qwen3-30B-A3B-Instruct-2507-FP8/raw/v2026.4/generation_config.json
+# (2026-11-09); Sampling has no top_k or penalty field, so those values are not sent. Each module compiles for the
+# recorded ttsim descriptor and runs through the driver on ttsim, a simulator (never performance); outputs are checked
+# against the item's declared tolerance, and run errors, mismatches, and simulator gaps come back as corrections
+# within the cap of 8. Exploratory.
+extends: ../../../base.yaml  # projects/base.yaml: runs root, sandbox, and report choices
+faithful: false  # an exploratory arm of this project; nothing reproduces an upstream run
+model:
+  backend: openai_compat  # the OpenAI-compatible server run.sh starts on port 8123
+  id: furiosa-ai/Qwen3-30B-A3B-Instruct-2507-FP8
+  timeout_s: 1800  # as sweep18's recipes
+llm:
+  sampling:
+    temperature: 0.7  # its generation_config.json at v2026.4 (top_k 20 not sent)
+    top_p: 0.8  # the same source
+    max_tokens: 8192  # not a reasoning model (Instruct-2507); as sweep18's recipes
+extract:
+  unfenced_file_lines: true  # as sweep18's recipes
+bench:
+  suite: tt-pairs-v0-ttir  # tt-pairs-v0's items unchanged, with a ttir language whose reference is tt
+  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  items: [eltwise_binary, eltwise_sfpu, matmul_multi_core]  # each judged by its declared tolerance
+directions: [{source: cpp, target: ttir}]
+prompts: tt-ttir-bare-v1  # the bare loop, with run-failure (simulator gaps included) and mismatch corrections
+toolchain:
+  ttir: ttir-ttmetal-ttsim  # the runtime build's tools, lowering for the recorded ttsim descriptor
+  tt: ttmetal-host  # the tt reference's toolchain (reference: tt)
+  cpp: gcc-native  # the cpp reference's toolchain, for the references' agreement
+fixes:
+  baseline_both: true  # build and run both references
+stages: [baseline, generate, compile_loop, run_loop, oracle]
+executor:
+  cpp: {kind: native}  # the cpp reference runs in the sandbox on the host CPU
+  tt: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # the tt reference runs in the sandbox on ttsim, a simulator
+  ttir: {kind: ttmlir-ttsim, arch: wormhole_b0, dispatch: slow}  # each flatbuffer runs through the driver on ttsim
+oracle: {kind: binary_io, metric: from_item, threshold: from_item, shape: elements}  # the item's declared tolerance
+trials: {n: 2}
+loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true}  # mismatches and gaps come back too
