@@ -7,7 +7,8 @@
 #
 # It sets what alpha01's gate sets for every run (tools/server/gate.py, build_env), under the scratch root, so the
 # toolchain scripts and the lassi package find the same environment on both hosts:
-#   LASSI_SCRATCH (the root), LASSI_RUNS_ROOT, LASSI_TOOLCHAINS, LASSI_JOBS (8), TMPDIR, TMP, TEMP, the caches,
+#   LASSI_SCRATCH (the root), LASSI_RUNS_ROOT, LASSI_TOOLCHAINS, LASSI_SHARED and LASSI_VENVS (the root, as the gate
+#   sets them without a shared root), LASSI_JOBS (8), TMPDIR, TMP, TEMP, the caches,
 #   root/bin at the front of PATH, and PYTHONUNBUFFERED=1, with the gate's sub-paths
 #   (tests/tools/test_local_profile.py reads them from gate.py, so the two cannot drift);
 #   HOME at the root, since tt-mlir.sh checks HOME and git, CMake, and pip write under it;
@@ -115,6 +116,7 @@ __lassi_profile_export() {
   export LASSI_SCRATCH="$root"
   export LASSI_RUNS_ROOT="$root/lassi-runs"
   export LASSI_TOOLCHAINS="$root/toolchains"
+  export LASSI_SHARED="$root" LASSI_VENVS="$root"  # no shared root here: the gate's values without one (P17.63)
   export LASSI_JOBS=8
   export TMPDIR="$root/tmp" TMP="$root/tmp" TEMP="$root/tmp"
   export XDG_CACHE_HOME="$root/.cache"

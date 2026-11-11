@@ -60,7 +60,7 @@ The contract these tests fix, for the implementation to follow:
   line from LASSI_STOP_GIB (a positive integer of GiB), both required with
   no default and checked with the other values before the core limit. The
   host profile (tools/local/host-profile.sh) sets them on the workstation;
-  on alpha01 the rx command line gives LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl
+  on alpha01 the rx command line gives LASSI_ALLOWED_ROOT=/mnt/nvme10/shrec-shared
   and LASSI_STOP_GIB=145, with which the script keeps and refuses exactly
   what the literal root and 145 GiB did. LASSI_TOOLCHAINS, LASSI_SCRATCH, and
   HOME must each resolve to the allowed root or under it, which is matched
@@ -658,16 +658,16 @@ def test_script_is_strict_sources_its_pin_and_needs_the_gate_environment() -> No
 # The allowed root and the stop line (task P5.15).
 
 
-ALPHA01_ROOT = "/mnt/nvme10/joseph_ufl"
+ALPHA01_ROOT = "/mnt/nvme10/shrec-shared"
 # What alpha01's rx command line gives the script (Host Facts: the 145G stop line under the 150G cap), with the
 # gate's layout of the roots (tools/server/gate.py, build_env), and HOME at the scratch root, as there.
 ALPHA01 = {
     "LASSI_ALLOWED_ROOT": ALPHA01_ROOT,
     "LASSI_STOP_GIB": "145",
     "LASSI_TOOLCHAINS": f"{ALPHA01_ROOT}/toolchains",
-    "LASSI_SCRATCH": ALPHA01_ROOT,
+    "LASSI_SCRATCH": f"{ALPHA01_ROOT}/lassi",
     "LASSI_JOBS": "4",
-    "HOME": ALPHA01_ROOT,
+    "HOME": f"{ALPHA01_ROOT}/lassi",
 }
 # Another host's values, as a host profile gives them, under the probe's directory ("$PWD" in a value names it);
 # SYNTHETIC.

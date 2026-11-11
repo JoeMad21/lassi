@@ -3,7 +3,7 @@
 # the ttxla trainer runs its worker in (lassi.train.ttxla_trainer; plans/spikes/tt-training.md, Finding 3, step 1). On
 # alpha01 it runs as its own big rx job, CPU only, before the owner's window or at the start of the window's sequence
 # (tools/train_tt.py install, or plans/runs/train-tt/run.sh when the venv is missing), with
-# LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl and LASSI_STOP_GIB=345 on its command line; on the workstation the host
+# LASSI_ALLOWED_ROOT=/mnt/nvme10/shrec-shared and LASSI_STOP_GIB=345 on its command line; on the workstation the host
 # profile (tools/local/host-profile.sh) sets them. Under $LASSI_TOOLCHAINS/$PREFIX_NAME it places:
 #   downloads/   the CPython 3.11 archive (python-build-standalone, the build uv installs), checked by size and sha256;
 #   python/      that interpreter, unpacked;
@@ -25,8 +25,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tt-xla.pin
 source "$here/tt-xla.pin"
 # No value below has a default (AGENTS.md, rules for [OPEN] choices). On alpha01 the gate sets LASSI_TOOLCHAINS and
-# LASSI_SCRATCH, and the rx command line gives LASSI_ALLOWED_ROOT and LASSI_STOP_GIB; HOME is the gate's own, the
-# scratch root on the build host.
+# LASSI_SCRATCH, and the rx command line gives LASSI_ALLOWED_ROOT and LASSI_STOP_GIB, and since P17.63 HOME too,
+# since the gate passes its own HOME through and the owner's home lies outside the allowed root.
 set_by="by tools/local/host-profile.sh on the workstation, or on alpha01 by the gate or the rx command line"
 : "${LASSI_TOOLCHAINS:?LASSI_TOOLCHAINS must be set $set_by}"
 : "${LASSI_SCRATCH:?LASSI_SCRATCH must be set $set_by}"

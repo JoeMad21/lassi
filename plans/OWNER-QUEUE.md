@@ -1509,3 +1509,43 @@ Options:
 - (b) Sampling on the training server's GPUs with vLLM; RNGD only for final evaluation of exported checkpoints.
 Recommendation: (b), with a Decision Log entry.
 Answer:
+
+## OQ-124 Moving alpha01's Build Chain To /mnt/nvme10/shrec-shared
+State: CLOSED
+Kind: decision
+Blocks: none (task P17.63)
+Evidence: read-only inventories rx 20261110-212139-exec-b4e4, 20261110-212242-exec-838b, 20261110-212520-exec-fb83; the move rx 20261110-215116-exec-abc4 (plans/runs/shrec-move/)
+Question: The owner asked to move LASSI's build chain from /mnt/nvme10/joseph_ufl into /mnt/nvme10/shrec-shared. What moves, who runs the moves, which layout, and do old paths keep links?
+Options:
+- Scope: (a) the shared layer only (HF cache, toolchains, venvs, caches); (b) everything of LASSI's, the gate and run trees included.
+- Moves: (a) the owner runs a script; (b) the agent runs them through rx, batch by batch, deleting nothing.
+- Layout: (a) shared: hf, toolchains, venvs, cache at the top, LASSI under shrec-shared/lassi, with a gate change; (b) flat: LASSI's current layout at shrec-shared.
+- Links: (a) a link at each old path (tt-metal's and tt-mlir's runtime libraries and every venv embed the old path; alpha01 has no patchelf); (b) no links, rebuilding now.
+Recommendation: scope (a), owner-run script, shared layout, links.
+Answer: The owner in the working session of 2026-11-11: "I want to move our entire build chain for this project and other projects in the server into /mnt/nvme10/shrec-shared Everything from model weights (huggingface cache) to dependencies should go in there. Move the files for this project into there and ensure that everything works without running on accelerators. I then want you to draft a plan to move other projects in my directory into there." The options the owner picked in the session's question dialogs: scope "Everything"; moves "You run the moves"; the read-only inventory "Yes, run it"; layout "Shared layout (Recommended)"; and "Yes, go ahead" for the batch, whose text named the repo changes (the gate's shared roots, rx's default root, the hard-coded paths, AGENTS.md, and Agent Rule 7 in both bible copies), the owner's gate step, the moves with links at the old paths, and checks without accelerators. Applied: Agent Rule 7 and Host Facts (Decision Log, 2026-11-11), AGENTS.md, task P17.63. The owner's gate step: move lassi-gate to /mnt/nvme10/shrec-shared/lassi with a link back, add "shared_root": "/mnt/nvme10/shrec-shared" and the two new roots of the rm deny pattern to config.json by hand (rx bootstrap keeps an existing config.json), then run `rx bootstrap --update-gate`.
+
+## OQ-125 Which Tree The Scratch Cap Measures After The Move
+State: OPEN
+Kind: policy
+Blocks: P17.63's toolchain rebuilds at the new root (their stop line measures LASSI_ALLOWED_ROOT, now /mnt/nvme10/shrec-shared, already past 145G); the excess-files inventory of the next phase planned
+Evidence: rx 20261110-212139-exec-b4e4 (sizes before the move: .cache 203G, of it the HF cache 202G; lassi-runs 37G; toolchains 36G; furiosa-venv-2026.4 7.6G; lassi-wt 2.0G; the disk 85G free of 3.5T)
+Question: The 150G cap measured `du -sh /mnt/nvme10/joseph_ufl`. LASSI's files now sit in /mnt/nvme10/shrec-shared/lassi (about 40G) and in the shared layer (about 250G, mostly model weights), which other projects will use too. Which tree does the cap measure, at what figure?
+Options:
+- (a) LASSI's own tree only, /mnt/nvme10/shrec-shared/lassi, at 150G; the shared layer has no cap of its own, only the gate's free-space floors on the disk.
+- (b) LASSI's tree plus what LASSI keeps in the shared layer (about 290G today, past 150G since the 30B weights), at a new figure.
+- (c) The whole /mnt/nvme10/shrec-shared, at a new figure, once other projects join it.
+Recommendation: (a), since the shared layer belongs to every project and the disk's free space (85G, 98% used) is the real limit. Under (a) the install scripts need a change: they require LASSI_TOOLCHAINS under their allowed root and measure that root against the stop line, and the shared toolchains lie outside /mnt/nvme10/shrec-shared/lassi. Until this is answered, agents check `du -sh /mnt/nvme10/shrec-shared/lassi` and the disk's free space as an interim check (AGENTS.md, Remote Execution), and no toolchain is installed or rebuilt at the new root.
+Answer:
+
+## OQ-126 Moving The Owner's Other Projects Into /mnt/nvme10/shrec-shared
+State: OPEN
+Kind: decision
+Blocks: none in LASSI (the owner's request of 2026-11-11, OQ-124: "I then want you to draft a plan to move other projects in my directory into there.")
+Evidence: rx 20261110-212139-exec-b4e4 and 20261110-212242-exec-838b (what is left in /mnt/nvme10/joseph_ufl: TurboQuant-Tenstorrent 697M, a tt-smi clone 2.5M, a venv of 2026-03-13 at .venv 90M, pip user packages in .local/lib 5.1G, and home files); the plan was drafted for the owner outside the repository on 2026-11-11
+Question: Should the owner's other projects follow LASSI into /mnt/nvme10/shrec-shared, each in its own folder beside lassi/, reading the shared hf, toolchains, venvs, and cache?
+Options:
+- (a) Yes, in steps: one read-only look at each project, then one move batch with links at the old paths, then rebuilds where a project embeds the old path; the pip user packages become a named venv in /mnt/nvme10/shrec-shared/venvs, and the owner empties .local/lib.
+- (b) Move only TurboQuant-Tenstorrent now and leave the rest.
+- (c) Leave them in /mnt/nvme10/joseph_ufl.
+Recommendation: (a), each batch approved in the session (Agent Rule 17); home files (.ssh, dotfiles, .vscode-server, .config) stay in the home.
+Answer:

@@ -2,8 +2,9 @@
 # Build the pinned tt-mlir tools in user space (task P5.4), as recorded in toolchains/tt-mlir.pin. On the workstation
 # it runs in the LASSI WSL distro under the host profile (tools/local/host-profile.sh), which sets LASSI_ALLOWED_ROOT
 # and LASSI_STOP_GIB with the gate's variables, through the long-job runner (tools/local/longjob.py); on alpha01 it
-# runs through `uv run tools/rx.py job start --big`, with LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl and
-# LASSI_STOP_GIB=145 on its command line (P5.15). Under $LASSI_TOOLCHAINS/$PREFIX_NAME it places:
+# runs through `uv run tools/rx.py job start --big`, with HOME=/mnt/nvme10/shrec-shared/lassi,
+# LASSI_ALLOWED_ROOT=/mnt/nvme10/shrec-shared, and the stop line OQ-125 settles on its command line (P5.15; P17.63).
+# Under $LASSI_TOOLCHAINS/$PREFIX_NAME it places:
 #   src/tt-mlir       tt-mlir at COMMIT with its history and the tag VERSION_TAG, which its configure describes;
 #   toolchain/        TTMLIR_TOOLCHAIN_DIR: flatbuffers at FLATBUFFERS_COMMIT, installed (flatc, headers, library);
 #   toolchain/venv/   TTMLIR_VENV_DIR: a venv of the pinned Python holding the tracked, hash-checked requirements;
@@ -35,17 +36,18 @@ here="$(cd "$(dirname "$0")" && pwd)"
 source "$here/tt-mlir.pin"
 # No value below has a default (AGENTS.md, rules for [OPEN] choices). On alpha01 the gate sets LASSI_TOOLCHAINS,
 # LASSI_SCRATCH, and LASSI_JOBS, and the rx command line gives LASSI_ALLOWED_ROOT and LASSI_STOP_GIB, the scratch
-# root and the stop line in GiB (/mnt/nvme10/joseph_ufl and 145; bible, Host Facts); on the workstation the host
-# profile sets all five.
+# root and the stop line in GiB (/mnt/nvme10/shrec-shared, and the stop line OQ-125 settles; bible, Host
+# Facts); on the workstation the host profile sets all five.
 set_by="by tools/local/host-profile.sh on the workstation, or on alpha01 by the gate or the rx command line"
 : "${LASSI_TOOLCHAINS:?LASSI_TOOLCHAINS must be set $set_by}"
 : "${LASSI_SCRATCH:?LASSI_SCRATCH must be set $set_by}"
 : "${LASSI_JOBS:?LASSI_JOBS must be set $set_by}"
 : "${LASSI_ALLOWED_ROOT:?LASSI_ALLOWED_ROOT must be set $set_by}"
 : "${LASSI_STOP_GIB:?LASSI_STOP_GIB must be set $set_by}"
-# The gate sets no HOME: it passes its own through (tools/server/gate.py, build_env), and on the build host that is
-# the scratch root (plans/spikes/p0-compile-hardening.md; rx 20260923-183739-exec-7786); the host profile sets HOME
-# to the scratch root. HOME is checked with the two roots, since git, CMake, and pip write under it.
+# The gate sets no HOME: it passes its own through (tools/server/gate.py, build_env), and on the build host that was
+# the scratch root (plans/spikes/p0-compile-hardening.md; rx 20260923-183739-exec-7786) until the move of P17.63,
+# which left the owner's home outside the allowed root, so an alpha01 command line now gives HOME as well; the host
+# profile sets HOME to the scratch root. HOME is checked with the two roots, since git, CMake, and pip write under it.
 : "${HOME:?HOME must be set; the gate passes its own HOME through, the scratch root on the build host}"
 # The allowed root is absolute, so that it does not move with the working directory, and not /, the whole file
 # system. Each root, with its links resolved, must be the allowed root or lie under it; the allowed root is quoted

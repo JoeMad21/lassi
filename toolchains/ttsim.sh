@@ -5,8 +5,8 @@
 # toolchains/tt-metal.sh. On the workstation it runs in the LASSI WSL distro under the host profile
 # (tools/local/host-profile.sh), which sets LASSI_ALLOWED_ROOT and LASSI_STOP_GIB with the gate's variables, through
 # the long-job runner (tools/local/longjob.py); on alpha01 it runs through `uv run tools/rx.py job start --big`, with
-# LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl and LASSI_STOP_GIB=145 on its command line (P5.15). Nothing here loads
-# the library or runs a program, so nothing opens a device.
+# LASSI_ALLOWED_ROOT=/mnt/nvme10/shrec-shared and the stop line OQ-125 settles on its command line (P5.15; P17.63).
+# Nothing here loads the library or runs a program, so nothing opens a device.
 # Idempotent: an install whose record and files match the pin is kept, and a verified download is reused. A new
 # install is assembled in a staging prefix and checked; only then is a previous install moved aside (never
 # deleted) and the staging prefix renamed into place.
@@ -16,7 +16,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 source "$here/ttsim.pin"
 # No value below has a default (AGENTS.md, rules for [OPEN] choices). On alpha01 the gate sets LASSI_TOOLCHAINS and
 # LASSI_SCRATCH, and the rx command line gives LASSI_ALLOWED_ROOT and LASSI_STOP_GIB, the scratch root and the stop
-# line in GiB (/mnt/nvme10/joseph_ufl and 145; bible, Host Facts); on the workstation the host profile sets all four.
+# line in GiB (/mnt/nvme10/shrec-shared, and the stop line OQ-125 settles; bible, Host Facts); on the
+# workstation the host profile sets all four.
 set_by="by tools/local/host-profile.sh on the workstation, or on alpha01 by the gate or the rx command line"
 : "${LASSI_TOOLCHAINS:?LASSI_TOOLCHAINS must be set $set_by}"
 : "${LASSI_SCRATCH:?LASSI_SCRATCH must be set $set_by}"

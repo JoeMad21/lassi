@@ -106,13 +106,13 @@ SETTING = re.compile(r"-D([A-Za-z0-9_]+)(?::[A-Z]+)?=(\S+)")
 FUNCTION = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\(\) \{\n.*?^\}\n", re.S | re.M)
 CORE_LIMIT = "prlimit --pid $$ --core=1:1"
 CORE_READ = "resource.getrlimit(resource.RLIMIT_CORE) != (1, 1)"
-ALPHA01_ROOT = "/mnt/nvme10/joseph_ufl"
+ALPHA01_ROOT = "/mnt/nvme10/shrec-shared"
 # The values the proposed rx command line gives (plans/spikes/ttmlir-runtime.md), with the gate's layout and HOME
 # at the scratch root.
 ALPHA01 = {
     "LASSI_ALLOWED_ROOT": ALPHA01_ROOT, "LASSI_STOP_GIB": "345", "LASSI_FREE_FLOOR_GIB": "30",
-    "LASSI_TOOLCHAINS": f"{ALPHA01_ROOT}/toolchains", "LASSI_SCRATCH": ALPHA01_ROOT, "LASSI_JOBS": "32",
-    "HOME": ALPHA01_ROOT,
+    "LASSI_TOOLCHAINS": f"{ALPHA01_ROOT}/toolchains", "LASSI_SCRATCH": f"{ALPHA01_ROOT}/lassi", "LASSI_JOBS": "32",
+    "HOME": f"{ALPHA01_ROOT}/lassi",
 }
 SCRIPT_VARIABLES = ("LASSI_ALLOWED_ROOT", "LASSI_STOP_GIB", "LASSI_FREE_FLOOR_GIB", "LASSI_TOOLCHAINS",
                     "LASSI_SCRATCH", "LASSI_JOBS")

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build lassi-ttmlir-run, the LASSI tt-mlir driver (task P17.48), as recorded in toolchains/tt-mlir-driver.pin, against
 # the pinned runtime install of toolchains/tt-mlir-runtime.pin. On alpha01 it is a short CPU-only run:
-#   uv run tools/rx.py run --timeout 600 -- 'LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl bash toolchains/tt-mlir-driver.sh'
+#   uv run tools/rx.py run --timeout 600 -- 'LASSI_ALLOWED_ROOT=/mnt/nvme10/shrec-shared bash toolchains/tt-mlir-driver.sh'
 # Under $LASSI_TOOLCHAINS/$PREFIX_NAME it places bin/lassi-ttmlir-run and the install record lassi-install.txt; the
 # ttsim system descriptor is written there afterwards, in the sandbox, by tools/ttmlir_system_desc.py. It compiles one
 # C++ file with the runtime's own compiler and linker and lists the program's libraries with ldd (the loader's trace

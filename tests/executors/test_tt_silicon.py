@@ -272,6 +272,7 @@ def roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Roots:
     monkeypatch.setenv("HOME", str(found.home))
     monkeypatch.setenv("TMPDIR", str(found.tmpdir))
     monkeypatch.delenv("LASSI_TOOLCHAINS", raising=False)
+    monkeypatch.delenv("LASSI_SHARED", raising=False)  # the gate and the host profile set it (P17.63)
     return found
 
 

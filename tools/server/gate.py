@@ -18,6 +18,10 @@ Layout under the scratch root (default: parent of this file's directory):
     toolchains/            installed toolchains, <name>@<pin>/
     tmp/, .cache/          scratch temp and caches
 
+With config.json's optional "shared_root" (task P17.63), the build chain every project on the
+host reuses lives there instead: toolchains/, hf/, venvs/, cache/, cargo/, rustup/; the gate,
+the bare repository, the slots, the run trees, tmp/, and bin/ stay under the scratch root.
+
 Standard library only; compatible with Python 3.6+.
 """
 
@@ -413,6 +417,39 @@ def read_pins(path):
     return pins
 
 
+def check_shared_root(cfg):
+    """Refuse a config.json "shared_root" that is not an absolute path other than / (task P17.63)."""
+    root = cfg.get("shared_root")
+    if root is None:
+        return
+    if not isinstance(root, str) or not os.path.isabs(root) or os.path.normpath(root) == os.path.normpath(os.sep):
+        raise GateError("config.json's shared_root must be an absolute path other than /, not %r" % (root,))
+
+
+def shared_env(root):
+    """Return the variables config.json's "shared_root" moves out of the scratch root (task P17.63).
+
+    The shared root holds what every project on the host reuses: toolchains, the HF cache, venvs,
+    and package caches. The gate, the bare repository, the slots, the run trees, tmp/, and bin/
+    stay under the scratch root.
+    """
+    cache = os.path.join(root, "cache")
+    return {
+        "LASSI_TOOLCHAINS": os.path.join(root, "toolchains"),
+        "LASSI_SHARED": root,
+        "LASSI_VENVS": os.path.join(root, "venvs"),
+        "XDG_CACHE_HOME": cache,
+        "UV_CACHE_DIR": os.path.join(cache, "uv"),
+        "PIP_CACHE_DIR": os.path.join(cache, "pip"),
+        "HF_HOME": os.path.join(root, "hf"),
+        "TIKTOKEN_CACHE_DIR": os.path.join(cache, "tiktoken"),
+        "CCACHE_DIR": os.path.join(cache, "ccache"),
+        "CARGO_HOME": os.path.join(root, "cargo"),
+        "RUSTUP_HOME": os.path.join(root, "rustup"),
+        "npm_config_cache": os.path.join(cache, "npm"),
+    }
+
+
 def build_env(cfg, extra):
     env = dict(os.environ)
     jobs = max(1, min(int(cfg["max_build_jobs"]), (os.cpu_count() or 2) // 2))
@@ -422,6 +459,8 @@ def build_env(cfg, extra):
         "LASSI_SCRATCH": SCRATCH,
         "LASSI_RUNS_ROOT": RUNS_ROOT,
         "LASSI_TOOLCHAINS": TOOLCHAINS,
+        "LASSI_SHARED": SCRATCH,
+        "LASSI_VENVS": SCRATCH,
         "LASSI_JOBS": str(jobs),
         "TMPDIR": TMP, "TMP": TMP, "TEMP": TMP,
         "XDG_CACHE_HOME": os.path.join(SCRATCH, ".cache"),
@@ -438,6 +477,10 @@ def build_env(cfg, extra):
         "PATH": os.path.join(SCRATCH, "bin") + os.pathsep + env.get("PATH", ""),
         "PYTHONUNBUFFERED": "1",
     })
+    shared = cfg.get("shared_root")
+    if shared:
+        os.makedirs(os.path.join(shared, "cache"), exist_ok=True)
+        env.update(shared_env(shared))
     env.update(extra)
     return env
 
@@ -766,9 +809,11 @@ def verb_job_kill(req, cfg):
 
 
 def verb_doctor(req, cfg):
+    shared = cfg.get("shared_root") or SCRATCH
     checks = {
         "gate_version": GATE_VERSION, "scratch": SCRATCH, "stop": os.path.exists(STOP_FILE),
         "scratch_free_gb": free_gb(SCRATCH), "root_free_gb": free_gb("/"), "host": host_info(),
+        "shared": shared, "shared_free_gb": free_gb(shared),
         "bare_repo": os.path.isdir(BARE), "git": sh(["git", "--version"])[1].strip(),
         "uv": shutil.which("uv", path=os.path.join(SCRATCH, "bin") + os.pathsep + os.environ.get("PATH", "")),
         "config": {k: cfg[k] for k in ("min_free_gb", "min_free_gb_big", "max_jobs", "max_big_jobs",
@@ -894,6 +939,7 @@ def main(argv):
     if verb in ("run", "exec", "job_start", "job_kill", "slot_rm"):
         audit(dict(entry, result="start"))
     try:
+        check_shared_root(cfg)
         result = VERBS[verb](req, cfg)
     except GateError as exc:
         audit(dict(entry, result="refused", reason=str(exc)))

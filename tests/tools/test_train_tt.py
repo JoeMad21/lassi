@@ -18,9 +18,12 @@ The interface these tests fix:
 - launch refuses .rip-stop, a dirty or unpushed tree (unless --allow-dirty), a gate with STOP set, the tt_silicon
   device class disabled (the owner enables it for the window), too little scratch space, and any running job;
   it prints the plan, asks y/N unless --yes, and starts one big rx job running
-  `LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl LASSI_STOP_GIB=345 bash plans/runs/train-tt/run.sh --deadline <epoch>
-  --spacing <s> --recipe <path>:<timeout_s> ...`, a command naming no word the gate's Tenstorrent guard refuses.
-- install starts the venv install alone (run.sh --install-only), CPU only, without the tt_silicon class.
+  `HOME=/mnt/nvme10/shrec-shared/lassi LASSI_ALLOWED_ROOT=/mnt/nvme10/shrec-shared LASSI_STOP_GIB=345 bash
+  plans/runs/train-tt/run.sh --deadline <epoch> --spacing <s> --recipe <path>:<timeout_s> ...`, a command naming no
+  word the gate's Tenstorrent guard refuses. HOME is the gate's scratch root (task P17.63): toolchains/tt-xla.sh
+  refuses unless HOME resolves under LASSI_ALLOWED_ROOT, and alpha01's own HOME, /mnt/nvme10/joseph_ufl, does not.
+- install starts the venv install alone (run.sh --install-only), CPU only, without the tt_silicon class, with the
+  same HOME, allowed root, and stop line.
 - stop creates $LASSI_RUNS_ROOT/train-tt/STOP with one rx exec (--clear removes it); pull copies the job's
   provenance and its output directory into results/<name>.
 """
@@ -217,8 +220,10 @@ def test_the_remote_command_names_each_recipe_with_its_timeout_and_no_gate_word(
     args = tool.build_parser().parse_args(["plan", "--until", "12:00"])
     plan = tool.build_plan(args)
     command = plan.remote_command()
-    assert command.startswith("LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl LASSI_STOP_GIB=345 bash "
-                              "plans/runs/train-tt/run.sh --deadline ")
+    assert command.startswith(
+        "HOME=/mnt/nvme10/shrec-shared/lassi LASSI_ALLOWED_ROOT=/mnt/nvme10/shrec-shared "
+        "LASSI_STOP_GIB=345 bash plans/runs/train-tt/run.sh --deadline "
+    ), command
     assert f"--deadline {END}" in command and "--spacing 120" in command
     recipes = re.findall(r"--recipe (\S+):(\d+)", command)
     assert [Path(path).stem for path, _ in recipes] == list(ORDER)
@@ -318,8 +323,10 @@ def test_install_starts_the_venv_install_alone_without_the_tt_silicon_class(
     assert tool.main(["install", "--yes"]) == 0
     (start,) = host.started()
     command = start[-1]
-    assert command == ("LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl LASSI_STOP_GIB=345 bash plans/runs/train-tt/run.sh "
-                       "--install-only")
+    assert command == (
+        "HOME=/mnt/nvme10/shrec-shared/lassi LASSI_ALLOWED_ROOT=/mnt/nvme10/shrec-shared "
+        "LASSI_STOP_GIB=345 bash plans/runs/train-tt/run.sh --install-only"
+    )
     assert start[start.index("--timeout") + 1] == "3600" and "--big" in start
     assert start[start.index("--name") + 1] == "tt-xla-venv"
 

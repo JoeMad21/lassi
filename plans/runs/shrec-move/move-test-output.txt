@@ -1,0 +1,52 @@
+##### list
+link    T/shrec-shared/lassi/ttrun-venv -> T/shrec-shared/venvs/ttrun-venv
+link    T/shrec-shared/lassi/.cache/huggingface -> T/shrec-shared/hf
+== 12 to move; free on the filesystem: 1.4T
+rc=0
+##### move
+moved   T/joseph_ufl/.cache/huggingface -> T/shrec-shared/hf
+moved   T/joseph_ufl/hf/hub/models--Qwen--Qwen2.5-Coder-0.5B-Instruct -> T/shrec-shared/hf/hub/models--Qwen--Qwen2.5-Coder-0.5B-Instruct
+made T/shrec-shared/venvs
+moved   T/joseph_ufl/furiosa-venv-2026.4 -> T/shrec-shared/venvs/furiosa-venv-2026.4
+made T/shrec-shared/cache
+moved   T/joseph_ufl/.cache/uv -> T/shrec-shared/cache/uv
+made T/shrec-shared/lassi
+moved   T/joseph_ufl/lassi.git -> T/shrec-shared/lassi/lassi.git
+moved   T/joseph_ufl/lassi-wt -> T/shrec-shared/lassi/lassi-wt
+moved   T/joseph_ufl/lassi-runs -> T/shrec-shared/lassi/lassi-runs
+moved   T/joseph_ufl/bench -> T/shrec-shared/lassi/bench
+moved   T/joseph_ufl/sweep.sh -> T/shrec-shared/lassi/sweep.sh
+moved   T/joseph_ufl/bin -> T/shrec-shared/lassi/bin
+moved   T/joseph_ufl/tmp -> T/shrec-shared/lassi/tmp
+linked  T/shrec-shared/lassi/toolchains -> T/shrec-shared/toolchains
+linked  T/shrec-shared/lassi/hf -> T/shrec-shared/hf
+linked  T/shrec-shared/lassi/furiosa-venv-2026.4 -> T/shrec-shared/venvs/furiosa-venv-2026.4
+linked  T/shrec-shared/lassi/ttrun-venv -> T/shrec-shared/venvs/ttrun-venv
+made T/shrec-shared/lassi/.cache
+linked  T/shrec-shared/lassi/.cache/huggingface -> T/shrec-shared/hf
+repair: repair: gitdir incorrect: T/shrec-shared/lassi/lassi.git/worktrees/slot1/gitdir
+worktrees repaired: 1
+== 12 to move; free on the filesystem: 1.4T
+rc=0
+##### rerun: entries done
+17
+##### checks
+so
+blob
+blob
+blob
+qwen-merged
+venv-compat-ok
+ssh-stays
+other-project-stays
+home-cache-stays
+wt-new-path-ok
+wt-old-path-ok
+gitdir: T/shrec-shared/lassi/lassi.git/worktrees/slot1
+##### refuse: target exists
+REFUSED: T/shrec-shared/lassi/rag already exists
+rc=2
+##### refuse: busy
+REFUSED: a server, sweep, download, or build of this account is running:
+559 bash run-suite.sh 20
+rc=2

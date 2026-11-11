@@ -20,7 +20,7 @@ Run options: --slot NAME (default <machine>-<branch>), --timeout SECONDS, --big 
 run; stricter free-space floor, one at a time), --live (stream output), --tail N (lines shown).
 
 Settings come from environment variables or an optional untracked .rx.json at the repo root:
-RX_HOST (ssh alias, default ionx), RX_SCRATCH (default /mnt/nvme10/joseph_ufl),
+RX_HOST (ssh alias, default ionx), RX_SCRATCH (default /mnt/nvme10/shrec-shared/lassi),
 RX_REMOTE_PYTHON (default python3), RX_MACHINE (default this host's name),
 RX_TRANSPORT (ssh | local; local runs the gate directly, for tests).
 
@@ -55,7 +55,7 @@ LOCAL_CACHE = REPO / ".rx"
 def settings() -> Dict[str, str]:
     cfg = {
         "host": "ionx",
-        "scratch": "/mnt/nvme10/joseph_ufl",
+        "scratch": "/mnt/nvme10/shrec-shared/lassi",
         "remote_python": "python3",
         "machine": re.sub(r"[^A-Za-z0-9._-]", "-", platform.node().split(".")[0].lower()) or "local",
         "transport": "ssh",

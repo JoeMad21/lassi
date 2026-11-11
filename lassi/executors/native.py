@@ -5,8 +5,8 @@ arguments, and only through lassi.executors.sandbox (Agent Rule 6). The
 artifact's directory is the run's workdir, the one writable host directory;
 it must lie inside the runs root, $LASSI_RUNS_ROOT (lassi.executors.workdir),
 so the writable mount is never an ad hoc host directory (Agent Rule 7). The
-hidden roots are $LASSI_SCRATCH and $HOME unless configured otherwise, and
-always the runs root too, so no other trial is readable wherever the runs
+hidden roots are $LASSI_SCRATCH, $HOME, and $LASSI_SHARED unless configured
+otherwise, and always the runs root too, so no other trial is readable wherever the runs
 root lies: inside the sandbox they show only the path skeleton to the
 workdir, the harness (when configured), and the pinned toolchains root
 ($LASSI_TOOLCHAINS unless configured otherwise), the last two read-only
@@ -47,8 +47,9 @@ HOST_CPU = "host CPU (native)"
 # The field of CPUINFO that names the CPU model.
 _MODEL_FIELD = "model name"
 
-# The environment variables that name the default hidden roots, in order.
-_ROOT_VARIABLES = ("LASSI_SCRATCH", "HOME")
+# The environment variables that name the default hidden roots, in order: $LASSI_SHARED is the shared build chain
+# the gate names since P17.63 (equal to $LASSI_SCRATCH without one, and then listed once).
+_ROOT_VARIABLES = ("LASSI_SCRATCH", "HOME", "LASSI_SHARED")
 # The environment variable that names the default toolchains root, which the sandbox re-exposes read-only.
 _TOOLCHAINS_VARIABLE = "LASSI_TOOLCHAINS"
 # The fixed part of every program's environment: the sandbox's default program environment without HOME, which
@@ -113,7 +114,7 @@ def _absolute_variable(name: str, use: str) -> Path | None:
 
 
 def _environment_roots() -> tuple[Path, ...]:
-    """Return $LASSI_SCRATCH and $HOME, the ones that are set, in that order, without duplicates."""
+    """Return $LASSI_SCRATCH, $HOME, and $LASSI_SHARED, the ones that are set, in that order, without duplicates."""
     roots: list[Path] = []
     for name in _ROOT_VARIABLES:
         path = _absolute_variable(name, "hidden in the sandbox")
@@ -164,8 +165,8 @@ class NativeExecutor:
 
     The config key `harness` names a directory mounted read-only at its own
     path. The keyword settings are for the runner and tests: `hidden_roots`
-    (None means $LASSI_SCRATCH and $HOME from the environment at run time;
-    the runs root is always added), `toolchains` (None means
+    (None means $LASSI_SCRATCH, $HOME, and $LASSI_SHARED from the environment
+    at run time; the runs root is always added), `toolchains` (None means
     $LASSI_TOOLCHAINS at run time; unset or empty means none), where a
     relative environment value raises SandboxUnavailableError, and `sandbox`
     (None means a Sandbox with the default runner).
@@ -245,7 +246,7 @@ class NativeExecutor:
         roots = _environment_roots() if self.hidden_roots is None else self.hidden_roots
         if not roots:
             raise SandboxUnavailableError(
-                "no hidden root: set $LASSI_SCRATCH or $HOME, or pass hidden_roots; nothing ran"
+                "no hidden root: set $LASSI_SCRATCH, $HOME, or $LASSI_SHARED, or pass hidden_roots; nothing ran"
             )
         toolchains = self.toolchains
         if toolchains is None:

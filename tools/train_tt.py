@@ -40,7 +40,10 @@ DEFAULT_SLOT = "train-tt"
 DEFAULT_NAME = "train-tt"
 INSTALL_NAME = "tt-xla-venv"
 OUTPUT_DIR = "lassi-runs/train-tt"  # run.sh writes $LASSI_RUNS_ROOT/train-tt/<job id>
-ALLOWED_ROOT = "/mnt/nvme10/joseph_ufl"  # the scratch root and its stop line in GiB (AGENTS.md, Remote Execution)
+ALLOWED_ROOT = "/mnt/nvme10/shrec-shared"  # the shared root and its stop line in GiB (AGENTS.md, Remote Execution)
+# HOME for the remote commands: tt-xla.sh requires HOME under the allowed root, and the gate passes its own HOME
+# through, the owner's home, which lies outside it since the move of P17.63.
+REMOTE_HOME = "/mnt/nvme10/shrec-shared/lassi"
 STOP_GIB = 345  # the stop line under the owner's lift of the scratch cap (OQ-074, 2026-10-23), as the MLIR installs ran
 FLOOR_GB = 60  # the gate's free-space floor for big jobs (tools/server/config.default.json, min_free_gb_big)
 MARGIN_GB = 5
@@ -273,7 +276,8 @@ class Plan:
 
     def remote_command(self) -> str:
         """The command the job runs in its slot, with the allowed root and stop line tt-xla.sh needs."""
-        parts = [f"LASSI_ALLOWED_ROOT={ALLOWED_ROOT}", f"LASSI_STOP_GIB={STOP_GIB}", "bash", REMOTE_SCRIPT,
+        parts = [f"HOME={REMOTE_HOME}", f"LASSI_ALLOWED_ROOT={ALLOWED_ROOT}", f"LASSI_STOP_GIB={STOP_GIB}", "bash",
+                 REMOTE_SCRIPT,
                  "--deadline", str(self.deadline), "--spacing", str(self.spacing)]
         for row in self.rows:
             parts += ["--recipe", f"{row.path}:{row.timeout_s}"]
@@ -470,7 +474,8 @@ def do_launch(args: argparse.Namespace) -> int:
 
 def install_command() -> str:
     """The command of the install job: run.sh with --install-only, with the allowed root and stop line."""
-    return f"LASSI_ALLOWED_ROOT={ALLOWED_ROOT} LASSI_STOP_GIB={STOP_GIB} bash {REMOTE_SCRIPT} --install-only"
+    return (f"HOME={REMOTE_HOME} LASSI_ALLOWED_ROOT={ALLOWED_ROOT} LASSI_STOP_GIB={STOP_GIB} bash {REMOTE_SCRIPT} "
+            "--install-only")
 
 
 def do_install(args: argparse.Namespace) -> int:

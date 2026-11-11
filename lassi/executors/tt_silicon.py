@@ -903,7 +903,7 @@ class TtSiliconExecutor:
     The config keys are `hugepages`, `reset_filter`, and `device_profiler`,
     each required with no default, and `harness`. The keyword settings `hidden_roots`,
     `toolchains`, and `sandbox` are the ttsim executor's (None means
-    $LASSI_SCRATCH and $HOME, $LASSI_TOOLCHAINS, and a Sandbox with the
+    $LASSI_SCRATCH, $HOME, and $LASSI_SHARED; $LASSI_TOOLCHAINS; and a Sandbox with the
     default runner). The rest are seams for the tests: `root`, the host
     root every host path is read under; `access`, the read-and-write check
     asked about each card node (access(2), which opens nothing); `owner`, a

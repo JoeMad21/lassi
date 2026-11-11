@@ -2,12 +2,12 @@
 # Build the pinned tt-metal in user space (task P4.2), as recorded in toolchains/tt-metal.pin. On the workstation it
 # runs in the LASSI WSL distro under the host profile (tools/local/host-profile.sh), which sets LASSI_ALLOWED_ROOT and
 # LASSI_STOP_GIB with the gate's variables, through the long-job runner (tools/local/longjob.py); on alpha01 it runs
-# through `uv run tools/rx.py job start --big`, with LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl and LASSI_STOP_GIB=145
-# on its command line (P5.15). It fetches the pinned commit and its submodules by sha at depth 1, configures with
-# the pin's flags, and builds only the pin's TARGETS and examples: the runtime library, the linker scripts and
-# objects the kernel JIT links with, and the pinned programming examples, not all or the install target, so that it
-# takes the least CPU on the shared host (owner, 2026-09-25). It never runs a program it builds, so nothing opens a
-# device.
+# through `uv run tools/rx.py job start --big`, with LASSI_ALLOWED_ROOT=/mnt/nvme10/shrec-shared and the stop line
+# OQ-125 settles on its command line (P5.15; P17.63). It fetches the pinned commit and its submodules by sha at depth
+# 1, configures with the pin's flags, and builds only the pin's TARGETS and examples: the runtime library, the linker
+# scripts and objects the kernel JIT links with, and the pinned programming examples, not all or the install target,
+# so that it takes the least CPU on the shared host (owner, 2026-09-25). It never runs a program it builds, so nothing
+# opens a device.
 # The flags are those of the pin's own ttsim CI build (.github/workflows/ttsim.yaml, pr-gate.yaml, and
 # build-artifact.yaml at COMMIT: build_metal.sh --build-type Release with TOOLCHAIN_FILE, --disable-profiler,
 # and --without-distributed), except the Python bindings, the tests, and ccache, which are off, and, since task P17.42
@@ -41,8 +41,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 source "$here/tt-metal.pin"
 # No value below has a default (AGENTS.md, rules for [OPEN] choices). On alpha01 the gate sets LASSI_TOOLCHAINS,
 # LASSI_SCRATCH, and LASSI_JOBS, and the rx command line gives LASSI_ALLOWED_ROOT and LASSI_STOP_GIB, the scratch
-# root and the stop line in GiB (/mnt/nvme10/joseph_ufl and 145; bible, Host Facts); on the workstation the host
-# profile sets all five.
+# root and the stop line in GiB (/mnt/nvme10/shrec-shared, and the stop line OQ-125 settles; bible, Host
+# Facts); on the workstation the host profile sets all five.
 set_by="by tools/local/host-profile.sh on the workstation, or on alpha01 by the gate or the rx command line"
 : "${LASSI_TOOLCHAINS:?LASSI_TOOLCHAINS must be set $set_by}"
 : "${LASSI_SCRATCH:?LASSI_SCRATCH must be set $set_by}"

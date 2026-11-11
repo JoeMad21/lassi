@@ -222,7 +222,7 @@ class GpuExecutor:
         roots = _environment_roots() if self.hidden_roots is None else self.hidden_roots
         if not roots:
             raise SandboxUnavailableError(
-                "no hidden root: set $LASSI_SCRATCH or $HOME, or pass hidden_roots; nothing ran"
+                "no hidden root: set $LASSI_SCRATCH, $HOME, or $LASSI_SHARED, or pass hidden_roots; nothing ran"
             )
         toolchains = self.toolchains
         if toolchains is None:

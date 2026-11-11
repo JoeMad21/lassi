@@ -4,8 +4,8 @@ It runs a TT host program (built by the ttmetal-host toolchain) with its
 inputs as arguments on ttsim, the pinned simulator of a Wormhole chip,
 only through lassi.executors.sandbox (Agent Rule 6), as the native executor
 runs a CPU program: the artifact's directory, resolved, is the run's workdir
-and must lie inside the runs root; the hidden roots are $LASSI_SCRATCH and
-$HOME unless configured, plus the runs root; the harness (config key
+and must lie inside the runs root; the hidden roots are $LASSI_SCRATCH,
+$HOME, and $LASSI_SHARED unless configured, plus the runs root; the harness (config key
 `harness`) and the toolchains root ($LASSI_TOOLCHAINS unless configured)
 are mounted read-only. No device is ever opened: the program's kernels run
 on ttsim's simulated cores inside the host process (Agent Rules 2 and 9).
@@ -553,8 +553,8 @@ class TtsimExecutor:
     The config keys are `arch`, `dispatch`, `chips`, and `harness` (see the
     module docstring); the keyword settings `hidden_roots`, `toolchains`,
     and `sandbox` are for the runner and tests, as NativeExecutor has them
-    (None means $LASSI_SCRATCH and $HOME, $LASSI_TOOLCHAINS, and a Sandbox
-    with the default runner). `pins` holds toolchains/ttsim.pin's and
+    (None means $LASSI_SCRATCH, $HOME, and $LASSI_SHARED; $LASSI_TOOLCHAINS; and a
+    Sandbox with the default runner). `pins` holds toolchains/ttsim.pin's and
     toolchains/tt-metal.pin's pairs, read at construction.
     """
 
@@ -717,7 +717,7 @@ class TtsimExecutor:
         roots = _environment_roots() if self.hidden_roots is None else self.hidden_roots
         if not roots:
             raise SandboxUnavailableError(
-                "no hidden root: set $LASSI_SCRATCH or $HOME, or pass hidden_roots; nothing ran"
+                "no hidden root: set $LASSI_SCRATCH, $HOME, or $LASSI_SHARED, or pass hidden_roots; nothing ran"
             )
         return (*(_resolved(root) for root in roots), runs_root().resolve())
 

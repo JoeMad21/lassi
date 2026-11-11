@@ -21,7 +21,7 @@
     "\\b(ssh|scp|rsync|sftp)\\s",
     "lassi-gate",
     "lassi\\.git/hooks",
-    "\\brm\\s+(-\\S+\\s+)*(/|~/?|\\$HOME/?|/mnt/nvme10/joseph_ufl/?)\\*?(\\s|$)",
+    "\\brm\\s+(-\\S+\\s+)*(/|~/?|\\$HOME/?|/mnt/nvme10/joseph_ufl/?|/mnt/nvme10/shrec-shared/?|/mnt/nvme10/shrec-shared/lassi/?)\\*?(\\s|$)",
     "\\bchmod\\s+(-R\\s+)?[0-7]*7[0-7]*\\s+/(\\s|$)"
   ],
   "devices": {

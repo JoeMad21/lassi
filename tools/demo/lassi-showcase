@@ -22,7 +22,8 @@ import sys
 import time
 from pathlib import Path
 
-BASE = "/mnt/nvme10/joseph_ufl"
+SHARED = "/mnt/nvme10/shrec-shared"  # the shared build chain: hf, toolchains, venvs, cache (P17.63)
+BASE = f"{SHARED}/lassi"  # LASSI's own tree: the gate's scratch root
 WORKTREE = Path(f"{BASE}/lassi-wt/demo-live")  # the demo slot lassi-live also runs from
 RUNS_ROOT = Path(f"{BASE}/lassi-runs")
 RUN = RUNS_ROOT / "runs" / "demo-rngd-cpu-1"
@@ -34,8 +35,9 @@ def environment() -> dict:
     env = dict(os.environ)
     env.update(
         PATH=f"{BASE}/bin:" + env.get("PATH", ""), LASSI_SCRATCH=BASE, LASSI_RUNS_ROOT=str(RUNS_ROOT),
-        LASSI_TOOLCHAINS=f"{BASE}/toolchains", TMPDIR=f"{BASE}/tmp", UV_CACHE_DIR=f"{BASE}/.cache/uv",
-        XDG_CACHE_HOME=f"{BASE}/.cache", PIP_CACHE_DIR=f"{BASE}/.cache/pip", HF_HOME=f"{BASE}/hf",
+        LASSI_TOOLCHAINS=f"{SHARED}/toolchains", TMPDIR=f"{BASE}/tmp", UV_CACHE_DIR=f"{SHARED}/cache/uv",
+        XDG_CACHE_HOME=f"{SHARED}/cache", PIP_CACHE_DIR=f"{SHARED}/cache/pip", HF_HOME=f"{SHARED}/hf",
+        LASSI_SHARED=str(SHARED), LASSI_VENVS=f"{SHARED}/venvs",  # sandboxes hide $LASSI_SHARED (P17.63)
         PYTHONUNBUFFERED="1",
     )
     return env

@@ -53,7 +53,8 @@ import time
 import urllib.request
 from pathlib import Path
 
-BASE = Path("/mnt/nvme10/joseph_ufl")
+SHARED = Path("/mnt/nvme10/shrec-shared")  # the shared build chain: hf, toolchains, venvs, cache (P17.63)
+BASE = SHARED / "lassi"  # LASSI's own tree: the gate's scratch root
 SLOT = BASE / "lassi-wt" / "demo-live"
 RUNS_ROOT = BASE / "lassi-runs"
 RECIPES = BASE / "lassi-live"
@@ -83,8 +84,9 @@ def environment() -> dict:
     env = dict(os.environ)
     env.update(
         PATH=f"{BASE}/bin:" + env.get("PATH", ""), LASSI_SCRATCH=str(BASE), LASSI_RUNS_ROOT=str(RUNS_ROOT),
-        LASSI_TOOLCHAINS=f"{BASE}/toolchains", TMPDIR=f"{BASE}/tmp", UV_CACHE_DIR=f"{BASE}/.cache/uv",
-        XDG_CACHE_HOME=f"{BASE}/.cache", PIP_CACHE_DIR=f"{BASE}/.cache/pip", HF_HOME=f"{BASE}/hf",
+        LASSI_TOOLCHAINS=f"{SHARED}/toolchains", TMPDIR=f"{BASE}/tmp", UV_CACHE_DIR=f"{SHARED}/cache/uv",
+        XDG_CACHE_HOME=f"{SHARED}/cache", PIP_CACHE_DIR=f"{SHARED}/cache/pip", HF_HOME=f"{SHARED}/hf",
+        LASSI_SHARED=str(SHARED), LASSI_VENVS=f"{SHARED}/venvs",  # sandboxes hide $LASSI_SHARED (P17.63)
         PYTHONUNBUFFERED="1",
     )
     return env
@@ -179,7 +181,7 @@ def start_server(card: str, log: Path) -> subprocess.Popen:
         "wait $S\n"
     )
     env = environment()
-    env.update(HF_HOME=f"{BASE}/.cache/huggingface", HF_HUB_OFFLINE="1", LASSI_LIVE_PID=str(os.getpid()))
+    env.update(HF_HOME=f"{SHARED}/hf", HF_HUB_OFFLINE="1", LASSI_LIVE_PID=str(os.getpid()))
     handle = open(log, "w", encoding="utf-8")
     return subprocess.Popen(["bash", "-c", script], stdout=handle, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                             env=env, start_new_session=True)

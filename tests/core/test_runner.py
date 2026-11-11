@@ -27,7 +27,8 @@ Compile hardening (P0.20): build_toolchain gives each pinned toolchain a
 lassi.executors.sandbox.SandboxedCompileRunner, so every compile runs as a
 sandbox command under prlimit --core=1 with the build dir as its workdir,
 the toolchains root exposed read-only, and $HOME, $LASSI_SCRATCH, and
-$LASSI_RUNS_ROOT hidden (A1, A5). The compile environment is the parent's
+$LASSI_RUNS_ROOT hidden (A1, A5), and since task P17.63 $LASSI_SHARED, the
+shared build-chain root, as well. The compile environment is the parent's
 PATH, LANG=C, LC_ALL=C, and the linked prefixes a pin names, with no HOME
 (A2), plus a private TMPDIR under each compile's build dir; a TMPDIR outside
 $LASSI_SCRATCH is refused (A3). build_toolchain runs `<pinned compiler>
@@ -188,10 +189,12 @@ def clean_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Unset the gate variables and the compile variables a test could inherit; each test sets what it needs.
 
     TMPDIR, which a pinned compile requires, points at a test directory, as
-    the gate points it at the scratch disk.
+    the gate points it at the scratch disk. $LASSI_SHARED (task P17.63) is
+    unset too, so only the tests that set it see it.
     """
     for name in ("LASSI_RUNS_ROOT", "LASSI_SCRATCH", "LASSI_TOOLCHAINS", "NVCC_PREPEND_FLAGS", "NVCC_APPEND_FLAGS"):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("LASSI_SHARED", raising=False)
     monkeypatch.delenv("CPATH", raising=False)
     tmpdir = tmp_path / "compile-tmp"
     tmpdir.mkdir()
@@ -2862,6 +2865,81 @@ def test_the_hidden_roots_must_be_absolute_and_at_least_one_must_be_set(
     with pytest.raises(RunError, match="none of"):
         runner_module.build_toolchain("nvcc-sm80", root)
     assert processes.calls == []
+
+
+# The shared root (task P17.63): alpha01's build chain sits under $LASSI_SHARED, outside the scratch root and
+# $HOME, so every compile hides it with $HOME, $LASSI_SCRATCH, and $LASSI_RUNS_ROOT. The gate sets $LASSI_SHARED
+# equal to $LASSI_SCRATCH when config.json names no shared_root.
+
+
+def set_compile_roots(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, **names: str | None) -> dict[str, Path]:
+    """Set each variable named to tmp_path/<value> (None unsets it); return the paths set, by variable."""
+    paths: dict[str, Path] = {}
+    for variable, value in names.items():
+        if value is None:
+            monkeypatch.delenv(variable, raising=False)
+        else:
+            paths[variable] = tmp_path / value
+            monkeypatch.setenv(variable, str(paths[variable]))
+    return paths
+
+
+def test_compile_hidden_roots_include_the_shared_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """$LASSI_SHARED is hidden from compiles with $HOME, $LASSI_SCRATCH, $LASSI_RUNS_ROOT, and the build root."""
+    paths = set_compile_roots(
+        monkeypatch, tmp_path, HOME="home", LASSI_SCRATCH="scratch", LASSI_RUNS_ROOT="runs", LASSI_SHARED="shared"
+    )
+    build = tmp_path / "build"
+    roots = runner_module._compile_hidden_roots(build)
+    assert paths["LASSI_SHARED"] in roots, roots
+    assert set(roots) == {*paths.values(), build}, roots
+    assert len(roots) == len(set(roots)), roots
+
+
+def test_compile_hidden_roots_need_only_the_shared_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With $LASSI_SHARED the only variable set, it alone is hidden; there is no "none of" refusal."""
+    paths = set_compile_roots(
+        monkeypatch, tmp_path, HOME=None, LASSI_SCRATCH=None, LASSI_RUNS_ROOT=None, LASSI_SHARED="shared"
+    )
+    assert runner_module._compile_hidden_roots(None) == (paths["LASSI_SHARED"],)
+
+
+def test_compile_hidden_roots_list_a_shared_root_equal_to_the_scratch_root_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without a shared_root the gate sets $LASSI_SHARED to $LASSI_SCRATCH; the root is hidden once."""
+    paths = set_compile_roots(
+        monkeypatch, tmp_path, HOME="home", LASSI_SCRATCH="scratch", LASSI_RUNS_ROOT="runs", LASSI_SHARED="scratch"
+    )
+    roots = runner_module._compile_hidden_roots(None)
+    assert roots.count(paths["LASSI_SCRATCH"]) == 1, roots
+    assert set(roots) == {paths["HOME"], paths["LASSI_SCRATCH"], paths["LASSI_RUNS_ROOT"]}, roots
+
+
+def test_a_relative_shared_root_is_refused_as_the_other_hidden_roots_are(
+    tmp_path: Path, processes: Processes, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A relative $LASSI_SHARED raises RunError naming it, from _compile_hidden_roots and build_toolchain alike."""
+    monkeypatch.setenv("LASSI_SHARED", "relative-shared")
+    with pytest.raises(RunError, match=r"\$LASSI_SHARED must be an absolute path"):
+        runner_module._compile_hidden_roots(tmp_path / "build")
+    root = pinned_root(tmp_path, NVCC_BIN)
+    processes.watch(root)
+    with pytest.raises(RunError, match=r"\$LASSI_SHARED must be an absolute path"):
+        runner_module.build_toolchain("nvcc-sm80", root)
+    assert processes.calls == [], "the refusal comes before anything runs"
+
+
+def test_build_toolchain_hides_the_shared_root_from_its_compiles(
+    tmp_path: Path, processes: Processes, parent_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pinned toolchain's sandboxed compile runner hides $LASSI_SHARED."""
+    shared = tmp_path / "shared"
+    monkeypatch.setenv("LASSI_SHARED", str(shared))
+    root = pinned_root(tmp_path, NVCC_BIN)
+    processes.watch(root)
+    built = runner_module.build_toolchain("nvcc-sm80", root)
+    assert shared in [Path(item) for item in built.toolchain.runner.hidden_roots]
 
 
 # ---------------------------------------------------------------------------

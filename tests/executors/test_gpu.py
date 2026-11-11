@@ -164,6 +164,7 @@ def runs_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("LASSI_SCRATCH", str(tmp_path / "scratch"))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.delenv("LASSI_TOOLCHAINS", raising=False)
+    monkeypatch.delenv("LASSI_SHARED", raising=False)  # the gate and the host profile set it (P17.63)
     return runs
 
 

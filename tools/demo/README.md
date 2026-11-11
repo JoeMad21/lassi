@@ -1,7 +1,7 @@
 # LASSI demo scripts
 
-The demo scripts that run on alpha01 from `/mnt/nvme10/joseph_ufl/bin`. Their source lives here; the copies in
-`bin` are installed from the demo slot `/mnt/nvme10/joseph_ufl/lassi-wt/demo-live`, which runs the commit that
+The demo scripts that run on alpha01 from `/mnt/nvme10/shrec-shared/lassi/bin`. Their source lives here; the copies in
+`bin` are installed from the demo slot `/mnt/nvme10/shrec-shared/lassi/lassi-wt/demo-live`, which runs the commit that
 holds them. Every demo number is one sample of the stock demo model, never a performance figure, and every
 Tenstorrent number comes from ttsim, a simulator: label it simulator, never silicon.
 
@@ -43,7 +43,7 @@ Tenstorrent number comes from ttsim, a simulator: label it simulator, never sili
   `--card`.
 - Port 8123 in use, or a server of this account still running: an earlier server has not exited; wait for it.
 - The server is not ready after 300 s: read the serve log the script names under
-  `/mnt/nvme10/joseph_ufl/tmp/`.
+  `/mnt/nvme10/shrec-shared/lassi/tmp/`.
 - A Tenstorrent trial that ends at the cap or with a simulator finding is a result, not a failure of the demo:
   the outcome table names its end reason.
 

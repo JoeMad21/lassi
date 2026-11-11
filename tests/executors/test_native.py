@@ -4,9 +4,11 @@ The native executor runs a CPU artifact (bible Execution Backends, executor
 native) and, like every executor, runs it only through the sandbox module
 (Agent Rule 6): the workdir is the artifact's directory, the argv is the
 artifact then its inputs, the hidden roots default to $LASSI_SCRATCH and
-$HOME and always include the runs root, and the toolchains root the sandbox
-re-exposes read-only defaults to $LASSI_TOOLCHAINS (P0.16 R3); every one of
-those paths is resolved first. It reports the files the run created as output
+$HOME, and since task P17.63 $LASSI_SHARED, the shared build-chain root
+(lassi.executors.native._environment_roots, which the ttsim, tt_silicon, and
+gpu executors share), and always include the runs root, and the toolchains
+root the sandbox re-exposes read-only defaults to $LASSI_TOOLCHAINS (P0.16
+R3); every one of those paths is resolved first. It reports the files the run created as output
 files (bible Component Interfaces, Executor contract rules), and passes the
 sandbox's stdout and stderr truncation flags (P0.16 R4) and its
 workdir_incomplete flag (P0.16 R5) on in its RunResult.
@@ -58,15 +60,19 @@ def sandbox() -> ModuleType:
 
 @pytest.fixture(autouse=True)
 def runs_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Make tmp_path/runs the runs root ($LASSI_RUNS_ROOT), where these tests' artifacts live; unset $LASSI_TOOLCHAINS.
+    """Make tmp_path/runs the runs root ($LASSI_RUNS_ROOT); unset $LASSI_TOOLCHAINS and $LASSI_SHARED.
 
-    The runs root sits beside, not above, the scratch and home roots these
-    tests set, so the hidden roots the sandbox gets stay distinct.
+    The runs root, where these tests' artifacts live, sits beside, not
+    above, the scratch and home roots these tests set, so the hidden roots
+    the sandbox gets stay distinct. $LASSI_SHARED, which the gate and the
+    workstation's host profile export (task P17.63), is unset so that only
+    the tests that set it see it.
     """
     runs = tmp_path / "runs"
     runs.mkdir()
     monkeypatch.setenv("LASSI_RUNS_ROOT", str(runs))
     monkeypatch.delenv("LASSI_TOOLCHAINS", raising=False)
+    monkeypatch.delenv("LASSI_SHARED", raising=False)
     return runs
 
 
@@ -417,6 +423,78 @@ def test_a_relative_root_variable_means_sandbox_unavailable_and_nothing_runs(
             monkeypatch.setenv(name, str(tmp_path / name.lower()) if value == "ABSOLUTE" else value)
     fake = FakeSandbox(result=canned(sandbox))
     with pytest.raises(sandbox.SandboxUnavailableError, match="absolute"):
+        native.NativeExecutor(sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
+    assert fake.calls == []
+
+
+# The shared root (task P17.63): alpha01's build chain sits under $LASSI_SHARED, outside the scratch root and
+# $HOME, so the sandbox hides it too. The gate sets $LASSI_SHARED equal to $LASSI_SCRATCH when config.json names
+# no shared_root.
+
+
+@pytest.mark.parametrize(
+    ("scratch", "home", "shared", "expected"),
+    [
+        ("scratch", "home", "shared", ("scratch", "home", "shared")),
+        (None, None, "shared", ("shared",)),
+        ("scratch", None, "shared", ("scratch", "shared")),
+        (None, "home", "shared", ("home", "shared")),
+        ("scratch", "home", "scratch", ("scratch", "home")),
+        ("scratch", "home", "home", ("scratch", "home")),
+        ("scratch", "home", None, ("scratch", "home")),
+        ("scratch", "home", "", ("scratch", "home")),
+    ],
+    ids=[
+        "all-three",
+        "shared-only",
+        "scratch-and-shared",
+        "home-and-shared",
+        "shared-is-scratch",
+        "shared-is-home",
+        "shared-unset",
+        "shared-empty",
+    ],
+)
+def test_environment_roots_are_scratch_then_home_then_shared(
+    native: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scratch: str | None,
+    home: str | None,
+    shared: str | None,
+    expected: tuple[str, ...],
+) -> None:
+    """_environment_roots() gives $LASSI_SCRATCH, $HOME, and $LASSI_SHARED, those set, in order, each once."""
+    set_roots(monkeypatch, None if scratch is None else tmp_path / scratch, None if home is None else tmp_path / home)
+    if shared is None:
+        monkeypatch.delenv("LASSI_SHARED", raising=False)
+    else:
+        monkeypatch.setenv("LASSI_SHARED", str(tmp_path / shared) if shared else "")
+    assert native._environment_roots() == tuple(tmp_path / name for name in expected)
+
+
+def test_a_run_hides_the_shared_root_after_scratch_and_home(
+    native: ModuleType, sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run's hidden roots are $LASSI_SCRATCH, $HOME, $LASSI_SHARED, then the runs root."""
+    scratch, home, shared = tmp_path / "scratch", tmp_path / "home", tmp_path / "shared"
+    set_roots(monkeypatch, scratch, home)
+    monkeypatch.setenv("LASSI_SHARED", str(shared))
+    fake = FakeSandbox(result=canned(sandbox))
+    native.NativeExecutor(sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
+    assert fake.calls[0].spec.hidden_roots == (scratch, home, shared, tmp_path / "runs")
+
+
+def test_a_relative_shared_variable_means_sandbox_unavailable_and_nothing_runs(
+    native: ModuleType, sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A relative $LASSI_SHARED is refused as a relative $LASSI_SCRATCH or $HOME is, before anything runs."""
+    set_roots(monkeypatch, tmp_path / "scratch", tmp_path / "home")
+    monkeypatch.setenv("LASSI_SHARED", "relative/shared")
+    with pytest.raises(sandbox.SandboxUnavailableError, match=r"\$LASSI_SHARED must be an absolute path"):
+        native._environment_roots()
+    fake = FakeSandbox(result=canned(sandbox))
+    with pytest.raises(sandbox.SandboxUnavailableError, match=r"\$LASSI_SHARED must be an absolute path"):
         native.NativeExecutor(sandbox=fake).run(make_artifact(tmp_path), [], LIMITS)
     assert fake.calls == []
 

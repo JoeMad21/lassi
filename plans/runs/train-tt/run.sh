@@ -4,7 +4,8 @@
 #   uv run tools/train_tt.py launch [options]
 # which runs, from a clean pushed commit,
 #   uv run tools/rx.py job start --big --slot train-tt --name train-tt --timeout <deadline + 900 s> -- \
-#     'LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl LASSI_STOP_GIB=345 bash plans/runs/train-tt/run.sh \
+#     'HOME=/mnt/nvme10/shrec-shared/lassi LASSI_ALLOWED_ROOT=/mnt/nvme10/shrec-shared LASSI_STOP_GIB=345 \
+#      bash plans/runs/train-tt/run.sh \
 #      --deadline <epoch> --spacing <s> --recipe <path>:<timeout_s> ...'
 # OQ-100 (a) with (s2): training runs of tracked code on the cards, started by the owner; one start runs a sequence of
 # runs, each its own process, spaced, the sequence stopping at the first failure or hang. Steps, in order:

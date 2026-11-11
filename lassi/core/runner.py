@@ -503,8 +503,9 @@ _VERSION_PROBE_PREFIX = "lassi-version-check."
 _VERSION_ARGS = ("--version",)
 # The build dir, under the runs root, against which the compile layout is checked before a run (never created).
 _LAYOUT_PROBE = "lassi-layout-check"
-# The environment variables that name the roots every compile hides (P0.20), in order.
-_COMPILE_HIDDEN_VARIABLES = ("HOME", "LASSI_SCRATCH", "LASSI_RUNS_ROOT")
+# The environment variables that name the roots every compile hides (P0.20), in order; $LASSI_SHARED, the shared
+# build chain the gate names since P17.63, is hidden too.
+_COMPILE_HIDDEN_VARIABLES = ("HOME", "LASSI_SCRATCH", "LASSI_RUNS_ROOT", "LASSI_SHARED")
 # A context pack's name, as lassi.prompts.assets checks it: one plain path segment (_template_set_pack).
 _PACK_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 # The retrieval corpora under the assets root, and the index file's name where the generator writes it by default:

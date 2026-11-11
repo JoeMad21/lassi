@@ -18,7 +18,7 @@ host values: each script takes its allowed root from LASSI_ALLOWED_ROOT and
 its stop line from LASSI_STOP_GIB (a positive integer of GiB), both required
 with no default. The host profile (tools/local/host-profile.sh) sets them on
 the workstation; on alpha01 the rx command line gives
-LASSI_ALLOWED_ROOT=/mnt/nvme10/joseph_ufl and LASSI_STOP_GIB=145, with which
+LASSI_ALLOWED_ROOT=/mnt/nvme10/shrec-shared and LASSI_STOP_GIB=145, with which
 the scripts keep and refuse exactly what the literal root and 145 GiB did.
 Both scripts hold RLIMIT_CORE at exactly 1 byte with prlimit, read back with
 prlimit itself (these pins name no Python), as toolchains/tt-mlir.sh does.
@@ -919,14 +919,14 @@ def test_ttsim_swap_in_moves_the_previous_install_aside_and_keeps_it(tmp_path: P
 # The allowed root, the stop line, and the core limit (task P5.15).
 
 
-ALPHA01_ROOT = "/mnt/nvme10/joseph_ufl"
+ALPHA01_ROOT = "/mnt/nvme10/shrec-shared"
 # What alpha01's rx command line gives the scripts (Host Facts: the 145G stop line under the 150G cap), with the
 # gate's layout of the roots (tools/server/gate.py, build_env).
 ALPHA01 = {
     "LASSI_ALLOWED_ROOT": ALPHA01_ROOT,
     "LASSI_STOP_GIB": "145",
     "LASSI_TOOLCHAINS": f"{ALPHA01_ROOT}/toolchains",
-    "LASSI_SCRATCH": ALPHA01_ROOT,
+    "LASSI_SCRATCH": f"{ALPHA01_ROOT}/lassi",
     "LASSI_JOBS": "4",
 }
 # Another host's values, as a host profile gives them, under the probe's directory ("$PWD" in a value names it);

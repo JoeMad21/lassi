@@ -1,0 +1,86 @@
+== moving: /mnt/nvme10/joseph_ufl -> /mnt/nvme10/shrec-shared
+absolute symlinks in the HF stores: 0 (they keep resolving through the links left behind)
+moved   /mnt/nvme10/joseph_ufl/toolchains -> /mnt/nvme10/shrec-shared/toolchains
+moved   /mnt/nvme10/joseph_ufl/.cache/huggingface -> /mnt/nvme10/shrec-shared/hf
+moved   /mnt/nvme10/joseph_ufl/hf/hub/models--Qwen--Qwen2.5-Coder-0.5B-Instruct -> /mnt/nvme10/shrec-shared/hf/hub/models--Qwen--Qwen2.5-Coder-0.5B-Instruct
+made /mnt/nvme10/shrec-shared/venvs
+moved   /mnt/nvme10/joseph_ufl/furiosa-venv-2026.4 -> /mnt/nvme10/shrec-shared/venvs/furiosa-venv-2026.4
+moved   /mnt/nvme10/joseph_ufl/ttrun-venv -> /mnt/nvme10/shrec-shared/venvs/ttrun-venv
+made /mnt/nvme10/shrec-shared/cache
+moved   /mnt/nvme10/joseph_ufl/.cache/uv -> /mnt/nvme10/shrec-shared/cache/uv
+moved   /mnt/nvme10/joseph_ufl/.cache/tt-metal-cache -> /mnt/nvme10/shrec-shared/cache/tt-metal-cache
+moved   /mnt/nvme10/joseph_ufl/.cache/furiosa -> /mnt/nvme10/shrec-shared/cache/furiosa
+moved   /mnt/nvme10/joseph_ufl/.cache/tiktoken -> /mnt/nvme10/shrec-shared/cache/tiktoken
+moved   /mnt/nvme10/joseph_ufl/.cache/lassi-p17-torchinductor -> /mnt/nvme10/shrec-shared/cache/lassi-p17-torchinductor
+moved   /mnt/nvme10/joseph_ufl/.cache/.furiosa-permit-probe -> /mnt/nvme10/shrec-shared/cache/.furiosa-permit-probe
+made /mnt/nvme10/shrec-shared/lassi
+moved   /mnt/nvme10/joseph_ufl/lassi.git -> /mnt/nvme10/shrec-shared/lassi/lassi.git
+moved   /mnt/nvme10/joseph_ufl/lassi-wt -> /mnt/nvme10/shrec-shared/lassi/lassi-wt
+moved   /mnt/nvme10/joseph_ufl/lassi-runs -> /mnt/nvme10/shrec-shared/lassi/lassi-runs
+moved   /mnt/nvme10/joseph_ufl/lassi-live -> /mnt/nvme10/shrec-shared/lassi/lassi-live
+moved   /mnt/nvme10/joseph_ufl/bench -> /mnt/nvme10/shrec-shared/lassi/bench
+moved   /mnt/nvme10/joseph_ufl/rag -> /mnt/nvme10/shrec-shared/lassi/rag
+moved   /mnt/nvme10/joseph_ufl/train-data -> /mnt/nvme10/shrec-shared/lassi/train-data
+moved   /mnt/nvme10/joseph_ufl/downloads -> /mnt/nvme10/shrec-shared/lassi/downloads
+moved   /mnt/nvme10/joseph_ufl/tools -> /mnt/nvme10/shrec-shared/lassi/tools
+moved   /mnt/nvme10/joseph_ufl/sweep16-results-20261030-1526 -> /mnt/nvme10/shrec-shared/lassi/sweep16-results-20261030-1526
+moved   /mnt/nvme10/joseph_ufl/sweep16-results-20261030-1526.tar.gz -> /mnt/nvme10/shrec-shared/lassi/sweep16-results-20261030-1526.tar.gz
+moved   /mnt/nvme10/joseph_ufl/sweep16-results-20261030-1529 -> /mnt/nvme10/shrec-shared/lassi/sweep16-results-20261030-1529
+moved   /mnt/nvme10/joseph_ufl/sweep16-results-20261030-1529.tar.gz -> /mnt/nvme10/shrec-shared/lassi/sweep16-results-20261030-1529.tar.gz
+moved   /mnt/nvme10/joseph_ufl/sweep.sh -> /mnt/nvme10/shrec-shared/lassi/sweep.sh
+moved   /mnt/nvme10/joseph_ufl/skeleton-build.aegjXo -> /mnt/nvme10/shrec-shared/lassi/skeleton-build.aegjXo
+moved   /mnt/nvme10/joseph_ufl/skeleton-build.WsQkqK -> /mnt/nvme10/shrec-shared/lassi/skeleton-build.WsQkqK
+moved   /mnt/nvme10/joseph_ufl/all-blobs.txt -> /mnt/nvme10/shrec-shared/lassi/all-blobs.txt
+moved   /mnt/nvme10/joseph_ufl/kept-blobs.txt -> /mnt/nvme10/shrec-shared/lassi/kept-blobs.txt
+moved   /mnt/nvme10/joseph_ufl/orphan-blobs.txt -> /mnt/nvme10/shrec-shared/lassi/orphan-blobs.txt
+moved   /mnt/nvme10/joseph_ufl/bin -> /mnt/nvme10/shrec-shared/lassi/bin
+moved   /mnt/nvme10/joseph_ufl/tmp -> /mnt/nvme10/shrec-shared/lassi/tmp
+linked  /mnt/nvme10/shrec-shared/lassi/toolchains -> /mnt/nvme10/shrec-shared/toolchains
+linked  /mnt/nvme10/shrec-shared/lassi/hf -> /mnt/nvme10/shrec-shared/hf
+linked  /mnt/nvme10/shrec-shared/lassi/furiosa-venv-2026.4 -> /mnt/nvme10/shrec-shared/venvs/furiosa-venv-2026.4
+linked  /mnt/nvme10/shrec-shared/lassi/ttrun-venv -> /mnt/nvme10/shrec-shared/venvs/ttrun-venv
+made /mnt/nvme10/shrec-shared/lassi/.cache
+linked  /mnt/nvme10/shrec-shared/lassi/.cache/huggingface -> /mnt/nvme10/shrec-shared/hf
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/balettk/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/classify/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/demo-live/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/demo-proxy/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/demo-run/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-00bd90f6/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-322e3199/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-36f263b3/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-37c0cf4f/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-3c6a69c0/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-40bd4a88/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-52136291/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-7e420914/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-bd5e51fc/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-c173cd58/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-d118e253/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-detached-d544bd24/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-p16-adversarial/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/desktop-8r113ei-p5-ir/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/features/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/furiosa-dl/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/furiosa-prep/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/night/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/p16-witness/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/post/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/rngd-matrix/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/rngd-serve/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/rngd-sweep2/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/rngd-sweep3/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/rngd-sweep4/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/suite/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/sweep5b/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/tiera30-maxabs/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/tiera30-pcc/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/tiera-maxabs/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/tiera-pcc/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/tt-silicon/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/window/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/window3/gitdir
+repair: repair: gitdir incorrect: /mnt/nvme10/shrec-shared/lassi/lassi.git/worktrees/window4/gitdir
+worktrees repaired: 40
+== 32 to move; free on the filesystem: 85G
+[rx] id=20261110-215116-exec-abc4 state=done rc=0

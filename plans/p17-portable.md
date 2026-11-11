@@ -574,6 +574,13 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: lassi/train/, lassi/executors/ (no change to the silicon executor's lock), tools/rx.py, tools/server/, tests/.
 - Host: Windows (fakes); the training server and alpha01 later. Depends: P17.53, OQ-116, OQ-119, OQ-120, OQ-122 for the parts that touch them.
 
+### P17.63 Move the alpha01 build chain to /mnt/nvme10/shrec-shared
+- Added on 2026-11-11 (the owner: "I want to move our entire build chain for this project and other projects in the server into /mnt/nvme10/shrec-shared ... Move the files for this project into there and ensure that everything works without running on accelerators."; OQ-124).
+- Bible: Agent Rules 7 and 17, Repository Layout, Project Recipes, Execution Backends (Sandbox), Host Facts, Decision Log.
+- Accept: the move (plans/runs/shrec-move/shrec-move.sh, tested on a fake tree by move-test.sh; README.md there) leaves every LASSI entry under /mnt/nvme10/shrec-shared with a link at its old path and nothing deleted; the gate's optional `shared_root` puts LASSI_TOOLCHAINS, HF_HOME, the caches, CARGO_HOME, and RUSTUP_HOME under the shared root and exports LASSI_SHARED and LASSI_VENVS, leaving the environment unchanged without it, and refuses a relative or root shared_root (tests/tools/test_rx_gate.py); sandboxed compiles and programs hide $LASSI_SHARED as they hide $HOME and $LASSI_SCRATCH (tests/core/test_runner.py, tests/executors/test_native.py); tools/train_tt.py's commands give HOME under the allowed root; rx's default root is /mnt/nvme10/shrec-shared/lassi; after the owner moves the gate and updates it, rx doctor reports both roots, and checks that open no accelerator pass from the new root: an HF cache scan that loads no model, the toolchains' version checks, the remote tests, and one ttsim run of a tt-pairs reference.
+- Files: tools/server/gate.py, tools/server/config.default.json, tools/rx.py, tools/local/host-profile.sh, lassi/core/runner.py, lassi/executors/ (native, ttsim, tt_silicon, gpu), plans/runs/train-tt/run.sh, tools/train_tt.py, tools/demo/, toolchains/*.sh headers, plans/runs/shrec-move/, AGENTS.md, docs/BIBLE.md, tests/.
+- Host: Windows (code, tests, fakes); alpha01 for the move and the checks, each batch approved by the owner in the working session. Depends: none. The owner moves the gate's folder (the gate refuses any command naming it) and runs `rx bootstrap --update-gate`.
+
 ### P17.G Phase gate (BLOCKED: GPU host, OQ-040)
 - Bible: Build Roadmap (P17 row, Gate column), Agent Rules 1 and 10; AGENTS.md Phase Gate and Results.
 - Accept, from one clean commit:
