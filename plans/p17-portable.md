@@ -581,6 +581,13 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: tools/server/gate.py, tools/server/config.default.json, tools/rx.py, tools/local/host-profile.sh, lassi/core/runner.py, lassi/executors/ (native, ttsim, tt_silicon, gpu), plans/runs/train-tt/run.sh, tools/train_tt.py, tools/demo/, toolchains/*.sh headers, plans/runs/shrec-move/, AGENTS.md, docs/BIBLE.md, tests/.
 - Host: Windows (code, tests, fakes); alpha01 for the move and the checks, each batch approved by the owner in the working session. Depends: none. The owner moves the gate's folder (the gate refuses any command naming it) and runs `rx bootstrap --update-gate`.
 
+### P17.64 bale-v0-tt, all eight apps, C++ -> TT-Metalium on the 30B-class models
+- Added on 2026-11-11 (the owner, about 23:25 EST: "I booked you 12am-5am EST. Go ahead and do more tests with BALE. I want BALE applications converted from C++ to TT-Metallium. You were able to do three applications, I want more of the BALE applications ready. Run them on the 30B models and if we have time, we'll do the other models."). The three apps of P17.40 (histo, ig, triangle) ran C++ <-> OpenMP; bale-v0-tt (P17.43) holds all eight apps as cpp -> ttkh items, which only gpt-oss-120b's sweep10 and sweep11 recipes named.
+- Bible: Benchmark Suites, Project Recipes, Execution Backends (ttsim), Oracles (binary_io), Agent Rules 2, 5, and 9.
+- Accept: projects/lassi-demo/bale-tt-30b-base.yaml and sweep21/<slug>/ for every row of plans/runs/suite/models-30b.tsv: bale-ex-1 to -4 (sweep10's worked examples) and bale-all-1 to -4 (sweep11's bale-all), each arm's four recipes covering the eight items once, each recipe sweep20's model and sampling and otherwise the gpt-oss-120b recipe of its arm (tests/core/test_sweep21_recipes.py); the window's run on ttsim after the owner's gate step (P17.63), with its pull, summaries, and run report.
+- Files: projects/lassi-demo/bale-tt-30b-base.yaml, projects/lassi-demo/sweep21/, tests/core/test_sweep21_recipes.py, plans/runs/2026-11-12-window-plan.md.
+- Host: Windows (recipes, tests); alpha01 for the window (RNGD serving, ttsim), each batch approved by the owner in the session. Depends: P17.43, P17.63's gate step.
+
 ### P17.G Phase gate (BLOCKED: GPU host, OQ-040)
 - Bible: Build Roadmap (P17 row, Gate column), Agent Rules 1 and 10; AGENTS.md Phase Gate and Results.
 - Accept, from one clean commit:

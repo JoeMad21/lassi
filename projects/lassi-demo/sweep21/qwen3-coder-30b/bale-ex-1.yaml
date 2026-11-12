@@ -1,0 +1,15 @@
+# sweep21 (task P17.64), arm ex: sweep10's bale-cpp recipes, the worked examples of tt-kh-examples-v0 alone, at
+# generation and each correction, for furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8 (v2026.4, 4 RNGD cards), items
+# histo, ig. Its sampling is sweep20's for this model (projects/lassi-demo/sweep20/qwen3-coder-30b/ttir-l0.yaml). The
+# shared settings and their reasons are in ../../bale-tt-30b-base.yaml. Exploratory; every TT program runs on ttsim, a
+# simulator.
+extends: ../../bale-tt-30b-base.yaml
+model:
+  id: furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8
+llm:
+  sampling:
+    temperature: 0.7
+    top_p: 0.8
+    max_tokens: 8192
+bench:
+  items: [histo, ig]

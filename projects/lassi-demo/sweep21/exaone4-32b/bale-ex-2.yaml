@@ -1,0 +1,5 @@
+# sweep21 (task P17.64), arm ex: bale-ex-1.yaml with items triangle, transpose_matrix. Exploratory; every TT program
+# runs on ttsim, a simulator.
+extends: bale-ex-1.yaml
+bench:
+  items: [triangle, transpose_matrix]

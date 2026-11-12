@@ -1,0 +1,14 @@
+# sweep21 (task P17.64), arm ex: sweep10's bale-cpp recipes, the worked examples of tt-kh-examples-v0 alone, at
+# generation and each correction, for furiosa-ai/gemma-4-31B-it-FP8-block (v2026.4, 4 RNGD cards), items histo, ig.
+# Its sampling is sweep20's for this model (projects/lassi-demo/sweep20/gemma4-31b/ttir-l0.yaml). The shared settings
+# and their reasons are in ../../bale-tt-30b-base.yaml. Exploratory; every TT program runs on ttsim, a simulator.
+extends: ../../bale-tt-30b-base.yaml
+model:
+  id: furiosa-ai/gemma-4-31B-it-FP8-block
+llm:
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    max_tokens: 16384
+bench:
+  items: [histo, ig]
