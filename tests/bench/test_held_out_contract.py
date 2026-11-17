@@ -96,6 +96,18 @@ DIGESTS = {
     ("bale-v0-tt", "triangle", "num_vertices"): "ce7a07443aebc516f4eb60b7929bd395f4095cfdcb9866fa48d2fa5466182d76",
     ("bale-v0-tt", "triangle", "edge_u"): "1721acaef35aea61c6bc61a9c9dd262bb9d758f0236a370ded39c18125efd37a",
     ("bale-v0-tt", "triangle", "edge_v"): "cea30188682358b2f0bdd965c7162bad2a60950651d985b03e2068ab13e0f03e",
+    # tt-par-v0's development items (task P17.67), recorded when the suite was added.
+    ("tt-par-v0", "matmul_multicore_reuse", "a"): "b066ed17178f4b4c96ad8c57e5c517cf231cc05789586baca6a43baa68e26314",
+    ("tt-par-v0", "matmul_multicore_reuse", "b"): "442711f921521cad6c6d17fafbf7d42e98ea8ad6506b742eff93ebbf30f1fedf",
+    ("tt-par-v0", "matmul_multicore_reuse_mcast", "a"):
+        "5c4b7707643c371507ef780916e296ea1ca5a4411c7539abdec710902985680d",
+    ("tt-par-v0", "matmul_multicore_reuse_mcast", "b"):
+        "e1990d4e62ea98e4463f0b6f98d9e040c650fe6d83f9e77f9046f7ec6fbd1a33",
+    ("tt-par-v0", "pad_multi_core", "src"): "88650aa2fc0e8138b1c66f5912eabb4b9fecc2976aef0168dc2fd8874ca4a7d7",
+    ("tt-par-v0", "vecadd_multi_core", "a"): "e7543865c65b0e7ebad843d77a087c63f0d4c888941573bf29760b5b66e30e98",
+    ("tt-par-v0", "vecadd_multi_core", "b"): "c6241a5fea3769ec8b7a4f19882a90e58b81fcc5cb4aaa18d86878f2652701fe",
+    ("tt-par-v0", "vecadd_sharding", "a"): "b2658acbd5ba601b66e08c5b68249e22fb4bbae34a1dbe7777c60d598526ef27",
+    ("tt-par-v0", "vecadd_sharding", "b"): "5ee5d46378f481cd888a465c811369fa5c3155fb9bfb364b0bf2b5be8361ff72",
 }
 # tt-pairs-v0-ttkernel (task P17.36), tt-pairs-v0-kh (task P17.39), and tt-pairs-v0-ttir and tt-pairs-v0-d2m (task
 # P17.48) hold tt-pairs-v0's items with the same inputs and seeds, so their files are tt-pairs-v0's, byte for byte
@@ -116,7 +128,7 @@ DIGESTS.update({
 })
 RECORDED_SUITES = (
     "adv-seeded-v0", "bale-v0", "bale-v0-tt", "bale-v0-ttnn", "lassi-hecbench-10", "tt-pairs-v0",
-    "tt-pairs-v0-ttkernel", "tt-pairs-v0-kh", "tt-pairs-v0-ttir", "tt-pairs-v0-d2m",
+    "tt-pairs-v0-ttkernel", "tt-pairs-v0-kh", "tt-pairs-v0-ttir", "tt-pairs-v0-d2m", "tt-par-v0",
 )
 
 

@@ -216,12 +216,13 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.64 | OWNER | bale-v0-tt, all eight apps, C++ -> TT-Metalium on the 30B-class models | P17.43 | sweep21 ran in the window of 2026-11-12 (sweep-20261111-2138 to -2343 runs in the inventory rx 20261116-161608-exec-0f2e); its pull, summaries, and run report wait on the owner's yes (OQ-130; Agent Rule 17) |
 | P17.65 | DONE | Device profiles of the saved TT translations on the Wormhole cards | P17.42,P17.55 | rx 20261116-212311-tracy-0bc3 at 5d75218: 57 steps; 41 translations and every reference passed on card 0; results/tracy-20261116/summary.md |
 | P17.66 | DONE | tt_silicon: a visible_card setting that sets TT_VISIBLE_DEVICES | P17.16,P17.42 | visible_card sets TT_VISIBLE_DEVICES; verified on card 0 by rx 20261116-212311-tracy-0bc3 (57 steps, exit 0) |
-| P17.67 | READY | tt-par-v0: the development items from tt-metal's multi-core examples | P17.31 | planned 2026-11-17; the owner chose the five items (OQ-129); spike plans/spikes/tt-par-upstream.md |
+| P17.67 | DONE | tt-par-v0: the development items from tt-metal's multi-core examples | P17.31 | tt-par-v0's five development items: manifest, C++ and TT host programs, tests; unbuilt, their builds and ttsim runs are P17.76 (OQ-130) |
 | P17.68 | READY | tt-par-v0: the held-out items written here | P17.67 | planned 2026-11-17; the owner chose the five computations (OQ-129); committed before P17.71 to P17.73 start |
 | P17.69 | READY | tt-par-v0-kh: the host-and-kernels variant | P17.67,P17.68 |  |
 | P17.70 | READY | Cores used: a structural count, never a time | P17.42 |  |
 | P17.71 | READY | Skeletons with the compute grid by default (opt-in) | P17.33,P17.39,P17.68 |  |
 | P17.72 | READY | Prompt sets with the parallel goal and the multi-core calls (opt-in) | P17.68 |  |
 | P17.73 | READY | A single-core correction (opt-in) | P17.68,P17.70,P17.72 |  |
-| P17.74 | READY | tt-par sweeps on ttsim: the development ladder, then the frozen held-out run | P17.67,P17.68,P17.69,P17.70,P17.71,P17.72,P17.73 |  |
+| P17.74 | READY | tt-par sweeps on ttsim: the development ladder, then the frozen held-out run | P17.67,P17.68,P17.69,P17.70,P17.71,P17.72,P17.73,P17.76 |  |
 | P17.75 | OWNER | Card profiles of the tt-par translations | P17.74 | the owner starts card runs (OQ-127) |
+| P17.76 | OWNER | tt-par-v0's programs built and checked on ttsim | P17.67,P17.68 | every step on alpha01 waits on the owner's yes (OQ-130) |

@@ -196,7 +196,8 @@ docs                   excluded: matmul_multi_core_optimized.rst, data_reuse.rst
      is [unknown] until the reference runs. tile_write_multi_core.cpp includes only <cstdint> [read].
    - unpack_to_dest: not taken by the host's settings: no fp32_dest_acc_en, no unpack_to_dest_mode, Float16_b buffers
      (ComputeConfig defaults, metal tt_metal/api/tt-metalium/kernel_types.hpp:76-83) [read].
-5. Item: yes, at its own sizes. A host-only C++ program computes bf16(float(a) + float(b)); each input holds 655,360
+5. Item: yes, at its own sizes. A host-only C++ program computes float(a) + float(b) in f32 (the manifest
+   compares the device's bf16 sum, widened, against it, as upstream's check does); each input holds 655,360
    elements; the kernels need only buffer addresses, tile ranges, and circular-buffer ids, which a host written here
    passes; the output is 640 tiles, more than 64.
 6. tt-train-v0: excluded ("duplicate of Tier A eltwise_binary"), not included. tt-metal-docs: the host and all three
@@ -300,7 +301,10 @@ docs                   excluded: matmul_multi_core_optimized.rst, data_reuse.rst
    0.3 with seed 12522 (:375-376; metal tt_metal/impl/data_format/bfloat16.cpp:99-109, mt19937). A CPU golden in f32
    accumulation rounded to bf16 (:26-57, :380); inputs tilized before upload and the result untilized (:383-389).
 2. Cores: compute_with_storage_grid_size (:83-85); in0_block_w 2 (:98); per-core block and subblock from
-   get_large_matmul_params (:105-109; bmm_op.hpp:117-221), which takes the largest per-core block its rule allows;
+   get_large_matmul_params (:105-109; bmm_op.hpp:117-221), which, unless a prime factor forces a size, walks the
+   per-core N choices in ascending order and returns the first whose blocks fit the grid, with the largest M within
+   the budget for that N (at 640 it returns 20 x 4 though 20 x 5 also fits; corrected 2026-11-17 by the P17.67
+   programs' check of the rule on every Mt and Nt from 1 to 256);
    num_cores_to_corerangeset over the blocks, row-wise (:171-176); block b on core (b mod num_cores_x, b div
    num_cores_x) (:269-275). At 640: per-core 20 x 4 tiles, 1 x 5 blocks, 5 cores on 8x7, 8x8, and 8x9 [arith,
    command 5]. Its divisibility checks are TT_ASSERT (:119-121, :174), which compile to nothing outside DEBUG
@@ -484,8 +488,8 @@ card 0 is 8x7 (56), ttsim is 8x9 (72, inferred). Inputs are the largest input's 
 Five items, each with a host-only C++ program and a TT host program written here that runs the upstream kernels
 unmodified, named by path and sha256 (the table rows above), with no tt-metal text tracked:
 
-1. vecadd_multi_core at its own size: a and b [655360] bf16, uniform [0, 10) as upstream draws them; c bf16; max_abs
-   0.3 (its check); split_work_to_cores over the grid (64 on 8x8, 56 on card 0). It is the plainest multi-core host
+1. vecadd_multi_core at its own size: a and b [655360] bf16, uniform [0, 10) as upstream draws them; c f32 (the
+   device's bf16 sum widened); max_abs 0.3 (its check); split_work_to_cores over the grid (64 on 8x8, 56 on card 0). It is the plainest multi-core host
    (grid, split, per-core start tile), the pattern P17.71 and P17.72 teach.
 2. vecadd_sharding raised to 448 tiles (a, b [458752] bf16, uniform [0, 10)), height-sharded over the 8 x 7 range,
    56 cores of 8 tiles; max_abs 0.2 (its check). It covers the sharded-L1, compute-only host, which no other item has.
@@ -514,10 +518,11 @@ bytes ((401,408 + 262,144 + 1,605,632) bf16).
 
 Before the manifest commit: none of these kernels has run in this project, and upstream's own ttsim CI ran none of
 these five at the pin (its list, plans/spikes/p4-tt-pins.md:125, names only matmul_multicore_reuse of them, which it
-skipped; bible 761). P17.67 requires each TT reference to pass against its C++ program on ttsim; an item whose
+skipped; bible 761). P17.76 requires each TT reference to pass against its C++ program on ttsim; an item whose
 reference fails there (the doubled release_dst of item 1, the 4-byte transfers of item 3, and the multicast and
-semaphores of item 5 are the likeliest places) goes to the owner queue with the run as evidence, since dropping it
-changes the owner's choice (OQ-129).
+semaphores of item 5 are the likeliest places) goes to the owner queue with the run as evidence when the fault is in
+an upstream kernel, which stays unmodified, since dropping the item changes the owner's choice (OQ-129); a fault in
+the host program written here is fixed there.
 
 ## Consequences for the plan
 

@@ -48,6 +48,8 @@ REPO = Path(__file__).resolve().parents[2]
 BENCH = REPO / "assets" / "bench"
 DEV_SUITES = ("tt-pairs-v0", "tt-pairs-v0-kh", "tt-pairs-v0-ttkernel", "tt-pairs-v0-ttir", "tt-pairs-v0-d2m")
 TT_PAIRS_ITEMS = ("eltwise_binary", "eltwise_sfpu", "loopback", "matmul_multi_core", "matmul_single_core")
+# Other committed suites that hold dev items beside items of other splits (tt-par-v0, task P17.67; OQ-129).
+MIXED_DEV_SUITES = ("tt-par-v0",)
 # The splits every other committed suite keeps (task P17.31 changes none of them).
 OTHER_SUITES = {
     "bale-v0": "unassigned",
@@ -345,9 +347,9 @@ def test_every_other_suite_keeps_its_splits(suite: str, split: str) -> None:
 
 
 def test_no_suite_outside_the_development_set_holds_a_dev_item() -> None:
-    """Only the five tt-pairs-v0 suites hold dev items among the committed manifests."""
+    """Only the five tt-pairs-v0 suites and MIXED_DEV_SUITES hold dev items among the committed manifests."""
     found = {path.stem: raw(path.stem) for path in sorted(BENCH.glob("*.yaml"))}
     assert set(DEV_SUITES) | set(OTHER_SUITES) <= set(found)
     with_dev = sorted(name for name, data in found.items()
                       if any(entry.get("split") == "dev" for entry in data["items"].values()))
-    assert not set(with_dev) - set(DEV_SUITES), with_dev
+    assert not set(with_dev) - set(DEV_SUITES) - set(MIXED_DEV_SUITES), with_dev
