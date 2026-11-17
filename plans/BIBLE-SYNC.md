@@ -110,3 +110,12 @@ The tt-par-v0 row queued above (P17.67) now names the held-out items; apply it i
 
 Mirror edit in docs/BIBLE.md: Benchmark Suites table, a new row after tt-par-v0: | tt-par-v0-kh | tt-par-v0's ten items unchanged, plus a ttkh language: the whole TT program a translation writes, the host program and every kernel it launches, at the paths the item's tracked host program gives them, with lassi_io.h its only support and the tt program its reference (task P17.69; OQ-129, both variants) | Hand-written (cpp -> ttkh) | As tt-par-v0: the development items dev, the held-out items eval (OQ-129) |
 - The 2026-11-17 tt-par-v0 Decision Log row queued under P17.67 above now also names tt-par-v0-kh and P17.69, as the mirror carries it.
+
+## 2026-11-17: the core-grid prompt sets (P17.72)
+
+Mirror edits in docs/BIBLE.md:
+
+- Repository Layout, the prompt sets list: Old: tt-kh-v0/ (cpp -> ttkh templates: the host program and every kernel, P17.39)
+  New: tt-kh-v0/ (cpp -> ttkh templates: the host program and every kernel, P17.39), tt-host-v2/ and tt-kh-v1/ (tt-host-v1 and tt-kh-v0 with the goal of spreading the work over the compute grid and the multi-core calls, P17.72)
+- Decision Log, first data row: | 2026-11-17 | The core-grid prompt sets tt-host-v2 and tt-kh-v1 (task P17.72; Repository Layout; OQ-129): each is tt-host-v1 or tt-kh-v0 with exactly the edits tests/prompts/test_tt_parallel_prompts.py pins, two kinds in tt-host-v2 and a third in tt-kh-v1: the goal, to spread the work over the device's whole compute grid, after the rule that the device computes every output, in the generation and both correction templates; in generate.txt, the single-core core line replaced by the multi-core calls at the pin (compute_with_storage_grid_size, split_work_to_cores from work_split.hpp, corerange_to_cores, runtime args per core); and, for tt-kh-v1, kernels that read their core's first tile and tile count from their runtime args. Opt-in: a recipe names the set, and the v1 and v0 sets are unchanged | In the window of 2026-11-16 the matmul_multi_core translations ran on one core (rx 20261116-212311-tracy-0bc3), and tt-host-v1 showed only the single-core core line. The edits name no item and come from the pinned API, after tt-par-v0's held-out items were committed (P17.68), so only development items can steer them (Agent Rule 5) |
+- Count sentence: "Two hundred and eight" -> "Two hundred and nine"; "and two on 2026-11-17" -> "and three on 2026-11-17".

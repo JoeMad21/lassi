@@ -662,7 +662,7 @@ Added on 2026-11-17 (OQ-129; the owner: "Forget the testing window tonight, just
 
 ### P17.72 Prompt sets with the parallel goal and the multi-core calls (opt-in)
 - Bible: Project Recipes, Agent Rules 4 and 5.
-- Accept: assets/prompts/tt-host-v2/ and assets/prompts/tt-kh-v1/ are tt-host-v1 and tt-kh-v0 with the goal stated (spread the work over the device's compute grid; a program on one core is slow) and the multi-core calls listed beside the single-core ones (compute_with_storage_grid_size, split_work_to_cores from <tt-metalium/work_split.hpp>, CoreRangeSet, runtime args per core), and, for tt-kh-v1, kernels that take their first tile and tile count as runtime args; tt-host-v1 and tt-kh-v0 unchanged; they name no item, and P17.68's leak test passes; tests as for tt-host-v1 and tt-kh-v0.
+- Accept: assets/prompts/tt-host-v2/ and assets/prompts/tt-kh-v1/ are tt-host-v1 and tt-kh-v0 with the goal stated (spread the work over the device's compute grid; a program on one core is slow) and the multi-core calls in place of the single-core core line (compute_with_storage_grid_size, split_work_to_cores from <tt-metalium/work_split.hpp>, CoreRangeSet, runtime args per core), and, for tt-kh-v1, kernels that take their first tile and tile count as runtime args; tt-host-v1 and tt-kh-v0 unchanged; they name no item, and P17.68's leak test passes; tests as for tt-host-v1 and tt-kh-v0.
 - Files: assets/prompts/tt-host-v2/, assets/prompts/tt-kh-v1/, tests/prompts/, docs/BIBLE.md.
 - Host: Windows. Depends: P17.68.
 

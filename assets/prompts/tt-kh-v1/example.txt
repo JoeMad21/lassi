@@ -1,0 +1,3 @@
+Example $name, its host program first, then its kernels:
+
+$files

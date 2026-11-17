@@ -1,0 +1,5 @@
+Declarations from the TT-Metalium API reference of tt-metal commit 5280a9cf follow, copied exactly: the host API
+a TT host program at that commit calls. Each starts with its qualified name and the header that declares it; use
+these names, argument types, and members, which may differ from older TT-Metalium releases.
+
+$declarations

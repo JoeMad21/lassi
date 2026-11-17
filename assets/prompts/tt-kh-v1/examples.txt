@@ -1,0 +1,7 @@
+Worked examples follow: complete programs from tt-metal's own examples at commit 5280a9cf, each a host program and
+the kernels it launches, copied exactly. They solve other tasks than the one after them, so do not copy their
+computation; copy how they use the TT-Metalium host API and the kernel API: the headers they include, the
+namespaces they name, the calls they make with their arguments, the config structs with their fields, and each
+kernel's void kernel_main() with the calls it makes. Where your memory of the API differs from them, follow them.
+
+$examples

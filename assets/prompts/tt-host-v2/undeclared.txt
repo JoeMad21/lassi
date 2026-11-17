@@ -1,0 +1,1 @@
+No declaration in the reference is named $name; the declared names nearest to it are $candidates.

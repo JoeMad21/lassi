@@ -221,7 +221,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.69 | DONE | tt-par-v0-kh: the host-and-kernels variant | P17.67,P17.68 | tt-par-v0-kh: tt-par-v0's ten items with a ttkh language (host program and kernels; lassi_io.h alone; reference tt); tests; unbuilt (P17.76) |
 | P17.70 | READY | Cores used: a structural count, never a time | P17.42 |  |
 | P17.71 | READY | Skeletons with the compute grid by default (opt-in) | P17.33,P17.39,P17.68 |  |
-| P17.72 | READY | Prompt sets with the parallel goal and the multi-core calls (opt-in) | P17.68 |  |
+| P17.72 | DONE | Prompt sets with the parallel goal and the multi-core calls (opt-in) | P17.68 | tt-host-v2 and tt-kh-v1: the grid goal and the multi-core calls, opt-in; tests pin the edits; steered by no held-out item |
 | P17.73 | READY | A single-core correction (opt-in) | P17.68,P17.70,P17.72 |  |
 | P17.74 | READY | tt-par sweeps on ttsim: the development ladder, then the frozen held-out run | P17.67,P17.68,P17.69,P17.70,P17.71,P17.72,P17.73,P17.76 |  |
 | P17.75 | OWNER | Card profiles of the tt-par translations | P17.74 | the owner starts card runs (OQ-127) |
