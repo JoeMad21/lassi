@@ -11,7 +11,9 @@ unchanged"; "every tt-pairs-v0 item's held-out inputs pass its contract").
   item, of every manifest under assets/bench/, that declares held-out
   inputs. tt-pairs-v0's were recorded at commit 9793777, before any P16.1
   change, adv-seeded-v0's when the suite was added (task P16.8), and
-  bale-v0's when that suite was added (task P17.40), each by
+  bale-v0's when that suite was added (task P17.40), and tt-par-v0's
+  held-out items' (task P17.68) from their manifest entries before the
+  items joined the manifest, each by
   loading each manifest with load_suite and running
   generate_inputs(item.inputs, item.seed, <a temporary directory>). They are
   known-answer values of the generator, not measurements. lassi-hecbench-10
@@ -108,6 +110,14 @@ DIGESTS = {
     ("tt-par-v0", "vecadd_multi_core", "b"): "c6241a5fea3769ec8b7a4f19882a90e58b81fcc5cb4aaa18d86878f2652701fe",
     ("tt-par-v0", "vecadd_sharding", "a"): "b2658acbd5ba601b66e08c5b68249e22fb4bbae34a1dbe7777c60d598526ef27",
     ("tt-par-v0", "vecadd_sharding", "b"): "5ee5d46378f481cd888a465c811369fa5c3155fb9bfb364b0bf2b5be8361ff72",
+    # tt-par-v0's held-out items (task P17.68), recorded from their entries' inputs and seeds before they joined the
+    # manifest, the same way.
+    ("tt-par-v0", "row_sum", "a"): "bcbfe76e0d7e3d85131646f457afe295e1da71a8d5e0dd907e28f089a061add8",
+    ("tt-par-v0", "col_max", "a"): "03469ba9ff608ad80e7f73ba167983cf6018180b5214fb1bcb1f2f8953b078de",
+    ("tt-par-v0", "transpose_2d", "a"): "4d2df8070bc0fd6dcccd00957e560a6ebe1a8de5e7f4d218f7cf565e84c3fcf9",
+    ("tt-par-v0", "row_softmax", "x"): "e59f34ec92608c93052f0000d9fe1209579603c234d504af6f7179a58e4a1412",
+    ("tt-par-v0", "col_scale", "a"): "12a352772e8e2cc174d61b8c64c6a38990685bd2afd74076689f29f27bd21e5d",
+    ("tt-par-v0", "col_scale", "s"): "658abb75fb58c831aae525c905e596bbb43e166a3aedecba1b92cc784b115cb8",
 }
 # tt-pairs-v0-ttkernel (task P17.36), tt-pairs-v0-kh (task P17.39), and tt-pairs-v0-ttir and tt-pairs-v0-d2m (task
 # P17.48) hold tt-pairs-v0's items with the same inputs and seeds, so their files are tt-pairs-v0's, byte for byte
@@ -172,6 +182,8 @@ def test_the_recorded_suites_still_declare_exactly_the_recorded_inputs(
 def test_generate_inputs_gives_the_recorded_bytes_for_every_item(
     held_out: dict[tuple[str, str], dict[str, Path]],
 ) -> None:
+    missing = sorted(key for key in DIGESTS if key[2] not in held_out.get(key[:2], {}))
+    assert missing == [], f"recorded held-out inputs that no manifest declares: {missing}"
     changed = {
         key: digest
         for key, expected in DIGESTS.items()

@@ -9,8 +9,10 @@
 #   tools/fetch_bench.py copies them from the installed pinned tree into $LASSI_SCRATCH/bench. Prompt and feature
 #   work may be steered by these items (Agent Rule 5; OQ-083 (b)); the registry refuses them to training and corpus
 #   harvest.
-# - held-out items (split eval), which task P17.68 adds: computations written here, each a C++ program and a TT
-#   reference whose host program and kernels are written here and tracked (<item>/tt/kernels/). No prompt set,
+# - held-out items (split eval; task P17.68): row_sum, col_max, transpose_2d, row_softmax, and col_scale, the
+#   computations the owner chose (OQ-129), each a C++ program and a TT reference whose host program and kernels are
+#   written here and tracked (<item>/tt/kernels/), committed before any prompt, skeleton, or correction work for
+#   parallel code (tasks P17.71 to P17.73) started. No prompt set,
 #   skeleton, worked example, context pack, retrieval corpus, or training spec holds their text, and only evaluation
 #   may read them.
 # No reference here has been built or run yet: each must pass against its C++ program on ttsim before task P17.76
@@ -315,3 +317,320 @@ items:
           matmul/matmul_common/kernels/compute/bmm_large_block_zm.cpp:
             upstream: tt_metal/programming_examples/matmul/matmul_common/kernels/compute/bmm_large_block_zm.cpp
             sha256: 8c59140dbaf49e584af6fd1ea443d00be684f3a708bfb0fd8a7ff735539aec30
+  row_sum:
+    split: eval
+    seed: 21
+    # s[i] = the sum over j of a[i, j] for a bf16 a of [4096, 256], written here (OQ-129). The unit of work is a tile
+    # row (32 rows of a, 8 tiles): 128 units, more than either grid below has cores. The input is uniform [-1, 1), so
+    # the row sums are centred on 0 (from -36.9 to 32.3 at this seed, standard deviation 9.2) and the running sums
+    # stay small against the elements; every element is drawn independently, so a candidate that skips part of a
+    # row, sums a column, or writes a row's sum to another row misses by far more than the tolerance (below).
+    # The reference splits the 128 tile rows over the device's compute grid with split_work_to_cores, one run of
+    # consecutive tile rows per core. Cores it uses, PROJECTED (arithmetic from that split, no run): 56 on card 0's
+    # 8 x 7 grid (16 cores of 3 tile rows and 40 of 2) and 72 on an 8 x 9 grid (56 cores of 2 tile rows and 16 of 1);
+    # P17.70 counts the cores under ttsim.
+    inputs:
+      - {name: a, dtype: bf16, shape: [4096, 256], dist: uniform, lo: -1.0, hi: 1.0}
+    # f32 [4096] on both sides. The device's sums are bf16 and the TT program widens them to f32 exactly, as
+    # tt-pairs-v0 eltwise_binary does; the C++ program writes each exact row sum rounded once to f32. f32 rather than
+    # bf16 so that the C++ side adds no bf16 rounding of its own (the tolerance then bounds the device's error alone)
+    # and a translation that keeps more precision, such as an f32 Dst or f32 output pages, is not penalized.
+    outputs: [s]
+    # max_abs 4.0, from the arithmetic, not from a run. The reference accumulates in a 16-bit (bf16) Dst: its
+    # ComputeConfig leaves fp32_dest_acc_en off. Along one row the reduce rounds the running sum into Dst 32 times: 8
+    # tiles x 2 faces x the 2 fidelity phases whose products are nonzero when the scaler is 1.0 (tt-llk's REDUCE_ROW
+    # reduce at the pin's submodule f9909668 issues one GAPOOL per face and phase under HiFi4; tt-isa-documentation,
+    # GAPOOL, MVMUL, and Matrix Unit arithmetic: each GAPOOL rounds into Dst once, to nearest). Each rounding is at
+    # most half a bf16 ulp of the running sum, 0.125 below a magnitude of 64 (the largest running sum here is 36.9):
+    # 32 x 0.125 = 4.0. Worked out row by row for this seed's inputs, with each lane's 10-bit alignment of its products
+    # and terms added, the bound is at most 2.79; a bit-level model of that documented arithmetic gives an error of at
+    # most 0.62 (both PROJECTED, from the inputs and the documentation, no run). The C++ program's f32 rounding adds at
+    # most 2e-6. A candidate that drops one 16-column face of every row misses by up to 7.8 here, and one that drops a
+    # tile column by up to 11.9; one that drops a single column of a (at most 1.0) is not caught.
+    tolerance: {metric: max_abs, threshold: 4.0}
+    # Analytic work (task P17.42): 255 adds per row, the bf16 input read and the bf16 sums written once on the device
+    # (2 bytes each); a property of the item, never a measurement.
+    work:
+      flop: 1044480
+      ops: {add: 1044480}
+      bytes: 2105344
+      basis: '4096 rows x 255 adds; (1048576 + 4096) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the host program written here sets no fp32_dest_acc_en and no unpack_to_dest_mode (its one
+      ComputeConfig sets only math_fidelity HiFi4, every other field at its default, compile_args empty), and its
+      three circular buffers (c_0, c_1, c_16) are Float16_b, so the reduce accumulates in a 16-bit Dst and nothing is
+      unpacked as Float32 (read from the program; no run yet)
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/row_sum/cpp
+        tracked: true
+        files: [row_sum.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/row_sum/tt
+        tracked: true
+        files: [row_sum.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # The kernels are written here and tracked, each at the path the host program launches it by.
+          kernels/dataflow/read_tile_rows.cpp: {tracked: assets/bench/tt-par-v0/row_sum/tt/kernels/dataflow/read_tile_rows.cpp}
+          kernels/compute/sum_tile_rows.cpp: {tracked: assets/bench/tt-par-v0/row_sum/tt/kernels/compute/sum_tile_rows.cpp}
+          kernels/dataflow/write_row_sums.cpp: {tracked: assets/bench/tt-par-v0/row_sum/tt/kernels/dataflow/write_row_sums.cpp}
+  col_max:
+    split: eval
+    seed: 22
+    # m[j] = the maximum over i of a[i, j] for a bf16 a of [256, 4096], written here (OQ-129). The unit of work is a
+    # tile column (32 columns of a, 8 tiles): 128 units, more than either grid below has cores. The input is uniform
+    # [-1, 0.0625): about 6 percent of the elements are non-negative (from 1 to 30 in each column at this seed), so
+    # every column's maximum is a small positive value (from 0.0215 to 0.0623 here), where bf16 steps by at most
+    # 2^-12, and the maximum is a single element in all but 137 of the 4096 columns. Computed from this seed's
+    # inputs: a candidate that skips one tile row of a changes from 483 to 520 column maxima, one that skips a
+    # single row of a changes 12 or more, and one that takes the largest magnitude instead changes all 4096 (the
+    # most negative elements lie near -1). No column is all negative, so the result does not depend on how the
+    # maximum reduce reads a Dst row the packer has cleared (as minus infinity, by tt-isa-documentation's GMPOOL;
+    # unconfirmed here), and a candidate that starts its running maximum at 0 is not caught.
+    # The reference splits the 128 tile columns over the device's compute grid with split_work_to_cores, one run of
+    # consecutive tile columns per core. Cores it uses, PROJECTED (arithmetic from that split, no run): 56 on card 0's
+    # 8 x 7 grid (16 cores of 3 tile columns and 40 of 2) and 72 on an 8 x 9 grid (56 cores of 2 tile columns and 16
+    # of 1); P17.70 counts the cores under ttsim.
+    inputs:
+      - {name: a, dtype: bf16, shape: [256, 4096], dist: uniform, lo: -1.0, hi: 0.0625}
+    outputs: [m]  # bf16 [4096] on both sides: each maximum is one of a's elements, moved as its bit pattern
+    # exact equality, from the arithmetic. The maximum of bf16 values is one of them, and the pinned reduce keeps it
+    # unchanged: under REDUCE_COL MAX, tt-llk (the pin's submodule f9909668) issues one GMPOOL per face with no
+    # fidelity phases, and GMPOOL (tt-isa-documentation) scales each element only by the power of two in the exponent
+    # of its scaler datum before comparing; the scaler is 1.0, so nothing is scaled. bf16 elements reach SrcA and the
+    # 16-bit Dst as they are (no element of the input is a denormal, which the unit would flush to zero), and the
+    # packer writes Dst to the Float16_b output pages unchanged, so every m[j] equals the C++ program's bit for bit.
+    tolerance: {metric: max_abs, threshold: 0}
+    # Analytic work (task P17.42): 255 comparisons per column, counted under ops with no FLOP figure, since a maximum
+    # does no rounding arithmetic; the bf16 input read and the bf16 maxima written once on the device (2 bytes each);
+    # a property of the item, never a measurement.
+    work:
+      flop: null
+      ops: {max: 1044480}
+      bytes: 2105344
+      basis: '4096 columns x 255 comparisons; (1048576 + 4096) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the host program written here sets no fp32_dest_acc_en and no unpack_to_dest_mode (its one
+      ComputeConfig sets only math_fidelity HiFi4, every other field at its default, compile_args empty), and its
+      three circular buffers (c_0, c_1, c_16) are Float16_b, so the reduce works in a 16-bit Dst and nothing is
+      unpacked as Float32 (read from the program; no run yet)
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/col_max/cpp
+        tracked: true
+        files: [col_max.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/col_max/tt
+        tracked: true
+        files: [col_max.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # The kernels are written here and tracked, each at the path the host program launches it by.
+          kernels/dataflow/read_tile_columns.cpp: {tracked: assets/bench/tt-par-v0/col_max/tt/kernels/dataflow/read_tile_columns.cpp}
+          kernels/compute/max_tile_columns.cpp: {tracked: assets/bench/tt-par-v0/col_max/tt/kernels/compute/max_tile_columns.cpp}
+          kernels/dataflow/write_column_maxima.cpp: {tracked: assets/bench/tt-par-v0/col_max/tt/kernels/dataflow/write_column_maxima.cpp}
+  transpose_2d:
+    split: eval
+    seed: 23
+    # B = A^T for a bf16 A of [1024, 1024], a computation the owner chose for the held-out items (OQ-129), with both
+    # programs and the kernels written here: an eval item, never given to training, prompt tuning, or corpus harvest
+    # (Agent Rule 5). 1024 x 1024 is 2**20 elements, the input cap, and gives B 1024 tiles, more than the cores of any
+    # grid here. A is drawn uniform [-4, 4) over its 2**20 elements, so it is far from symmetric and its tiles are far
+    # from their own transposes: a program that copies A unchanged, moves whole tiles to their mirrored places without
+    # turning each one, or turns each tile where it stands without moving it misses most elements by up to 8. The
+    # draw's step is 2**-21, so no value is subnormal (the device reads a subnormal source value as zero), and the
+    # draw gives no -0.
+    # The reference splits B's 1024 tiles over the device's compute grid with split_work_to_cores, one run of
+    # consecutive tiles per core. Cores it uses, PROJECTED (arithmetic from that split at the pin, no run): 56 on card
+    # 0's 8 x 7 grid (16 cores of 19 tiles and 40 of 18) and 72 on an 8 x 9 grid (16 cores of 15 tiles and 56 of 14);
+    # P17.70 counts the cores under ttsim.
+    inputs:
+      - {name: a, dtype: bf16, shape: [1024, 1024], dist: uniform, lo: -4.0, hi: 4.0}
+    outputs: [b]  # bf16 [1024, 1024], row-major on both sides
+    # exact equality: a transpose moves bit patterns and computes nothing. On the device each bf16 value goes from its
+    # Float16_b tile into source register A unchanged (bf16 sits in the register's 19-bit format with its three low
+    # mantissa bits zero), the unpacker transposing the faces and each face; into the 16-bit destination register by a
+    # move that passes bf16 through unchanged (transpose_wh.h at the pin: llk_unpack_A, then
+    # llk_math_eltwise_unary_datacopy A2D, for any input that is not Int32); and out through the packer to a
+    # Float16_b tile. The C++ program copies the same bit patterns.
+    tolerance: {metric: max_abs, threshold: 0}
+    # Analytic work (task P17.42): a transpose, no floating-point arithmetic, so no FLOP figure; the bf16 input read and
+    # the bf16 output written once (2 bytes each); never a measurement.
+    work:
+      flop: null
+      ops: {}
+      bytes: 4194304
+      basis: 'a transpose, no arithmetic; (1048576 + 1048576) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the host program written here creates one compute kernel, whose one ComputeConfig sets only
+      math_fidelity HiFi4 and empty compile_args, so fp32_dest_acc_en stays off and unpack_to_dest_mode stays empty,
+      and its two circular buffers (c_0, c_16) are Float16_b; the compute kernel written here calls transpose_wh_init
+      and transpose_wh_tile, which take their UnpackToDestEn path only for an Int32 input (transpose_wh.h:37-42 and
+      :103-108 at the pin), never for c_0's Float16_b (read at the pin; no run yet)
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/transpose_2d/cpp
+        tracked: true
+        files: [transpose_2d.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/transpose_2d/tt
+        tracked: true
+        files: [transpose_2d.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # The kernels, written here and tracked, at the paths the host program launches them from.
+          kernels/dataflow/read_mirror_tiles.cpp: {tracked: assets/bench/tt-par-v0/transpose_2d/tt/kernels/dataflow/read_mirror_tiles.cpp}
+          kernels/compute/transpose_tiles.cpp: {tracked: assets/bench/tt-par-v0/transpose_2d/tt/kernels/compute/transpose_tiles.cpp}
+          kernels/dataflow/write_tiles.cpp: {tracked: assets/bench/tt-par-v0/transpose_2d/tt/kernels/dataflow/write_tiles.cpp}
+  row_softmax:
+    split: eval
+    seed: 25
+    # y[i, j] = exp(x[i, j] - max_k x[i, k]) / sum_k exp(x[i, k] - max_k x[i, k]) for a bf16 x of [4096, 256]
+    # (1,048,576 elements, the 2**20 cap), a computation written here (OQ-129). x is uniform [64, 128) so that the
+    # subtraction of the maximum is required: exp overflows float32 and bf16 above about 88.72, and about 61% of the
+    # elements lie above that, so a program that drops the subtraction gets an infinity on the host (float32 exp) or a
+    # NaN on the device (the pinned non-approximate exp clamps its exponent field at 255, which reads as NaN) in every
+    # row, and binary_io fails any unmatched NaN or infinity; the chance that a row of 256 has no element above 88.72
+    # is 0.386**256, about 1e-106. With the subtraction every exponent lies in [-64, 0]: the bf16 inputs are multiples
+    # of 0.5 there, each within a factor of 2 of its row's maximum, so x - max is exact in bf16 and exp never
+    # underflows. Uniform [-8, 8) would not test the subtraction: exp(8) is far from overflow, and on this seed a
+    # float32 program without it lands within 0.00025 of the reference (PROJECTED: a model of the arithmetic, no run). Since
+    # softmax does not change under a per-row shift, a program that subtracts some other value of the row (its first
+    # element, say) also passes here; the item checks the outputs, not which shift was used. On this seed the row sums
+    # of exp(x - max) lie in [1.68, 15.8] and the largest output is 0.594.
+    # Work unit: one tile row (32 rows, 8 tiles); the reference splits the 128 tile rows over the compute grid with
+    # split_work_to_cores. Reference cores, PROJECTED (arithmetic from that split, no run): 56 on card 0's 8 x 7 grid
+    # (16 cores of 3 tile rows and 40 of 2) and 72 on an 8 x 9 grid (56 cores of 2 and 16 of 1); P17.70 counts the
+    # cores under ttsim. Each working core's circular buffers take 35 tiles, 71,680 bytes (70 KiB) of L1: c_0 two tile
+    # rows of input (16 tiles), c_3 the tile row of exp(x - max) (8), c_16 the output tile row (8), and one tile each
+    # for the reduce scaler (c_1), the row maxima (c_2), and the reciprocal sums (c_4).
+    inputs:
+      - {name: x, dtype: bf16, shape: [4096, 256], dist: uniform, lo: 64.0, hi: 128.0}
+    outputs: [y]  # bf16 [4096, 256] on both sides
+    # absolute 0.03 on outputs in [0, 1], set from the arithmetic. The C++ program rounds float32 values once to bf16
+    # (half an ulp: at most 0.002 at this seed's largest output). The device rounds at each step with fp32_dest_acc_en
+    # off: exp (the pinned exp_21f, a polynomial within about 0.2%, rounded to bf16), the row sum (each row's 16 face
+    # partial sums, 2 faces x 8 tiles, accumulated in 16-bit dest), the reciprocal (Newton steps from a fixed guess,
+    # rounded to bf16), and the product (rounded to bf16). A bf16 model of those steps on this seed's 4096 rows
+    # (PROJECTED: arithmetic, no device run) gives a largest difference of 0.0059 with round-to-nearest at each
+    # accumulation and 0.0195 with truncation at each of 32 (every face sum split in two), the worst case modeled;
+    # 0.03 sits above both. A max_abs bound, not pcc, since a per-row scale
+    # error keeps pcc high (a sum over 7 of the 8 tiles still has pcc 0.986, PROJECTED). Wrong programs miss by far
+    # more in the same model (PROJECTED): no normalization or a one-hot answer by 0.94, a sum over 7 of the 8 tiles by 0.86, a maximum over
+    # each column of the tile row instead of each row by 0.47; one without the subtraction gets NaN or infinity.
+    tolerance: {metric: max_abs, threshold: 0.03}
+    # Analytic work (task P17.42), per row of 256: 255 comparisons for the maximum, 256 subtractions, 256 exp, 255
+    # additions for the sum, one reciprocal, and 256 multiplies (the TT reference's reciprocal-then-multiply form). flop counts
+    # the comparisons, subtractions, additions, and multiplies (1022 per row); exp and the reciprocal go under ops
+    # only. bytes: the bf16 input read and the bf16 output written once (2 bytes each), the fewest the device must
+    # move. The same for every candidate; never a measurement.
+    work:
+      flop: 4186112
+      ops: {max: 1044480, sub: 1048576, exp: 1048576, add: 1044480, recip: 4096, mul: 1048576}
+      bytes: 4194304
+      basis: >-
+        4096 rows of 256, per row 255 max comparisons, 256 subtractions, 256 exp, 255 adds, 1 reciprocal, and 256
+        multiplies; flop = 4096 x 1022 (comparisons, subtractions, adds, multiplies); (1048576 + 1048576) bf16
+        elements x 2 bytes
+    unpack_to_dest: >-
+      not taken: the host program written here sets no fp32_dest_acc_en and no unpack_to_dest_mode: its one
+      ComputeConfig sets only math_fidelity HiFi4, math_approx_mode false, and compile_args, and its six circular
+      buffers (c_0, c_1, c_2, c_3, c_4, c_16) are all Float16_b; the compute kernel written here unpacks only to the
+      source registers (the row reduces of c_0 and c_3 with the c_1 scaler, and the column-broadcast subtract and
+      multiply) and calls no copy or unpack-to-dest path (read from the code; no ttsim run of it yet)
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/row_softmax/cpp
+        tracked: true
+        files: [row_softmax.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/row_softmax/tt
+        tracked: true
+        files: [row_softmax.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # Written here and tracked, each at the path the host program launches it from.
+          kernels/dataflow/row_softmax_reader.cpp:
+            tracked: assets/bench/tt-par-v0/row_softmax/tt/kernels/dataflow/row_softmax_reader.cpp
+          kernels/compute/row_softmax.cpp:
+            tracked: assets/bench/tt-par-v0/row_softmax/tt/kernels/compute/row_softmax.cpp
+          kernels/dataflow/row_softmax_writer.cpp:
+            tracked: assets/bench/tt-par-v0/row_softmax/tt/kernels/dataflow/row_softmax_writer.cpp
+  col_scale:
+    split: eval
+    seed: 24
+    # C[i, j] = A[i, j] * s[j] for a bf16 A of [1024, 1024] and a bf16 row vector s of [1024], a computation the owner
+    # chose for the held-out items (OQ-129), with both programs and the kernels written here: an eval item, never given
+    # to training, prompt tuning, or corpus harvest (Agent Rule 5). A is 2**20 elements, the input cap, and C has 1024
+    # tiles, more than the cores of any grid here. A is drawn uniform [-1, 1) and s uniform [-2, 2), each from its own
+    # stream: a program that ignores s (C = A) misses by |A| |s - 1|, up to 3; one that broadcasts along the wrong axis
+    # (C[i, j] = A[i, j] * s[i]) by |A| |s[i] - s[j]|, up to 4; one that multiplies by the scale tile elementwise, or
+    # broadcasts its first column, zeroes rows or columns it should scale; and one that takes the wrong tile of s
+    # scales a tile column by another column's values. Every such miss is far past the tolerance. The draws' steps
+    # (2**-23 and 2**-22) keep every nonzero value and every nonzero product a normal bf16, so the device's flushing of
+    # subnormals changes nothing.
+    # The reference splits C's 1024 tiles over the device's compute grid with split_work_to_cores, one run of
+    # consecutive tiles per core; the host lays s out as one scale tile per tile column (s in the tile's first row,
+    # zeros below) and computes no product. Cores it uses, PROJECTED (arithmetic from that split at the pin, no run):
+    # 56 on card 0's 8 x 7 grid (16 cores of 19 tiles and 40 of 18) and 72 on an 8 x 9 grid (16 cores of 15 tiles and
+    # 56 of 14); P17.70 counts the cores under ttsim.
+    inputs:
+      - {name: a, dtype: bf16, shape: [1024, 1024], dist: uniform, lo: -1.0, hi: 1.0}
+      - {name: s, dtype: bf16, shape: [1024], dist: uniform, lo: -2.0, hi: 2.0}
+    # bf16 [1024, 1024], row-major on both sides: the device packs its products as Float16_b and the TT program writes
+    # them unconverted; the C++ program rounds the exact f32 product to bf16, to nearest with ties to even, so the two
+    # are compared in the one format the device can produce, with no host conversion of a device value.
+    outputs: [c]
+    # absolute 2**-6 = 0.015625, two bf16 units in the last place below 2, from the device's arithmetic (PROJECTED:
+    # reasoning and a model of it, no run). The compute kernel multiplies with math fidelity HiFi4: the matrix unit's multiplier takes 5 bits of the
+    # A operand and 7 of the s operand, so a bf16 product needs all four fidelity phases (tt-isa-documentation
+    # WormholeB0 SrcASrcB.md, "Fidelity phases"; the pinned LLK's llk_math_eltwise_binary.h issues one ELWMUL per phase,
+    # tt_llk f990966), and each phase adds its partial product into the 16-bit bf16 destination register with one
+    # rounding to nearest, ties away from zero (MatrixUnitArithmetic.md, tt-isa-documentation f1b8bbe). Running that
+    # model over every pair of bf16 mantissas and both sign relations, the device's result is within 2 bf16 units in
+    # the last place of the exact product's binade of the round-to-nearest-even product the C++ program writes (65,534
+    # of the 65,536 cases within 1); the same holds when the destination's stale low bit is set. Every |C| is below 2
+    # except (-1)(-2) = 2, which both sides give exactly, so two units of the [1, 2) binade, 2 x 2**-7, bound every
+    # element's difference. A product truncated to bf16 once, as a simpler simulator might form it, stays within 1 unit.
+    tolerance: {metric: max_abs, threshold: 0.015625}
+    # Analytic work (task P17.42): one multiply per element of C; A and s read and C written once on the device in bf16
+    # (2 bytes each); never a measurement. The reference rereads a scale tile per tile of C, which this count, a
+    # property of the item, leaves out.
+    work:
+      flop: 1048576
+      ops: {mul: 1048576}
+      bytes: 4196352
+      basis: '1048576 multiplies; (1048576 + 1024 + 1048576) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the host program written here creates one compute kernel, whose one ComputeConfig sets only
+      math_fidelity HiFi4 and empty compile_args, so fp32_dest_acc_en stays off and unpack_to_dest_mode stays empty,
+      and its three circular buffers (c_0, c_1, c_16) are Float16_b; the compute kernel written here calls init_bcast
+      for ELWMUL with a row broadcast and mul_tiles_bcast_rows, whose unpack of two Float16_b operands into the two
+      source registers names no unpack-to-dest mode (bcast.h:174-183 and :239-257 at the pin; read at the pin, no run
+      yet)
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/col_scale/cpp
+        tracked: true
+        files: [col_scale.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/col_scale/tt
+        tracked: true
+        files: [col_scale.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # The kernels, written here and tracked, at the paths the host program launches them from.
+          kernels/dataflow/read_tile_and_scale.cpp: {tracked: assets/bench/tt-par-v0/col_scale/tt/kernels/dataflow/read_tile_and_scale.cpp}
+          kernels/compute/scale_columns.cpp: {tracked: assets/bench/tt-par-v0/col_scale/tt/kernels/compute/scale_columns.cpp}
+          kernels/dataflow/write_tiles.cpp: {tracked: assets/bench/tt-par-v0/col_scale/tt/kernels/dataflow/write_tiles.cpp}
