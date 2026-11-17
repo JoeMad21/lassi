@@ -1,0 +1,24 @@
+# The manifest of tt-host-skeleton-v1, tt-host-skeleton-v0 with the device's compute grid by default (task P17.71;
+# OQ-096, option (a), the owner's answer of 2026-10-25, "Item-agnostic only"): its cores blank takes the grid from
+# compute_with_storage_grid_size and splits the output tiles over it with split_work_to_cores, the circular buffers
+# and kernels go on all the cores that get work, and its runtime_args blank gives each core its first tile and tile
+# count. Written by hand from tt-host-skeleton-v0 and the pinned tt-metalium headers (work_split.hpp,
+# core_coord.hpp, and mesh_device.hpp at the commit), never from a suite item's program or its upstream example
+# (Agent Rule 5). It is unverified at the pin until the build host compiles it and a one-tile program built from it
+# runs on ttsim. A run recipe carries it with its skeleton section (lassi.core.recipe SKELETON);
+# lassi.prompts.skeletons reads it only when both files match this manifest. language is the target language of
+# every direction that carries it; pin and commit name the toolchain pin its calls are written for. sha256 is the
+# sha256 of the lines '<sha256>  <path>' of the files in order; a change to either file changes its sha256 and bytes
+# here, and the sha256 below.
+skeleton: tt-host-skeleton-v1
+language: tt
+pin: tt-metal
+commit: 5280a9cfb00998fd49667a29523d03aee905c129
+files:
+- path: host.cpp
+  sha256: 22a3bd75a8bde876ed3bbfcb7d5abb021377b83ad815c1c76d29521bea53d617
+  bytes: 12339
+- path: block.txt
+  sha256: 511bea07e395b61d24c0645c98fcf0d943c2e50a897ad2d6023544cc390ed2fa
+  bytes: 1642
+sha256: af555e777cc469464f390b4a1bc7020eb781d183ed8cbe78ab1a9ca9d1db56ae

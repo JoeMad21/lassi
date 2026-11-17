@@ -1,0 +1,33 @@
+# The manifest of tt-kh-skeleton-v1, tt-kh-skeleton-v0 with the device's compute grid by default (task P17.71;
+# OQ-096, option (a), the owner's answer of 2026-10-25, "Item-agnostic only"). host.cpp is tt-host-skeleton-v1's
+# host.cpp byte for byte; the three kernel skeletons, at the paths its CreateKernel calls name, are
+# tt-kh-skeleton-v0's with each kernel reading its core's first tile and tile count from its runtime args and
+# working on those tiles only (the compute kernel's tile count moves from its compile args to its runtime args).
+# Written by hand from the v0 skeletons and the pinned headers (tt_metal/api/tt-metalium and tt_metal/hw/inc/api at
+# the commit), never from a suite item's program or its upstream example (Agent Rule 5). The host program and the
+# kernels are unverified at the pin until the build host compiles the host program and a one-tile program built
+# from them runs on ttsim. A run recipe carries the skeleton with its skeleton section (lassi.core.recipe
+# SKELETON); lassi.prompts.skeletons reads it only when every file matches this manifest. language is the target
+# language of every direction that carries it; pin and commit name the toolchain pin its calls are written for.
+# sha256 is the sha256 of the lines '<sha256>  <path>' of the files in order.
+skeleton: tt-kh-skeleton-v1
+language: ttkh
+pin: tt-metal
+commit: 5280a9cfb00998fd49667a29523d03aee905c129
+files:
+- path: host.cpp
+  sha256: 22a3bd75a8bde876ed3bbfcb7d5abb021377b83ad815c1c76d29521bea53d617
+  bytes: 12339
+- path: block.txt
+  sha256: ae03a94365f191bfb4b28423e7fa3e32209d22f34db6a053d080f8e9213ad183
+  bytes: 2234
+- path: kernels/dataflow/reader.cpp
+  sha256: a631aa780376e960ee2e9caee033ab1c5c378f6b651baae673415d98f81bc23a
+  bytes: 2079
+- path: kernels/compute/compute.cpp
+  sha256: e87638a8d0320ebcfa3800661d090634fc0e6ae74e82b267720f41ba76133f69
+  bytes: 2109
+- path: kernels/dataflow/writer.cpp
+  sha256: 1b25d0f514b62735492835fb0510d5f8a2d693d4d7810234e98dd2475042fbce
+  bytes: 1960
+sha256: 311eb64d9cbbe73dcbddefb75b638012992dcabb542c5421f8ddc0e83dbafd73

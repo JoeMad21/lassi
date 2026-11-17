@@ -655,7 +655,7 @@ Added on 2026-11-17 (OQ-129; the owner: "Forget the testing window tonight, just
 - Bible: Project Recipes (the Skeleton bullet), Agent Rules 4 and 5; OQ-096 (a).
 - Accept:
   - assets/skeletons/tt-host-skeleton-v1/ (language tt) and assets/skeletons/tt-kh-skeleton-v1/ (language ttkh): the cores blank holds the device's compute grid (compute_with_storage_grid_size) and split_work_to_cores over the output tiles, with the circular buffers and kernels on that core range and one SetRuntimeArgs per core with its first tile and tile count; the kh skeleton's placeholder kernels read their first tile and tile count from those runtime args.
-  - Each compiles at the pin on alpha01, and a one-tile program built from it still runs on ttsim (the other cores get a count of zero).
+  - Each compiles at the pin on alpha01, and a one-tile program built from it still runs on ttsim (with fewer tiles than cores, split_work_to_cores uses as many cores as tiles, so the other cores get no kernel); the compile and the run wait on OQ-130.
   - Both are item-agnostic, written from the pinned headers and from tt-metal examples that are no suite's item, never from an item's reference program or its upstream example (OQ-096 (a)); they name no item, and P17.68's leak test passes; the v0 skeletons are unchanged.
 - Files: assets/skeletons/tt-host-skeleton-v1/, assets/skeletons/tt-kh-skeleton-v1/, tests/prompts/, docs/BIBLE.md.
 - Host: Windows; alpha01 for the compile and the ttsim run, with the owner's yes. Depends: P17.33, P17.39, P17.68.
