@@ -135,6 +135,12 @@ def test_the_constants_are_the_contracts(tracy: ModuleType) -> None:
     assert tuple(tracy.SUMMARY_COLUMNS) == SUMMARY_COLUMNS
 
 
+def test_every_card_run_uses_card_0_alone(tracy: ModuleType) -> None:
+    """Task P17.66: the executor is built with visible_card 0, as the smoke ran (TT_VISIBLE_DEVICES=0)."""
+    assert tracy.VISIBLE_CARD == 0
+    assert "visible_card=VISIBLE_CARD" in Path(tracy.__file__).read_text(encoding="utf-8")
+
+
 def test_the_types_are_the_contracts(tracy: ModuleType) -> None:
     row = tracy.Candidate(1, BALE, TRANSPOSE, "cpp", "ttkh", MODEL, SWEEP, "0123456789", "a/run01/trial.json")
     with pytest.raises(dataclasses.FrozenInstanceError):

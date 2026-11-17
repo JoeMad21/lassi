@@ -9,8 +9,9 @@ through `uv run tools/rx.py job start`:
 
 Each saved translation in plans/runs/tracy/candidates.tsv (an exact match on ttsim, written by a served model) is
 built again with its target's toolchain, at the pinned tt-metal built with Tracy, and run once on the cards through
-the sandboxed tt_silicon executor with device_profiler kernel, which reads tt-metal's device profiler: the device
-kernel time of every program the run launched, at the AICLK the cards reported. Before an item's first translation,
+the sandboxed tt_silicon executor with device_profiler kernel and visible_card VISIBLE_CARD (card 0 alone), which
+reads tt-metal's device profiler: the device kernel time of every program the run launched, at the AICLK the cards
+reported. Before an item's first translation,
 its C++ program runs once on the host CPU in the sandbox (the outputs every TT run is judged against, and a host CPU
 wall time), and its tracked TT reference, when the item has one, runs once on the cards the same way. The first card
 run is the qualification, tt-pairs-v0 loopback's tracked reference: nothing model-written runs unless its C++ program
@@ -50,6 +51,9 @@ SUMMARY_COLUMNS = ("step", "kind", "suite", "item", "model", "status", "passed",
 # The toolchain each language builds with, as the recipes bind them (projects/lassi-demo/bale-tt-30b-base.yaml).
 TOOLCHAIN = {"cpp": "gcc-native", "tt": "ttmetal-host", "ttkh": "ttmetal-host"}
 PURPOSE = "eval"  # an evaluation run (lassi.core.stages PURPOSE; Agent Rule 5)
+# The one card every card run uses (TT_VISIBLE_DEVICES; task P17.66): with all eight cards visible, tt-metal's fabric
+# control plane aborted the loopback reference (rx 20261116-192634-tracy-07f1); the smoke ran on card 0 alone.
+VISIBLE_CARD = 0
 REPO = Path(__file__).resolve().parents[3]
 CANDIDATES = REPO / "plans" / "runs" / "tracy" / "candidates.tsv"
 _SHA = re.compile(r"[0-9a-f]{10}")
@@ -647,7 +651,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     world.cpu = NativeExecutor()
     try:
-        world.card = TtSiliconExecutor(hugepages="private-per-run", reset_filter=True, device_profiler="kernel")
+        world.card = TtSiliconExecutor(
+            hugepages="private-per-run", reset_filter=True, device_profiler="kernel", visible_card=VISIBLE_CARD
+        )
     except Exception as error:  # noqa: BLE001 - DeviceUnavailable or a refused setting: nothing runs
         print(f"tracy profile: the tt_silicon executor refused the cards: {type(error).__name__}: {error}", flush=True)
         return STOPPED

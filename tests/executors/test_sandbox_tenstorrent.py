@@ -80,6 +80,13 @@ What is checked, on Windows or any host with sh and awk:
   (nothing is installed): off, the program is CONFINE_PROGRAM; on, the reset
   request fails with EPERM and nothing else changes, and the run's script
   embeds the program its setting names.
+- The card visibility name (task P17.66): TT_VISIBILITY_NAMES is
+  ("TT_VISIBLE_DEVICES",), a group of its own on ENVIRONMENT_NAMES, which
+  the tt_silicon executor sets with its visible_card setting so UMD opens
+  one card alone (plans/spikes/tt-silicon-executor.md, Finding 1). A
+  SandboxSpec may set it only with a TenstorrentExposure (no exposure and a
+  GPU's DeviceExposure are each a ValueError naming it), and a compile
+  environment never.
 
 The PCI addresses are the eight lspci listed on alpha01 (rx
 20261021-201421-exec-4ea0, OQ-070's evidence); card 0's sysfs path is the
@@ -956,3 +963,44 @@ def test_the_runs_script_embeds_the_confinement_its_reset_setting_names(
     for runs, program in ((off, sandbox.CONFINE_PROGRAM), (on, on_program)):
         chain = runs.exposed.calls[the_program_call(runs.exposed.calls)]
         assert chain[chain.index("-c") + 1] == program, "the program's chain installs that filter"
+
+
+# ---------------------------------------------------------------------------
+# The card visibility name (task P17.66): only with a TenstorrentExposure, never in a compile
+
+TT_VISIBLE = "TT_VISIBLE_DEVICES"
+
+
+def visibility_names(sandbox: ModuleType) -> tuple[str, ...]:
+    """Return sandbox.TT_VISIBILITY_NAMES as a tuple, failing the test clearly while task P17.66 has not added it."""
+    if not hasattr(sandbox, "TT_VISIBILITY_NAMES"):
+        pytest.fail("lassi.executors.sandbox has no TT_VISIBILITY_NAMES yet (task P17.66)")
+    return tuple(sandbox.TT_VISIBILITY_NAMES)
+
+
+def test_the_allowlist_holds_the_card_visibility_name_as_its_own_group(sandbox: ModuleType) -> None:
+    names = visibility_names(sandbox)
+    assert names == (TT_VISIBLE,)
+    assert set(names) <= sandbox.ENVIRONMENT_NAMES
+    for group in ("TT_METAL_NAMES", "GPU_VISIBILITY_NAMES", "TT_PROFILER_NAMES"):
+        assert not set(names) & set(getattr(sandbox, group)), f"{group} does not hold it"
+
+
+def test_a_spec_sets_tt_visible_devices_only_with_a_tenstorrent_exposure(sandbox: ModuleType) -> None:
+    environment = {"PATH": sandbox.SANDBOX_PATH, TT_VISIBLE: "0"}
+    with pytest.raises(ValueError, match=TT_VISIBLE):
+        sample_spec(sandbox, environment=environment)
+    with pytest.raises(ValueError, match=TT_VISIBLE):
+        sample_spec(sandbox, environment=environment, devices=gpu_exposure(sandbox))
+    spec = sample_spec(sandbox, environment=environment, devices=make_tt(sandbox))
+    assert dict(spec.environment)[TT_VISIBLE] == "0"
+
+
+def test_a_compile_environment_never_sets_tt_visible_devices(sandbox: ModuleType, tmp_path: Path) -> None:
+    assert TT_VISIBLE in sandbox.ENVIRONMENT_NAMES, "on the allowlist, so the compile's own rule must refuse it"
+    with pytest.raises(ValueError, match=TT_VISIBLE):
+        sandbox.SandboxedCompileRunner(
+            environment={"PATH": sandbox.SANDBOX_PATH, TT_VISIBLE: "0"},
+            toolchains=tmp_path,
+            hidden_roots=[tmp_path / "hidden"],
+        )

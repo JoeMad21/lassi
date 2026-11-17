@@ -24,6 +24,19 @@ The interface these tests assume, which task P17.16 adds:
   value is "private-per-run" (1b), and reset_filter, a bool (4a). An absent
   value or any other is a ValueError naming the key, raised before any host
   file is read.
+- visible_card (task P17.66), default None: None leaves TT_VISIBLE_DEVICES
+  unset, as before; an int n that names one of the host's cards (its node
+  is /dev/tenstorrent/<n>) sets TT_VISIBLE_DEVICES to str(n) in the run's
+  environment, so UMD opens that card alone, while the exposure still
+  binds every card's node, and device() ends with "; run on card <n> alone
+  (TT_VISIBLE_DEVICES=<n>)". A bool, a str, a float, or a negative int is
+  a ValueError naming visible_card before any host file is read; an int
+  that names none of the host's cards is one too, once the cards are read.
+  Why: at the pin, tt-metal opening every card of a host whose cards are
+  not linked can map no mesh holding chip 0 and abort in device setup; the
+  October smoke runs passed with TT_VISIBLE_DEVICES=0
+  (plans/runs/tt-silicon/smoke.py; plans/spikes/tt-silicon-executor.md,
+  Finding 1: UMD reads the value as /dev/tenstorrent/<n> numbers).
 - Keyword settings for the runner and tests, as the gpu executor has
   them: harness, hidden_roots, toolchains, and sandbox (the native
   executor's); root, the host root every host path is read under (default
@@ -101,10 +114,7 @@ The interface these tests assume, which task P17.16 adds:
      reset_filter setting. The environment is the ttsim row's without
      TT_METAL_SIMULATOR (OQ-075 (8a)), the JIT cache and logs under a
      reserved directory of the workdir whose name starts with "@", no HOME,
-     and no TT_VISIBLE_DEVICES: with every node bound, UMD enumerates every
-     numbered node set or unset (spike, Finding 1), setting it costs more
-     opens of every node, and the sandbox's ENVIRONMENT_NAMES does not hold
-     it;
+     and no TT_VISIBLE_DEVICES unless visible_card names a card (above);
   6. the quarantine (OQ-075 (3a)): a marker whose name holds "quarantine"
      goes under $LASSI_SCRATCH/locks, naming every card's serial, once the
      spec is built and before the sandbox is called, so it is in place
@@ -202,12 +212,13 @@ from lassi.toolchains import pins as pins_module
 LIMITS = Limits(wall_s=2.5, memory_mb=256, cpus=2)
 INPUTS = ["--size", "8"]
 CAPABILITIES = frozenset({"runs_code", "sandboxed", "silicon"})
-# device_profiler, off or kernel, joined the settings with task P17.42 (tests/executors/test_tt_silicon_timing.py).
-CONFIG_KEYS = frozenset({"hugepages", "reset_filter", "device_profiler", "harness"})
+# device_profiler, off or kernel, joined the settings with task P17.42 (tests/executors/test_tt_silicon_timing.py),
+# and visible_card, the one card UMD is shown, with task P17.66.
+CONFIG_KEYS = frozenset({"hugepages", "reset_filter", "device_profiler", "visible_card", "harness"})
 KEYWORDS = frozenset(
     {
-        "hugepages", "reset_filter", "device_profiler", "harness", "hidden_roots", "toolchains", "sandbox", "root",
-        "access", "owner", "link", "uid", "clock", "sleep", "flock",
+        "hugepages", "reset_filter", "device_profiler", "visible_card", "harness", "hidden_roots", "toolchains",
+        "sandbox", "root", "access", "owner", "link", "uid", "clock", "sleep", "flock",
     }
 )  # fmt: skip
 MISSING = object()
@@ -475,7 +486,8 @@ def test_registered_as_executor_tt_silicon_with_its_capabilities(module: ModuleT
     entry = DEFAULT_REGISTRY.get("Executor", "tt_silicon")
     assert entry.factory is module.TtSiliconExecutor
     assert entry.capabilities == CAPABILITIES, "runs_code, sandboxed, and silicon; never simulator or takes_device"
-    assert entry.config_keys == CONFIG_KEYS, "no card key: every card is exposed (OQ-072)"
+    assert entry.config_keys == CONFIG_KEYS, "every card is exposed (OQ-072); visible_card names the one UMD opens"
+    assert "visible_card" in module.TtSiliconExecutor.config_keys, "task P17.66"
     assert module.TtSiliconExecutor.name == "tt_silicon"
     assert not callable(getattr(module.TtSiliconExecutor, "framework", None)), "it runs a built program, no framework"
 
@@ -506,6 +518,7 @@ def test_the_constructor_takes_the_two_settings_and_keyword_seams(module: Module
     assert params["link"].default is module._link_text, "readlink(2), which opens nothing (task P17.54)"
     assert params["flock"].default is None, "None means fcntl.flock, imported only when a lock is taken"
     assert all(params[name].default is None for name in ("harness", "hidden_roots", "toolchains", "sandbox"))
+    assert params["visible_card"].default is None, "every card is shown to UMD unless a recipe names one"
     assert list(inspect.signature(module.TtSiliconExecutor.run).parameters) == ["self", "artifact", "inputs", "limits"]
 
 
@@ -571,6 +584,27 @@ def test_reset_filter_must_be_a_bool_before_any_host_file_is_read(
         module.TtSiliconExecutor(**settings, root=empty, access=access, uid=4100, sandbox=ExplodingSandbox())
     assert "reset_filter" in str(caught.value), str(caught.value)
     assert access.asked == []
+
+
+@pytest.mark.parametrize(
+    "value",
+    [True, False, "0", "", 0.0, 1.5, -1, [0]],
+    ids=["true", "false", "text", "empty", "float-zero", "float", "negative", "list"],
+)
+def test_visible_card_must_be_a_card_number_before_any_host_file_is_read(
+    module: ModuleType, tmp_path: Path, value: Any
+) -> None:
+    empty = tmp_path / "empty"
+    access, owners = Access(empty), Owners(empty)
+    settings: dict[str, Any] = {
+        "hugepages": PRIVATE_PER_RUN, "reset_filter": True, "device_profiler": "off", "visible_card": value,
+    }  # fmt: skip
+    with pytest.raises(ValueError) as caught:
+        module.TtSiliconExecutor(
+            **settings, root=empty, access=access, owner=owners, uid=4100, sandbox=ExplodingSandbox()
+        )
+    assert "visible_card" in str(caught.value), str(caught.value)
+    assert access.asked == [] and owners.asked == [], "the setting is refused before any host file is read"
 
 
 # ---------------------------------------------------------------------------
@@ -987,6 +1021,76 @@ def test_the_spec_keeps_the_native_workdir_roots_and_argv(
     assert same_path(call.spec.harness, harness) and same_path(call.spec.toolchains, install.root)
     expected = [os.path.realpath(path) for path in (roots.scratch, roots.home, roots.runs)]
     assert [os.path.realpath(root) for root in call.spec.hidden_roots] == expected, "the locks directory is hidden"
+
+
+# ---------------------------------------------------------------------------
+# visible_card (task P17.66): one card shown to UMD, every card still bound
+
+
+def visible_suffix(card: int) -> str:
+    """Return the text device() ends with when visible_card is `card`."""
+    return f"; run on card {card} alone (TT_VISIBLE_DEVICES={card})"
+
+
+def test_visible_card_none_leaves_tt_visible_devices_unset_and_the_device_line_as_it_was(
+    module: ModuleType, host: Host, install: Any, roots: Roots
+) -> None:
+    plain = build(module, host, sandbox=ExplodingSandbox())
+    executor, fake = silicon(module, host, install, visible_card=None)
+    executor.run(make_artifact(roots.runs), INPUTS, LIMITS)
+    (call,) = fake.calls
+    assert set(call.environment) == SILICON_NAMES, "no TT_VISIBLE_DEVICES without a visible card"
+    assert executor.device() == plain.device()
+    assert "TT_VISIBLE_DEVICES" not in executor.device()
+
+
+@pytest.mark.parametrize("card", [0, 5, 7], ids=["card-0", "card-5", "card-7"])
+def test_visible_card_shows_umd_one_card_while_every_card_stays_bound(
+    module: ModuleType, host: Host, install: Any, roots: Roots, card: int
+) -> None:
+    artifact = make_artifact(roots.runs)
+    plain, plain_fake = silicon(module, host, install)
+    plain.run(artifact, INPUTS, LIMITS)
+    executor, fake = silicon(module, host, install, visible_card=card)
+    executor.run(artifact, INPUTS, LIMITS)
+    (before,), (call,) = plain_fake.calls, fake.calls
+    assert call.environment == {**before.environment, "TT_VISIBLE_DEVICES": str(card)}, "one name more, nothing else"
+    exposure = call.spec.devices
+    assert isinstance(exposure, sandbox_module.TenstorrentExposure)
+    nodes = [f"{NODE_DIR}/{number}" for number in host.cards]
+    assert pairs(exposure.nodes) == [(node, node) for node in nodes], "every card's node stays bound"
+    assert pairs(exposure.pci_dirs) == pairs(before.spec.devices.pci_dirs)
+    assert exposure.hugepages is not None and exposure.reset_filter is before.spec.devices.reset_filter
+    assert executor.device() == plain.device() + visible_suffix(card)
+
+
+def test_visible_card_is_a_node_name_not_a_position(
+    module: ModuleType, tmp_path: Path, install: Any, roots: Roots
+) -> None:
+    host = write_host(tmp_path / "two", cards=[1, 3])
+    executor, fake = silicon(module, host, install, visible_card=3)
+    executor.run(make_artifact(roots.runs), INPUTS, LIMITS)
+    assert fake.calls[0].environment["TT_VISIBLE_DEVICES"] == "3"
+    assert executor.device().endswith(visible_suffix(3)), executor.device()
+    assert pairs(fake.calls[0].spec.devices.nodes) == [(f"{NODE_DIR}/{n}", f"{NODE_DIR}/{n}") for n in (1, 3)]
+
+
+@pytest.mark.parametrize(
+    ("cards", "card"),
+    [((0, 1, 2, 3, 4, 5, 6, 7), 99), ((0, 1, 2, 3, 4, 5, 6, 7), 8), ((1, 3), 0), ((1, 3), 2)],
+    ids=["99-of-eight", "8-of-eight", "0-of-1-and-3", "2-of-1-and-3"],
+)
+def test_a_visible_card_the_host_does_not_have_is_refused_before_the_program(
+    module: ModuleType, tmp_path: Path, install: Any, roots: Roots, cards: tuple[int, ...], card: int
+) -> None:
+    host = write_host(tmp_path / "cards", cards=cards)
+    fake, flock = FakeSandbox(results=[canned()]), FakeFlock()
+    with pytest.raises(ValueError) as caught:
+        executor = build(module, host, sandbox=fake, toolchains=install.root, flock=flock, visible_card=card)
+        executor.run(make_artifact(roots.runs), INPUTS, LIMITS)
+    assert "visible_card" in str(caught.value), str(caught.value)
+    assert fake.calls == [], "nothing ran"
+    assert markers(roots) == [] and flock.held_files(roots.locks) == []
 
 
 # ---------------------------------------------------------------------------

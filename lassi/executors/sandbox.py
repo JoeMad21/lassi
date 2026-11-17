@@ -552,6 +552,10 @@ TT_PROFILER_NAMES = (
     "TT_METAL_PROFILER_DISABLE_PUSH_TO_TRACY",
     "TT_METAL_PROFILER_DIR",
 )
+# UMD's card list, which only the tt_silicon executor sets, with visible_card (task P17.66): UMD reads it as
+# /dev/tenstorrent/<n> device numbers (umd pcie/pci_device.cpp:256-316; plans/spikes/tt-silicon-executor.md).
+# SandboxSpec refuses it without a TenstorrentExposure, and a compile never holds it.
+TT_VISIBILITY_NAMES = ("TT_VISIBLE_DEVICES",)
 # HOME is never on ENVIRONMENT_NAMES. A program's SandboxSpec.environment may still set it, only to an absolute path
 # at or under the spec's own workdir (_check_home), so no host HOME reaches a program (Agent Rule 12): the
 # ttmlir-ttsim executor sets it to a reserved directory there (the owner's answer to OQ-115). A compile never sets it.
@@ -561,8 +565,9 @@ HOME_NAME = "HOME"
 # NVHPC_CUDA_HOME), for compiles; OMP_NUM_THREADS, the OpenMP runtime's default thread count, which the native
 # executor sets to Limits.cpus (DEMO.2); TT_METAL_NAMES, which the ttsim executor sets (task P4.11), so a
 # program on ttsim finds the pinned simulator and tree and keeps its JIT cache in its own workdir; and
-# GPU_VISIBILITY_NAMES, which the gpu executor sets (task P17.5), only with a device exposure; and TT_PROFILER_NAMES,
-# which the tt_silicon executor sets (task P17.42), only with a Tenstorrent exposure. HOME, loader variables
+# GPU_VISIBILITY_NAMES, which the gpu executor sets (task P17.5), only with a device exposure; and TT_PROFILER_NAMES
+# and TT_VISIBILITY_NAMES, which the tt_silicon executor sets (tasks P17.42 and P17.66), only with a Tenstorrent
+# exposure. HOME, loader variables
 # (LD_PRELOAD, LD_LIBRARY_PATH), variables that change a compile silently (NVCC_PREPEND_FLAGS, CPATH), any other
 # TT_METAL_* name (such as TT_METAL_KERNEL_PATH or TT_METAL_HOME), and credentials are never on it (Agent Rule 12).
 # It is fixed: nothing adds a name at run time.
@@ -577,6 +582,7 @@ ENVIRONMENT_NAMES = frozenset(
         *TT_METAL_NAMES,
         *GPU_VISIBILITY_NAMES,
         *TT_PROFILER_NAMES,
+        *TT_VISIBILITY_NAMES,
     }
 )
 # The names the private /dev already holds: the six bound nodes, pts and shm, and the five links. No device node
@@ -1681,9 +1687,10 @@ class SandboxSpec:
     TenstorrentExposure runs TENSTORRENT_SETUP_SCRIPTS[(reset_filter,
     whether it has a hugepage directory)], and
     only then may the environment hold any of TT_PROFILER_NAMES (task
-    P17.42). ValueError is raised for an exposure _check_devices or
-    _check_tenstorrent refuses, for a visibility name without a DeviceExposure,
-    for a profiler name without a TenstorrentExposure,
+    P17.42) or TT_VISIBILITY_NAMES (task P17.66). ValueError is raised for
+    an exposure _check_devices or _check_tenstorrent refuses, for a
+    visibility name without a DeviceExposure, for a profiler name or a
+    card-list name without a TenstorrentExposure,
     when a path is relative or lies under one of PRIVATE_DIRS (the private
     tmpfs would hide it), when the workdir, the harness, or the toolchains
     root lies under one of SYSTEM_DIRS, when a hidden root is a filesystem
@@ -1749,6 +1756,12 @@ class SandboxSpec:
                     raise ValueError(
                         f"the sandbox environment may set {name} only with a TenstorrentExposure (a silicon run's): "
                         "tt-metal's device profiler runs on the cards, never on ttsim (Agent Rule 2)"
+                    )
+            for name in TT_VISIBILITY_NAMES:
+                if name in (environment or {}):
+                    raise ValueError(
+                        f"the sandbox environment may set {name} only with a TenstorrentExposure (a silicon run's): "
+                        "it names the Wormhole card UMD may use (task P17.66)"
                     )
         object.__setattr__(self, "environment", None if environment is None else MappingProxyType(environment))
 
@@ -2316,15 +2329,15 @@ class SandboxedCompileRunner:
         when the runner is made. Raise ValueError when the environment holds
         a name outside ENVIRONMENT_NAMES, a value that is not a string
         without NUL, TMPDIR (each compile gets its own), HOME, or one of
-        GPU_VISIBILITY_NAMES or TT_PROFILER_NAMES (a compile has no device
-        exposure), or when no hidden root is given.
+        GPU_VISIBILITY_NAMES, TT_PROFILER_NAMES, or TT_VISIBILITY_NAMES (a
+        compile has no device exposure), or when no hidden root is given.
         """
         checked = _checked_environment(environment)
         if checked is None or "TMPDIR" in checked:
             raise ValueError("a compile environment is a mapping without TMPDIR; each compile gets its own TMPDIR")
         if HOME_NAME in checked:
             raise ValueError(f"a compile environment may not set {HOME_NAME}; only a program's run may, in its workdir")
-        visible = sorted(set(checked) & {*GPU_VISIBILITY_NAMES, *TT_PROFILER_NAMES})
+        visible = sorted(set(checked) & {*GPU_VISIBILITY_NAMES, *TT_PROFILER_NAMES, *TT_VISIBILITY_NAMES})
         if visible:
             raise ValueError(f"a compile environment may not set {', '.join(visible)}; a compile sees no device")
         if isinstance(hidden_roots, (str, os.PathLike)) or not hidden_roots:

@@ -604,6 +604,16 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: plans/runs/tracy/candidates.tsv, plans/runs/tracy/make_candidates.py, plans/runs/tracy/inventory.py and its output inventory-rx-20261116-161608-exec-0f2e.txt, plans/runs/tracy/profile.py, plans/runs/tracy/README.md, tests/tools/test_tracy_profile.py.
 - Host: Windows (script, tests); alpha01 in the owner's window, the run started by the owner. Depends: P17.42, P17.55.
 
+### P17.66 tt_silicon: a visible_card setting that sets TT_VISIBLE_DEVICES
+- Added on 2026-11-16, in the owner's window, after the first sandboxed card run (rx 20261116-192634-tracy-07f1, step 2, the tracked loopback reference) ended with exit status 134: with every card's node bound and TT_VISIBLE_DEVICES unset, tt-metal 5280a9cf-tracy (commit f34c0da) saw 16 chips on 8 unlinked n300 cards, its fabric control plane fell back to a 2-chip mesh, and MeshDevice::create_unit_mesh(0) raised TT_FATAL "Physical chip id 0 not found in control plane chip mapping" (control_plane.cpp:1249). The 2026-10-23 smoke passed with TT_VISIBLE_DEVICES=0 (plans/runs/tt-silicon/smoke.py) at the same tt-metal commit, built without Tracy, outside the sandbox and without the device profiler, so the variable is the likely cause, not a proven one. The owner chose to fix it in the window. The P17.56 launch recipes (projects/lassi-demo/sweep10-si/gpt-oss-120b/) bind tt_silicon without visible_card and would likely abort the same way; changing them changes their hashes, a later decision.
+- Bible: Execution Backends (the tt_silicon row), Sandbox, Agent Rules 6 and 9.
+- Accept:
+  - TtSiliconExecutor takes `visible_card` (config key; None by default, today's behaviour): None leaves TT_VISIBLE_DEVICES unset; an int n naming one of the host's cards sets TT_VISIBLE_DEVICES=n in the program's environment, every card's node stays bound, and device() ends with "; run on card n alone (TT_VISIBLE_DEVICES=n)". A bool, a non-int, or a negative int is a ValueError naming visible_card before any host file is read; an int naming no card of the host is a ValueError naming visible_card.
+  - The sandbox's allowlist holds TT_VISIBILITY_NAMES (TT_VISIBLE_DEVICES), which a SandboxSpec holds only with a TenstorrentExposure and a compile never.
+  - plans/runs/tracy/profile.py builds the executor with visible_card 0.
+- Files: lassi/executors/tt_silicon.py, lassi/executors/sandbox.py, plans/runs/tracy/profile.py, plans/runs/tracy/README.md, tests/executors/test_tt_silicon.py, tests/executors/test_sandbox_tenstorrent.py, tests/tools/test_tracy_profile.py, docs/BIBLE.md, plans/BIBLE-SYNC.md.
+- Host: Windows (code, tests); the card run in the owner's window, started by the owner. Depends: P17.16, P17.42.
+
 ### P17.G Phase gate (BLOCKED: GPU host, OQ-040)
 - Bible: Build Roadmap (P17 row, Gate column), Agent Rules 1 and 10; AGENTS.md Phase Gate and Results.
 - Accept, from one clean commit:

@@ -1563,3 +1563,15 @@ Options:
 - (d) Profile only the tracked references tonight; the translations wait for DMA domains.
 Recommendation: none given; the choice of exposure is the owner's.
 Answer: The owner, in the working session of 2026-11-16, chose (c): "I'll start it myself." To the second question (one read-only pass over the run trees, the Tracy install record, and the cards' IOMMU types, CPU only, nothing opened or written), the owner answered "Yes, run it now"; it ran as rx 20261116-161608-exec-0f2e. Applied in P17.65: plans/runs/tracy/README.md names the owner as the one who starts the run, and no agent launches it.
+
+## OQ-128 The Window Of 2026-11-16: Another Account's Hugepage Files And The All-Card Abort
+State: CLOSED
+Kind: decision
+Blocks: P17.65 (the window's run on the cards), P17.66
+Evidence: rx 20261116-184803-tracy-621d (the first launch: the cards stayed busy for 300 s, since another account's 16 hugepage files of 2026-11-10 held 16 of the 32 1 GiB pages; exit 3, nothing ran); rx 20261116-191152-exec-d531, 20261116-191900-exec-8b4a, 20261116-192306-exec-f935 (read-only: the files' metadata, no process of that account, no other account's TT process, every card idle at AICLK 500 with its heartbeat rising); rx 20261116-192556-exec-1a68, 20261116-192617-exec-0242, 20261116-192623-exec-24d4 (the owner's preview, removal, and check: 32 of 32 pages free); rx 20261116-192634-tracy-07f1 (the second launch: the loopback reference aborted with exit status 134 in tt-metal's fabric setup, all eight cards visible; the quarantine marker stands)
+Question: Two choices in the window. (1) The executor refuses while another account owns a file in /dev/hugepages-1G, and UMD never removes its files, so another account's leftovers block every run: remove them, or wait? (2) With every card visible, tt-metal 5280a9cf-tracy aborted the qualification in its fabric setup; the smoke had passed with TT_VISIBLE_DEVICES=0: fix it tonight with a card setting, or stop for the night?
+Options:
+- (1a) The owner removes the files after the read-only checks; (1b) the file's owner or the admin removes them; (1c) wait for a reboot.
+- (2a) Fix it tonight: an optional visible_card setting that sets TT_VISIBLE_DEVICES, tested and audited, the kit on card 0; (2b) stop, and fix it before the next window.
+Recommendation: (1b), since the files are another account's; (2a), since the window was booked and the fix mirrors the smoke's setting.
+Answer: The owner, in the working session of 2026-11-16: (1) asked for the delete command and ran it (rx 20261116-192617-exec-0242), a find limited to that account's regular files named *tenstorrent directly in /dev/hugepages-1G, after a preview listed exactly the 16 files; (2) chose (2a), "Fix it tonight". Applied in P17.66. Open for later: binding only the chosen card's node, which the spike calls stronger and which would avoid the extra enumeration opens of every node, reverses OQ-072 and needs a new owner decision; the P17.56 launch recipes bind tt_silicon without visible_card.

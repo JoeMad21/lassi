@@ -36,7 +36,16 @@ absent value or any other is a ValueError naming the key, raised before any
 host file is read; "kernel" is also a ValueError unless toolchains/
 tt-metal.pin builds tt-metal with -DENABLE_TRACY=ON, the only build that
 compiles the profiler (the owner's answer of 2026-10-26: the main pin built
-with Tracy). `harness` is the ttsim executor's.
+with Tracy). `harness` is the ttsim executor's. `visible_card` (task
+P17.66) is optional: None, the default, leaves TT_VISIBLE_DEVICES unset, as
+before; an int names one card by its node number (/dev/tenstorrent/<n>) and
+sets TT_VISIBLE_DEVICES=<n>, so tt-metal opens that card alone while every
+card's node stays bound, and device() names it. A bool, any other type, or a
+negative int is a ValueError naming the key before any host file is read; a
+number that names no card of the host is one once the cards are read. With
+all eight cards visible, tt-metal 5280a9cf's fabric setup aborted the first
+sandboxed card run (rx 20261116-192634-tracy-07f1); the 2026-10-23 smoke
+ran on card 0 alone.
 
 Construction reads the host under its root from file metadata (lstat,
 access(2), readlink(2), and directory listings) and sysfs or procfs text
@@ -144,9 +153,11 @@ lock or directory. Then, in order:
    the JIT cache and logs under <workdir>/@tt-silicon (RESERVED_DIR; no
    model file path may start with "@"), created before the run, no HOME,
    and nothing from the caller's environment. TT_VISIBLE_DEVICES stays
-   unset: with every node bound, UMD enumerates every numbered node whether
-   it is set or unset (Finding 1), setting it costs more opens of every
-   node, and the sandbox's ENVIRONMENT_NAMES does not hold it. The spec
+   unset unless visible_card names a card (task P17.66; the sandbox allows
+   it only with a Tenstorrent exposure, TT_VISIBILITY_NAMES): with every
+   node bound, UMD enumerates every numbered node whether it is set or
+   unset (Finding 1) and setting it costs more opens of every node, but
+   only with it set does tt-metal keep to one card. The spec
    and the sandbox command (sandbox_command) are built before item 6's
    marker, so a ValueError from either writes none.
 6. The quarantine (OQ-075 (3a)): right before the sandbox is called, the
@@ -645,16 +656,40 @@ def _check_settings(hugepages: object, reset_filter: object) -> None:
         )
 
 
-def program_environment(tree: Path, workdir: Path, limits: Limits) -> dict[str, str]:
+def _check_visible_card(visible_card: object) -> None:
+    """Raise ValueError naming visible_card unless it is None or a non-negative int, not a bool (task P17.66)."""
+    if visible_card is None:
+        return
+    if isinstance(visible_card, bool) or not isinstance(visible_card, int) or visible_card < 0:
+        raise ValueError(
+            "visible_card must be None (TT_VISIBLE_DEVICES unset) or one card's node number, a non-negative int "
+            f"(task P17.66); got {visible_card!r}"
+        )
+
+
+def _check_card_named(visible_card: int | None, cards: Sequence[Card]) -> None:
+    """Raise ValueError naming visible_card when it is an int that names none of the host's cards (task P17.66)."""
+    names = [card.name for card in cards]
+    if visible_card is not None and str(visible_card) not in names:
+        raise ValueError(
+            f"visible_card {visible_card} names no card of this host; its cards are {', '.join(names) or 'none'} "
+            "(task P17.66)"
+        )
+
+
+def program_environment(
+    tree: Path, workdir: Path, limits: Limits, visible_card: int | None = None
+) -> dict[str, str]:
     """Return a silicon program's environment in `workdir`: the ttsim row's settings without TT_METAL_SIMULATOR.
 
     TT_METAL_RUNTIME_ROOT is the pinned tree; the JIT cache and the logs are
     <workdir>/@tt-silicon/cache and <workdir>/@tt-silicon/logs; and
-    TT_METAL_THREADCOUNT is limits.cpus. No HOME and no TT_VISIBLE_DEVICES
-    (see the module docstring); the caller's environment is never read.
+    TT_METAL_THREADCOUNT is limits.cpus. No HOME; TT_VISIBLE_DEVICES only
+    when `visible_card` is a card's number, then that number (task P17.66;
+    see the module docstring); the caller's environment is never read.
     """
     reserved = workdir / RESERVED_DIR
-    return {
+    environment = {
         "PATH": SANDBOX_PATH,
         "TMPDIR": "/tmp",
         "LANG": "C",
@@ -667,6 +702,9 @@ def program_environment(tree: Path, workdir: Path, limits: Limits) -> dict[str, 
         "TT_METAL_INSPECTOR_RPC": "0",
         "TT_METAL_THREADCOUNT": str(limits.cpus),
     }
+    if visible_card is not None:
+        environment["TT_VISIBLE_DEVICES"] = str(visible_card)
+    return environment
 
 
 def _ending(result: SandboxResult) -> str | None:
@@ -901,7 +939,8 @@ class TtSiliconExecutor:
     """Runs a TT host program on every Wormhole card of the host, only inside the sandbox (see the module docstring).
 
     The config keys are `hugepages`, `reset_filter`, and `device_profiler`,
-    each required with no default, and `harness`. The keyword settings `hidden_roots`,
+    each required with no default, `harness`, and `visible_card` (None by
+    default, or one card's node number; task P17.66). The keyword settings `hidden_roots`,
     `toolchains`, and `sandbox` are the ttsim executor's (None means
     $LASSI_SCRATCH, $HOME, and $LASSI_SHARED; $LASSI_TOOLCHAINS; and a Sandbox with the
     default runner). The rest are seams for the tests: `root`, the host
@@ -920,7 +959,7 @@ class TtSiliconExecutor:
 
     name = "tt_silicon"
     capabilities = frozenset({"runs_code", "sandboxed", SILICON})
-    config_keys = frozenset({"hugepages", "reset_filter", "device_profiler", "harness"})
+    config_keys = frozenset({"hugepages", "reset_filter", "device_profiler", "harness", "visible_card"})
 
     def __init__(
         self,
@@ -929,6 +968,7 @@ class TtSiliconExecutor:
         reset_filter: bool | None = None,
         device_profiler: str | None = None,
         harness: str | None = None,
+        visible_card: int | None = None,
         hidden_roots: Sequence[str] | None = None,
         toolchains: str | None = None,
         sandbox: Sandbox | None = None,
@@ -949,6 +989,8 @@ class TtSiliconExecutor:
         """
         _check_settings(hugepages, reset_filter)
         _check_profiler(device_profiler)
+        _check_visible_card(visible_card)
+        self.visible_card: int | None = visible_card
         if isinstance(hidden_roots, (str, os.PathLike)):
             raise ValueError(f"hidden_roots must be a sequence of paths, got {hidden_roots!r}")
         self.reset_filter: bool = bool(reset_filter)
@@ -970,6 +1012,7 @@ class TtSiliconExecutor:
         names = _card_names(self.root)
         _check_nodes(self.root, names, access)
         self.cards: tuple[Card, ...] = tuple(_read_card(self.root, name, link) for name in names)
+        _check_card_named(self.visible_card, self.cards)
         self.pass_through: int = sum(1 for card in self.cards if not card.dma)
         self.driver: str = _driver_version(self.root)
         _check_host(self.root, len(self.cards), self.pass_through)
@@ -980,8 +1023,9 @@ class TtSiliconExecutor:
         For example "Tenstorrent Wormhole n300 x 8 (silicon): card 0 serial
         <s>, firmware bundle <b>, ARC firmware <a>, IOMMU group 135
         identity; card 1 ...; tenstorrent driver <v>; tt-metal
-        5280a9cf-tracy": one line of printable ASCII. It reads no file and
-        starts no process.
+        5280a9cf-tracy", with "; run on card <n> alone (TT_VISIBLE_DEVICES=<n>)"
+        appended when visible_card is set (task P17.66): one line of printable
+        ASCII. It reads no file and starts no process.
         """
         cards = "; ".join(
             f"card {card.name} serial {card.serial}, firmware bundle {card.bundle}, ARC firmware {card.arc}, "
@@ -992,6 +1036,8 @@ class TtSiliconExecutor:
             f"Tenstorrent Wormhole {CARD_TYPE} x {len(self.cards)} (silicon): {cards}; tenstorrent driver "
             f"{self.driver}; tt-metal {pin_files.recorded_version(self.pins[TT_METAL_PIN])}"
         )
+        if self.visible_card is not None:
+            text += f"; run on card {self.visible_card} alone (TT_VISIBLE_DEVICES={self.visible_card})"
         return printable(" ".join(text.split()))
 
     def run(self, artifact: Path, inputs: Sequence[str], limits: Limits) -> RunResult:
@@ -1189,7 +1235,7 @@ class TtSiliconExecutor:
             hugepages=None if run_dir is None else PurePosixPath(HUGEPAGE_POINT) / run_dir,
             reset_filter=self.reset_filter,
         )
-        environment = program_environment(mounts.tree, workdir, limits)
+        environment = program_environment(mounts.tree, workdir, limits, self.visible_card)
         if self.device_profiler == "kernel":
             environment.update(tt_profiler.profiler_environment(workdir / RESERVED_DIR / PROFILER_DIR))
         return SandboxSpec(

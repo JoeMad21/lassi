@@ -40,3 +40,12 @@ Mirror edits of 2026-11-01, not yet in the master. Apply each to the master as i
 - Evaluation Protocol, Reporting Rules: the simulator gaps bullet (the hardware check list, final_tests.tsv).
 - Environment State, the Tenstorrent Wormhole row's last cell (the final test, the pending revision, the identity domains of 2026-10-29).
 - Risks And Questions: the simulator-to-silicon gap row.
+
+## 2026-11-16: the tt_silicon visible_card setting (P17.66)
+
+Mirror edits of 2026-11-16, deferred during the owner's window of that night. The master's tt_silicon row still predates the entries above (it lacks P17.42's device_profiler sentence), so apply this after them, as each edit stands in docs/BIBLE.md, then clear this entry.
+
+- Decision Log row dated 2026-11-16 (P17.66), and the count sentence as the mirror gives it (two hundred and six; one on 2026-11-16).
+- Execution Backends, the tt_silicon row: the visible_card clause after the settings sentence ("and visible_card (task P17.66), null unless it names one card's number"), and the sentence on TT_VISIBLE_DEVICES (unset unless visible_card names a card; the abort of rx 20261116-192634-tracy-07f1; unverified on the cards until the next run).
+- Execution Backends, the tt_silicon row's Status cell: the config keys now end "harness, and visible_card (task P17.66)".
+- Sandbox, the tt_silicon program runs bullet: the environment sentence (the profiler's names with device_profiler kernel, TT_VISIBLE_DEVICES with visible_card, the allowlist's TT_PROFILER_NAMES and TT_VISIBILITY_NAMES, each only with a Tenstorrent exposure and never in a compile), replacing "so the allowlist gains no name".

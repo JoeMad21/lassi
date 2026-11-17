@@ -19,9 +19,13 @@ run, a pause between runs.
 ## What Runs, In Order
 
 1. The qualification: tt-pairs-v0 loopback's C++ program on the host CPU, then its tracked TT reference on the
-   cards through the sandboxed tt_silicon executor with device_profiler kernel. It is the first program this
-   executor runs on the cards. Unless both programs build, run cleanly, and pass, and the reference gives a device
-   timing, the run stops (exit 4) before any model-written program is read or run.
+   cards through the sandboxed tt_silicon executor with device_profiler kernel and visible_card 0 (task P17.66:
+   every card's node is bound, and TT_VISIBLE_DEVICES=0 should keep tt-metal on card 0, as in the 2026-10-23
+   smoke, unverified on the cards until this run;
+   with all eight cards visible, tt-metal's fabric setup aborted this reference, rx 20261116-192634-tracy-07f1).
+   It is the first program this executor runs on the cards. Unless both programs build, run cleanly, and pass,
+   and the reference gives a device timing, the run stops (exit 4) before any model-written program is read or
+   run.
 2. The 41 translations of candidates.tsv, which make_candidates.py wrote from the read-only inventory
    (inventory.py, the text run as rx 20261116-161608-exec-0f2e with one paragraph added and one line wrapped; its output is
    inventory-rx-20261116-161608-exec-0f2e.txt; the file's header counts the rows each rule dropped), in its

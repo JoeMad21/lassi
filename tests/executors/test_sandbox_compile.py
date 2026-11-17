@@ -371,6 +371,9 @@ def test_environment_names_are_exactly_the_compile_program_ttsim_and_gpu_names(s
     # (tests/executors/test_tt_silicon_timing.py).
     expected |= {"TT_METAL_DEVICE_PROFILER", "TT_METAL_PROFILER_CPP_POST_PROCESS",
                  "TT_METAL_PROFILER_DISABLE_PUSH_TO_TRACY", "TT_METAL_PROFILER_DIR"}
+    # Task P17.66: UMD's card list, which a spec holds only with a Tenstorrent exposure
+    # (tests/executors/test_sandbox_tenstorrent.py).
+    expected |= {"TT_VISIBLE_DEVICES"}
     assert sandbox.ENVIRONMENT_NAMES == frozenset(expected), sorted(sandbox.ENVIRONMENT_NAMES ^ expected)
 
 
