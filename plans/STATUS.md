@@ -216,3 +216,12 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.64 | ACTIVE | bale-v0-tt, all eight apps, C++ -> TT-Metalium on the 30B-class models | P17.43 | the owner's window of 2026-11-12, 00:00 to 05:00 EST: sweep21 (bale-ex and bale-all arms, 8 recipes per model, six models); runs after the owner's gate step (P17.63) |
 | P17.65 | OWNER | Device profiles of the saved TT translations on the Wormhole cards | P17.42,P17.55 | 2026-11-16: the kit (plans/runs/tracy: candidates.tsv, 41 translations from rx 20261116-161608-exec-0f2e; profile.py; README.md) is committed and tested with fakes; waits on the owner's run in the window, which the owner starts (OQ-127); then the pull, results/tracy-<date>/summary.md, and the run report |
 | P17.66 | DONE | tt_silicon: a visible_card setting that sets TT_VISIBLE_DEVICES | P17.16,P17.42 | visible_card sets TT_VISIBLE_DEVICES; kit on card 0; unverified on the cards until the owner's next run |
+| P17.67 | READY | tt-par-v0: the development items from tt-metal's multi-core examples | P17.31 | planned 2026-11-17; the owner chose the five items (OQ-129); spike plans/spikes/tt-par-upstream.md |
+| P17.68 | READY | tt-par-v0: the held-out items written here | P17.67 | planned 2026-11-17; the owner chose the five computations (OQ-129); committed before P17.71 to P17.73 start |
+| P17.69 | READY | tt-par-v0-kh: the host-and-kernels variant | P17.67,P17.68 |  |
+| P17.70 | READY | Cores used: a structural count, never a time | P17.42 |  |
+| P17.71 | READY | Skeletons with the compute grid by default (opt-in) | P17.33,P17.39,P17.68 |  |
+| P17.72 | READY | Prompt sets with the parallel goal and the multi-core calls (opt-in) | P17.68 |  |
+| P17.73 | READY | A single-core correction (opt-in) | P17.68,P17.70,P17.72 |  |
+| P17.74 | READY | tt-par sweeps on ttsim: the development ladder, then the frozen held-out run | P17.67,P17.68,P17.69,P17.70,P17.71,P17.72,P17.73 |  |
+| P17.75 | OWNER | Card profiles of the tt-par translations | P17.74 | the owner starts card runs (OQ-127) |

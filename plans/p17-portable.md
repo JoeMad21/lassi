@@ -614,6 +614,78 @@ PHASE-NOTES P17 items, by task: the owner request and the work order, this plan 
 - Files: lassi/executors/tt_silicon.py, lassi/executors/sandbox.py, plans/runs/tracy/profile.py, plans/runs/tracy/README.md, tests/executors/test_tt_silicon.py, tests/executors/test_sandbox_tenstorrent.py, tests/tools/test_tracy_profile.py, docs/BIBLE.md, plans/BIBLE-SYNC.md.
 - Host: Windows (code, tests); the card run in the owner's window, started by the owner. Depends: P17.16, P17.42.
 
+### The multi-core C++ -> TT test (P17.67 to P17.75)
+Added on 2026-11-17 (OQ-129; the owner: "Forget the testing window tonight, just focus on creating materials for the new test."). In the window of 2026-11-16 (rx 20261116-212311-tracy-0bc3, commit 5d75218, pulled into results/tracy-20261116 by P17.65), the device log of tt-pairs-v0 matmul_multi_core's tracked reference listed 56 cores of card 0, and each of its six gpt-oss-120b translations, which passed on the card against the C++ program, listed one core. tt-pairs-v0 holds one multi-core item, the skeleton's cores blank ships one core (assets/skeletons/tt-host-skeleton-v0/host.cpp), and tt-host-v1's generation prompt shows only a single-core core line. The owner chose items split per item, each item in a host-only and a host-and-kernels variant, and items from tt-metal's examples and written here (OQ-129). tt-metal's multi-core examples sit close to Tier A's add and matmul, and parts of them are in the tt-metal-docs retrieval corpus (pad_multi_core, vecadd_sharding, and the matmul_common kernels; assets/rag/tt-metal-docs/MANIFEST.yaml), so they become the development items; the programs written here, which no corpus, prompt, skeleton, or training set holds, become the held-out items. The held-out items are committed before any task that changes a prompt, skeleton, or correction for parallel code starts, and only development items steer that work (Agent Rule 5). Card 0 of alpha01 has 56 compute cores, 8 wide by 7 tall (its device log, rx 20261116-212311-tracy-0bc3); "more output tiles than the grid has cores" below means more than ttsim's grid as well, which P17.70 counts.
+
+### P17.67 tt-par-v0: the development items from tt-metal's multi-core examples
+- Bible: Benchmark Suites (a new suite and its splits), Harness Contract, Oracles (binary_io), Agent Rules 3 and 5.
+- Accept:
+  - plans/spikes/tt-par-upstream.md (written 2026-11-17 from the files at the pin, each checked against its git blob id): what each multi-core example computes, its core grid, its own check, its kernels with their sha256 and arguments, and whether it can be an item.
+  - assets/bench/tt-par-v0.yaml: the five development items the owner chose on 2026-11-17 (OQ-129), at the spike's sizes: vecadd_multi_core (as upstream, 640 tiles), vecadd_sharding (448 tiles on 56 cores), pad_multi_core ([512, 128] padded to [512, 256]), matmul_multicore_reuse and matmul_multicore_reuse_mcast (1568 x 1024 x 256); each in the development split that P17.31 adds, with seed, inputs, outputs, tolerance (the example's own check; exact equality for pad_multi_core, which has none), analytic work, the reference's core count, and the languages cpp (a host-only program written here) and tt (a host program written here that runs the upstream kernels unmodified, named by path and sha256); no tt-metal text tracked, as in tt-pairs-v0.
+  - Each C++ program runs on alpha01's CPU; each TT reference passes against its C++ program on ttsim, its run recorded with provenance (an item whose reference fails there goes to the owner queue with that run as evidence, since dropping it changes the owner's choice); tests/bench/test_tt_par.py checks the suite as tests/bench/test_tt_pairs.py checks tt-pairs-v0.
+- Files: assets/bench/tt-par-v0.yaml, assets/bench/tt-par-v0/, plans/spikes/tt-par-upstream.md, tests/bench/, docs/BIBLE.md.
+- Host: Windows (programs, manifest, tests); alpha01 for the fetch, the C++ runs, and ttsim, with the owner's yes per batch. Depends: P17.31.
+
+### P17.68 tt-par-v0: the held-out items written here
+- Bible: Benchmark Suites, Harness Contract, Oracles (binary_io), Agent Rule 5.
+- Accept:
+  - The five computations the owner chose on 2026-11-17 (OQ-129), each a C++ program written here with a multi-core TT reference written here (host program and kernels, tracked) that splits its work over the compute grid: row_sum (the sum of each row of a bf16 [4096, 256] matrix), col_max (the maximum of each column of a bf16 [256, 4096] matrix), transpose_2d (a bf16 [1024, 1024] matrix transposed), row_softmax (the softmax of each row of a bf16 [4096, 256] matrix), and col_scale (C[i, j] = A[i, j] * s[j] for a bf16 [1024, 1024] matrix A and a row vector s); the sizes give more output tiles, or tile rows or columns, than the grid has cores, each input at most 2**20 elements; final sizes and tolerances are set in this task from the kernel API at the pin.
+  - Their items in tt-par-v0.yaml with split eval and P17.67's fields.
+  - Each C++ program runs on alpha01's CPU; each reference passes against its C++ program on ttsim, its run recorded with provenance, its core count recorded.
+  - A leak test fails when a held-out reference shares three consecutive non-blank lines, each holding a letter or digit, with any tracked prompt set, skeleton, worked example, or training spec (run on Windows), or with the built context packs and retrieval indexes (run on the build host, whose text is not tracked).
+- Files: assets/bench/tt-par-v0.yaml, assets/bench/tt-par-v0/, tests/bench/, docs/BIBLE.md.
+- Host: Windows; alpha01 for the C++ runs, ttsim, and the leak test's built half, with the owner's yes per batch. Depends: P17.67.
+
+### P17.69 tt-par-v0-kh: the host-and-kernels variant
+- Bible: Benchmark Suites, Harness Contract, Agent Rule 5.
+- Accept: assets/bench/tt-par-v0-kh.yaml holds tt-par-v0's items unchanged (splits, seeds, inputs, outputs, tolerances, work) plus a ttkh language whose support holds lassi_io.h alone, with `reference: tt`, as tt-pairs-v0-kh is to tt-pairs-v0; a test checks it as tests/bench/test_kh_suite.py checks tt-pairs-v0-kh.
+- Files: assets/bench/tt-par-v0-kh.yaml, tests/bench/, docs/BIBLE.md.
+- Host: Windows. Depends: P17.67, P17.68.
+
+### P17.70 Cores used: a structural count, never a time
+- Bible: Result Record (DeviceTiming, Trial), Execution Backends (ttsim, tt_silicon), Agent Rules 1, 2, and 14.
+- Accept:
+  - On the cards: DeviceTiming (P17.42) carries the number of distinct Tensix cores in the run's device log, and the Tracy kit's records and summary show it beside each reference's.
+  - On ttsim: plans/spikes/ttsim-cores.md compares ways to count the cores a program's kernels run on (the device profiler under ttsim, the core sets the host program passes to CreateKernel, or the kernel JIT's outputs), and counts ttsim's grid; the count is reported as a count only, never a time (Agent Rule 2); the chosen way is built behind the executor interface, its count in the trial record.
+- Files: lassi/executors/, lassi/core/, plans/runs/tracy/, plans/spikes/ttsim-cores.md, tests/, docs/BIBLE.md.
+- Host: Windows; alpha01 for the spike's ttsim runs, with the owner's yes. Depends: P17.42.
+
+### P17.71 Skeletons with the compute grid by default (opt-in)
+- Bible: Project Recipes (the Skeleton bullet), Agent Rules 4 and 5; OQ-096 (a).
+- Accept:
+  - assets/skeletons/tt-host-skeleton-v1/ (language tt) and assets/skeletons/tt-kh-skeleton-v1/ (language ttkh): the cores blank holds the device's compute grid (compute_with_storage_grid_size) and split_work_to_cores over the output tiles, with the circular buffers and kernels on that core range and one SetRuntimeArgs per core with its first tile and tile count; the kh skeleton's placeholder kernels read their first tile and tile count from those runtime args.
+  - Each compiles at the pin on alpha01, and a one-tile program built from it still runs on ttsim (the other cores get a count of zero).
+  - Both are item-agnostic, written from the pinned headers and from tt-metal examples that are no suite's item, never from an item's reference program or its upstream example (OQ-096 (a)); they name no item, and P17.68's leak test passes; the v0 skeletons are unchanged.
+- Files: assets/skeletons/tt-host-skeleton-v1/, assets/skeletons/tt-kh-skeleton-v1/, tests/prompts/, docs/BIBLE.md.
+- Host: Windows; alpha01 for the compile and the ttsim run, with the owner's yes. Depends: P17.33, P17.39, P17.68.
+
+### P17.72 Prompt sets with the parallel goal and the multi-core calls (opt-in)
+- Bible: Project Recipes, Agent Rules 4 and 5.
+- Accept: assets/prompts/tt-host-v2/ and assets/prompts/tt-kh-v1/ are tt-host-v1 and tt-kh-v0 with the goal stated (spread the work over the device's compute grid; a program on one core is slow) and the multi-core calls listed beside the single-core ones (compute_with_storage_grid_size, split_work_to_cores from <tt-metalium/work_split.hpp>, CoreRangeSet, runtime args per core), and, for tt-kh-v1, kernels that take their first tile and tile count as runtime args; tt-host-v1 and tt-kh-v0 unchanged; they name no item, and P17.68's leak test passes; tests as for tt-host-v1 and tt-kh-v0.
+- Files: assets/prompts/tt-host-v2/, assets/prompts/tt-kh-v1/, tests/prompts/, docs/BIBLE.md.
+- Host: Windows. Depends: P17.68.
+
+### P17.73 A single-core correction (opt-in)
+- Bible: Project Recipes, Result Record (Trial.requests), Agent Rules 2, 4, and 9.
+- Accept: a recipe key, refused under faithful: true, under which a candidate that passed on ttsim on one core, while its item's output spans more tiles than the grid has cores, gets one correction prompt naming the one core and asking for the work split over the grid; its template lives in tt-host-v2 and tt-kh-v1, and the runner refuses the key under a prompt set without it; the request is counted in Trial.requests; the count comes from P17.70's ttsim way, never from the cards (Agent Rule 9); a corrected candidate that fails keeps the earlier passing attempt as the trial's result.
+- Files: lassi/core/recipe.py, lassi/core/stages.py, lassi/core/runner.py, assets/prompts/tt-host-v2/, assets/prompts/tt-kh-v1/, tests/core/, docs/BIBLE.md.
+- Host: Windows. Depends: P17.68, P17.70, P17.72.
+
+### P17.74 tt-par sweeps on ttsim: the development ladder, then the frozen held-out run
+- Bible: Project Recipes, Evaluation Protocol, Agent Rules 1, 2, 5, and 10.
+- Accept:
+  - projects/lassi-demo/sweep22/: for each variant, a ladder on the development split from the bare LASSI loop up (plans/LESSONS.md, the feature-ladder direction): the bare loop (tt-host-v1 or tt-kh-v0 with no skeleton, worked examples, or API pack); the control (the v0 skeleton of that variant); the v2 prompt set (tt-host-v2 or tt-kh-v1) with the v0 skeleton; the v1 prompt set with the v1 skeleton; the v2 prompt set with the v1 skeleton; the v2 prompt set with the v0 skeleton and the correction; and the v2 prompt set with the v1 skeleton and the correction; retrieval off in every rung, since the tt-metal-docs corpus holds parts of the development references; on gpt-oss-120b and the models of plans/runs/suite/models-30b.tsv (gpt-oss-120b's weights were removed from alpha01 after the window of 2026-11-01, so its arm needs a download in an owner window first).
+  - Their ttsim run in an owner window, labeled development results, each table opening with the loop stages that ran and those skipped, and each rung's first-try and final success reported.
+  - The held-out recipes (split eval) of the rungs chosen from the development results, committed before the held-out run and unchanged by it; their ttsim run in an owner window, its tables naming ttsim as the device and opening with the stages that ran.
+- Files: projects/lassi-demo/sweep22/, tests/core/, results/, plans/runs/.
+- Host: Windows (recipes, tests); alpha01 in the owner's windows. Depends: P17.67, P17.68, P17.69, P17.70, P17.71, P17.72, P17.73.
+
+### P17.75 Card profiles of the tt-par translations
+- Bible: Execution Backends (tt_silicon), Result Record (DeviceTiming), Agent Rules 2, 6, 9, and 17.
+- Accept: the Tracy kit (plans/runs/tracy) reads P17.74's passing translations and their items' references, the owner starts the run on the cards (OQ-127), and the report shows each translation's cores used and device kernel time beside its reference's, with provenance, the development and held-out results apart.
+- Files: plans/runs/tracy/, tests/tools/, results/, plans/runs/.
+- Host: Windows (kit, tests); alpha01's cards, the run started by the owner. Depends: P17.74.
+
 ### P17.G Phase gate (BLOCKED: GPU host, OQ-040)
 - Bible: Build Roadmap (P17 row, Gate column), Agent Rules 1 and 10; AGENTS.md Phase Gate and Results.
 - Accept, from one clean commit:
