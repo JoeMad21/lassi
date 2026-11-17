@@ -1549,3 +1549,17 @@ Options:
 - (c) Leave them in /mnt/nvme10/joseph_ufl.
 Recommendation: (a), each batch approved in the session (Agent Rule 17); home files (.ssh, dotfiles, .vscode-server, .config) stay in the home.
 Answer:
+
+## OQ-127 Who Starts The Device Profiles Of The Saved TT Translations While The Cards Are In Pass-Through
+State: CLOSED
+Kind: decision
+Blocks: P17.65 (the window's run on the cards)
+Evidence: rx 20261116-161608-exec-0f2e (read-only, 2026-11-16: every Wormhole card's IOMMU group type identity, groups 135 to 138 and 150 to 153; the Tracy install tt-metal@5280a9cf-tracy with ENABLE_TRACY, TRACY_NO_BROADCAST, and TRACY_ONLY_LOCALHOST on; 16 of 32 free 1 GiB hugepages; no quarantine marker; 74 distinct exact matches on ttsim with a TT target); OQ-078 and OQ-099 (answered 2026-10-29); plans/runs/tracy/README.md
+Question: Profiling the saved translations on the cards (task P17.65) runs model-generated programs there. Every card is in an identity IOMMU domain, in which a program on a card can reach host memory through the card's DMA (OQ-078); the software carries no gate, and agents do not launch model-generated programs on the cards while the cards are in pass-through. How should the window go, and may an agent run the read-only inventory now?
+Options:
+- (a) Read each card's IOMMU type first; launch everything when every card is DMA; otherwise run only the tracked references and the owner starts the translations.
+- (b) Root puts every card in a DMA domain before the window; the agent launches the kit after the read-only check.
+- (c) Keep pass-through; the owner starts the whole kit in the window, accepting that a translated program could reach host memory.
+- (d) Profile only the tracked references tonight; the translations wait for DMA domains.
+Recommendation: none given; the choice of exposure is the owner's.
+Answer: The owner, in the working session of 2026-11-16, chose (c): "I'll start it myself." To the second question (one read-only pass over the run trees, the Tracy install record, and the cards' IOMMU types, CPU only, nothing opened or written), the owner answered "Yes, run it now"; it ran as rx 20261116-161608-exec-0f2e. Applied in P17.65: plans/runs/tracy/README.md names the owner as the one who starts the run, and no agent launches it.

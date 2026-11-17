@@ -88,6 +88,7 @@ What slowed work down, and the practice that avoids it next time. Read this befo
 - Name a scratch worktree that runs the suite with no digits after a hyphen: tests/llm/test_openai_compat.py checks that a refused port, -1 among them, never appears in the error text, and a traceback naming a worktree `wt-1726` held "-1", so the test failed there and passed elsewhere (2026-10-25, P17.26). A worktree moved with `git worktree move` keeps a .venv and __pycache__ files that name its old path; remove both before running the suite there.
 - Run a WSL command as `wsl -d <distro> --exec bash -lc '<command>'`, never `wsl -- <command>`: the latter expands variables before bash sees them, and P5.3's dry run once turned an empty `$V` into a Python venv at the repository root (bin/, lib/, lib64, include/, pyvenv.cfg; untracked, removed) (2026-10-10).
 - WSL's newer `mount` breaks the sandbox inside a user namespace (exit 16 on `mount --move`), so a WSL dry run of a batch must wrap the sandbox; alpha01's older mount works (P4). The same may affect any WSL test run that reaches the sandbox (P5.3, 2026-10-10).
+- A new worktree lacks the generated, git-ignored context files under assets/context/ttkernel-5f396fd6/ (.gitignore line 50), so four tests in tests/core/test_mlir1_recipes.py fail there with "ttkernel_ops.ttkernel.txt is missing" until `uv run tools/build_ttkernel_context.py` regenerates them or they are copied from a worktree at the same commit (P17.65, 2026-11-16: 4 failed in a full run, 34 passed after the copy).
 
 ## alpha01
 
