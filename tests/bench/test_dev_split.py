@@ -49,7 +49,7 @@ BENCH = REPO / "assets" / "bench"
 DEV_SUITES = ("tt-pairs-v0", "tt-pairs-v0-kh", "tt-pairs-v0-ttkernel", "tt-pairs-v0-ttir", "tt-pairs-v0-d2m")
 TT_PAIRS_ITEMS = ("eltwise_binary", "eltwise_sfpu", "loopback", "matmul_multi_core", "matmul_single_core")
 # Other committed suites that hold dev items beside items of other splits (tt-par-v0, task P17.67; OQ-129).
-MIXED_DEV_SUITES = ("tt-par-v0",)
+MIXED_DEV_SUITES = ("tt-par-v0", "tt-par-v0-kh")
 # The splits every other committed suite keeps (task P17.31 changes none of them).
 OTHER_SUITES = {
     "bale-v0": "unassigned",

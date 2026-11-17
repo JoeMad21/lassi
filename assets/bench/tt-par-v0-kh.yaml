@@ -1,0 +1,756 @@
+# The C++ -> TT suite of tt-par-v0's items in which the model writes the whole TT-Metalium program (task P17.69;
+# OQ-129, "Both variants"): tt-par-v0's items unchanged (the same splits, held-out inputs, seeds, outputs,
+# tolerances, work, notes, and cpp and tt languages; tests/bench/test_tt_par_kh.py checks it), plus a ttkh language,
+# as tt-pairs-v0-kh is to tt-pairs-v0. A ttkh translation is the host program and every device kernel it launches: its
+# files are the item's tracked TT host program's name, then each kernel at the path that host program launches it,
+# so ttmetal-host compiles the host program and writes each kernel uncompiled at its path for the kernel JIT (bible
+# Harness Contract). The ttkh support holds lassi_io.h alone, with its sha256, and no kernel: the reference's kernels
+# and host program would be the answer (Agent Rule 5). `reference: tt` makes the item's tt program the ttkh
+# reference the baseline builds and runs on ttsim. The development items are dev and the held-out items eval, as in
+# tt-par-v0 (OQ-129). No reference has been built or run yet (task P17.76). Fetch with
+# `uv run tools/fetch_bench.py assets/bench/tt-par-v0-kh.yaml`.
+suite: tt-par-v0-kh
+repo: https://github.com/tenstorrent/tt-metal.git
+# tt-metal at P4.2's install commit, the joint pin (toolchains/tt-metal.pin; bible Toolchain Pins), as tt-par-v0.yaml
+# pins it; load_suite checks that the pin's COMMIT and URL are this commit and repo. Every item comment below is
+# tt-par-v0.yaml's, copied with its item.
+commit: 5280a9cfb00998fd49667a29523d03aee905c129
+pin: tt-metal
+items:
+  vecadd_multi_core:
+    split: dev
+    seed: 11
+    # c = a + b elementwise at upstream's own size, 640 tiles (655,360 elements per vector), each input uniform
+    # [0, 10) as upstream draws them; the sums lie in [0, 20). a and b come from independent streams over the whole
+    # range, so a candidate that ignores either input, or adds a tile of one to the wrong tile of the other, misses
+    # by up to 10, far past the tolerance. The vectors stay flat (rank 1): the TT program never tilizes them, as
+    # upstream does not, since an elementwise add does not depend on where an element sits inside a tile.
+    # The reference splits the 640 tiles over the device's compute grid with split_work_to_cores (row-major), one
+    # run of consecutive tiles per core, as upstream does. Cores it uses, PROJECTED (arithmetic from that split, no
+    # run): 56 on card 0's 8 x 7 grid (24 cores of 12 tiles and 32 of 11) and 72 on an 8 x 9 grid (64 cores of 9
+    # tiles and 8 of 8); P17.70 counts the cores under ttsim.
+    inputs:
+      - {name: a, dtype: bf16, shape: [655360], dist: uniform, lo: 0.0, hi: 10.0}
+      - {name: b, dtype: bf16, shape: [655360], dist: uniform, lo: 0.0, hi: 10.0}
+    outputs: [c]  # f32 on both sides: the TT program widens the device's bf16 result exactly
+    # absolute 0.3, the upstream check (vecadd_multi_core.cpp:283-284 at the pin; plans/spikes/tt-par-upstream.md): an
+    # element fails when the device's sum differs from the f32 sum of the two bf16 inputs by more than 0.3, and the
+    # C++ program writes that f32 sum
+    tolerance: {metric: max_abs, threshold: 0.3}
+    # Analytic work (task P17.42): one add per element, the two bf16 inputs read and the bf16 sum written once on the
+    # device (2 bytes each); a property of the item, never a measurement.
+    work:
+      flop: 655360
+      ops: {add: 655360}
+      bytes: 3932160
+      basis: '655360 adds; (2 x 655360 + 655360) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
+      buffer Float16_b (plans/spikes/tt-par-upstream.md, read at the pin; no run yet), and the host program written
+      here does the same: its one ComputeConfig sets only math_fidelity HiFi4, math_approx_mode false, compile_args,
+      and named_compile_args, and its three circular buffers (c_0, c_1, c_2) are Float16_b
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/vecadd_multi_core/cpp
+        tracked: true
+        files: [vecadd_multi_core.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/vecadd_multi_core/tt
+        tracked: true
+        files: [vecadd_multi_core.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # Each sha256 is of the file at the pin as plans/spikes/tt-par-upstream.md fetched it, its git blob id
+          # and size checked against the pinned tree. The compute kernel calls the deprecated release_dst() after
+          # tile_regs_release() on every tile, which repeats the math and pack "dest section done" steps; whether
+          # that is harmless on ttsim and the cards is unknown until the reference runs (the spike, item 4).
+          vecadd_multi_core/kernels/interleaved_tile_read_multi_core.cpp:
+            upstream: tt_metal/programming_examples/vecadd_multi_core/kernels/interleaved_tile_read_multi_core.cpp
+            sha256: c044be02a23eaf2447e77ff6b37d0023355b6a2a4bed5a2686f24dd64780970f
+          vecadd_multi_core/kernels/tile_write_multi_core.cpp:
+            upstream: tt_metal/programming_examples/vecadd_multi_core/kernels/tile_write_multi_core.cpp
+            sha256: fd273d6022c361740530a2bfbc34664a39676ccd0c04306f484b266fb5a3fc4b
+          vecadd_multi_core/kernels/add_multi_core.cpp:
+            upstream: tt_metal/programming_examples/vecadd_multi_core/kernels/add_multi_core.cpp
+            sha256: 0d0c8fb1301dc5e0cc06349d43c9bf0ef1496166b79a6b13e9db99c23599260d
+      ttkh:
+        dir: assets/bench/tt-par-v0/vecadd_multi_core/ttkh  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - vecadd_multi_core.cpp
+          - vecadd_multi_core/kernels/interleaved_tile_read_multi_core.cpp
+          - vecadd_multi_core/kernels/tile_write_multi_core.cpp
+          - vecadd_multi_core/kernels/add_multi_core.cpp
+        reference: tt
+        support:
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  vecadd_sharding:
+    split: dev
+    seed: 12
+    # c = a + b elementwise, raised from upstream's 16 tiles to 448 (458,752 elements per vector), so the output spans
+    # more tiles than any of the grids has cores (plans/spikes/tt-par-upstream.md, Recommendation); 448 is the least
+    # common multiple of 56 and 64. Each input uniform [0, 10) as upstream draws them; the sums lie in [0, 20). a and
+    # b come from independent streams over the whole range, so a candidate that ignores either input, or adds a tile
+    # of one to the wrong tile of the other, misses by up to 10, far past the tolerance. The vectors stay flat (rank
+    # 1) and are never tilized, as upstream's are not.
+    # The reference height-shards a, b, and c over the L1 of a fixed block of 56 cores, 8 wide by 7 tall ((0, 0) to
+    # (7, 6)), 8 tiles per core, in place of upstream's fixed 4 cores of 4 tiles, sets each core's three circular
+    # buffers to its shards' addresses, and runs upstream's one compute kernel there with no reader or writer. Cores
+    # it uses, PROJECTED (arithmetic from that block, no run): 56 on card 0's 8 x 7 grid and 56 on an 8 x 9 grid,
+    # the same block on both; P17.70 counts the cores under ttsim.
+    inputs:
+      - {name: a, dtype: bf16, shape: [458752], dist: uniform, lo: 0.0, hi: 10.0}
+      - {name: b, dtype: bf16, shape: [458752], dist: uniform, lo: 0.0, hi: 10.0}
+    outputs: [c]  # f32 on both sides: the TT program widens the device's bf16 result exactly
+    # absolute 0.2, the upstream check (vecadd_sharding.cpp:263-264 at the pin; plans/spikes/tt-par-upstream.md): an
+    # element fails when the device's sum differs from the f32 sum of the two bf16 inputs by more than 0.2, and the
+    # C++ program writes that f32 sum
+    tolerance: {metric: max_abs, threshold: 0.2}
+    # Analytic work (task P17.42): one add per element, the two bf16 inputs written to L1 and the bf16 sum read back
+    # once (2 bytes each); a property of the item, never a measurement.
+    work:
+      flop: 458752
+      ops: {add: 458752}
+      bytes: 2752512
+      basis: '458752 adds; (2 x 458752 + 458752) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
+      buffer Float16_b (plans/spikes/tt-par-upstream.md, read at the pin; no run yet), and the host program written
+      here does the same: its one ComputeConfig sets only math_fidelity HiFi4, math_approx_mode false, and
+      compile_args, and its three circular buffers (c_0, c_1, c_2) are Float16_b, each at its sharded L1 buffer's
+      address
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/vecadd_sharding/cpp
+        tracked: true
+        files: [vecadd_sharding.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/vecadd_sharding/tt
+        tracked: true
+        files: [vecadd_sharding.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # The sha256 is of the file at the pin as plans/spikes/tt-par-upstream.md fetched it, its git blob id and
+          # size checked against the pinned tree. The kernel never waits on its input buffers and never reserves its
+          # output: it relies on each circular buffer being exactly its core's shard, already in L1.
+          vecadd_sharding/kernels/add_sharding.cpp:
+            upstream: tt_metal/programming_examples/vecadd_sharding/kernels/add_sharding.cpp
+            sha256: 9b89bd03d6e8dedec93c8a778f9aa204f56fa3f8d639f350f32fd41ec316b2fd
+      ttkh:
+        dir: assets/bench/tt-par-v0/vecadd_sharding/ttkh  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - vecadd_sharding.cpp
+          - vecadd_sharding/kernels/add_sharding.cpp
+        reference: tt
+        support:
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  pad_multi_core:
+    split: dev
+    seed: 13
+    # Each row of a row-major bf16 matrix padded on the right with the value 2.0, as upstream pads its [64, 32]
+    # matrix to [64, 64], raised here to [512, 128] padded to [512, 256] (plans/spikes/tt-par-upstream.md,
+    # pad_multi_core; OQ-129) so the 512 rows outnumber the cores of every grid. Upstream fills its source with
+    # 1, 2, ..., 2048; the input is drawn here from [-1, 1) instead, so no input element equals the pad value and a
+    # candidate that pads with the wrong value or misplaces a row cannot pass. 65536 input elements, far under the cap.
+    inputs:
+      - {name: src, dtype: bf16, shape: [512, 128], dist: uniform, lo: -1.0, hi: 1.0}
+    outputs: [dst]  # bf16 [512, 256], row-major on both sides: the device moves 4-byte row-major sticks, never tiles
+    # exact equality, chosen here: upstream prints the source and padded matrices and checks nothing. The output is
+    # a copy of the input's bit patterns plus a constant, so every element must equal the C++ program's.
+    tolerance: {metric: max_abs, threshold: 0}
+    # Analytic work (task P17.42): a copy and a constant fill, no floating-point arithmetic, so no FLOP figure; the
+    # bf16 input read and the bf16 padded output written once (2 bytes each); never a measurement.
+    work:
+      flop: null
+      ops: {}
+      bytes: 393216
+      basis: 'a copy plus a constant fill; (65536 + 131072) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the example has two data-movement kernels and no compute kernel, so nothing unpacks to dest; the
+      host program written here likewise creates two data-movement kernels and no compute kernel, names no compute
+      config, fp32_dest_acc_en, or unpack_to_dest_mode, and gives its one circular buffer configuration (c_0, c_1,
+      and c_2 sharing one L1 region) the format Float16_b where upstream names UInt32, a format no kernel here reads
+      (plans/spikes/tt-par-upstream.md, pad_multi_core)
+    # The TT reference's core count, PROJECTED (arithmetic over split_work_to_cores at the pin, no run): the 512 rows
+    # go to the cores in whole rows over the whole compute grid, so card 0's 8x7 grid uses 56 cores (8 of 10 rows and
+    # 48 of 9), an 8x9 grid 72 (8 of 8 rows and 64 of 7), and an 8x8 grid 64 (8 rows each).
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/pad_multi_core/cpp
+        tracked: true
+        files: [pad_multi_core.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/pad_multi_core/tt
+        tracked: true
+        files: [pad_multi_core.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          pad_multi_core/kernels/pad_reader_dims_rm_interleaved.cpp:
+            upstream: tt_metal/programming_examples/pad_multi_core/kernels/pad_reader_dims_rm_interleaved.cpp
+            sha256: 31ad8a0d23a9dca3eebc6da3d4b8c740c23a02e27e4ed711262318773e17482b
+          pad_multi_core/kernels/pad_writer_dims_rm_interleaved.cpp:
+            upstream: tt_metal/programming_examples/pad_multi_core/kernels/pad_writer_dims_rm_interleaved.cpp
+            sha256: ee711f0765c06c770261681e5cd6b6cacb9cd99023945ad4c366113a5af4903b
+      ttkh:
+        dir: assets/bench/tt-par-v0/pad_multi_core/ttkh  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - pad_multi_core.cpp
+          - pad_multi_core/kernels/pad_reader_dims_rm_interleaved.cpp
+          - pad_multi_core/kernels/pad_writer_dims_rm_interleaved.cpp
+        reference: tt
+        support:
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  matmul_multicore_reuse:
+    split: dev
+    seed: 14
+    # c = a b at M 1568, K 256, N 1024 (49 x 8 x 32 tiles; plans/spikes/tt-par-upstream.md, Recommendation item 4;
+    # OQ-129 (a)). Upstream's own size, 640 x 640 x 640, is valid but its block rule puts it on 5 cores; at this size
+    # the rule gives one block per core over 56 cores. Inputs as upstream draws them, uniform [0, 1) shifted by -0.4
+    # for a and -0.3 for b; a holds 401,408 elements and b 262,144, both under the 2**20 cap (c holds 1,605,632).
+    inputs:
+      - {name: a, dtype: bf16, shape: [1568, 256], dist: uniform, lo: -0.4, hi: 0.6}
+      - {name: b, dtype: bf16, shape: [256, 1024], dist: uniform, lo: -0.3, hi: 0.7}
+    outputs: [c]  # bf16 [1568, 1024] on both sides
+    # PCC above 0.99 against the CPU result, the upstream check (matmul_multicore_reuse.cpp:393-395 at the pin, against
+    # its golden of float32 sums rounded once to bf16); binary_io passes a PCC at or above the threshold
+    tolerance: {metric: pcc, threshold: 0.99}
+    # Blocks: the TT program restates upstream's block rule (get_large_matmul_params, matmul/matmul_common/bmm_op.hpp
+    # at the pin) in code of its own, which gives upstream's values at this size on grids 8 wide and 7, 8, or 9 tall:
+    # per_core_M 7 and per_core_N 4 tiles, out_subblock_h 7 and out_subblock_w 1, in0_block_w 2 (upstream's
+    # constant), so 4 K steps and 7 x 8 = 56 blocks, block number b on core (b mod 8, b div 8): cores (0, 0) to
+    # (7, 6), each with 72 tiles (144 KiB) of circular buffers. Arithmetic over the rule (a port checked against a
+    # literal port of upstream's code over every tile count from 1 to 256 on eight grids), not a run.
+    # Reference cores, PROJECTED (arithmetic, no run): 56 on card 0 (8 x 7 grid) and 56 on an 8 x 9 grid.
+    # Analytic work (task P17.42): 2MNK FLOPs (one multiply-add per M N K), the two bf16 inputs read and the bf16
+    # product written once (2 bytes each), the fewest bytes the device must move; this reference reads each block
+    # row's strip of a on 8 cores and each block column's strip of b on 7, so it moves more. The same for every
+    # candidate; never a measurement.
+    work:
+      flop: 822083584
+      ops: {mac: 411041792}
+      bytes: 4538368
+      basis: '2MNK, M 1568, N 1024, K 256; (1568 x 256 + 256 x 1024 + 1568 x 1024) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
+      buffer Float16_b (plans/spikes/tt-par-upstream.md, read from the source; no ttsim run of it yet), and the host
+      program written here does the same: its one ComputeConfig sets only math_fidelity HiFi4 and the twelve
+      compile_args, and its circular buffers (c_0, c_1, and c_16 with c_24 in one shared config) are all Float16_b, so
+      the compute kernel's reload of partial sums from c_24 (copy_tile) reads Float16_b with no unpack-to-dest mode
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/matmul_multicore_reuse/cpp
+        tracked: true
+        files: [matmul_multicore_reuse.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/matmul_multicore_reuse/tt
+        tracked: true
+        files: [matmul_multicore_reuse.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout.cpp
+            sha256: 8bc4f61e7780d664ed7825757fdfdc440f05fe50c8060cdfb809803b681267ef
+          matmul/matmul_common/kernels/dataflow/writer_bmm_tile_layout.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/writer_bmm_tile_layout.cpp
+            sha256: e17aec12dd837bba1d91e66ec455611df745ff07c897f6172acd821329c1b600
+          matmul/matmul_common/kernels/compute/bmm_large_block_zm.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_common/kernels/compute/bmm_large_block_zm.cpp
+            sha256: 8c59140dbaf49e584af6fd1ea443d00be684f3a708bfb0fd8a7ff735539aec30
+      ttkh:
+        dir: assets/bench/tt-par-v0/matmul_multicore_reuse/ttkh  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - matmul_multicore_reuse.cpp
+          - matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout.cpp
+          - matmul/matmul_common/kernels/dataflow/writer_bmm_tile_layout.cpp
+          - matmul/matmul_common/kernels/compute/bmm_large_block_zm.cpp
+        reference: tt
+        support:
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  matmul_multicore_reuse_mcast:
+    split: dev
+    seed: 15
+    # c = a b at M 1568, K 256, N 1024 (49 x 8 x 32 tiles; plans/spikes/tt-par-upstream.md, Recommendation item 5,
+    # choice (a); OQ-129 (a)), the same size as matmul_multicore_reuse, so the pair differs only in the dataflow (each
+    # core reading its own strips against strips multicast along rows and columns). Upstream's own size, 3584 x 3072 x
+    # 768, has inputs over the 2**20 cap. Inputs as upstream draws them, uniform [0, 1) shifted by -0.4 for a and
+    # -0.3 for b; a holds 401,408 elements and b 262,144 (c holds 1,605,632).
+    inputs:
+      - {name: a, dtype: bf16, shape: [1568, 256], dist: uniform, lo: -0.4, hi: 0.6}
+      - {name: b, dtype: bf16, shape: [256, 1024], dist: uniform, lo: -0.3, hi: 0.7}
+    outputs: [c]  # bf16 [1568, 1024] on both sides
+    # PCC above 0.98 against the CPU result, the upstream check (matmul_multicore_reuse_mcast.cpp:516-518 at the pin,
+    # against its golden of float32 sums rounded once to bf16); binary_io passes a PCC at or above the threshold
+    tolerance: {metric: pcc, threshold: 0.98}
+    # Blocks: the TT program restates upstream's block rule (get_large_matmul_params, matmul/matmul_common/bmm_op.hpp
+    # at the pin) in code of its own, which gives upstream's values at this size on grids 8 wide and 7, 8, or 9 tall:
+    # per_core_M 7 and per_core_N 4 tiles, out_subblock_h 7 and out_subblock_w 1, in0_block_w 2 (upstream's
+    # constant), so 4 K steps and a rectangle of 7 block rows by 8 block columns from (0, 0), as get_core_range
+    # (bmm_op.hpp) gives it: cores (0, 0) to (7, 6), each with 72 tiles (144 KiB) of circular buffers and four
+    # semaphores. Core (0, 0) sends a along row 0 and b down column 0; the rest of column 0 send a to 7 cores each and
+    # receive b; the rest of row 0 receive a and send b to 6 cores each; the other 42 receive both. The kernels'
+    # paths are the real tail matmul/matmul_common/kernels/...: upstream's host names
+    # tt_metal/programming_examples/matmul_common/kernels/..., which does not exist at the pin, and no CMake file
+    # builds that host. Arithmetic over the rule (a port checked against a literal port of upstream's code), not a run.
+    # Reference cores, PROJECTED (arithmetic, no run): 56 on card 0 (8 x 7 grid) and 56 on an 8 x 9 grid.
+    # Analytic work (task P17.42): 2MNK FLOPs (one multiply-add per M N K), the two bf16 inputs read and the bf16
+    # product written once (2 bytes each), the fewest bytes the device must move, which this reference's DRAM reads
+    # match (each strip read once and multicast); the same for every candidate; never a measurement.
+    work:
+      flop: 822083584
+      ops: {mac: 411041792}
+      bytes: 4538368
+      basis: '2MNK, M 1568, N 1024, K 256; (1568 x 256 + 256 x 1024 + 1568 x 1024) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the upstream example sets no fp32_dest_acc_en and no unpack_to_dest_mode and keeps every circular
+      buffer Float16_b (plans/spikes/tt-par-upstream.md, read from the source; no ttsim run of it yet), and the host
+      program written here does the same: its one ComputeConfig sets only math_fidelity HiFi4 and the twelve
+      compile_args, and its circular buffers (c_0, c_1, and c_16 with c_24 in one shared config) are all Float16_b, so
+      the compute kernel's reload of partial sums from c_24 (copy_tile) reads Float16_b with no unpack-to-dest mode
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/matmul_multicore_reuse_mcast/cpp
+        tracked: true
+        files: [matmul_multicore_reuse_mcast.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/matmul_multicore_reuse_mcast/tt
+        tracked: true
+        files: [matmul_multicore_reuse_mcast.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_sender.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_sender.cpp
+            sha256: 31dd377003eb2bc302bd508a9603591e28838f8d6d0a0e4fc28581c0ba50cebd
+          matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_receiver.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_receiver.cpp
+            sha256: c6d1e619e3c792806183c50b2c50394889e1574bf8c260e52806325ee310cd07
+          matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_sender.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_sender.cpp
+            sha256: 793023368a44508b537c7c119ccc00928fdb2e8ff8ec30249c31b4a01d126988
+          matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_receiver.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_receiver.cpp
+            sha256: c893a77b3566f5af187c55f9afffe7c5c9ecce442ad51c7a5470053859df4ca0
+          matmul/matmul_common/kernels/dataflow/writer_bmm_tile_layout.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_common/kernels/dataflow/writer_bmm_tile_layout.cpp
+            sha256: e17aec12dd837bba1d91e66ec455611df745ff07c897f6172acd821329c1b600
+          matmul/matmul_common/kernels/compute/bmm_large_block_zm.cpp:
+            upstream: tt_metal/programming_examples/matmul/matmul_common/kernels/compute/bmm_large_block_zm.cpp
+            sha256: 8c59140dbaf49e584af6fd1ea443d00be684f3a708bfb0fd8a7ff735539aec30
+      ttkh:
+        dir: assets/bench/tt-par-v0/matmul_multicore_reuse_mcast/ttkh  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - matmul_multicore_reuse_mcast.cpp
+          - matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_sender.cpp
+          - matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_receiver.cpp
+          - matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_sender.cpp
+          - matmul/matmul_common/kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_receiver.cpp
+          - matmul/matmul_common/kernels/dataflow/writer_bmm_tile_layout.cpp
+          - matmul/matmul_common/kernels/compute/bmm_large_block_zm.cpp
+        reference: tt
+        support:
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  row_sum:
+    split: eval
+    seed: 21
+    # s[i] = the sum over j of a[i, j] for a bf16 a of [4096, 256], written here (OQ-129). The unit of work is a tile
+    # row (32 rows of a, 8 tiles): 128 units, more than either grid below has cores. The input is uniform [-1, 1), so
+    # the row sums are centred on 0 (from -36.9 to 32.3 at this seed, standard deviation 9.2) and the running sums
+    # stay small against the elements; every element is drawn independently, so a candidate that skips part of a
+    # row, sums a column, or writes a row's sum to another row misses by far more than the tolerance (below).
+    # The reference splits the 128 tile rows over the device's compute grid with split_work_to_cores, one run of
+    # consecutive tile rows per core. Cores it uses, PROJECTED (arithmetic from that split, no run): 56 on card 0's
+    # 8 x 7 grid (16 cores of 3 tile rows and 40 of 2) and 72 on an 8 x 9 grid (56 cores of 2 tile rows and 16 of 1);
+    # P17.70 counts the cores under ttsim.
+    inputs:
+      - {name: a, dtype: bf16, shape: [4096, 256], dist: uniform, lo: -1.0, hi: 1.0}
+    # f32 [4096] on both sides. The device's sums are bf16 and the TT program widens them to f32 exactly, as
+    # tt-pairs-v0 eltwise_binary does; the C++ program writes each exact row sum rounded once to f32. f32 rather than
+    # bf16 so that the C++ side adds no bf16 rounding of its own (the tolerance then bounds the device's error alone)
+    # and a translation that keeps more precision, such as an f32 Dst or f32 output pages, is not penalized.
+    outputs: [s]
+    # max_abs 4.0, from the arithmetic, not from a run. The reference accumulates in a 16-bit (bf16) Dst: its
+    # ComputeConfig leaves fp32_dest_acc_en off. Along one row the reduce rounds the running sum into Dst 32 times: 8
+    # tiles x 2 faces x the 2 fidelity phases whose products are nonzero when the scaler is 1.0 (tt-llk's REDUCE_ROW
+    # reduce at the pin's submodule f9909668 issues one GAPOOL per face and phase under HiFi4; tt-isa-documentation,
+    # GAPOOL, MVMUL, and Matrix Unit arithmetic: each GAPOOL rounds into Dst once, to nearest). Each rounding is at
+    # most half a bf16 ulp of the running sum, 0.125 below a magnitude of 64 (the largest running sum here is 36.9):
+    # 32 x 0.125 = 4.0. Worked out row by row for this seed's inputs, with each lane's 10-bit alignment of its products
+    # and terms added, the bound is at most 2.79; a bit-level model of that documented arithmetic gives an error of at
+    # most 0.62 (both PROJECTED, from the inputs and the documentation, no run). The C++ program's f32 rounding adds at
+    # most 2e-6. A candidate that drops one 16-column face of every row misses by up to 7.8 here, and one that drops a
+    # tile column by up to 11.9; one that drops a single column of a (at most 1.0) is not caught.
+    tolerance: {metric: max_abs, threshold: 4.0}
+    # Analytic work (task P17.42): 255 adds per row, the bf16 input read and the bf16 sums written once on the device
+    # (2 bytes each); a property of the item, never a measurement.
+    work:
+      flop: 1044480
+      ops: {add: 1044480}
+      bytes: 2105344
+      basis: '4096 rows x 255 adds; (1048576 + 4096) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the host program written here sets no fp32_dest_acc_en and no unpack_to_dest_mode (its one
+      ComputeConfig sets only math_fidelity HiFi4, every other field at its default, compile_args empty), and its
+      three circular buffers (c_0, c_1, c_16) are Float16_b, so the reduce accumulates in a 16-bit Dst and nothing is
+      unpacked as Float32 (read from the program; no run yet)
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/row_sum/cpp
+        tracked: true
+        files: [row_sum.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/row_sum/tt
+        tracked: true
+        files: [row_sum.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # The kernels are written here and tracked, each at the path the host program launches it by.
+          kernels/dataflow/read_tile_rows.cpp: {tracked: assets/bench/tt-par-v0/row_sum/tt/kernels/dataflow/read_tile_rows.cpp}
+          kernels/compute/sum_tile_rows.cpp: {tracked: assets/bench/tt-par-v0/row_sum/tt/kernels/compute/sum_tile_rows.cpp}
+          kernels/dataflow/write_row_sums.cpp: {tracked: assets/bench/tt-par-v0/row_sum/tt/kernels/dataflow/write_row_sums.cpp}
+      ttkh:
+        dir: assets/bench/tt-par-v0/row_sum/ttkh  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - row_sum.cpp
+          - kernels/dataflow/read_tile_rows.cpp
+          - kernels/compute/sum_tile_rows.cpp
+          - kernels/dataflow/write_row_sums.cpp
+        reference: tt
+        support:
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  col_max:
+    split: eval
+    seed: 22
+    # m[j] = the maximum over i of a[i, j] for a bf16 a of [256, 4096], written here (OQ-129). The unit of work is a
+    # tile column (32 columns of a, 8 tiles): 128 units, more than either grid below has cores. The input is uniform
+    # [-1, 0.0625): about 6 percent of the elements are non-negative (from 1 to 30 in each column at this seed), so
+    # every column's maximum is a small positive value (from 0.0215 to 0.0623 here), where bf16 steps by at most
+    # 2^-12, and the maximum is a single element in all but 137 of the 4096 columns. Computed from this seed's
+    # inputs: a candidate that skips one tile row of a changes from 483 to 520 column maxima, one that skips a
+    # single row of a changes 12 or more, and one that takes the largest magnitude instead changes all 4096 (the
+    # most negative elements lie near -1). No column is all negative, so the result does not depend on how the
+    # maximum reduce reads a Dst row the packer has cleared (as minus infinity, by tt-isa-documentation's GMPOOL;
+    # unconfirmed here), and a candidate that starts its running maximum at 0 is not caught.
+    # The reference splits the 128 tile columns over the device's compute grid with split_work_to_cores, one run of
+    # consecutive tile columns per core. Cores it uses, PROJECTED (arithmetic from that split, no run): 56 on card 0's
+    # 8 x 7 grid (16 cores of 3 tile columns and 40 of 2) and 72 on an 8 x 9 grid (56 cores of 2 tile columns and 16
+    # of 1); P17.70 counts the cores under ttsim.
+    inputs:
+      - {name: a, dtype: bf16, shape: [256, 4096], dist: uniform, lo: -1.0, hi: 0.0625}
+    outputs: [m]  # bf16 [4096] on both sides: each maximum is one of a's elements, moved as its bit pattern
+    # exact equality, from the arithmetic. The maximum of bf16 values is one of them, and the pinned reduce keeps it
+    # unchanged: under REDUCE_COL MAX, tt-llk (the pin's submodule f9909668) issues one GMPOOL per face with no
+    # fidelity phases, and GMPOOL (tt-isa-documentation) scales each element only by the power of two in the exponent
+    # of its scaler datum before comparing; the scaler is 1.0, so nothing is scaled. bf16 elements reach SrcA and the
+    # 16-bit Dst as they are (no element of the input is a denormal, which the unit would flush to zero), and the
+    # packer writes Dst to the Float16_b output pages unchanged, so every m[j] equals the C++ program's bit for bit.
+    tolerance: {metric: max_abs, threshold: 0}
+    # Analytic work (task P17.42): 255 comparisons per column, counted under ops with no FLOP figure, since a maximum
+    # does no rounding arithmetic; the bf16 input read and the bf16 maxima written once on the device (2 bytes each);
+    # a property of the item, never a measurement.
+    work:
+      flop: null
+      ops: {max: 1044480}
+      bytes: 2105344
+      basis: '4096 columns x 255 comparisons; (1048576 + 4096) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the host program written here sets no fp32_dest_acc_en and no unpack_to_dest_mode (its one
+      ComputeConfig sets only math_fidelity HiFi4, every other field at its default, compile_args empty), and its
+      three circular buffers (c_0, c_1, c_16) are Float16_b, so the reduce works in a 16-bit Dst and nothing is
+      unpacked as Float32 (read from the program; no run yet)
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/col_max/cpp
+        tracked: true
+        files: [col_max.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/col_max/tt
+        tracked: true
+        files: [col_max.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # The kernels are written here and tracked, each at the path the host program launches it by.
+          kernels/dataflow/read_tile_columns.cpp: {tracked: assets/bench/tt-par-v0/col_max/tt/kernels/dataflow/read_tile_columns.cpp}
+          kernels/compute/max_tile_columns.cpp: {tracked: assets/bench/tt-par-v0/col_max/tt/kernels/compute/max_tile_columns.cpp}
+          kernels/dataflow/write_column_maxima.cpp: {tracked: assets/bench/tt-par-v0/col_max/tt/kernels/dataflow/write_column_maxima.cpp}
+      ttkh:
+        dir: assets/bench/tt-par-v0/col_max/ttkh  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - col_max.cpp
+          - kernels/dataflow/read_tile_columns.cpp
+          - kernels/compute/max_tile_columns.cpp
+          - kernels/dataflow/write_column_maxima.cpp
+        reference: tt
+        support:
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  transpose_2d:
+    split: eval
+    seed: 23
+    # B = A^T for a bf16 A of [1024, 1024], a computation the owner chose for the held-out items (OQ-129), with both
+    # programs and the kernels written here: an eval item, never given to training, prompt tuning, or corpus harvest
+    # (Agent Rule 5). 1024 x 1024 is 2**20 elements, the input cap, and gives B 1024 tiles, more than the cores of any
+    # grid here. A is drawn uniform [-4, 4) over its 2**20 elements, so it is far from symmetric and its tiles are far
+    # from their own transposes: a program that copies A unchanged, moves whole tiles to their mirrored places without
+    # turning each one, or turns each tile where it stands without moving it misses most elements by up to 8. The
+    # draw's step is 2**-21, so no value is subnormal (the device reads a subnormal source value as zero), and the
+    # draw gives no -0.
+    # The reference splits B's 1024 tiles over the device's compute grid with split_work_to_cores, one run of
+    # consecutive tiles per core. Cores it uses, PROJECTED (arithmetic from that split at the pin, no run): 56 on card
+    # 0's 8 x 7 grid (16 cores of 19 tiles and 40 of 18) and 72 on an 8 x 9 grid (16 cores of 15 tiles and 56 of 14);
+    # P17.70 counts the cores under ttsim.
+    inputs:
+      - {name: a, dtype: bf16, shape: [1024, 1024], dist: uniform, lo: -4.0, hi: 4.0}
+    outputs: [b]  # bf16 [1024, 1024], row-major on both sides
+    # exact equality: a transpose moves bit patterns and computes nothing. On the device each bf16 value goes from its
+    # Float16_b tile into source register A unchanged (bf16 sits in the register's 19-bit format with its three low
+    # mantissa bits zero), the unpacker transposing the faces and each face; into the 16-bit destination register by a
+    # move that passes bf16 through unchanged (transpose_wh.h at the pin: llk_unpack_A, then
+    # llk_math_eltwise_unary_datacopy A2D, for any input that is not Int32); and out through the packer to a
+    # Float16_b tile. The C++ program copies the same bit patterns.
+    tolerance: {metric: max_abs, threshold: 0}
+    # Analytic work (task P17.42): a transpose, no floating-point arithmetic, so no FLOP figure; the bf16 input read and
+    # the bf16 output written once (2 bytes each); never a measurement.
+    work:
+      flop: null
+      ops: {}
+      bytes: 4194304
+      basis: 'a transpose, no arithmetic; (1048576 + 1048576) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the host program written here creates one compute kernel, whose one ComputeConfig sets only
+      math_fidelity HiFi4 and empty compile_args, so fp32_dest_acc_en stays off and unpack_to_dest_mode stays empty,
+      and its two circular buffers (c_0, c_16) are Float16_b; the compute kernel written here calls transpose_wh_init
+      and transpose_wh_tile, which take their UnpackToDestEn path only for an Int32 input (transpose_wh.h:37-42 and
+      :103-108 at the pin), never for c_0's Float16_b (read at the pin; no run yet)
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/transpose_2d/cpp
+        tracked: true
+        files: [transpose_2d.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/transpose_2d/tt
+        tracked: true
+        files: [transpose_2d.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # The kernels, written here and tracked, at the paths the host program launches them from.
+          kernels/dataflow/read_mirror_tiles.cpp: {tracked: assets/bench/tt-par-v0/transpose_2d/tt/kernels/dataflow/read_mirror_tiles.cpp}
+          kernels/compute/transpose_tiles.cpp: {tracked: assets/bench/tt-par-v0/transpose_2d/tt/kernels/compute/transpose_tiles.cpp}
+          kernels/dataflow/write_tiles.cpp: {tracked: assets/bench/tt-par-v0/transpose_2d/tt/kernels/dataflow/write_tiles.cpp}
+      ttkh:
+        dir: assets/bench/tt-par-v0/transpose_2d/ttkh  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - transpose_2d.cpp
+          - kernels/dataflow/read_mirror_tiles.cpp
+          - kernels/compute/transpose_tiles.cpp
+          - kernels/dataflow/write_tiles.cpp
+        reference: tt
+        support:
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  row_softmax:
+    split: eval
+    seed: 25
+    # y[i, j] = exp(x[i, j] - max_k x[i, k]) / sum_k exp(x[i, k] - max_k x[i, k]) for a bf16 x of [4096, 256]
+    # (1,048,576 elements, the 2**20 cap), a computation written here (OQ-129). x is uniform [64, 128) so that the
+    # subtraction of the maximum is required: exp overflows float32 and bf16 above about 88.72, and about 61% of the
+    # elements lie above that, so a program that drops the subtraction gets an infinity on the host (float32 exp) or a
+    # NaN on the device (the pinned non-approximate exp clamps its exponent field at 255, which reads as NaN) in every
+    # row, and binary_io fails any unmatched NaN or infinity; the chance that a row of 256 has no element above 88.72
+    # is 0.386**256, about 1e-106. With the subtraction every exponent lies in [-64, 0]: the bf16 inputs are multiples
+    # of 0.5 there, each within a factor of 2 of its row's maximum, so x - max is exact in bf16 and exp never
+    # underflows. Uniform [-8, 8) would not test the subtraction: exp(8) is far from overflow, and on this seed a
+    # float32 program without it lands within 0.00025 of the reference (PROJECTED: a model of the arithmetic, no run). Since
+    # softmax does not change under a per-row shift, a program that subtracts some other value of the row (its first
+    # element, say) also passes here; the item checks the outputs, not which shift was used. On this seed the row sums
+    # of exp(x - max) lie in [1.68, 15.8] and the largest output is 0.594.
+    # Work unit: one tile row (32 rows, 8 tiles); the reference splits the 128 tile rows over the compute grid with
+    # split_work_to_cores. Reference cores, PROJECTED (arithmetic from that split, no run): 56 on card 0's 8 x 7 grid
+    # (16 cores of 3 tile rows and 40 of 2) and 72 on an 8 x 9 grid (56 cores of 2 and 16 of 1); P17.70 counts the
+    # cores under ttsim. Each working core's circular buffers take 35 tiles, 71,680 bytes (70 KiB) of L1: c_0 two tile
+    # rows of input (16 tiles), c_3 the tile row of exp(x - max) (8), c_16 the output tile row (8), and one tile each
+    # for the reduce scaler (c_1), the row maxima (c_2), and the reciprocal sums (c_4).
+    inputs:
+      - {name: x, dtype: bf16, shape: [4096, 256], dist: uniform, lo: 64.0, hi: 128.0}
+    outputs: [y]  # bf16 [4096, 256] on both sides
+    # absolute 0.03 on outputs in [0, 1], set from the arithmetic. The C++ program rounds float32 values once to bf16
+    # (half an ulp: at most 0.002 at this seed's largest output). The device rounds at each step with fp32_dest_acc_en
+    # off: exp (the pinned exp_21f, a polynomial within about 0.2%, rounded to bf16), the row sum (each row's 16 face
+    # partial sums, 2 faces x 8 tiles, accumulated in 16-bit dest), the reciprocal (Newton steps from a fixed guess,
+    # rounded to bf16), and the product (rounded to bf16). A bf16 model of those steps on this seed's 4096 rows
+    # (PROJECTED: arithmetic, no device run) gives a largest difference of 0.0059 with round-to-nearest at each
+    # accumulation and 0.0195 with truncation at each of 32 (every face sum split in two), the worst case modeled;
+    # 0.03 sits above both. A max_abs bound, not pcc, since a per-row scale
+    # error keeps pcc high (a sum over 7 of the 8 tiles still has pcc 0.986, PROJECTED). Wrong programs miss by far
+    # more in the same model (PROJECTED): no normalization or a one-hot answer by 0.94, a sum over 7 of the 8 tiles by 0.86, a maximum over
+    # each column of the tile row instead of each row by 0.47; one without the subtraction gets NaN or infinity.
+    tolerance: {metric: max_abs, threshold: 0.03}
+    # Analytic work (task P17.42), per row of 256: 255 comparisons for the maximum, 256 subtractions, 256 exp, 255
+    # additions for the sum, one reciprocal, and 256 multiplies (the TT reference's reciprocal-then-multiply form). flop counts
+    # the comparisons, subtractions, additions, and multiplies (1022 per row); exp and the reciprocal go under ops
+    # only. bytes: the bf16 input read and the bf16 output written once (2 bytes each), the fewest the device must
+    # move. The same for every candidate; never a measurement.
+    work:
+      flop: 4186112
+      ops: {max: 1044480, sub: 1048576, exp: 1048576, add: 1044480, recip: 4096, mul: 1048576}
+      bytes: 4194304
+      basis: >-
+        4096 rows of 256, per row 255 max comparisons, 256 subtractions, 256 exp, 255 adds, 1 reciprocal, and 256
+        multiplies; flop = 4096 x 1022 (comparisons, subtractions, adds, multiplies); (1048576 + 1048576) bf16
+        elements x 2 bytes
+    unpack_to_dest: >-
+      not taken: the host program written here sets no fp32_dest_acc_en and no unpack_to_dest_mode: its one
+      ComputeConfig sets only math_fidelity HiFi4, math_approx_mode false, and compile_args, and its six circular
+      buffers (c_0, c_1, c_2, c_3, c_4, c_16) are all Float16_b; the compute kernel written here unpacks only to the
+      source registers (the row reduces of c_0 and c_3 with the c_1 scaler, and the column-broadcast subtract and
+      multiply) and calls no copy or unpack-to-dest path (read from the code; no ttsim run of it yet)
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/row_softmax/cpp
+        tracked: true
+        files: [row_softmax.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/row_softmax/tt
+        tracked: true
+        files: [row_softmax.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # Written here and tracked, each at the path the host program launches it from.
+          kernels/dataflow/row_softmax_reader.cpp:
+            tracked: assets/bench/tt-par-v0/row_softmax/tt/kernels/dataflow/row_softmax_reader.cpp
+          kernels/compute/row_softmax.cpp:
+            tracked: assets/bench/tt-par-v0/row_softmax/tt/kernels/compute/row_softmax.cpp
+          kernels/dataflow/row_softmax_writer.cpp:
+            tracked: assets/bench/tt-par-v0/row_softmax/tt/kernels/dataflow/row_softmax_writer.cpp
+      ttkh:
+        dir: assets/bench/tt-par-v0/row_softmax/ttkh  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - row_softmax.cpp
+          - kernels/dataflow/row_softmax_reader.cpp
+          - kernels/compute/row_softmax.cpp
+          - kernels/dataflow/row_softmax_writer.cpp
+        reference: tt
+        support:
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
+  col_scale:
+    split: eval
+    seed: 24
+    # C[i, j] = A[i, j] * s[j] for a bf16 A of [1024, 1024] and a bf16 row vector s of [1024], a computation the owner
+    # chose for the held-out items (OQ-129), with both programs and the kernels written here: an eval item, never given
+    # to training, prompt tuning, or corpus harvest (Agent Rule 5). A is 2**20 elements, the input cap, and C has 1024
+    # tiles, more than the cores of any grid here. A is drawn uniform [-1, 1) and s uniform [-2, 2), each from its own
+    # stream: a program that ignores s (C = A) misses by |A| |s - 1|, up to 3; one that broadcasts along the wrong axis
+    # (C[i, j] = A[i, j] * s[i]) by |A| |s[i] - s[j]|, up to 4; one that multiplies by the scale tile elementwise, or
+    # broadcasts its first column, zeroes rows or columns it should scale; and one that takes the wrong tile of s
+    # scales a tile column by another column's values. Every such miss is far past the tolerance. The draws' steps
+    # (2**-23 and 2**-22) keep every nonzero value and every nonzero product a normal bf16, so the device's flushing of
+    # subnormals changes nothing.
+    # The reference splits C's 1024 tiles over the device's compute grid with split_work_to_cores, one run of
+    # consecutive tiles per core; the host lays s out as one scale tile per tile column (s in the tile's first row,
+    # zeros below) and computes no product. Cores it uses, PROJECTED (arithmetic from that split at the pin, no run):
+    # 56 on card 0's 8 x 7 grid (16 cores of 19 tiles and 40 of 18) and 72 on an 8 x 9 grid (16 cores of 15 tiles and
+    # 56 of 14); P17.70 counts the cores under ttsim.
+    inputs:
+      - {name: a, dtype: bf16, shape: [1024, 1024], dist: uniform, lo: -1.0, hi: 1.0}
+      - {name: s, dtype: bf16, shape: [1024], dist: uniform, lo: -2.0, hi: 2.0}
+    # bf16 [1024, 1024], row-major on both sides: the device packs its products as Float16_b and the TT program writes
+    # them unconverted; the C++ program rounds the exact f32 product to bf16, to nearest with ties to even, so the two
+    # are compared in the one format the device can produce, with no host conversion of a device value.
+    outputs: [c]
+    # absolute 2**-6 = 0.015625, two bf16 units in the last place below 2, from the device's arithmetic (PROJECTED:
+    # reasoning and a model of it, no run). The compute kernel multiplies with math fidelity HiFi4: the matrix unit's multiplier takes 5 bits of the
+    # A operand and 7 of the s operand, so a bf16 product needs all four fidelity phases (tt-isa-documentation
+    # WormholeB0 SrcASrcB.md, "Fidelity phases"; the pinned LLK's llk_math_eltwise_binary.h issues one ELWMUL per phase,
+    # tt_llk f990966), and each phase adds its partial product into the 16-bit bf16 destination register with one
+    # rounding to nearest, ties away from zero (MatrixUnitArithmetic.md, tt-isa-documentation f1b8bbe). Running that
+    # model over every pair of bf16 mantissas and both sign relations, the device's result is within 2 bf16 units in
+    # the last place of the exact product's binade of the round-to-nearest-even product the C++ program writes (65,534
+    # of the 65,536 cases within 1); the same holds when the destination's stale low bit is set. Every |C| is below 2
+    # except (-1)(-2) = 2, which both sides give exactly, so two units of the [1, 2) binade, 2 x 2**-7, bound every
+    # element's difference. A product truncated to bf16 once, as a simpler simulator might form it, stays within 1 unit.
+    tolerance: {metric: max_abs, threshold: 0.015625}
+    # Analytic work (task P17.42): one multiply per element of C; A and s read and C written once on the device in bf16
+    # (2 bytes each); never a measurement. The reference rereads a scale tile per tile of C, which this count, a
+    # property of the item, leaves out.
+    work:
+      flop: 1048576
+      ops: {mul: 1048576}
+      bytes: 4196352
+      basis: '1048576 multiplies; (1048576 + 1024 + 1048576) bf16 elements x 2 bytes'
+    unpack_to_dest: >-
+      not taken: the host program written here creates one compute kernel, whose one ComputeConfig sets only
+      math_fidelity HiFi4 and empty compile_args, so fp32_dest_acc_en stays off and unpack_to_dest_mode stays empty,
+      and its three circular buffers (c_0, c_1, c_16) are Float16_b; the compute kernel written here calls init_bcast
+      for ELWMUL with a row broadcast and mul_tiles_bcast_rows, whose unpack of two Float16_b operands into the two
+      source registers names no unpack-to-dest mode (bcast.h:174-183 and :239-257 at the pin; read at the pin, no run
+      yet)
+    languages:
+      cpp:
+        dir: assets/bench/tt-par-v0/col_scale/cpp
+        tracked: true
+        files: [col_scale.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+      tt:
+        dir: assets/bench/tt-par-v0/col_scale/tt
+        tracked: true
+        files: [col_scale.cpp]
+        support:
+          lassi_io.h: {tracked: assets/harness/c/lassi_io.h}
+          # The kernels, written here and tracked, at the paths the host program launches them from.
+          kernels/dataflow/read_tile_and_scale.cpp: {tracked: assets/bench/tt-par-v0/col_scale/tt/kernels/dataflow/read_tile_and_scale.cpp}
+          kernels/compute/scale_columns.cpp: {tracked: assets/bench/tt-par-v0/col_scale/tt/kernels/compute/scale_columns.cpp}
+          kernels/dataflow/write_tiles.cpp: {tracked: assets/bench/tt-par-v0/col_scale/tt/kernels/dataflow/write_tiles.cpp}
+      ttkh:
+        dir: assets/bench/tt-par-v0/col_scale/ttkh  # never read: the reference is the tt program
+        tracked: true
+        files:
+          - col_scale.cpp
+          - kernels/dataflow/read_tile_and_scale.cpp
+          - kernels/compute/scale_columns.cpp
+          - kernels/dataflow/write_tiles.cpp
+        reference: tt
+        support:
+          lassi_io.h:
+            tracked: assets/harness/c/lassi_io.h
+            sha256: de51ccc4c6d9d2369e69080fe7de66244bea7d5dca1f3acccdd33845a4037de5
