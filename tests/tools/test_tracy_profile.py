@@ -68,7 +68,7 @@ TT_TARGETS = ("tt", "ttkh")
 QUALIFY = ("tt-pairs-v0", "loopback", "tt")
 DONE, DEADLINE, STOPPED, QUALIFY_FAILED = 0, 2, 3, 4
 SUMMARY_COLUMNS = ("step", "kind", "suite", "item", "model", "status", "passed", "exit_code", "wall_s", "kernel_ns",
-                   "programs", "aiclk_mhz", "self_reported", "note")
+                   "programs", "cores", "reference_cores", "aiclk_mhz", "self_reported", "note")
 RECORD_KEYS = ("step", "kind", "suite", "item", "status", "reason", "passed", "same_as", "device_timing")
 HEADER = "\t".join(COLUMNS)
 # The fake world's names of the qualification's two steps (label below).
@@ -655,6 +655,24 @@ def test_the_summary_has_the_header_and_one_row_per_record(rig: Rig) -> None:
         ("1", "cpp", "ran"), ("2", "reference", "ran"), ("3", "cpp", "ran"), ("4", "candidate", "ran")]
     assert (table[3]["suite"], table[3]["item"], table[3]["model"]) == (BALE, TRANSPOSE, MODEL)
     assert table[3]["kernel_ns"] == "3500"
+    assert (table[3]["cores"], table[3]["reference_cores"]) == ("2", ""), "no TT reference for this item"
+
+
+def test_the_summary_shows_each_card_runs_cores_beside_its_references(rig: Rig) -> None:
+    """cores is a card run's most cores over its programs; a candidate's reference_cores is its reference's (P17.70)."""
+    rig.world.scripts[Q_REF] = Script(timing=timing(500, 600, 700, 800, self_reported=False))
+    rig.world.scripts[f"cpp/{KH}/loopback/0"] = Script(files={"main.cpp": f"SYNTHETIC {Q_CPP}"})
+    rig.world.scripts[f"reference/{KH}/loopback/0"] = Script(files={"main.cpp": f"SYNTHETIC {Q_REF}"}, language="tt")
+    rig.world.scripts[f"candidate/{KH}/loopback/3"] = Script(timing=timing(1000, 2500))
+    steps = [*qualification(rig.tracy), *item_steps(rig, KH, "loopback", "ttkh", 3, reference=True)]
+    assert rig.run(steps) == DONE
+    table = [dict(zip(SUMMARY_COLUMNS, values, strict=True)) for values in rig.summary()[1:]]
+    reference = next(row for row in table if row["kind"] == "reference" and row["status"] == "ran")
+    assert reference["cores"] == "4"
+    candidate = next(row for row in table if row["kind"] == "candidate")
+    assert (candidate["cores"], candidate["reference_cores"]) == ("2", "4"), "the skipped duplicate's reference"
+    assert all(row["reference_cores"] == "" for row in table if row["kind"] != "candidate")
+    assert all(row["cores"] == "" for row in table if row["kind"] == "cpp")
 
 
 def test_records_and_summary_rows_are_appended_as_each_step_ends(rig: Rig) -> None:

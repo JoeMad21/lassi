@@ -46,8 +46,10 @@ TT_TARGETS = ("tt", "ttkh")
 # The qualification: the tracked reference of tt-pairs-v0 loopback, the first program on the cards.
 QUALIFY = ("tt-pairs-v0", "loopback", "tt")
 DONE, DEADLINE, STOPPED, QUALIFY_FAILED = 0, 2, 3, 4
+# cores: the most cores any of the run's programs used (tt-metal's CORE COUNT), from its device timing; for a
+# candidate, reference_cores is its item's reference's, a count beside a count, never a time (task P17.70).
 SUMMARY_COLUMNS = ("step", "kind", "suite", "item", "model", "status", "passed", "exit_code", "wall_s", "kernel_ns",
-                   "programs", "aiclk_mhz", "self_reported", "note")
+                   "programs", "cores", "reference_cores", "aiclk_mhz", "self_reported", "note")
 # The toolchain each language builds with, as the recipes bind them (projects/lassi-demo/bale-tt-30b-base.yaml).
 TOOLCHAIN = {"cpp": "gcc-native", "tt": "ttmetal-host", "ttkh": "ttmetal-host"}
 PURPOSE = "eval"  # an evaluation run (lassi.core.stages PURPOSE; Agent Rule 5)
@@ -242,6 +244,9 @@ class _Log:
         self.report.mkdir(parents=True, exist_ok=True)
         (self.report / "summary.tsv").write_text("\t".join(SUMMARY_COLUMNS) + "\n", encoding="ascii")
         self.last: dict[str, Any] = {}
+        # Each card run's cores by step, and each item's reference's cores by (suite, item), for reference_cores.
+        self.step_cores: dict[Any, int | None] = {}
+        self.reference_cores: dict[tuple[Any, Any], int | None] = {}
 
     def write(self, record: Mapping[str, Any]) -> None:
         """Append `record`, completed with DEFAULTS, to both files; keep it as `last`."""
@@ -249,7 +254,13 @@ class _Log:
         self.last = full
         with open(self.report / "records.jsonl", "a", encoding="ascii") as handle:
             handle.write(json.dumps(full, sort_keys=True, default=str) + "\n")
-        row = _summary_row(full)
+        cores = _cores(full)
+        self.step_cores[full.get("step")] = cores
+        key = (full.get("suite"), full.get("item"))
+        if full.get("kind") == "reference":
+            self.reference_cores[key] = self.step_cores.get(full["same_as"]) if full.get("same_as") else cores
+        versus = self.reference_cores.get(key) if full.get("kind") == "candidate" else None
+        row = _summary_row(full, cores, versus)
         with open(self.report / "summary.tsv", "a", encoding="ascii") as handle:
             handle.write("\t".join(row) + "\n")
         print("  ".join(cell for cell in row if cell), flush=True)
@@ -259,7 +270,14 @@ class _Log:
         self.write({"step": None, "kind": "stop", "suite": None, "item": None, "status": status, "reason": reason})
 
 
-def _summary_row(record: Mapping[str, Any]) -> list[str]:
+def _cores(record: Mapping[str, Any]) -> int | None:
+    """Return the most cores any program of the record's device timing used, or None without a timing."""
+    programs = (record.get("device_timing") or {}).get("programs") or []
+    counts = [program["cores"] for program in programs if program.get("cores") is not None]
+    return max(counts) if counts else None
+
+
+def _summary_row(record: Mapping[str, Any], cores: int | None, reference_cores: int | None) -> list[str]:
     """Return the summary.tsv cells of one record, as plain ASCII with no tab or line break."""
     timing = record.get("device_timing") or {}
     note = record.get("reason") or ""
@@ -267,8 +285,8 @@ def _summary_row(record: Mapping[str, Any]) -> list[str]:
         note = f"same program as step {record['same_as']}"
     values = [record.get("step"), record.get("kind"), record.get("suite"), record.get("item"), record.get("model"),
               record.get("status"), record.get("passed"), record.get("exit_code"), record.get("wall_s"),
-              timing.get("kernel_ns_total"), len(timing.get("programs") or []) if timing else None,
-              timing.get("aiclk_mhz"), timing.get("self_reported"), note]
+              timing.get("kernel_ns_total"), len(timing.get("programs") or []) if timing else None, cores,
+              reference_cores, timing.get("aiclk_mhz"), timing.get("self_reported"), note]
     return [_cell(value) for value in values]
 
 

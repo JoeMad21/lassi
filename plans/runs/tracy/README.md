@@ -90,14 +90,16 @@ the report (records, summary, profiler files; the builds stay on alpha01):
 - records.jsonl: one record per step, written as the step ends: its status (ran, skipped, build-failed, error),
   whether it passed, exit status, hang, wall time, per-output oracle statistics (and against the TT reference), the
   device timing, the profiler files kept, and the streams' tails. The last record of a stopped run says why.
-- summary.tsv: one row per record.
+- summary.tsv: one row per record, with cores, the most cores any of the run's programs used (tt-metal's CORE
+  COUNT, the cores with profiler data), and, for a candidate, reference_cores, its item's reference's, whether or
+  not that reference passed (read its row's passed) (task P17.70): counts, never times.
 - profiler/<step>/: the run's profiler files, the device log profile_log_device.csv among them.
 
 ## Reading The Numbers
 
 - Device time is tt-metal's DEVICE KERNEL DURATION per program: from the first kernel start to the last kernel end
   over every core and RISC, at the AICLK the cards reported (kernel_ns; kernel_ns_total sums the run's programs).
-- A translation's device time is self-reported (self_reported true): its own process writes the profiler files, so
+- A translation's device time and cores are self-reported (self_reported true): its own process writes the profiler files, so
   a model-written program could forge them. A tracked reference's is not.
 - Wall time is the whole sandboxed command, with device open, the kernel JIT, and setup; it is never the device
   time. The C++ program's wall time is the host CPU's whole process, inputs and outputs included.

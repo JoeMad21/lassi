@@ -219,7 +219,7 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.67 | DONE | tt-par-v0: the development items from tt-metal's multi-core examples | P17.31 | tt-par-v0's five development items: manifest, C++ and TT host programs, tests; unbuilt, their builds and ttsim runs are P17.76 (OQ-130) |
 | P17.68 | DONE | tt-par-v0: the held-out items written here | P17.67 | tt-par-v0's five held-out items (split eval): C++ programs, TT host programs and kernels, tests, the leak test's Windows half; unbuilt, their builds, ttsim runs, and the leak test's built half are P17.76 (OQ-130); committed before P17.71 to P17.73 |
 | P17.69 | DONE | tt-par-v0-kh: the host-and-kernels variant | P17.67,P17.68 | tt-par-v0-kh: tt-par-v0's ten items with a ttkh language (host program and kernels; lassi_io.h alone; reference tt); tests; unbuilt (P17.76) |
-| P17.70 | READY | Cores used: a structural count, never a time | P17.42 |  |
+| P17.70 | OWNER | Cores used: a structural count, never a time | P17.42 | the cards' half done: the Tracy kit's summary.tsv shows each run's cores and a candidate's reference's (DeviceTiming already held them, P17.42); the ttsim spike waits on the owner's yes (OQ-130) |
 | P17.71 | OWNER | Skeletons with the compute grid by default (opt-in) | P17.33,P17.39,P17.68 | v1 skeletons, tests, bible entries committed; the compile at the pin and a one-tile ttsim run wait on the owner's yes (OQ-130) |
 | P17.72 | DONE | Prompt sets with the parallel goal and the multi-core calls (opt-in) | P17.68 | tt-host-v2 and tt-kh-v1: the grid goal and the multi-core calls, opt-in; tests pin the edits; steered by no held-out item |
 | P17.73 | READY | A single-core correction (opt-in) | P17.68,P17.70,P17.72 |  |
