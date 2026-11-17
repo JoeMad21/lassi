@@ -645,7 +645,7 @@ Added on 2026-11-17 (OQ-129; the owner: "Forget the testing window tonight, just
 ### P17.70 Cores used: a structural count, never a time
 - Bible: Result Record (DeviceTiming, Trial), Execution Backends (ttsim, tt_silicon), Agent Rules 1, 2, and 14.
 - Accept:
-  - On the cards: DeviceTiming (P17.42) carries the number of distinct Tensix cores in the run's device log, and the Tracy kit's records and summary show it beside each reference's.
+  - On the cards: DeviceTiming (P17.42) already carries each program's core count (records.jsonl of rx 20261116-212311-tracy-0bc3); the Tracy kit's summary.tsv gains a cores column, each translation's beside its reference's.
   - On ttsim: plans/spikes/ttsim-cores.md compares ways to count the cores a program's kernels run on (the device profiler under ttsim, the core sets the host program passes to CreateKernel, or the kernel JIT's outputs), and counts ttsim's grid; the count is reported as a count only, never a time (Agent Rule 2); the chosen way is built behind the executor interface, its count in the trial record.
 - Files: lassi/executors/, lassi/core/, plans/runs/tracy/, plans/spikes/ttsim-cores.md, tests/, docs/BIBLE.md.
 - Host: Windows; alpha01 for the spike's ttsim runs, with the owner's yes. Depends: P17.42.

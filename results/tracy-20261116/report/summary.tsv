@@ -1,0 +1,58 @@
+step	kind	suite	item	model	status	passed	exit_code	wall_s	kernel_ns	programs	aiclk_mhz	self_reported	note
+1	cpp	tt-pairs-v0	loopback		ran	True	0	0.469					
+2	reference	tt-pairs-v0	loopback		ran	True	0	2.845	44799	1	1000	False	
+3	cpp	bale-v0-tt	transpose_matrix		ran	True	0	0.469					
+4	candidate	bale-v0-tt	transpose_matrix	furiosa-ai--gemma-4-31B-it-FP8-block	ran	True	0	2.936	865967	1	1000	True	
+5	cpp	bale-v0-tt	randperm		ran	True	0	0.469					
+6	candidate	bale-v0-tt	randperm	furiosa-ai--gemma-4-31B-it-FP8-block	ran	True	0	2.936	609153	1	1000	True	
+7	cpp	tt-pairs-v0-kh	loopback		skipped								same program as step 1
+8	reference	tt-pairs-v0-kh	loopback		skipped								same program as step 2
+9	candidate	tt-pairs-v0-kh	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.987	47247	1	1000	True	
+10	cpp	tt-pairs-v0-kh	eltwise_sfpu		ran	True	0	0.427					
+11	reference	tt-pairs-v0-kh	eltwise_sfpu		ran	True	0	3.04	74272	1	1000	False	
+12	candidate	tt-pairs-v0-kh	eltwise_sfpu	furiosa-ai--gpt-oss-120b	ran	True	0	2.936	74269	1	1000	True	
+13	candidate	tt-pairs-v0-kh	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.937	47114	1	1000	True	
+14	candidate	tt-pairs-v0-kh	eltwise_sfpu	furiosa-ai--gpt-oss-120b	ran	True	0	3.038	74248	1	1000	True	
+15	candidate	tt-pairs-v0-kh	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.986	47164	1	1000	True	
+16	candidate	tt-pairs-v0-kh	eltwise_sfpu	furiosa-ai--gpt-oss-120b	ran	True	0	2.937	74263	1	1000	True	
+17	candidate	tt-pairs-v0-kh	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.888	47553	1	1000	True	
+18	candidate	tt-pairs-v0	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.938	44213	1	1000	True	
+19	cpp	tt-pairs-v0	eltwise_sfpu		skipped								same program as step 10
+20	reference	tt-pairs-v0	eltwise_sfpu		skipped								same program as step 11
+21	candidate	tt-pairs-v0	eltwise_sfpu	furiosa-ai--gpt-oss-120b	ran	True	0	2.887	74423	1	1000	True	
+22	cpp	tt-pairs-v0	eltwise_binary		ran	True	0	0.47					
+23	reference	tt-pairs-v0	eltwise_binary		ran	True	0	2.987	41680	1	1000	False	
+24	candidate	tt-pairs-v0	eltwise_binary	furiosa-ai--gpt-oss-120b	ran	True	0	2.937	41440	1	1000	True	
+25	cpp	tt-pairs-v0	matmul_single_core		ran	True	0	0.622					
+26	reference	tt-pairs-v0	matmul_single_core		ran	True	0	3.037	7868523	1	1000	False	
+27	candidate	tt-pairs-v0	matmul_single_core	furiosa-ai--gpt-oss-120b	ran	True	0	2.986	7867758	1	1000	True	
+28	cpp	tt-pairs-v0	matmul_multi_core		ran	True	0	0.519					
+29	reference	tt-pairs-v0	matmul_multi_core		ran	True	0	3.339	544279	1	1000	False	
+30	candidate	tt-pairs-v0	matmul_multi_core	furiosa-ai--gpt-oss-120b	ran	True	0	3.038	7899674	1	1000	True	
+31	candidate	tt-pairs-v0	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.937	44637	1	1000	True	
+32	candidate	tt-pairs-v0	eltwise_sfpu	furiosa-ai--gpt-oss-120b	ran	True	0	2.941	74262	1	1000	True	
+33	candidate	tt-pairs-v0	eltwise_binary	furiosa-ai--gpt-oss-120b	ran	True	0	2.942	40987	1	1000	True	
+34	candidate	tt-pairs-v0	matmul_single_core	furiosa-ai--gpt-oss-120b	ran	True	0	2.936	7866156	1	1000	True	
+35	candidate	tt-pairs-v0	matmul_multi_core	furiosa-ai--gpt-oss-120b	ran	True	0	2.937	7901294	1	1000	True	
+36	candidate	tt-pairs-v0	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.887	44621	1	1000	True	
+37	candidate	tt-pairs-v0	eltwise_sfpu	furiosa-ai--gpt-oss-120b	ran	True	0	2.909	74267	1	1000	True	
+38	candidate	tt-pairs-v0	eltwise_binary	furiosa-ai--gpt-oss-120b	ran	True	0	2.884	41470	1	1000	True	
+39	candidate	tt-pairs-v0	matmul_single_core	furiosa-ai--gpt-oss-120b	ran	True	0	2.986	7869015	1	1000	True	
+40	candidate	tt-pairs-v0	matmul_multi_core	furiosa-ai--gpt-oss-120b	ran	True	0	2.888	7813901	1	1000	True	
+41	candidate	tt-pairs-v0	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.937	44580	1	1000	True	
+42	candidate	tt-pairs-v0	eltwise_sfpu	furiosa-ai--gpt-oss-120b	ran	True	0	2.937	74453	1	1000	True	
+43	candidate	tt-pairs-v0	eltwise_binary	furiosa-ai--gpt-oss-120b	ran	True	0	3.087	41521	1	1000	True	
+44	candidate	tt-pairs-v0	matmul_single_core	furiosa-ai--gpt-oss-120b	ran	True	0	2.987	7864552	1	1000	True	
+45	candidate	tt-pairs-v0	matmul_multi_core	furiosa-ai--gpt-oss-120b	ran	True	0	2.992	7894253	1	1000	True	
+46	candidate	tt-pairs-v0	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.985	44381	1	1000	True	
+47	candidate	tt-pairs-v0	eltwise_sfpu	furiosa-ai--gpt-oss-120b	ran	True	0	2.988	74268	1	1000	True	
+48	candidate	tt-pairs-v0	eltwise_binary	furiosa-ai--gpt-oss-120b	ran	True	0	2.936	41802	1	1000	True	
+49	candidate	tt-pairs-v0	matmul_single_core	furiosa-ai--gpt-oss-120b	ran	True	0	3.041	7860707	1	1000	True	
+50	candidate	tt-pairs-v0	matmul_multi_core	furiosa-ai--gpt-oss-120b	ran	True	0	2.987	7898125	1	1000	True	
+51	candidate	tt-pairs-v0	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.886	44324	1	1000	True	
+52	candidate	tt-pairs-v0	eltwise_sfpu	furiosa-ai--gpt-oss-120b	ran	True	0	2.888	74277	1	1000	True	
+53	candidate	tt-pairs-v0	eltwise_binary	furiosa-ai--gpt-oss-120b	ran	True	0	3.19	1292572	1	1000	True	
+54	candidate	tt-pairs-v0	matmul_single_core	furiosa-ai--gpt-oss-120b	ran	True	0	2.935	7865977	1	1000	True	
+55	candidate	tt-pairs-v0	matmul_multi_core	furiosa-ai--gpt-oss-120b	ran	True	0	2.887	7895437	1	1000	True	
+56	candidate	tt-pairs-v0	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.885	44941	1	1000	True	
+57	candidate	tt-pairs-v0	loopback	furiosa-ai--gpt-oss-120b	ran	True	0	2.89	44941	1	1000	True	
