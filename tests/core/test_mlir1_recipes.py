@@ -197,7 +197,7 @@ def test_the_recipes_bind_cpp_to_ttkernel_with_sweep7s_model_settings(name: str)
     assert data["llm"] == sweep7["llm"]
     assert data["extract"] == sweep7["extract"]
     assert data["directions"] == [{"source": "cpp", "target": "ttkernel"}]
-    assert (data["bench"]["suite"], data["bench"]["split"], data["prompts"]) == (SUITE.name, "unassigned", SET)
+    assert (data["bench"]["suite"], data["bench"]["split"], data["prompts"]) == (SUITE.name, "dev", SET)
     assert data["toolchain"]["ttkernel"] == "ttkernel-ttmetal" and data["toolchain"]["tt"] == "ttmetal-host"
     assert data["executor"]["ttkernel"]["kind"] == "ttsim" and data["executor"]["tt"]["kind"] == "ttsim"
     assert data["trials"] == {"n": 3}

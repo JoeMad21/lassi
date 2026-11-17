@@ -8,8 +8,9 @@ kernels, declared tolerance, and unpack_to_dest reading. What they fix:
 
 - assets/bench/tt-pairs-v0.yaml pins tt-metal at P4.2's commit
   (toolchains/tt-metal.pin COMMIT and URL, `pin: tt-metal`) and lists the
-  five Tier A items, each `unassigned` (OQ-025, option (d)) and refused to
-  training, prompt tuning, and corpus harvest (Agent Rule 5).
+  five Tier A items, each `dev` (task P17.31; OQ-083, option (b): a
+  development set), given for evaluation and prompt tuning and refused to
+  training and corpus harvest (Agent Rule 5).
 - Each item's TT version is a host program written here
   (assets/bench/tt-pairs-v0/<item>/tt/<item>.cpp, tracked) with the
   upstream example's kernels, unmodified, as support files fetched from the
@@ -26,7 +27,8 @@ kernels, declared tolerance, and unpack_to_dest reading. What they fix:
   guard diagnostic. Each keeps the unpack_to_dest reading: its code
   (comments aside) names no fp32_dest_acc_en and no unpack_to_dest_mode,
   and every DataFormat it names is Float16_b.
-- tests/fixtures/recipes/p4-tier-a-dry-run.yaml loads and resolves.
+- tests/fixtures/recipes/p4-tier-a-dry-run.yaml loads and resolves, and
+  reads the split dev.
 
 The manifest is complete: one test asserts that it holds no PLACEHOLDER
 and loads, and the per-item tests load it as it is, so a PLACEHOLDER that
@@ -60,7 +62,9 @@ HARNESS = "assets/harness/c/lassi_io.h"
 RECIPE = REPO / "tests" / "fixtures" / "recipes" / "p4-tier-a-dry-run.yaml"
 ITEMS = ("eltwise_binary", "eltwise_sfpu", "loopback", "matmul_multi_core", "matmul_single_core")
 LANGUAGES = ("cpp", "tt")
-FORBIDDEN = ("train", "prompt-tuning", "harvest")
+# The purposes a dev item is refused (training and corpus harvest) and given (evaluation and prompt tuning; P17.31).
+FORBIDDEN = ("train", "harvest")
+GIVEN = ("eval", "prompt-tuning")
 PLACEHOLDER = "PLACEHOLDER"
 # Each item's declared tolerance: its upstream example's own check (plans/spikes/p4-ttsim-runtime.md, "The
 # examples' own checks"). Exact equality is max_abs 0 (bible Benchmark Suites, item tolerance).
@@ -140,11 +144,12 @@ def test_the_manifest_pins_tt_metal_at_the_install_commit() -> None:
     assert (data["repo"], data["commit"], data["pin"]) == (pin["URL"], pin["COMMIT"], "tt-metal")
 
 
-def test_the_manifest_lists_the_five_tier_a_items_each_unassigned() -> None:
+def test_the_manifest_lists_the_five_tier_a_items_each_dev() -> None:
+    """Every Tier A item is in the dev split: tt-pairs-v0 is a development set (P17.31; OQ-083 (b))."""
     items = raw()["items"]
     assert sorted(items) == list(ITEMS)
     for item, entry in items.items():
-        assert entry["split"] == "unassigned", f"{item}: every Tier A item stays unassigned (OQ-025)"
+        assert entry["split"] == "dev", f"{item}: every Tier A item is a development item (OQ-083 (b))"
 
 
 def test_the_manifest_holds_no_placeholder_and_loads() -> None:
@@ -153,11 +158,13 @@ def test_the_manifest_holds_no_placeholder_and_loads() -> None:
 
 
 @pytest.mark.parametrize("item", ITEMS)
-def test_an_item_is_unassigned_and_refused_to_every_purpose_rule_5_forbids(item: str) -> None:
+def test_an_item_is_dev_given_for_prompt_tuning_and_refused_to_training_and_harvest(item: str) -> None:
+    """A dev item serves evaluation and prompt tuning and is refused to training and corpus harvest (P17.31)."""
     loaded = suite()
-    assert loaded.item(item, purpose="eval").split == "unassigned"
+    for purpose in GIVEN:
+        assert loaded.item(item, purpose=purpose).split == "dev"
     for purpose in FORBIDDEN:
-        with pytest.raises(bench.EvalSplitError, match="unassigned"):
+        with pytest.raises(bench.EvalSplitError, match="dev split"):
             loaded.item(item, purpose=purpose)
 
 
@@ -254,7 +261,7 @@ def test_the_dry_run_recipe_loads_and_resolves() -> None:
     recipe = load_recipe(RECIPE)
     data = recipe.data
     assert data["model"] == {"backend": "mock", "id": "mock-reference"}
-    assert data["bench"]["suite"] == SUITE and data["bench"]["split"] == "unassigned"
+    assert data["bench"]["suite"] == SUITE and data["bench"]["split"] == "dev"
     assert sorted(data["bench"]["items"]) == list(ITEMS)
     assert data["directions"] == [{"source": "cpp", "target": "tt"}, {"source": "tt", "target": "cpp"}]
     assert data["fixes"]["baseline_both"] is True

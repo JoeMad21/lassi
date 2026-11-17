@@ -766,8 +766,8 @@ def test_absent_the_key_adds_nothing_and_set_it_enters_the_hash(tmp_path: Path) 
     assert len({recipe.recipe_hash for recipe in loaded.values()}) == 3, "a key that is set enters the hash"
 
 
-# The resolved hash of the Tier A max_abs run recipe at commit 8342709, before the key existed.
-TIER_A_MAXABS_HASH = "8bdaeac1d6b46ef4293c7187a831b5f3c6b054ef2bf02e1161fd9e8f8ca4e992"
+# The resolved hash of the Tier A max_abs run recipe without the key, with bench.split dev since task P17.31.
+TIER_A_MAXABS_HASH = "57c2be9657452c0b216efcb42bc1e04f1de3a8dd98aaa37f85ce886b94db03c7"
 
 
 def test_an_existing_recipe_keeps_its_resolved_form_and_hash() -> None:

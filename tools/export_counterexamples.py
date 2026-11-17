@@ -16,7 +16,7 @@ and trials the adversary stage did not take give no fixture.
 
 Agent Rule 5 and OQ-055, decision 12 (b): confirmed counterexamples join
 only synthetic fixtures outside every suite, never the held-out inputs of an
-eval or unassigned item. The tool reads no suite manifest and writes none;
+eval, unassigned, or dev item. The tool reads no suite manifest and writes none;
 it never writes under assets/ (every manifest and tracked source) or the
 train layer's synthetic fixture directory (lassi.train.data SYNTHETIC_DIR),
 and it refuses a destination that overlaps either, or that a link at or

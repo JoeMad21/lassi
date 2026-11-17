@@ -24,7 +24,7 @@ commit: 5280a9cfb00998fd49667a29523d03aee905c129
 pin: tt-metal
 items:
   eltwise_binary:
-    split: unassigned
+    split: dev
     seed: 2
     # a + b elementwise over 64 tiles. Upstream fills b with the constant -1.0; b is drawn here instead, so a
     # candidate that ignores b cannot pass. The sums stay in (-1, 1).
@@ -80,7 +80,7 @@ items:
         files: [eltwise_binary.mlir]
         reference: tt
   eltwise_sfpu:
-    split: unassigned
+    split: dev
     seed: 3
     # exp elementwise over 64 tiles of uniform [0, 1), as upstream draws them; the results lie in [1, e)
     inputs:
@@ -135,7 +135,7 @@ items:
         files: [eltwise_sfpu.mlir]
         reference: tt
   loopback:
-    split: unassigned
+    split: dev
     seed: 1
     # a DRAM-to-DRAM copy of upstream's 50 tiles as one flat vector, uniform [0, 100) as upstream draws them
     inputs:
@@ -182,7 +182,7 @@ items:
         files: [loopback.mlir]
         reference: tt
   matmul_multi_core:
-    split: unassigned
+    split: dev
     seed: 5
     # c = a b at upstream's 640 x 640 x 640, uniform [-0.5, 0.5) as upstream draws them
     inputs:
@@ -237,7 +237,7 @@ items:
         files: [matmul_multi_core.mlir]
         reference: tt
   matmul_single_core:
-    split: unassigned
+    split: dev
     seed: 4
     # c = a b at upstream's 640 x 640 x 640, uniform [0, 1); the TT program refuses a b that is not square, since
     # upstream's writer arguments agree with the host's only when K == N

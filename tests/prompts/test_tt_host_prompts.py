@@ -370,7 +370,7 @@ def run_recipe(name: str) -> dict[str, Any]:
 @pytest.mark.parametrize(("name", "metric"), sorted(RUN_RECIPES.items()))
 def test_a_tier_a_run_recipe_uses_this_set_and_its_items_declared_metric(name: str, metric: str) -> None:
     data = run_recipe(name)
-    assert (data["prompts"], data["bench"]["suite"], data["bench"]["split"]) == (SET, SUITE.name, "unassigned")
+    assert (data["prompts"], data["bench"]["suite"], data["bench"]["split"]) == (SET, SUITE.name, "dev")
     assert data["oracle"] == {"kind": "binary_io", "metric": metric, "threshold": "from_baseline"}
     for item in data["bench"]["items"]:
         tolerance = SUITE.items[item].tolerance

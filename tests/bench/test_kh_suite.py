@@ -61,7 +61,7 @@ def test_the_sibling_holds_the_development_items_unchanged() -> None:
         for language in ("cpp", "tt"):
             assert ours.languages[language] == theirs.languages[language], f"{name}.{language} drifted"
         assert sorted(ours.languages) == ["cpp", "tt", "ttkh"]
-        assert ours.split == "unassigned"
+        assert ours.split == "dev", f"{name}: a development item (P17.31; OQ-083 (b))"
 
 
 @pytest.mark.parametrize("name", ITEMS)

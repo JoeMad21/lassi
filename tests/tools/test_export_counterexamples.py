@@ -70,7 +70,7 @@ load_synthetic; bench through load_bench) reaches a fixture: each refuses it
 or never lists it.
 
 The run tree is built by hand: SYNTHETIC trials of tt-pairs-v0 items
-(direction tt-cpp, split unassigned) whose adversary records hold confirmed
+(direction tt-cpp, split dev, task P17.31) whose adversary records hold confirmed
 divergences, with their proposed inputs, constant arrays inside each item's
 contract, in the run's binary store. Items are read through Suite.item for
 purpose eval only, apart from the refusals these tests expect; nothing
@@ -136,7 +136,8 @@ DEFAULT_DEST = REPO / "tests" / "fixtures" / "adversary" / "counterexamples"
 WATCHED = (REPO / "assets", REPO / "tests" / "fixtures")
 
 SUITE = "tt-pairs-v0"
-SPLIT = "unassigned"
+# tt-pairs-v0's items are in the dev split (task P17.31; OQ-083 (b)), so its trials record it.
+SPLIT = "dev"
 SOURCE, TARGET = "tt", "cpp"
 DIRECTION = f"{SOURCE}-{TARGET}"
 PROJECT = "adv-export"
@@ -157,7 +158,8 @@ TRAIN_FIXTURE = "sft-tiny.jsonl"
 TRAIN_FIXTURE_TEXT = b'{"prompt": "SYNTHETIC prompt", "completion": "SYNTHETIC completion"}\n'
 REQUIRED_KEYS = ("provenance", "exploratory", "bench_item", "candidate_sha256", "inputs")
 PROVENANCE_KEYS = ("commit", "dirty", "device", "date")
-HELD_PURPOSES = ("train", "prompt-tuning", "harvest")
+# The purposes the registry refuses a dev item (task P17.31): a dev item is given for prompt tuning, never these.
+HELD_PURPOSES = ("train", "harvest")
 CANDIDATE_FAILURE = "SYNTHETIC: the cpp candidate run ended with exit status 139"
 
 
@@ -1212,6 +1214,7 @@ def test_suite_item_keeps_a_fixtures_item_held_and_unchanged(
             with pytest.raises(EvalSplitError):
                 suite.item(name, purpose=purpose)
         item = suite.item(name, purpose="eval")
+        assert item.split == SPLIT, f"{name} is a dev item (task P17.31)"
         assert repr(item) == repr(suite_before.item(name, purpose="eval"))
         assert "counterexamples" not in repr(item)
 

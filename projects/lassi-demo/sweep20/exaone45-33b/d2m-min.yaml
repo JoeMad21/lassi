@@ -26,7 +26,7 @@ extract:
   unfenced_file_lines: true  # as sweep18's recipes
 bench:
   suite: tt-pairs-v0-d2m  # tt-pairs-v0's items unchanged, with a d2m language whose reference is tt
-  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  split: dev  # every Tier A item is a development item (task P17.31; OQ-083 (b))
   items: [eltwise_binary, eltwise_sfpu, loopback, matmul_multi_core]  # each judged by its declared tolerance
 directions: [{source: cpp, target: d2m}]
 prompts: tt-d2m-bare-v1  # the bare loop for D2M, with run-failure (simulator gaps included) and mismatch corrections

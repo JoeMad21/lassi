@@ -48,7 +48,7 @@ extract:
   unfenced_file_lines: true  # as sweep10's mlir recipes (sweep7's chain)
 bench:
   suite: tt-pairs-v0-ttir  # tt-pairs-v0's items unchanged, with a ttir language whose reference is tt
-  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  split: dev  # every Tier A item is a development item (task P17.31; OQ-083 (b))
   items: [eltwise_binary, eltwise_sfpu, matmul_multi_core]  # the items TTIR can express (see above)
 directions: [{source: cpp, target: ttir}]
 prompts: tt-ttir-v0  # tt-mlir-v1's style for TTIR: what a TTIR module is at the pin; the item's declared shapes

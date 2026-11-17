@@ -153,13 +153,14 @@ PROMPT_KINDS = ("generate", "compile-correction", "run-correction", "mismatch-co
 REQUEST_STAGES = ["generate", "compile_loop", "run_loop", "run_loop"]
 
 # Committed recipes that use tt-host-v0 and neither feature, with their recipe hashes (see the module docstring).
+# Each recipe's hash with bench.split dev since task P17.31 (tt-pairs-v0 a development set, OQ-083 (b)).
 RECIPE_HASHES = {
     "projects/lassi-demo/tier-a-rngd-maxabs.yaml":
-        "8bdaeac1d6b46ef4293c7187a831b5f3c6b054ef2bf02e1161fd9e8f8ca4e992",
+        "57c2be9657452c0b216efcb42bc1e04f1de3a8dd98aaa37f85ce886b94db03c7",
     "projects/lassi-demo/sweep3/llama31-8b-maxabs.yaml":
-        "4ebf6f98594a84e82e13a40f71b1ad32c3da46f300e630afe97000f23ca348b0",
+        "f1d9a8bbcc14c6127ff97ba088a5b511ffbea1a296d7520ee8f4c0e5ba966de3",
     "projects/lassi-demo/sweep3/qwen3-coder-30b-pcc.yaml":
-        "797d4ac06582344590697d65f03a9b46e612627fd2f12c69327ba3650e1402c6",
+        "36245800d61b66f5779beabe9c41d08da9a7f34d653bdfe1a8c0b74702b78f78",
 }
 
 # SYNTHETIC stand-ins for the new templates, for sets built here to lack or break one of them.

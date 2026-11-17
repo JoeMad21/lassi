@@ -10,7 +10,7 @@ What they fix for projects/lassi-demo/sweep9/gpt-oss-120b/:
 - Six recipes: kh-ex, kh-exsk, and kh-allsk, each in the maxabs and pcc
   halves, and nothing else; each loads, and each half covers its items once
   by their declared metric.
-- Each binds cpp -> ttkh on tt-pairs-v0-kh (split unassigned) with the
+- Each binds cpp -> ttkh on tt-pairs-v0-kh (split dev, task P17.31) with the
   tt-kh-v0 set, ttmetal-host for ttkh and for the tt reference, ttsim for
   both (a simulator), sweep8's gpt-oss-120b model settings, 2 samples, a
   correction cap of 8, the mismatch report and simulator-gap feedback on,
@@ -87,7 +87,7 @@ def test_each_recipe_binds_cpp_to_ttkh_with_sweep8s_model_settings(name: str) ->
     for key in ("model", "llm", "extract", "fixes", "sandbox", "faithful"):
         assert data[key] == sweep8[key], key
     assert data["directions"] == [{"source": "cpp", "target": "ttkh"}]
-    assert (data["bench"]["suite"], data["bench"]["split"], data["prompts"]) == (SUITE.name, "unassigned", "tt-kh-v0")
+    assert (data["bench"]["suite"], data["bench"]["split"], data["prompts"]) == (SUITE.name, "dev", "tt-kh-v0")
     assert data["toolchain"] == {"cpp": "gcc-native", "tt": "ttmetal-host", "ttkh": "ttmetal-host"}
     assert {language: spec["kind"] for language, spec in data["executor"].items()} == {
         "cpp": "native", "tt": "ttsim", "ttkh": "ttsim"}

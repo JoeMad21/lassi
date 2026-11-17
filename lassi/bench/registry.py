@@ -4,18 +4,22 @@ A suite manifest under assets/bench/ pins its source repository by commit and
 lists each item with its split and, per language, the directory and files
 that hold that language's version. The registry loads a manifest, hands out
 items for a purpose, and refuses an eval or unassigned item to every purpose
-Agent Rule 5 forbids (evaluation splits are untouchable). A direction's
-reference target is the item's files in the target language, read from the
-pinned sources that tools/fetch_bench.py materializes under $LASSI_SCRATCH,
-never from git, unless the language is tracked (below).
+Agent Rule 5 forbids (evaluation splits are untouchable), and a dev item to
+training and corpus harvest. A direction's reference target is the item's
+files in the target language, read from the pinned sources that
+tools/fetch_bench.py materializes under $LASSI_SCRATCH, never from git,
+unless the language is tracked (below).
 
 Splits and purposes (task P4.13; OQ-025, option (d)): SPLITS are train, eval,
-and unassigned, a split that decides nothing until the owner assigns it.
-PURPOSES are train (training), eval (evaluation), prompt-tuning, and harvest
-(corpus harvest). Suite.item refuses an eval or unassigned item to train,
-prompt-tuning, and harvest with EvalSplitError; a train item serves every
-purpose. Suite.train_view() returns a TrainView, the train split alone, which
-is the only bench view a Trainer gets (task P17.9).
+unassigned, a split that decides nothing until the owner assigns it, and dev,
+a development item (task P17.31; OQ-083 (b)). PURPOSES are train (training),
+eval (evaluation), prompt-tuning, and harvest (corpus harvest).
+REFUSED_PURPOSES maps each split to the purposes Suite.item refuses it with
+EvalSplitError: an eval or unassigned item to train, prompt-tuning, and
+harvest; a dev item to train and harvest, so prompt and feature work may be
+steered by it; a train item to none. Suite.train_view() returns a
+TrainView, the train split alone, which is the only bench view a Trainer
+gets (task P17.9).
 
 Optional keys (P1.2), left out where a manifest does not need them:
 
@@ -137,11 +141,19 @@ from lassi.core.tolerance import Tolerance
 from lassi.harness.contract import MAX_INPUT_ELEMENTS, InputContract, input_contract
 from lassi.harness.lassi_io import SUFFIX, LassiIOError, check_input_spec, element_count, generate_inputs
 
-SPLITS = ("train", "eval", "unassigned")
+SPLITS = ("train", "eval", "unassigned", "dev")
 PURPOSES = ("train", "eval", "prompt-tuning", "harvest")
-# The splits Agent Rule 5 keeps from training, prompt tuning, and corpus harvest, and those purposes, with their words.
-HELD_SPLITS = ("eval", "unassigned")
+# The splits Agent Rule 5 keeps from training and corpus harvest (eval and unassigned from prompt tuning too), and
+# the purposes it forbids, with their words.
+HELD_SPLITS = ("eval", "unassigned", "dev")
 FORBIDDEN_PURPOSES = {"train": "training", "prompt-tuning": "prompt tuning", "harvest": "corpus harvest"}
+# The purposes Suite.item refuses each split (task P17.31): a dev item serves evaluation and prompt tuning only.
+REFUSED_PURPOSES = {
+    "train": frozenset(),
+    "eval": frozenset({"train", "prompt-tuning", "harvest"}),
+    "unassigned": frozenset({"train", "prompt-tuning", "harvest"}),
+    "dev": frozenset({"train", "harvest"}),
+}
 # MAX_INPUT_ELEMENTS (2**20), the most elements one held-out input may hold, is defined in lassi.harness.contract,
 # whose check_inputs refuses a proposed input past it too, and imported here, where load_suite caps each input at it.
 # Where stage_inputs writes the held-out inputs inside a run's workdir. No model file path may start with "@"
@@ -171,7 +183,7 @@ _HELD_OUT = ("inputs", "outputs", "seed")
 
 
 class EvalSplitError(ValueError):
-    """An eval or unassigned item was requested for a purpose Agent Rule 5 forbids: training, prompt tuning, harvest."""
+    """A held item was requested for a purpose its split refuses (REFUSED_PURPOSES; Agent Rule 5)."""
 
 
 @dataclass(frozen=True)
@@ -305,10 +317,10 @@ class TrainView:
     """A suite's train split: the only bench view a Trainer gets (Agent Rule 5; task P17.9).
 
     `train_items` maps each train-split item's name to its SuiteItem, each
-    fetched with Suite.item(purpose="train"); `held` maps each eval and
-    unassigned name to its split, kept only so item() can refuse it with
-    Suite.item's words. Both mappings are read-only, and the view holds no
-    eval or unassigned SuiteItem and no reference to the Suite.
+    fetched with Suite.item(purpose="train"); `held` maps each eval,
+    unassigned, and dev name to its split, kept only so item() can refuse it
+    with Suite.item's words. Both mappings are read-only, and the view holds
+    no held SuiteItem and no reference to the Suite.
     """
 
     name: str
@@ -317,7 +329,7 @@ class TrainView:
     held: Mapping[str, str]
 
     def item(self, name: str) -> SuiteItem:
-        """Return train item `name`; an eval or unassigned one raises EvalSplitError, an unknown one ValueError."""
+        """Return train item `name`; a held one (HELD_SPLITS) raises EvalSplitError, an unknown one ValueError."""
         if name in self.held:
             raise EvalSplitError(_held_message(self.name, name, self.held[name], "train"))
         found = self.train_items.get(name)
@@ -350,16 +362,17 @@ class Suite:
     def item(self, name: str, *, purpose: str) -> SuiteItem:
         """Return item `name` for `purpose`, one of PURPOSES (Agent Rule 5).
 
-        An eval or unassigned item asked for training, prompt tuning, or
-        corpus harvest raises EvalSplitError naming its split; an unknown
-        purpose or item raises ValueError.
+        An item asked for a purpose its split refuses (REFUSED_PURPOSES: an
+        eval or unassigned item for training, prompt tuning, or corpus harvest,
+        a dev item for training or corpus harvest) raises EvalSplitError naming
+        its split; an unknown purpose or item raises ValueError.
         """
         if purpose not in PURPOSES:
             raise ValueError(f"purpose must be one of {', '.join(PURPOSES)}, got {purpose!r}")
         found = self.items.get(name)
         if found is None:
             raise ValueError(f"suite {self.name} has no item {name!r}; items: {', '.join(sorted(self.items))}")
-        if purpose in FORBIDDEN_PURPOSES and found.split in HELD_SPLITS:
+        if purpose in REFUSED_PURPOSES[found.split]:
             raise EvalSplitError(_held_message(self.name, name, found.split, purpose))
         return found
 

@@ -119,7 +119,7 @@ def test_each_recipe_loads_and_binds_cpp_to_ttkernel_on_ttsim(name: str) -> None
     data = load(name)
     assert data["model"]["id"] == "furiosa-ai/gpt-oss-120b"
     assert data["directions"] == [{"source": "cpp", "target": "ttkernel"}]
-    assert (data["bench"]["suite"], data["bench"]["split"]) == (SUITE.name, "unassigned")
+    assert (data["bench"]["suite"], data["bench"]["split"]) == (SUITE.name, "dev")
     assert data["executor"]["ttkernel"]["kind"] == "ttsim" and data["executor"]["tt"]["kind"] == "ttsim"
     assert data["prompts"] == SET and data["context"] == [REF_PACK] and data["stages"] == STAGES
     assert "summarize_context" not in data["stages"], "the reference replaces the model-written card"

@@ -32,7 +32,7 @@ data set. Any other tree is refused.
   each difference, and nothing is written.
 
 Agent Rule 5, the rules build enforces (the spec's comments state them):
-1. every eval and unassigned item of the suite has its example directory
+1. every eval, unassigned, and dev item of the suite has its example directory
    (the directory above kernels/ in each upstream kernel path it lists)
    excluded, and no included directory is, holds, or lies in one;
 2. the spec excludes each duplicate of a Tier A task with its reason (a
@@ -207,7 +207,7 @@ def load_spec(path: Path) -> Spec:
 
 
 def load_held_out(spec: Spec, repo: Path = REPO) -> HeldOut:
-    """Return the held-out suite the spec names: its eval and unassigned items, their directories, its references."""
+    """Return the held-out suite the spec names: its held (HELD_SPLITS) items, their directories, its references."""
     path = repo / spec.suite
     suite = load_suite(path)
     items = tuple(sorted(name for name, item in suite.items.items() if item.split in HELD_SPLITS))

@@ -3,8 +3,8 @@
 tools/build_tt_rag.py reads a corpus spec (assets/rag/<corpus>/corpus.yaml),
 selects the spec's files from a pinned tree, and calls build_corpus, which
 cuts them into chunks (lassi.prompts.retrieval Chunk) and leaves out every
-file and chunk Agent Rule 5 forbids: no eval or unassigned item's code may
-reach a prompt through retrieval. For the Tier A suite the spec names:
+file and chunk Agent Rule 5 forbids: no eval, unassigned, or dev item's code
+reaches a prompt through retrieval (the spec leaves out every item of its suite). For the Tier A suite the spec names:
 
 1. Every file under an item's example directory (the directory above
    `kernels/` in each upstream kernel path the suite lists) is excluded,

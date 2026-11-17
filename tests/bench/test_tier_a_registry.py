@@ -156,7 +156,8 @@ def item_of(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_unassigned_is_a_split_and_rule_5_names_three_forbidden_purposes() -> None:
-    assert set(registry.SPLITS) == {"train", "eval", "unassigned"}
+    # dev joined the splits in task P17.31 (OQ-083 (b); tests/bench/test_dev_split.py).
+    assert set(registry.SPLITS) == {"train", "eval", "unassigned", "dev"}
     assert set(registry.PURPOSES) == {"train", "eval", "prompt-tuning", "harvest"}
 
 

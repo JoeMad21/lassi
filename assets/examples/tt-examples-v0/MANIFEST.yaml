@@ -15,7 +15,7 @@ checks:
   dataset_sha256: c453c47abab50b2cfc955e63824a8b3b78c8b7bb210dc9b902755a108cac5e4d
   root: tt_metal/programming_examples
   suite: assets/bench/tt-pairs-v0.yaml
-  suite_sha256: e406bc71cc2b69237c0b3c6f1feb059eb99dd40e1179dd040fa060105dc04f5c
+  suite_sha256: 43e661306cfc075230d7173a72e6361c76da9dbe440eecb5e1bbb80b1b5957b3
   run_lines: 3
   near_copy: 0.5
   references:

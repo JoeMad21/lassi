@@ -46,7 +46,7 @@ def test_the_sibling_holds_tt_pairs_v0_unchanged(language: str) -> None:
         assert set(ours.languages) == {"cpp", "tt", language}
         for kept in ("cpp", "tt"):
             assert ours.languages[kept] == theirs.languages[kept], f"{name}.{kept} drifted"
-        assert ours.split == "unassigned"
+        assert ours.split == "dev", f"{name}: a development item (P17.31; OQ-083 (b))"
 
 
 @pytest.mark.parametrize("language", LANGUAGES)

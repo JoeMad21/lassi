@@ -16,7 +16,7 @@ v0, the Keep row; Agent Rules 5 and 11):
   without an execution round trip) and were built with their source build's
   defines (Review Of v0, the -Ddfloat row). read_pair_set is the training
   reader: training code reads corpus pairs only through it (none does yet).
-- verification/ holds eval and unassigned records (write_verification,
+- verification/ holds eval, unassigned, and dev records (write_verification,
   read_verification, VerificationTable): the round trips of items read for
   purpose eval (lassi.corpus.inputs verification_item). No pair-set writer
   or training reader accepts them (Agent Rule 5).
@@ -39,7 +39,7 @@ apply).
 A complete table is never removed, never replaced: a writer refuses, with
 FileExistsError, an output directory whose table directory already exists,
 and a verification table never shares an output directory with a corpus
-table or a pair set (ValueError), so eval and unassigned records stay apart
+table or a pair set (ValueError), so eval, unassigned, and dev records stay apart
 from training data. Every refusal comes before any record is written. A
 writer claims the table's directory with an exclusive mkdir, so two writers
 never share one, then checks again that the output directory holds no table
@@ -133,17 +133,17 @@ SCHEMA = pa.schema(
 
 @dataclass(frozen=True, kw_only=True)
 class VerificationTable:
-    """Eval and unassigned records, read for purpose eval only; no pair-set writer or training reader accepts one.
+    """Held records (eval, unassigned, dev), read for purpose eval; no pair-set writer or training reader takes one.
 
-    `records` is kept as a tuple of CorpusRecords, each of split eval or
-    unassigned; any other item raises ValueError. The table is not iterable,
+    `records` is kept as a tuple of CorpusRecords, each of a held split
+    (HELD_SPLITS: eval, unassigned, dev); any other item raises ValueError. The table is not iterable,
     so it cannot pass for a list of records.
     """
 
     records: tuple[CorpusRecord, ...]
 
     def __post_init__(self) -> None:
-        """Check that every record is an eval or unassigned CorpusRecord; keep them as a tuple."""
+        """Check that every record is an eval, unassigned, or dev CorpusRecord; keep them as a tuple."""
         records = tuple(self.records)
         for record in records:
             if not isinstance(record, CorpusRecord):
@@ -151,7 +151,7 @@ class VerificationTable:
             if record.split not in HELD_SPLITS:
                 raise ValueError(
                     f"VerificationTable.records: {record.pair_id} is a {record.split} record; a verification table "
-                    "holds eval and unassigned records only"
+                    "holds eval, unassigned, and dev records only"
                 )
         object.__setattr__(self, "records", records)
 
@@ -163,8 +163,8 @@ class VerificationTable:
 def write_corpus(records: Iterable[CorpusRecord], out_dir: Path) -> None:
     """Write train records, every one given, as the corpus table under `out_dir` (Policy B as records).
 
-    Refuses, before any record is written: a VerificationTable or an eval or
-    unassigned record (EvalSplitError, saying Agent Rule 5 and naming the
+    Refuses, before any record is written: a VerificationTable or an eval,
+    unassigned, or dev record (EvalSplitError, saying Agent Rule 5 and naming the
     record), an item that is not a CorpusRecord (TypeError), two records
     with one pair_id (ValueError naming it), partition values that cannot be
     distinct directory names (ValueError), an `out_dir` that is a file
@@ -176,7 +176,7 @@ def write_corpus(records: Iterable[CorpusRecord], out_dir: Path) -> None:
 
 
 def write_verification(records: Iterable[CorpusRecord] | VerificationTable, out_dir: Path) -> None:
-    """Write eval and unassigned records as the verification table under `out_dir`.
+    """Write eval, unassigned, and dev records as the verification table under `out_dir`.
 
     `records` may be a VerificationTable or CorpusRecords; a train record or
     an item that is not a CorpusRecord raises ValueError (a train record
@@ -198,8 +198,8 @@ def write_pair_set(records: Iterable[CorpusRecord], out_dir: Path) -> dict[str, 
     left out under its gate status code, and a gated one built with other
     defines under BUILD_DEFINES; the returned dict maps each reason present
     to its count, sorted by reason. It refuses, before any record is written,
-    what write_corpus refuses, a VerificationTable and any eval or
-    unassigned record (EvalSplitError, Agent Rule 5) among them, over every
+    what write_corpus refuses, a VerificationTable and any eval, unassigned,
+    or dev record (EvalSplitError, Agent Rule 5) among them, over every
     record given, left out or not; and an `out_dir` that already holds a
     pair set (FileExistsError) or a verification table (ValueError).
     """
@@ -218,10 +218,10 @@ def write_pair_set(records: Iterable[CorpusRecord], out_dir: Path) -> dict[str, 
 
 
 def _train_records(records: Iterable[CorpusRecord] | VerificationTable, table: str) -> list[CorpusRecord]:
-    """Return the records given for a training table; refuse a VerificationTable and every eval or unassigned one."""
+    """Return the records given for a training table; refuse a VerificationTable and every held (HELD_SPLITS) one."""
     if isinstance(records, VerificationTable):
         raise EvalSplitError(
-            f"a verification table holds eval and unassigned records and never becomes {table} (Agent Rule 5)"
+            f"a verification table holds eval, unassigned, and dev records and never becomes {table} (Agent Rule 5)"
         )
     given = list(records)
     for record in given:
@@ -229,8 +229,9 @@ def _train_records(records: Iterable[CorpusRecord] | VerificationTable, table: s
             raise TypeError(f"{table} takes CorpusRecords, got {record!r}")
         if record.split in HELD_SPLITS:
             raise EvalSplitError(
-                f"{record.pair_id} is an {record.split} record and may never enter {table}, which training and "
-                "corpus harvest read (Agent Rule 5); eval and unassigned records go to a verification table"
+                f"{record.pair_id} is a record of the {record.split} split and may never enter {table}, which "
+                "training and corpus harvest read (Agent Rule 5); eval, unassigned, and dev records go to a "
+                "verification table"
             )
     return given
 
@@ -314,7 +315,7 @@ def _refuse_mix(out_dir: Path, table: str) -> None:
     if mixed:
         raise ValueError(
             f"{out_dir} holds a {mixed[0]} table; a verification table never shares a directory with a corpus "
-            "table or a pair set, so eval and unassigned records stay apart from training data (Agent Rule 5)"
+            "table or a pair set, so eval, unassigned, and dev records stay apart from training data (Agent Rule 5)"
         )
 
 
@@ -370,7 +371,7 @@ def read_corpus(out_dir: Path) -> list[CorpusRecord]:
     """Return the corpus table's records under `out_dir`, rebuilt and checked, sorted by pair_id.
 
     Raises ValueError when `out_dir` holds no corpus table or one that does
-    not read back, and EvalSplitError for an eval or unassigned record in it.
+    not read back, and EvalSplitError for an eval, unassigned, or dev record in it.
     """
     records = _read(Path(out_dir), CORPUS)
     _train_records(records, "the corpus table")
@@ -392,7 +393,7 @@ def read_pair_set(out_dir: Path) -> list[CorpusRecord]:
     Training code reads corpus pairs only through this reader (none does
     yet). It refuses a directory that holds a verification table
     (EvalSplitError, Agent Rule 5), one with no pair set or one that does
-    not read back (ValueError), an eval or unassigned record in it
+    not read back (ValueError), an eval, unassigned, or dev record in it
     (EvalSplitError), and a record that write_pair_set would have left out
     (ValueError).
     """

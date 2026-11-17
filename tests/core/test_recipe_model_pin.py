@@ -50,12 +50,13 @@ SEED = 7
 CPU = {"kind": "cpu"}
 # The sha256 of each committed project recipe's canonical YAML, computed with lassi.core.recipe at 3f79562, before
 # this task; a hash is a function of its input text, not a measurement. None of them sets either key.
+# The tier-a recipes' hashes are those with bench.split dev since task P17.31.
 COMMITTED_HASHES = {
     "lassi-demo/rngd-compile.yaml": "5d3ce25eba621fd4c25811d91a0addde2be573cf12f1dbf34baa231f2b67d85b",
     "lassi-demo/rngd-cpu.yaml": "b88418d427f0e1fee7e38ba9202c98f906144c8d7d73117c39a3322d417edf59",
     "lassi-demo/rngd-smoke.yaml": "09256bcdabf25e930d1ff5f3744f64546b4a6437d721ec586faebabffc98bae6",
-    "lassi-demo/tier-a-rngd-maxabs.yaml": "8bdaeac1d6b46ef4293c7187a831b5f3c6b054ef2bf02e1161fd9e8f8ca4e992",
-    "lassi-demo/tier-a-rngd-pcc.yaml": "575a1dfba6ab5abf20743ecc1e280c92ab92d85a83d079669c2209e38267dc59",
+    "lassi-demo/tier-a-rngd-maxabs.yaml": "57c2be9657452c0b216efcb42bc1e04f1de3a8dd98aaa37f85ce886b94db03c7",
+    "lassi-demo/tier-a-rngd-pcc.yaml": "1e55c5c4b9532bdf1674a21b3437f41886770593d84e258d1d10e87e615ed3db",
 }
 
 STANDALONE: dict[str, Any] = {

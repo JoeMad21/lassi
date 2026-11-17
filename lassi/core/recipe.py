@@ -2030,7 +2030,7 @@ def _check_train_source(path: Path, data: Mapping[str, Any]) -> None:
 
 
 def _check_train_split(path: Path, data: Mapping[str, Any]) -> None:
-    """Refuse a bench.split other than train; eval and unassigned with Agent Rule 5's words (lassi.bench.registry)."""
+    """Refuse a bench.split other than train; a held split (HELD_SPLITS) with Agent Rule 5's words."""
     if "bench" not in data:
         return
     split = data["bench"]["split"]

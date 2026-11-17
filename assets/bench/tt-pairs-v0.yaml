@@ -11,7 +11,8 @@ repo: https://github.com/tenstorrent/tt-metal.git
 # that the pin's COMMIT and URL are this commit and repo.
 commit: 5280a9cfb00998fd49667a29523d03aee905c129
 pin: tt-metal
-# Per item: split stays unassigned until the owner assigns it before any training run (OQ-025, option (d)); seed,
+# Per item: split dev, a development item (task P17.31; OQ-083 (b)), given for evaluation and prompt work and refused to
+# training and corpus harvest (Agent Rule 5); seed,
 # inputs (generate_inputs entries, at most 2**20 elements each), and outputs give the program's arguments, the input
 # files in input order and then the output files (lassi.bench.registry program_args); tolerance is the upstream
 # example's own check as P4.9 read it (plans/spikes/p4-ttsim-runtime.md, "The examples' own checks"; exact equality
@@ -22,7 +23,7 @@ pin: tt-metal
 # 20261004-222751-exec-f0dd). A value starting with PLACEHOLDER is refused by load_suite.
 items:
   eltwise_binary:
-    split: unassigned
+    split: dev
     seed: 2
     # a + b elementwise over 64 tiles. Upstream fills b with the constant -1.0; b is drawn here instead, so a
     # candidate that ignores b cannot pass. The sums stay in (-1, 1).
@@ -67,7 +68,7 @@ items:
             upstream: tt_metal/programming_examples/eltwise_binary/kernels/compute/tiles_add.cpp
             sha256: f3a596d336425cfaf938b10574340c8a5b870bdfdd640484970597b07f9103b3
   eltwise_sfpu:
-    split: unassigned
+    split: dev
     seed: 3
     # exp elementwise over 64 tiles of uniform [0, 1), as upstream draws them; the results lie in [1, e)
     inputs:
@@ -111,7 +112,7 @@ items:
             upstream: tt_metal/programming_examples/eltwise_sfpu/kernels/compute/eltwise_sfpu.cpp
             sha256: 43757a074a6c9e5bbfbfd0369ed93eb0522b2860bce4b565d80d8789e82070ea
   loopback:
-    split: unassigned
+    split: dev
     seed: 1
     # a DRAM-to-DRAM copy of upstream's 50 tiles as one flat vector, uniform [0, 100) as upstream draws them
     inputs:
@@ -147,7 +148,7 @@ items:
             upstream: tt_metal/programming_examples/loopback/kernels/loopback_dram_copy.cpp
             sha256: f247ed9ae024f47efac707e598379f3b47ce602c6140a9dfa2a6cc01bd263af1
   matmul_multi_core:
-    split: unassigned
+    split: dev
     seed: 5
     # c = a b at upstream's 640 x 640 x 640, uniform [-0.5, 0.5) as upstream draws them
     inputs:
@@ -191,7 +192,7 @@ items:
             upstream: tt_metal/programming_examples/matmul/matmul_multi_core/kernels/compute/mm.cpp
             sha256: 15b9b6f921ecb67d2edeebf2ba3d6fb83446d9023cce6d8cd5dc2d93f6132250
   matmul_single_core:
-    split: unassigned
+    split: dev
     seed: 4
     # c = a b at upstream's 640 x 640 x 640, uniform [0, 1); the TT program refuses a b that is not square, since
     # upstream's writer arguments agree with the host's only when K == N

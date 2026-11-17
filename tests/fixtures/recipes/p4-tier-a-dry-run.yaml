@@ -11,7 +11,7 @@ llm:
     max_tokens: 4096  # base.yaml leaves max_tokens open and the runner never picks it; the mock ignores it
 bench:
   suite: tt-pairs-v0  # assets/bench/tt-pairs-v0.yaml: the five Tier A pairs
-  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025); evaluation may read it
+  split: dev  # every Tier A item is a development item (task P17.31; OQ-083 (b)); evaluation may read it
   items: [eltwise_binary, eltwise_sfpu, loopback, matmul_multi_core, matmul_single_core]  # all five items
 directions: [{source: cpp, target: tt}, {source: tt, target: cpp}]  # both directions: 10 trials
 prompts: p0-smoke  # assets/prompts/p0-smoke/: generate.txt and correct.txt, a template set any direction can use

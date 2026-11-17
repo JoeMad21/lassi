@@ -66,7 +66,7 @@ class CorpusRecord:
     - pair_id, direction, source_language, target: non-empty strings with no
       control character. suite and item: bench registry names
       ([A-Za-z0-9][A-Za-z0-9._+-]*). split: one of the registry's SPLITS
-      (train, eval, unassigned).
+      (train, eval, unassigned, dev).
     - source_level, target_level: levels lassi.ir.form knows (form.levels()).
       source_ir, target_ir: a module text, or None for an entry that failed
       before it had one; each passes check_ir at its level, and no module

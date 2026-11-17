@@ -25,7 +25,7 @@ The contract these tests fix (lassi.train.run):
   not LF-only JSON Lines of objects, holds a repeated key, NaN, Infinity,
   or a number too large for a float, is empty, or links out of the fixture
   directory; a bench suite that does not load; a bench item that is
-  unknown, repeated, or eval or unassigned, read through Suite.item for
+  unknown, repeated, or eval, unassigned, or dev, read through Suite.item for
   purpose train, so EvalSplitError becomes a RunError; a split with no
   items); a device the host lacks (the probes of lassi.core.devices, never
   a fallback); a framework() that is missing, raises, returns None, or
@@ -64,7 +64,7 @@ Every component is the fake trainer of tests/train/train_fakes.py in a test
 Registry, every probe is a fake with SYNTHETIC facts, git answers a
 SYNTHETIC commit (tests/train/conftest.py), and the suite and fixtures are
 SYNTHETIC files written by the test, except the refusals that read the
-committed lassi-hecbench-10 (eval) and tt-pairs-v0 (unassigned) manifests.
+committed lassi-hecbench-10 (eval) and tt-pairs-v0 (dev, task P17.31) manifests.
 No value in this module is a measurement.
 """
 
@@ -447,9 +447,11 @@ REFUSALS: dict[str, Refusal] = {
     "eval-item": Refusal(RunError, ("bench.items", "layout", "Agent Rule 5"),
                          data=lambda: on_bench(suite="lassi-hecbench-10", items=["layout"]),
                          options=_committed_suites),
-    "unassigned-item": Refusal(RunError, ("bench.items", "eltwise_binary", "Agent Rule 5"),
-                               data=lambda: on_bench(suite="tt-pairs-v0", items=["eltwise_binary"]),
-                               options=_committed_suites),
+    "dev-split": Refusal(RecipeError, ("bench.split", "'dev'", "Agent Rule 5"),
+                         data=lambda: on_bench(suite="tt-pairs-v0", split="dev"), options=_committed_suites),
+    "dev-item": Refusal(RunError, ("bench.items", "eltwise_binary", "dev split", "Agent Rule 5"),
+                        data=lambda: on_bench(suite="tt-pairs-v0", items=["eltwise_binary"]),
+                        options=_committed_suites),
     "suite-without-train-items": Refusal(RunError, ("lassi-hecbench-10", "train"),
                                          data=lambda: on_bench(suite="lassi-hecbench-10"), options=_committed_suites),
     "eval-item-of-a-train-suite": Refusal(RunError, ("bench.items", "held", "Agent Rule 5"),

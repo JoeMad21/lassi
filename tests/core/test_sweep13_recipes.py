@@ -109,7 +109,7 @@ def test_each_recipe_is_compile_only_and_says_so(name: str) -> None:
     assert data["executor"] == {"kind": "none"} and "oracle" not in data
     assert data["toolchain"] == {language: TOOLCHAINS[language], "tt": "ttmetal-host"}
     assert data["directions"] == [{"source": "cpp", "target": language}]
-    assert data["bench"] == {"suite": f"tt-pairs-v0-{language}", "split": "unassigned", "items": ITEMS[language]}
+    assert data["bench"] == {"suite": f"tt-pairs-v0-{language}", "split": "dev", "items": ITEMS[language]}
     assert data["prompts"] == SETS[language] and data["context"] == [PACKS[language]]
     assert data["retrieval"] == {"index": INDEXES[language], "k": 4, "max_chars": 8000,
                                  "prompts": ["generate", "correct"]}

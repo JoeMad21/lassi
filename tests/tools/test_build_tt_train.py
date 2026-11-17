@@ -27,8 +27,12 @@ The contract these tests fix:
   no directory of a Tier A item, and the tracked manifest beside it matches
   it: its spec_sha256 is the spec's, its references are every tracked Tier
   A program with its current sha256 (a changed reference makes the
-  manifest stale), its held items cover every eval and unassigned item of
-  the suite, and its examples and exclusions are the spec's.
+  manifest stale), its held items cover every eval, unassigned, and dev
+  item of the suite, and its examples and exclusions are the spec's.
+- tt-pairs-v0 as a development set (task P17.31; OQ-083 (b)): with every
+  tt-pairs-v0 item in the dev split, load_held_out still holds the five
+  Tier A items and their example directories as the tracked manifest
+  records them, and the build's excluded directories are the manifest's.
 - THE TIER A TEST: when the generated records are present
   ($LASSI_SCRATCH/train-data/tt-train-v0.jsonl, the file the manifest pins
   by sha256), no record holds a run of 3 or more consecutive non-blank
@@ -42,10 +46,13 @@ The synthetic trees are SYNTHETIC; no value here is a measurement.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import importlib.util
 import json
 import os
+import re
+import shutil
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -327,6 +334,50 @@ def test_the_manifest_records_each_source_file_and_no_tier_a_file_in_a_record() 
         assert example["files"], example["example"]
         for entry in example["files"]:
             assert len(entry["sha256"]) == 64 and not any(entry["path"].startswith(prefix) for prefix in tier)
+
+
+# ---------------------------------------------------------------------------
+# tt-pairs-v0 as a development set (task P17.31; OQ-083 (b))
+
+TIER_A_ITEMS = ["eltwise_binary", "eltwise_sfpu", "loopback", "matmul_multi_core", "matmul_single_core"]
+
+
+def dev_repository(tmp_path: Path) -> Path:
+    """Return a SYNTHETIC repository root: tt-pairs-v0.yaml with every item's split set to dev, and its references."""
+    repo = tmp_path / "repo"
+    text, count = re.subn(r"(?m)^(    split: )[a-z]+(?=\r?$)", r"\g<1>dev", SUITE.read_bytes().decode("utf-8"))
+    assert count == len(TIER_A_ITEMS), f"expected one split line per Tier A item, found {count}"
+    target = repo / SUITE.relative_to(REPO)
+    target.parent.mkdir(parents=True)
+    target.write_bytes(text.encode("utf-8"))
+    shutil.copytree(REFERENCES, repo / REFERENCES.relative_to(REPO))
+    return repo
+
+
+def test_the_held_items_and_exclusions_are_unchanged_when_tt_pairs_v0_is_dev(tmp_path: Path) -> None:
+    """With every tt-pairs-v0 item dev, the held items, their directories, and the exclusions are the manifest's."""
+    module = tool()
+    spec = module.load_spec(SPEC)
+    try:
+        held = module.load_held_out(spec, repo=dev_repository(tmp_path))
+    except ValueError as error:
+        if "split" in str(error) and "'dev'" in str(error):
+            pytest.fail(f"load_suite refuses split dev, which is not a split yet (task P17.31): {error}")
+        raise
+    recorded = manifest()["held_out"]
+    assert list(held.items) == recorded["items"] == TIER_A_ITEMS, "a dev item left the held items (HELD_SPLITS)"
+    assert [{"path": path, "item": item} for path, item in held.tier_dirs.items()] == recorded["example_dirs"]
+    built = module.build({}, dataclasses.replace(spec, include={}), held, "5280a9cf")
+    assert [entry["example"] for entry in built.excluded] == [entry["example"] for entry in manifest()["excluded"]]
+
+
+def test_the_committed_suites_held_items_are_its_dev_items() -> None:
+    """Every committed tt-pairs-v0 item is dev, and the tool holds all five out, as the manifest records."""
+    suite = load_suite(SUITE)
+    assert {name: item.split for name, item in suite.items.items()} == dict.fromkeys(TIER_A_ITEMS, "dev")
+    assert "dev" in HELD_SPLITS
+    held = tool().load_held_out(tool().load_spec(SPEC))
+    assert list(held.items) == manifest()["held_out"]["items"] == TIER_A_ITEMS
 
 
 def generated_records() -> Path:

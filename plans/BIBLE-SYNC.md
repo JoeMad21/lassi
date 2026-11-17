@@ -49,3 +49,47 @@ Mirror edits of 2026-11-16, deferred during the owner's window of that night. Th
 - Execution Backends, the tt_silicon row: the visible_card clause after the settings sentence ("and visible_card (task P17.66), null unless it names one card's number"), and the sentence on TT_VISIBLE_DEVICES (unset unless visible_card names a card; the abort of rx 20261116-192634-tracy-07f1; unverified on the cards until the next run).
 - Execution Backends, the tt_silicon row's Status cell: the config keys now end "harness, and visible_card (task P17.66)".
 - Sandbox, the tt_silicon program runs bullet: the environment sentence (the profiler's names with device_profiler kernel, TT_VISIBLE_DEVICES with visible_card, the allowlist's TT_PROFILER_NAMES and TT_VISIBILITY_NAMES, each only with a Tenstorrent exposure and never in a compile), replacing "so the allowlist gains no name".
+
+## 2026-11-17: the dev split (P17.31)
+
+Mirror edits in docs/BIBLE.md, to apply to the master copy after the pending batches above:
+
+- Old: A manifest item's split is train, eval, or unassigned [DESIGN] (task P4.13; OQ-025, option (d)): unassigned marks an item the owner has not yet assigned and decides nothing. The bench registry (lassi.bench.registry, Suite.item) refuses an eval or unassigned item to training, prompt tuning, and corpus harvest, the purposes Agent Rule 5 forbids, with EvalSplitError naming its split, and gives it for evaluation; a train item serves every purpose. A recipe selects the items of its split by the split's exact name, and the runner refuses a recipe that asks for an item outside its split or for a split with no items, so until the owner assigns Tier A's splits (P7) a run reads them with `split: unassigned`.
+  New: A manifest item's split is train, eval, unassigned, or dev [DESIGN] (task P4.13; OQ-025, option (d); dev, task P17.31): unassigned marks an item the owner has not yet assigned and decides nothing, and dev marks a development item. The bench registry (lassi.bench.registry, Suite.item, REFUSED_PURPOSES) refuses an eval or unassigned item to training, prompt tuning, and corpus harvest, the purposes Agent Rule 5 forbids, and a dev item to training and corpus harvest, with EvalSplitError naming its split; it gives each for evaluation, and a dev item for prompt tuning as well; a train item serves every purpose. The held splits (HELD_SPLITS: eval, unassigned, and dev) are those kept from training and corpus harvest, so a train recipe, a corpus, and tt-train-v0's build refuse a dev item as they refuse an eval one. A recipe selects the items of its split by the split's exact name, and the runner refuses a recipe that asks for an item outside its split or for a split with no items.
+- Old: the manifest's splits and the registry (lassi.bench.registry SPLITS) are unchanged for now, its items still unassigned, and a later task, P17.31, adds the split value.
+  New: its five items and those of its four siblings (tt-pairs-v0-kh, tt-pairs-v0-ttkernel, tt-pairs-v0-ttir, tt-pairs-v0-d2m) are in the dev split, and every recipe that reads them names `split: dev` (task P17.31), which changed those recipes' hashes; the held-out C++ -> TT set evaluation needs is to be tt-par-v0's held-out items (task P17.68; OQ-129).
+- Old: | Split by item; every item unassigned until P7 (OQ-025) |
+  New: | Split by item; every item dev, a development set (OQ-083 (b); task P17.31) |
+- Old: | As tt-pairs-v0: every item unassigned (OQ-025), a development set (OQ-083 (b)) |
+  New: | As tt-pairs-v0: every item dev, a development set (OQ-083 (b); task P17.31) |
+- Old: | As tt-pairs-v0: every item unassigned (OQ-025), a development set (OQ-083 (b)) |
+  New: | As tt-pairs-v0: every item dev, a development set (OQ-083 (b); task P17.31) |
+- Old: (1) every eval and unassigned item of tt-pairs-v0 has its example directory
+  New: (1) every held item (eval, unassigned, or dev) of tt-pairs-v0 has its example directory
+- Old: Tier A (tt-pairs-v0): every item stays unassigned, refused to training as eval items are, until training exists; the owner assigns its splits before any training run reads the suite, in P7 (OQ-025, owner: option (d)).
+  New: Tier A (tt-pairs-v0): every item dev, a development set (OQ-083 (b); task P17.31), refused to training and corpus harvest, so its items can never be train or eval items (before it, unassigned under OQ-025, owner: option (d)).
+- Decision Log, first data row: | 2026-11-17 | The dev split (task P17.31; Benchmark Suites, the split rules; OQ-083 (b)): lassi.bench.registry SPLITS gains dev, a development item that the registry gives for evaluation and prompt tuning and refuses to training and corpus harvest (REFUSED_PURPOSES), and HELD_SPLITS, the splits kept from training and corpus harvest, holds eval, unassigned, and dev; tt-pairs-v0's five items and those of tt-pairs-v0-kh, -ttkernel, -ttir, and -d2m are dev, every recipe that reads them names `split: dev`, which changes those recipes' hashes, and the three manifests that record tt-pairs-v0's hash record its new one | OQ-083 (b) made tt-pairs-v0 a development set on 2026-10-25 and left the split value to this task: prompt and feature work steered by its outcomes has been allowed since, while the registry still refused its unassigned items to prompt tuning. A split of its own says what the items are, keeps them from training and corpus harvest as before, and lets tt-par-v0 (OQ-129) hold development and eval items side by side. A run's provenance names its commit, so an earlier run's recipe hash still reproduces at its own commit |
+- Count sentence: "Two hundred and six" -> "Two hundred and seven"; "and one on 2026-11-16" -> "one on 2026-11-16, and one on 2026-11-17".
+- Also in this batch (same section or the sections named), each Old -> New:
+  - Old: Split by item; every item unassigned until P7 (OQ-025). C++ -> TT:
+    New: Split by item; every item dev, a development set (OQ-083 (b); task P17.31). C++ -> TT:
+  - Old: and the eval and unassigned names with their splits only, in read-only mappings, so no eval or unassigned item and no Suite is reachable from TrainData (Agent Rule 5).
+    New: and the eval, unassigned, and dev names with their splits only, in read-only mappings, so no held item and no Suite is reachable from TrainData (Agent Rule 5).
+  - Old: which reads the view: an eval or unassigned item raises EvalSplitError
+    New: which reads the view: an eval, unassigned, or dev item raises EvalSplitError
+  - Old: bench.split must be train: eval and unassigned are refused at load, naming bench.split (Agent Rule 5), and so is any other split.
+    New: bench.split must be train: eval, unassigned, and dev are refused at load, naming bench.split (Agent Rule 5), and so is any other split.
+  - Old: so an unknown, eval, or unassigned item is refused, naming bench.items;
+    New: so an unknown, eval, unassigned, or dev item is refused, naming bench.items;
+  - Old: verification/ holds the eval and unassigned records of round trips read for purpose eval,
+    New: verification/ holds the eval, unassigned, and dev records of round trips read for purpose eval,
+  - Old: The writers of the corpus and of a pair set refuse an eval or unassigned record with EvalSplitError
+    New: The writers of the corpus and of a pair set refuse an eval, unassigned, or dev record with EvalSplitError
+  - Old: never the held-out inputs of an eval or unassigned item (owner, 2026-10-15, OQ-055, decision 12; Agent Rule 5).
+    New: never the held-out inputs of an eval, unassigned, or dev item (owner, 2026-10-15, OQ-055, decision 12; Agent Rule 5).
+  - Old: and every eval and unassigned item of that suite, read through the bench registry, must be among them,
+    New: and every eval, unassigned, and dev item of that suite, read through the bench registry, must be among them,
+  - Old: `lassi train` refuses a bench split of eval or unassigned at load and fetches every bench item through the bench registry for purpose train, which refuses an eval or unassigned item
+    New: `lassi train` refuses a bench split of eval, unassigned, or dev at load and fetches every bench item through the bench registry for purpose train, which refuses an eval, unassigned, or dev item
+  - Old: - A corpus is built without every eval and unassigned item (Agent Rule 5) [DESIGN]
+    New: - A corpus is built without every eval, unassigned, and dev item (Agent Rule 5) [DESIGN]

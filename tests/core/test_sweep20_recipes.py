@@ -85,7 +85,7 @@ def test_each_recipe_runs_on_ttsim_with_the_item_tolerance_and_says_so(slug: str
     assert data["executor"][language]["kind"] == "ttmlir-ttsim"
     assert data["oracle"] == {"kind": "binary_io", "metric": "from_item", "threshold": "from_item", "shape": "elements"}
     assert data["loop"] == {"max_corrections": 8, "correct_on_mismatch": True, "correct_on_sim_gap": True}
-    assert data["bench"]["split"] == "unassigned"
+    assert data["bench"]["split"] == "dev"
     text = (SWEEP / slug / f"{name}.yaml").read_text(encoding="ascii")
     header = " ".join(line.lstrip("# ") for line in text.split("\nextends:")[0].split("\n"))
     assert "RUN ON TTSIM WITH THE OUTPUT CHECK" in header and "a simulator" in header

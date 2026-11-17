@@ -27,8 +27,8 @@ The contract these tests fix (lassi.core.recipe):
   mode of 2026-10-23), and DATA_SOURCES is synthetic, bench, and corpus.
 - A train recipe names exactly one data source, bench, data.synthetic, or
   data.corpus (a corpus name, one plain name).
-  bench.split must be train: eval and unassigned are refused at load,
-  naming bench.split and Agent Rule 5.
+  bench.split must be train: eval, unassigned, and dev (task P17.31) are
+  refused at load, naming bench.split and Agent Rule 5.
 - The Trainer must declare takes_device, and its device section is checked
   as every device section is (lassi.core.devices.parse_device), each
   refusal naming trainer.device. Its declared methods, weight_modes, and
@@ -491,7 +491,15 @@ def test_eval_and_unassigned_bench_splits_are_refused_at_load(split: str, tmp_pa
     assert "Agent Rule 5" in message, message
 
 
-@pytest.mark.parametrize("split", ["test", "Train", "dev"])
+def test_a_dev_bench_split_is_refused_at_load_with_agent_rule_5s_words(tmp_path: Path) -> None:
+    """A train recipe that reads the dev split is refused as eval and unassigned are (task P17.31; OQ-083 (b))."""
+    message = load_error(tmp_path, on_bench(suite="tt-pairs-v0", split="dev"))
+    assert "bench.split" in message and "'dev'" in message, message
+    assert "the dev split may never be used for training (Agent Rule 5)" in message, message
+
+
+# "dev" left this list in task P17.31, when it became a split (the test above); "devel" stands for a misspelt one.
+@pytest.mark.parametrize("split", ["test", "Train", "devel"])
 def test_a_split_other_than_train_is_refused(split: str, tmp_path: Path) -> None:
     message = load_error(tmp_path, on_bench(split=split))
     assert "bench.split" in message and "train" in message, message

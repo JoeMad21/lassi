@@ -63,7 +63,7 @@ def test_the_sibling_holds_the_development_items_unchanged() -> None:
             assert getattr(ours, key) == getattr(theirs, key), f"{name}.{key} drifted from tt-pairs-v0"
         for language in ("cpp", "tt"):
             assert ours.languages[language] == theirs.languages[language], f"{name}.{language} drifted"
-        assert ours.split == "unassigned"
+        assert ours.split == "dev", f"{name}: a development item (P17.31; OQ-083 (b))"
 
 
 @pytest.mark.parametrize("name", ITEMS)

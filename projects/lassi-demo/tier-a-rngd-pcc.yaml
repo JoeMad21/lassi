@@ -16,7 +16,7 @@ llm:
     max_tokens: 4096  # the bound projects/lassi-demo/rngd-compile.yaml sets; base.yaml leaves it open
 bench:
   suite: tt-pairs-v0  # assets/bench/tt-pairs-v0.yaml: the five Tier A pairs
-  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  split: dev  # every Tier A item is a development item (task P17.31; OQ-083 (b))
   items: [matmul_multi_core, matmul_single_core]  # the items that declare pcc tolerances
 directions: [{source: cpp, target: tt}, {source: tt, target: cpp}]  # both directions
 prompts: tt-host-v0  # assets/prompts/tt-host-v0/: the C++ and TT host program template set

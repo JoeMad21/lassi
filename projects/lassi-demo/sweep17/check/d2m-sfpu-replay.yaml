@@ -17,7 +17,7 @@ extract:
   unfenced_file_lines: true  # as the sweep17 recipes
 bench:
   suite: tt-pairs-v0-d2m
-  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  split: dev  # every Tier A item is a development item (task P17.31; OQ-083 (b))
   items: [eltwise_sfpu]
 directions: [{source: cpp, target: d2m}]
 prompts: tt-d2m-bare-v1  # the sweep17 d2m template set; the replay ignores the prompts

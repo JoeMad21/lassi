@@ -25,7 +25,7 @@ extract:
   unfenced_file_lines: true  # as sweep18's recipes
 bench:
   suite: tt-pairs-v0-ttir  # tt-pairs-v0's items unchanged, with a ttir language whose reference is tt
-  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  split: dev  # every Tier A item is a development item (task P17.31; OQ-083 (b))
   items: [eltwise_binary, eltwise_sfpu, matmul_multi_core]  # each judged by its declared tolerance
 directions: [{source: cpp, target: ttir}]
 prompts: tt-ttir-bare-v1  # the bare loop, with run-failure (simulator gaps included) and mismatch corrections

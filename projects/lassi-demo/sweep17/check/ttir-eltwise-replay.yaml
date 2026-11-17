@@ -23,7 +23,7 @@ extract:
   unfenced_file_lines: true  # as the sweep17 recipes
 bench:
   suite: tt-pairs-v0-ttir
-  split: unassigned  # every Tier A item stays unassigned until the owner assigns it (OQ-025)
+  split: dev  # every Tier A item is a development item (task P17.31; OQ-083 (b))
   items: [eltwise_binary]
 directions: [{source: cpp, target: ttir}]
 prompts: tt-ttir-bare-v1  # the sweep17 template set; the replay ignores the prompts

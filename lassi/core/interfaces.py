@@ -645,7 +645,7 @@ class TrainData:
     took over the data's identity. `records` holds the synthetic or corpus
     records in file order (() for bench). `suite` is the bench suite's
     train-only view (lassi.bench.registry TrainView, from Suite.train_view();
-    task P17.9), which holds no eval or unassigned item (Agent Rule 5), and
+    task P17.9), which holds no eval, unassigned, or dev item (Agent Rule 5), and
     `items` the names of the selected items (None and () for synthetic
     data). A Trainer reads a bench item through bench_item.
     """
@@ -659,7 +659,7 @@ class TrainData:
     def bench_item(self, name: str) -> SuiteItem:
         """Return bench item `name` through the train-only view.
 
-        An eval or unassigned item raises EvalSplitError (Agent Rule 5); a
+        An eval, unassigned, or dev item raises EvalSplitError (Agent Rule 5); a
         train item outside `items`, which the split hash does not cover, and
         synthetic data, which has no suite, raise ValueError.
         """

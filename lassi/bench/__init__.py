@@ -1,7 +1,8 @@
 """Benchmark suites: the item registry with splits, reference targets, and pinned sources.
 
 See lassi.bench.registry. Eval and unassigned items are refused to training,
-prompt tuning, and corpus harvest (Agent Rule 5).
+prompt tuning, and corpus harvest, and dev items to training and corpus
+harvest (Agent Rule 5).
 """
 
 from lassi.bench.registry import (

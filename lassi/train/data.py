@@ -13,7 +13,7 @@ load_train_recipe):
   that resolves outside the fixture directory.
 - bench, a suite manifest's train split. load_bench loads the manifest and
   fetches every selected item (bench.items, else every item of the train
-  split) with Suite.item(name, purpose="train"), so an eval or unassigned
+  split) with Suite.item(name, purpose="train"), so an eval, unassigned, or dev
   item raises EvalSplitError, reported as a RunError (Agent Rule 5). The
   TrainData holds the suite's train-only view (Suite.train_view(); task
   P17.9), never the suite. It reads no source file.
@@ -25,7 +25,7 @@ load_train_recipe):
   corpus_root). load_corpus checks that the manifest names the corpus, that
   the records file's sha256 and record count are the manifest's, so only
   the file the tool checked is trained on, and Agent Rule 5: held_out names
-  the suite the corpus was built without, and every eval and unassigned
+  the suite the corpus was built without, and every eval, unassigned, and dev
   item of that suite, read through the bench registry, must be among its
   items. The records follow data.synthetic's line rules.
 
@@ -167,8 +167,8 @@ def load_bench(recipe: Recipe, suites_dir: Path) -> tuple[TrainData, dict[str, A
     The items are bench.items, else every item of the train split, each
     fetched with Suite.item(name, purpose="train") and sorted. A suite name
     that is not one plain segment, a missing or refused manifest, a split
-    with no items, an item named twice, an unknown item, and an eval or
-    unassigned item (EvalSplitError, Agent Rule 5) are RunErrors naming the
+    with no items, an item named twice, an unknown item, and an eval,
+    unassigned, or dev item (EvalSplitError, Agent Rule 5) are RunErrors naming the
     key. The TrainData holds the suite's train-only view (Suite.train_view()).
     The identity is what the split hash is taken over.
     """
@@ -237,8 +237,8 @@ def load_corpus(name: str, manifests: Path, records_root: Path, suites_dir: Path
     """Read corpus `name` (its manifest under `manifests`, its records under `records_root`); return data, identity.
 
     The manifest must name the corpus and its records file (records.file,
-    records.sha256, records.count), and its held_out must exclude every eval
-    and unassigned item of the suite it names (Agent Rule 5). The records file
+    records.sha256, records.count), and its held_out must exclude every eval,
+    unassigned, and dev item of the suite it names (Agent Rule 5). The records file
     must have that sha256 and count and follow data.synthetic's line rules.
     Every refusal is a RunError naming data.corpus.
     """
@@ -292,7 +292,7 @@ def _records_meta(meta: Any, where: str) -> dict[str, Any]:
 
 
 def _check_held_out(held: Any, suites_dir: Path, where: str) -> None:
-    """Refuse a corpus whose held_out does not exclude every eval and unassigned item of its suite (Agent Rule 5)."""
+    """Refuse a corpus whose held_out does not exclude every held (HELD_SPLITS) item of its suite (Agent Rule 5)."""
     items = held.get("items") if isinstance(held, dict) else None
     suite_name = held.get("suite") if isinstance(held, dict) else None
     if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
@@ -309,7 +309,7 @@ def _check_held_out(held: Any, suites_dir: Path, where: str) -> None:
         if spec.split in HELD_SPLITS and item not in items:
             raise RunError(
                 f"{where}: the corpus manifest does not record that it was built without the {spec.split} item "
-                f"{item!r} of suite {suite.name!r}; a corpus excludes every eval and unassigned item (Agent Rule 5)"
+                f"{item!r} of suite {suite.name!r}; a corpus excludes every held item (Agent Rule 5)"
             )
 
 

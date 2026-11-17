@@ -91,7 +91,7 @@ def test_the_compute_key_is_read_and_checked(tmp_path: Path, monkeypatch: pytest
     (copy / found.path).write_bytes(b"void lassi_loopback(void) {}\n")
     with pytest.raises(ValueError, match="sha256"):
         SUITE.compute_source("loopback", purpose="eval")
-    assert SUITE.items["loopback"].split == "unassigned"
+    assert SUITE.items["loopback"].split == "dev"
     with pytest.raises(registry.EvalSplitError):
         SUITE.compute_source("loopback", purpose="train")
 
