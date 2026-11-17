@@ -12,7 +12,8 @@ The contract these tests fix:
   tt-pairs-v0-kh, tt-pairs-v0-ttkernel, tt-pairs-v0-ttir, or tt-pairs-v0-d2m
   names bench.split dev, never unassigned, and still loads (as
   tests/core/test_faithful_bindings.py loads every committed recipe).
-- A recipe of any other suite keeps its split: none names dev.
+- A recipe of any other suite keeps its split: none names dev, except a recipe of
+  a suite that holds dev items beside items of other splits (MIXED_DEV_SUITES).
 
 The recipes are the committed ones, resolved through their extends chains;
 loading builds no component. No value here is a measurement.
@@ -30,6 +31,9 @@ from test_faithful_bindings import PROJECTS, committed_recipes, load_committed
 from lassi.core.recipe import resolved_data
 
 DEV_SUITES = frozenset({"tt-pairs-v0", "tt-pairs-v0-kh", "tt-pairs-v0-ttkernel", "tt-pairs-v0-ttir", "tt-pairs-v0-d2m"})
+# Suites that hold dev items beside items of other splits, whose recipes may read dev or another split (tt-par-v0,
+# task P17.67; tt-par-v0-kh, P17.69; OQ-129).
+MIXED_DEV_SUITES = frozenset({"tt-par-v0", "tt-par-v0-kh"})
 
 
 @cache
@@ -74,7 +78,7 @@ def test_a_recipe_of_a_development_suite_reads_split_dev_and_loads(tmp_path: Pat
 
 
 def test_no_recipe_of_another_suite_reads_split_dev() -> None:
-    """Recipes of every other suite keep their split: none names dev."""
+    """Recipes of every other suite keep their split: none names dev, except recipes of MIXED_DEV_SUITES."""
     moved = [label(path) for path, bench in benches().items()
-             if bench.get("suite") not in DEV_SUITES and bench.get("split") == "dev"]
+             if bench.get("suite") not in DEV_SUITES | MIXED_DEV_SUITES and bench.get("split") == "dev"]
     assert not moved, f"recipes of suites outside the development set read split dev: {moved[:5]}"

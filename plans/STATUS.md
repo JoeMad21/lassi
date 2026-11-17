@@ -225,4 +225,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.73 | READY | A single-core correction (opt-in) | P17.68,P17.70,P17.72 |  |
 | P17.74 | READY | tt-par sweeps on ttsim: the development ladder, then the frozen held-out run | P17.67,P17.68,P17.69,P17.70,P17.71,P17.72,P17.73,P17.76 |  |
 | P17.75 | OWNER | Card profiles of the tt-par translations | P17.74 | the owner starts card runs (OQ-127) |
-| P17.76 | OWNER | tt-par-v0's programs built and checked on ttsim | P17.67,P17.68 | every step on alpha01 waits on the owner's yes (OQ-130) |
+| P17.76 | OWNER | tt-par-v0's programs built and checked on ttsim | P17.67,P17.68 | check recipes (projects/lassi-demo/tt-par-check/) and the launch note (plans/runs/tt-par/README.md) ready; every step on alpha01 waits on the owner's yes (OQ-130) |

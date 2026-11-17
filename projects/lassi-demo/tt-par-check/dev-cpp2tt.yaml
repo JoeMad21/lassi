@@ -1,0 +1,34 @@
+# A check of tt-par-v0's dev items' programs on ttsim (task P17.76; OQ-129, OQ-130): no model is asked. The baseline
+# builds each item's C++ program with the pinned host g++ and runs it on the host CPU, builds its TT reference with the
+# pinned clang++-20 and runs it on ttsim, records the two programs' agreement under the item's own tolerance
+# (Trial.reference_agreement: the comparison with the C++ program), and ends the trial at baseline-disagree when they
+# disagree; the mock then answers with the TT reference as the candidate, which is built and run on ttsim a second
+# time, and the oracle compares that run with the baseline's TT run (a repeatability check, not the C++ comparison).
+# A trial that ends at baseline-compile, baseline-run, or baseline-disagree names the program to fix (P17.76: only a
+# host program, or a held-out item's kernels). One trial per item. Run on the build host with the owner's yes
+# (OQ-130), after `uv run tools/fetch_bench.py assets/bench/tt-par-v0.yaml` (plans/runs/tt-par/README.md). ttsim is
+# the device of every TT run here; its wall times are simulator wall time, never performance (Agent Rule 2).
+extends: base  # projects/base.yaml: sampling, runs root, sandbox, and report choices
+faithful: false  # a check recipe; nothing here reproduces an upstream run
+model: {backend: mock, id: mock-reference}  # replies with the item's reference target in FILE blocks
+llm:
+  sampling:
+    max_tokens: 4096  # required by the loader; the mock ignores it
+loop:
+  max_corrections: 0  # the reference is the candidate, so no correction is ever asked for
+bench:
+  suite: tt-par-v0  # assets/bench/tt-par-v0.yaml
+  split: dev  # the dev items (OQ-129)
+directions: [{source: cpp, target: tt}]  # the C++ program is the source, the TT program the reference
+prompts: tt-host-v1  # the mock ignores the prompt
+toolchain:
+  cpp: gcc-native  # the pinned host g++ with the native row's flags (toolchains/gcc.pin)
+  tt: ttmetal-host  # the pinned clang++-20 against the pinned tt-metal tree (toolchains/tt-metal.pin)
+fixes:
+  baseline_both: true  # build and run both references, so the baseline records their agreement
+stages: [baseline, generate, compile_loop, run_loop, oracle]
+executor:
+  cpp: {kind: native}  # the C++ program runs in the sandbox on the host CPU
+  tt: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # TT programs run in the sandbox on ttsim, a simulator
+oracle: {kind: binary_io, metric: from_item, threshold: from_item, shape: elements}  # the item's declared tolerance
+trials: {n: 1}  # one trial per item: five
