@@ -17,9 +17,10 @@ simulator wall time.
 Configuration (a recipe's executor section, such as `executor: {kind:
 ttsim, arch: wormhole_b0, dispatch: slow}`): `arch` (only "wormhole_b0", the chip the
 pinned library simulates), `dispatch` (only "slow", as the ttsim row sets),
-`chips` (only the int 1, a single chip; a bool is not an int), and
-`harness`. Any other value is a ValueError at construction naming the key
-and the one supported value.
+`chips` (only the int 1, a single chip; a bool is not an int), `harness`,
+and `count_cores` (true or false, false by default; task P17.70, the core
+count below). Any other value is a ValueError at construction naming the
+key and the values it takes.
 
 The pinned install, from toolchains/ttsim.pin and toolchains/tt-metal.pin,
 under the resolved toolchains root: the library
@@ -92,6 +93,18 @@ What the executor reads from a run (task P4.6's RunResult fields):
   No log or no complete dump: no note. The rerun's own findings, streams,
   and status are never read. Every hang is rerun, a reference run's too;
   the stages decide what to say (lassi.core.stages run_findings).
+- Core count (task P17.70; plans/spikes/ttsim-cores.md). With the config
+  key count_cores true (False by default), a run the stages read as clean
+  (exit 0, no hang, no undefined behavior, no gap, no error diagnostic)
+  runs once more with Watcher, exactly as a hang is rerun, and cores_note
+  reads the copy's last complete dump: the worker cores whose k_ids hold a
+  nonzero id ran a kernel. The count becomes one Diagnostic(stage "run",
+  severity "note", code lassi.core.capabilities CORES_CODE) on the scored
+  run; a rerun that did not exit 0 or hung, or no complete dump, gives no
+  note. A reference run is counted the same way. Under
+  ttsim the device profiler fails (UnimplementedFunctionality), so the
+  Watcher is the way to count; the count is a count of cores, never a time
+  (Agent Rule 2), and the stages never put it into a prompt.
 
 Every message keeps printable ASCII only; any other character becomes "?".
 Nothing the model wrote is muted: the finding lines, the kernel paths, and
@@ -113,11 +126,11 @@ import os
 import posixpath
 import re
 import shutil
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from lassi.core.capabilities import SIMULATOR, WATCHER_CODE
+from lassi.core.capabilities import CORES_CODE, SIMULATOR, WATCHER_CODE
 from lassi.core.interfaces import Limits, RunResult
 from lassi.core.record import Diagnostic
 from lassi.core.registry import register
@@ -188,6 +201,9 @@ _DUMP_START = re.compile(r"Dump #(?P<number>[0-9]{1,20}) at ")
 _DUMP_END = re.compile(r"Dump #(?P<number>[0-9]{1,20}) completed at ")
 # A core line ends "k_ids:  1|  0|  0|  0|  0" (one id per processor); a kernel line reads "k_id[  1]: <path>".
 _CORE_MARK = " core("
+# A worker core's line (the record run of plans/spikes/ttsim-cores.md: "Device 0 worker core(x= 0,y= 0) ..."); an idle
+# ethernet core's reads "idleth core(".
+_WORKER_MARK = " worker core("
 _CORE_IDS = "k_ids:"
 _ID_LIST = re.compile(r"[0-9 |]+")
 _KERNEL_ID = re.compile(r"k_id\[ *(?P<id>[0-9]{1,20})\]: ")
@@ -468,6 +484,42 @@ def watcher_note(log: str) -> Diagnostic | None:
     return Diagnostic(stage="run", severity="note", code=WATCHER_CODE, message=message)
 
 
+def count_worker_cores(log: str) -> tuple[str, int, int] | None:
+    """Return (dump number, workers that ran a kernel, worker lines) of the log's last complete dump, or None.
+
+    A worker core ran a kernel when its line's k_ids hold a nonzero id
+    (_busy_ids); a worker line without k_ids ran none. Only worker lines
+    count: an idle ethernet core is not a worker. None when the log holds no
+    complete dump (task P17.70; plans/spikes/ttsim-cores.md).
+    """
+    dump = _last_complete_dump([line.rstrip("\r") for line in log.split("\n")])
+    if dump is None:
+        return None
+    number, body = dump
+    workers = [line for line in body if _WORKER_MARK in line]
+    return number, sum(1 for line in workers if _busy_ids(line)), len(workers)
+
+
+def _ran_clean(returncode: int | None, sim_ub: bool, sim_gap: str | None, diagnostics: Sequence[Diagnostic]) -> bool:
+    """Return True for a run the stages read as clean (S5): exit 0, no undefined behavior, no gap, no error."""
+    return returncode == 0 and not sim_ub and sim_gap is None and not any(d.severity == "error" for d in diagnostics)
+
+
+def cores_note(log: str) -> Diagnostic | None:
+    """Return the core count of a Watcher log as a run-stage note coded CORES_CODE, or None.
+
+    The message is "cores used: <n> of <m> worker cores ran a kernel
+    (Watcher dump #<k>); a count, not a time" (Agent Rule 2). None when
+    count_worker_cores gives None or the dump holds no worker line.
+    """
+    counted = count_worker_cores(log)
+    if counted is None or counted[2] == 0:
+        return None
+    number, busy, workers = counted
+    message = f"cores used: {busy} of {workers} worker cores ran a kernel (Watcher dump #{number}); a count, not a time"
+    return Diagnostic(stage="run", severity="note", code=CORES_CODE, message=message)
+
+
 def _left_out(count: int) -> str:
     """Return the part of a capped message (a Watcher note, a build log) that says how many lines it leaves out."""
     return f"... {count} more lines left out"
@@ -550,17 +602,18 @@ class _Mounts:
 class TtsimExecutor:
     """Runs a TT host program on ttsim, the pinned Wormhole simulator, only inside the sandbox.
 
-    The config keys are `arch`, `dispatch`, `chips`, and `harness` (see the
-    module docstring); the keyword settings `hidden_roots`, `toolchains`,
-    and `sandbox` are for the runner and tests, as NativeExecutor has them
-    (None means $LASSI_SCRATCH, $HOME, and $LASSI_SHARED; $LASSI_TOOLCHAINS; and a
-    Sandbox with the default runner). `pins` holds toolchains/ttsim.pin's and
+    The config keys are `arch`, `dispatch`, `chips`, `harness`, and
+    `count_cores` (see the module docstring; count_cores, False by default,
+    adds the core count of a clean run, task P17.70); the keyword settings
+    `hidden_roots`, `toolchains`, and `sandbox` are for the runner and
+    tests, as NativeExecutor has them (None means $LASSI_SCRATCH, $HOME, and
+    $LASSI_SHARED; $LASSI_TOOLCHAINS; and a Sandbox with the default runner). `pins` holds toolchains/ttsim.pin's and
     toolchains/tt-metal.pin's pairs, read at construction.
     """
 
     name = "ttsim"
     capabilities = frozenset({"runs_code", "sandboxed", SIMULATOR})
-    config_keys = frozenset({"arch", "dispatch", "chips", "harness"})
+    config_keys = frozenset({"arch", "dispatch", "chips", "harness", "count_cores"})
     # The directories made under RESERVED_DIR before each sandboxed run; nothing under RESERVED_DIR is an output.
     reserved_dirs: tuple[str, ...] = RESERVED_SUBDIRS
 
@@ -571,11 +624,12 @@ class TtsimExecutor:
         dispatch: str = DISPATCH,
         chips: int = CHIPS,
         harness: str | None = None,
+        count_cores: bool = False,
         hidden_roots: Sequence[str] | None = None,
         toolchains: str | None = None,
         sandbox: Sandbox | None = None,
     ) -> None:
-        """Check the configuration and keep the settings; ValueError names a refused key and its one supported value.
+        """Check the configuration and keep the settings; ValueError names a refused key and the values it takes.
 
         factory() with no argument works on any host: nothing is checked on
         disk until run(). The pin files must hold the keys the executor
@@ -589,6 +643,9 @@ class TtsimExecutor:
             raise ValueError(f"chips must be the integer {CHIPS}: ttsim simulates a single chip; got {chips!r}")
         if isinstance(hidden_roots, (str, os.PathLike)):
             raise ValueError(f"hidden_roots must be a sequence of paths, got {hidden_roots!r}")
+        if not isinstance(count_cores, bool):
+            raise ValueError(f"count_cores must be true or false, got {count_cores!r}")
+        self.count_cores = count_cores
         self.harness: Path | None = None if harness is None else Path(harness)
         self.hidden_roots: tuple[Path, ...] | None = (
             None if hidden_roots is None else tuple(Path(root) for root in hidden_roots)
@@ -653,8 +710,10 @@ class TtsimExecutor:
         (none under @ttsim), sim_ub and sim_gap (read_findings), and the
         diagnostics: the findings, then the kernel JIT's
         (read_jit_diagnostics), then, after a hang, the Watcher note of the
-        rerun (_watcher_rerun), when there is one. SandboxUnavailableError
-        from either sandboxed run propagates.
+        rerun (_watcher_rerun), when there is one, or, under count_cores,
+        after a run the stages read as clean (_ran_clean), the cores note of
+        its rerun (cores_note).
+        SandboxUnavailableError from either sandboxed run propagates.
         """
         artifact = Path(artifact)
         if not artifact.is_absolute():
@@ -673,6 +732,11 @@ class TtsimExecutor:
         diagnostics = [*findings, *read_jit_diagnostics(result.stdout, result.stderr, workdir)]
         if result.hang:
             note = self._watcher_rerun(mounts, workdir, artifact.name, list(inputs), limits, hashes)
+            diagnostics.extend([] if note is None else [note])
+        elif self.count_cores and _ran_clean(result.returncode, sim_ub, sim_gap, diagnostics):
+            note = self._watcher_rerun(
+                mounts, workdir, artifact.name, list(inputs), limits, hashes, cores_note, clean_only=True
+            )
             diagnostics.extend([] if note is None else [note])
         return RunResult(
             exit_code=result.returncode,
@@ -747,20 +811,29 @@ class TtsimExecutor:
         inputs: list[str],
         limits: Limits,
         hashes: Mapping[str, str],
+        reader: Callable[[str], Diagnostic | None] = watcher_note,
+        *,
+        clean_only: bool = False,
     ) -> Diagnostic | None:
-        """Rerun a hung program once with Watcher in a fresh copy of its pre-run files; return the Watcher note.
+        """Rerun a program once with Watcher in a fresh copy of its pre-run files; return the note `reader` gives.
 
-        `name` is the artifact's file name in the workdir. There is no rerun,
-        and None is returned, when the artifact is not a pre-run regular file
-        or any pre-run file changed or vanished (_fresh_copy). The rerun's
-        result is never read; only its Watcher log is (watcher_note, from its
-        last WATCHER_READ_BYTES), and no log gives None.
+        A hung run gets watcher_note; a clean run under count_cores gets
+        cores_note (task P17.70) with `clean_only`, under which a rerun that
+        did not exit 0 or hung gives None, so a count never comes from a
+        dump taken before the program finished. `name` is the artifact's file
+        name in the workdir. There is no rerun, and None is returned, when the
+        artifact is not a pre-run regular file or any pre-run file changed or
+        vanished (_fresh_copy). Beyond that status, the rerun's result is
+        never read; only its Watcher log is (`reader`, from its last
+        WATCHER_READ_BYTES), and no log gives None.
         """
         if name not in hashes:
             return None
         copy = _fresh_copy(workdir, hashes)
         if copy is None:
             return None
-        self._sandboxed(mounts, copy, self._argv(mounts, copy / name, inputs), limits, watcher=True)
+        rerun = self._sandboxed(mounts, copy, self._argv(mounts, copy / name, inputs), limits, watcher=True)
+        if clean_only and (rerun.returncode != 0 or rerun.hang):
+            return None
         log = _read_tail(copy.joinpath(RESERVED_DIR, LOGS_DIR, *WATCHER_LOG), WATCHER_READ_BYTES)
-        return None if log is None else watcher_note(log)
+        return None if log is None else reader(log)

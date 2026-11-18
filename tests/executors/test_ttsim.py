@@ -157,7 +157,8 @@ def test_registered_as_executor_ttsim(ttsim: ModuleType) -> None:
     entry = registry.DEFAULT_REGISTRY.get("Executor", "ttsim")
     assert entry.factory is ttsim.TtsimExecutor
     assert entry.capabilities == frozenset({"runs_code", "sandboxed", SIMULATOR})
-    assert entry.config_keys == frozenset({"arch", "dispatch", "chips", "harness"}), "the lassi-df block's keys"
+    # The lassi-df block's keys, and count_cores (task P17.70; tests/executors/test_ttsim_cores.py).
+    assert entry.config_keys == frozenset({"arch", "dispatch", "chips", "harness", "count_cores"})
     assert ttsim.TtsimExecutor.name == "ttsim"
 
 
@@ -171,9 +172,12 @@ def test_package_imports_and_re_exports_ttsim(ttsim: ModuleType) -> None:
 
 def test_the_constructor_takes_keyword_settings_with_the_ttsim_rows_defaults(ttsim: ModuleType) -> None:
     params = inspect.signature(ttsim.TtsimExecutor).parameters
-    assert set(params) == {"arch", "dispatch", "chips", "harness", "hidden_roots", "toolchains", "sandbox"}
+    assert set(params) == {
+        "arch", "dispatch", "chips", "harness", "count_cores", "hidden_roots", "toolchains", "sandbox",
+    }
     assert all(param.kind is inspect.Parameter.KEYWORD_ONLY for param in params.values())
     assert (params["arch"].default, params["dispatch"].default, params["chips"].default) == ("wormhole_b0", "slow", 1)
+    assert params["count_cores"].default is False, "no core count unless a recipe asks for it (task P17.70)"
     assert all(params[name].default is None for name in ("harness", "hidden_roots", "toolchains", "sandbox"))
     assert list(inspect.signature(ttsim.TtsimExecutor.run).parameters) == ["self", "artifact", "inputs", "limits"]
 

@@ -57,6 +57,12 @@ SIMULATOR = "simulator"
 # beside SIMULATOR, so the executor and lassi.core.stages (which re-exports it as WATCHER_CODE and carries each such
 # note into the run's error text after the hang diagnostic) share one name without importing each other.
 WATCHER_CODE = "watcher"
+# The Diagnostic code of the core count such an executor adds to a clean run when asked to (task P17.70; the ttsim
+# executor's count_cores setting; plans/spikes/ttsim-cores.md): a run-stage note naming how many worker cores ran a
+# kernel, read from the Watcher's last complete dump of a rerun. A count of cores, never a time (Agent Rule 2); the
+# stages never put it into a prompt (lassi.core.stages prompt_diagnostics drops it, and run_findings and gap_findings
+# read only WATCHER_CODE notes and error findings), and the baseline keeps a target reference's beside the attempts'.
+CORES_CODE = "cores"
 
 # The capability of a Toolchain that lowers a compute-only source unit to MLIR for the generation prompt (task P17.41;
 # the recipe's source_mlir section): it provides lower(file, text, function, workdir), which writes the unit as `file`

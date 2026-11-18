@@ -28,8 +28,10 @@ rx 20261117-195934-exec-4b84. Exploratory runs from snapshot commits before it, 
 ## Ways Compared
 
 1. The device profiler, which gives each program's CORE COUNT on the cards (P17.42): under ttsim each of the five
-   programs exits 1 after "Profiler started on device 0", printing "ERROR: UnimplementedFunctionality: noc_regs_rd32:
-   offset=0x1c", and writes only new_zone_src_locations.log; its outputs are not written. ttsim v1.3.4 does not
+   programs exits 1 after "Profiler started on device 0" and writes only new_zone_src_locations.log; its outputs are
+   not written. vecadd_multi_core's output, read with rx 20261117-195934-exec-4b84 (and in the first exploratory
+   run), holds "ERROR: UnimplementedFunctionality: noc_regs_rd32: offset=0x1c"; the other four's error lines were not
+   read. ttsim v1.3.4 does not
    implement the register read the profiler needs, so this way does not work under ttsim.
 2. The kernel JIT's outputs (@ttsim/cache/<cache>/<hash>/kernels/<kernel>/<hash>/): one build per kernel and its
    compile-time arguments, shared by every core the kernel runs on, so they name the kernels, not the cores.
@@ -74,5 +76,6 @@ behind the ttsim executor, with these limits:
 - It reads each core's last launch message, so a run of several programs counts, for each core, the program that
   launched on it last; the tt-par references and the skeletons launch one program.
 - The Watcher polls the device while the program runs, so the count comes from a separate run with it on, as the
-  executor's hang rerun already does (lassi.executors.ttsim, watcher_note), only for a candidate that passed.
+  executor's hang rerun already does (lassi.executors.ttsim, watcher_note), only for a run the stages read as
+  clean (built task P17.70: under the ttsim executor's count_cores setting).
 - The count is a count of cores; the Watcher's timestamps and ttsim's wall time are never read as a time.

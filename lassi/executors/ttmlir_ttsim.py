@@ -11,7 +11,8 @@ driver"). It is the ttsim executor (lassi.executors.ttsim) with four
 changes, and everything else is that executor's: the sandbox (Agent Rule 6),
 the workdir and its mounts, the reserved @ttsim directory, the ttsim row's
 environment otherwise, the findings, the kernel JIT diagnostics, the Watcher
-rerun of a hang, and the config keys and their one supported values.
+rerun of a hang, and the config keys and their one supported values, but
+for count_cores (task P17.70), which this executor does not take.
 
 - HOME. TT-NN's static configuration in _ttnncpp.so, which the runtime
   library always links, reads getenv("HOME") with no check while the
@@ -291,7 +292,8 @@ def signal_diagnostic(exit_code: int | None, hang: bool) -> Diagnostic | None:
 class TtmlirTtsimExecutor(TtsimExecutor):
     """Runs a tt-mlir flatbuffer through the pinned runtime and LASSI's driver on ttsim, only inside the sandbox.
 
-    The config keys and keyword settings are the ttsim executor's. `pins`
+    The config keys and keyword settings are the ttsim executor's but
+    count_cores (task P17.70), which it does not take. `pins`
     holds ttsim's pairs and the runtime pin's (under tt-mlir-runtime), and
     `driver_pin` the driver pin's, read at construction.
     """

@@ -513,6 +513,7 @@ from lassi.bench import Direction, Suite, stage_inputs
 from lassi.core import fragments as fragment_text
 from lassi.core.capabilities import (
     ALIGNS_OUTPUT_FILES,
+    CORES_CODE,
     GUARD_CODE_PREFIX,
     HOST_COMPUTE_GUARD,
     SILICON,
@@ -1618,12 +1619,22 @@ def _lowered_note(where: str, level: str, module: str) -> Diagnostic:
 
 
 def prompt_diagnostics(diagnostics: Sequence[Diagnostic]) -> list[Diagnostic]:
-    """Return `diagnostics` without a guard's (code starting with GUARD_CODE_PREFIX), which never enter a prompt.
+    """Return `diagnostics` without those that never enter a prompt: a guard's, and a core count.
 
-    The order is kept and the sequence given is not changed (task P4.12;
-    the guard's outcome is never fed back to the model).
+    A guard's code starts with GUARD_CODE_PREFIX (task P4.12; the guard's
+    outcome is never fed back to the model); a core count is a run-stage
+    note coded CORES_CODE (task P17.70). The order is kept and the sequence
+    given is not changed.
     """
-    return [item for item in diagnostics if not (item.code or "").startswith(GUARD_CODE_PREFIX)]
+    return [
+        item for item in diagnostics
+        if not (item.code or "").startswith(GUARD_CODE_PREFIX) and not _is_cores_note(item)
+    ]
+
+
+def _is_cores_note(item: Diagnostic) -> bool:
+    """Return True for a core count an executor added to a clean run: a run-stage note coded CORES_CODE."""
+    return item.stage == "run" and item.severity == "note" and item.code == CORES_CODE
 
 
 def retrieval_on(context: RunContext, kind: str) -> bool:
@@ -2832,7 +2843,9 @@ class BaselineStage:
         target = language == context.direction.target
         info = _run_info(context, run, keep_outputs=target and self.files_oracle is not None, reference=True)
         if target:
-            notes = [*trial.baseline_diagnostics, *_timing_notes(run)]
+            # A silicon run's timing notes, and a core count (task P17.70), beside each translation's own.
+            counts = [item for item in run.diagnostics if _is_cores_note(item)]
+            notes = [*trial.baseline_diagnostics, *_timing_notes(run), *counts]
             trial = dataclasses.replace(trial, reference_run=info, baseline_diagnostics=notes)
         end = _reference_run_end(run, language)
         if end is not None:
@@ -4046,7 +4059,8 @@ def gap_findings(run: RunResult) -> list[str]:
     """
     unique: dict[str, Diagnostic] = {}
     for item in run.diagnostics:
-        if item.stage == "run" and item.code == run.sim_gap:
+        # A finding is an error (lassi.executors.ttsim read_findings); a note coded like a gap is never one.
+        if item.stage == "run" and item.severity == "error" and item.code == run.sim_gap:
             unique.setdefault(item.message, item)
     listed = listed_diagnostics(list(unique.values()))
     lines = [" ".join(item.message.splitlines()) for item in listed]
