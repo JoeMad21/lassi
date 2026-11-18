@@ -1,0 +1,42 @@
+2026-11-11T21:00:49-0800 sweep 20261111-2100: deadline 21:48:10, 2841 s left, output /mnt/nvme10/shrec-shared/lassi/lassi-runs/rngd-sweep/20261111-2100
+2026-11-11T21:00:50-0800 START qwen3-coder-30b: furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-11T21:01:20-0800 READY qwen3-coder-30b: running 8 recipes side by side for at most 2210 s
+2026-11-11T21:16:36-0800 qwen3-coder-30b run 2533809 ended rc=0
+2026-11-11T21:21:11-0800 qwen3-coder-30b run 2533810 ended rc=0
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533812 ended rc=124
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533814 ended rc=0
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533815 ended rc=0
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533820 ended rc=124
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533822 ended rc=0
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533827 ended rc=0
+qwen3-coder-30b--bale-all-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-1	cpp-ttkh/ig/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-2	cpp-ttkh/transpose_matrix/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-2	cpp-ttkh/triangle/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-1	cpp-ttkh/ig/run01	S5	0.0	8	correction-cap	9
+qwen3-coder-30b--bale-ex-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-3	cpp-ttkh/sssp/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-4	cpp-ttkh/toposort/run01	S4	None	8	correction-cap	9
+2026-11-11T21:38:12-0800 server 2505026 exited
+2026-11-11T21:38:12-0800 DONE qwen3-coder-30b; free cards now 8; 598 s left
+2026-11-11T21:38:12-0800 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+qwen3-coder-30b--bale-all-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-1	cpp-ttkh/ig/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-2	cpp-ttkh/transpose_matrix/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-2	cpp-ttkh/triangle/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-1	cpp-ttkh/ig/run01	S5	0.0	8	correction-cap	9
+qwen3-coder-30b--bale-ex-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-3	cpp-ttkh/sssp/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-4	cpp-ttkh/toposort/run01	S4	None	8	correction-cap	9
+2026-11-11T21:38:12-0800 sweep ended

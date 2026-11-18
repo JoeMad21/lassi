@@ -1,0 +1,48 @@
+2026-11-11T22:59:29-0800 sweep 20261111-2259: deadline 23:54:39, 3310 s left, output /mnt/nvme10/shrec-shared/lassi/lassi-runs/rngd-sweep/20261111-2259
+2026-11-11T22:59:29-0800 START qwen3-30b-instruct: furiosa-ai/Qwen3-30B-A3B-Instruct-2507-FP8@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-11T22:59:59-0800 READY qwen3-30b-instruct: running 8 recipes side by side for at most 2680 s
+2026-11-11T23:15:08-0800 qwen3-30b-instruct run 3392314 ended rc=0
+2026-11-11T23:17:21-0800 qwen3-30b-instruct run 3392315 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392316 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392317 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392319 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392321 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392322 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392324 ended rc=0
+qwen3-30b-instruct--bale-all-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-1	cpp-ttkh/ig/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-2	cpp-ttkh/transpose_matrix/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-2	cpp-ttkh/triangle/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-3	cpp-ttkh/sssp/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-4	cpp-ttkh/randperm/run01	S4	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-1	cpp-ttkh/ig/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-2	cpp-ttkh/transpose_matrix/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-2	cpp-ttkh/triangle/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-3	cpp-ttkh/sssp/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9
+2026-11-11T23:18:41-0800 server 3367608 exited
+2026-11-11T23:18:41-0800 DONE qwen3-30b-instruct; free cards now 8; 2158 s left
+2026-11-11T23:18:41-0800 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+qwen3-30b-instruct--bale-all-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-1	cpp-ttkh/ig/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-2	cpp-ttkh/transpose_matrix/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-2	cpp-ttkh/triangle/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-3	cpp-ttkh/sssp/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-4	cpp-ttkh/randperm/run01	S4	None	8	correction-cap	9
+qwen3-30b-instruct--bale-all-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-1	cpp-ttkh/ig/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-2	cpp-ttkh/transpose_matrix/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-2	cpp-ttkh/triangle/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-3	cpp-ttkh/sssp/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+qwen3-30b-instruct--bale-ex-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9
+2026-11-11T23:18:41-0800 sweep ended

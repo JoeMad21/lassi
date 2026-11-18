@@ -1,0 +1,26 @@
+2026-11-11T22:17:37-0800 sweep 20261111-2217: deadline 23:09:27, 3110 s left, output /mnt/nvme10/shrec-shared/lassi/lassi-runs/rngd-sweep/20261111-2217
+2026-11-11T22:17:37-0800 START qwen3-32b: furiosa-ai/Qwen3-32B-FP8@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-11T22:17:57-0800 READY qwen3-32b: running 8 recipes side by side for at most 2490 s
+2026-11-11T22:59:27-0800 qwen3-32b run 387622 ended rc=124
+2026-11-11T22:59:27-0800 qwen3-32b run 387623 ended rc=1
+2026-11-11T22:59:27-0800 qwen3-32b run 387624 ended rc=1
+2026-11-11T22:59:27-0800 qwen3-32b run 387625 ended rc=1
+2026-11-11T22:59:27-0800 qwen3-32b run 387626 ended rc=124
+2026-11-11T22:59:27-0800 qwen3-32b run 387627 ended rc=124
+2026-11-11T22:59:27-0800 qwen3-32b run 387628 ended rc=124
+2026-11-11T22:59:27-0800 qwen3-32b run 387630 ended rc=124
+qwen3-32b--bale-all-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-32b--bale-all-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+qwen3-32b--bale-ex-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-32b--bale-ex-2	cpp-ttkh/transpose_matrix/run01	S4	None	8	correction-cap	9
+qwen3-32b--bale-ex-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+2026-11-11T22:59:28-0800 server 368898 exited
+2026-11-11T22:59:29-0800 DONE qwen3-32b; free cards now 8; 598 s left
+2026-11-11T22:59:29-0800 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+qwen3-32b--bale-all-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-32b--bale-all-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+qwen3-32b--bale-ex-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-32b--bale-ex-2	cpp-ttkh/transpose_matrix/run01	S4	None	8	correction-cap	9
+qwen3-32b--bale-ex-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+2026-11-11T22:59:29-0800 sweep ended

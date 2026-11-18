@@ -1,0 +1,109 @@
+# Resolved recipe bale-all-4 (chain: base -> bale-tt-30b-base -> bale-ex-1 -> bale-all-1 -> bale-all-4)
+# recipe_hash: bd69a9364d6d6fc965905d5cf0fa8dc3e018c38f8b82228817136d1b926b0546 is the sha256 of the YAML below these comment lines
+bench:
+  items:
+  - toposort
+  - randperm
+  split: unassigned
+  suite: bale-v0-tt
+context:
+- tt-metalium-5280a9cf-kh
+directions:
+- source: cpp
+  target: ttkh
+examples:
+  max_chars: 32000
+  pack: tt-kh-examples-v0
+  prompts:
+  - generate
+  - correct
+executor:
+  cpp:
+    kind: native
+  omp:
+    kind: native
+  ttkh:
+    arch: wormhole_b0
+    dispatch: slow
+    kind: ttsim
+extract:
+  unfenced_file_lines: true
+faithful: false
+fixes:
+  baseline_both: false
+  execution_gate: true
+  fence_tag: true
+  parsed_diagnostics: true
+  prompt_newlines: true
+  prompt_spaces: true
+llm:
+  sampling:
+    max_tokens: 16384
+    temperature: 1.0
+    top_p: 0.95
+lookup:
+  core:
+  - tt-metalium/host_api.hpp
+  - tt-metalium/distributed.hpp
+  - tt-metalium/mesh_buffer.hpp
+  - tt-metalium/buffer_types.hpp
+  - tt-metalium/circular_buffer_config.hpp
+  - tt-metalium/kernel_types.hpp
+  - api/dataflow/dataflow_api.h
+  - api/compute/common.h
+  - api/compute/cb_api.h
+  - api/compute/reg_api.h
+  - api/compute/pack.h
+  - api/compute/tile_move_copy.h
+  - api/compute/compute_kernel_hw_startup.h
+  - api/compute/eltwise_binary.h
+  - api/compute/eltwise_unary/eltwise_unary.h
+  - api/compute/matmul.h
+  max_chars: 32000
+  nearest: 3
+  prompts:
+  - generate
+  - correct
+loop:
+  correct_on_mismatch: true
+  correct_on_sim_gap: true
+  max_corrections: 8
+  restart_after: 3
+  restart_on_repeat: true
+model:
+  backend: openai_compat
+  id: furiosa-ai/EXAONE-4.5-33B-FP8
+  timeout_s: 3600
+oracle:
+  kind: binary_io
+  metric: max_abs
+  threshold: 0
+project: bale-all-4
+prompts: bale-tt-v1
+report:
+  parquet: true
+  trial_md: true
+retrieval:
+  index: tt-metal-docs
+  k: 4
+  max_chars: 6000
+  prompts:
+  - generate
+  - correct
+runs_root: /mnt/nvme10/joseph_ufl/lassi-runs
+sandbox:
+  mem_gb: 16
+  network: false
+  wall_s: 300
+stages:
+- baseline
+- generate
+- compile_loop
+- run_loop
+- oracle
+toolchain:
+  cpp: gcc-native
+  omp: gcc-openmp
+  ttkh: ttmetal-host
+trials:
+  n: 1

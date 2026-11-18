@@ -1,0 +1,7 @@
+slug	trial	stage	alignment	corrections	end	attempts
+gemma4-31b--bale-all-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+gemma4-31b--bale-all-2	cpp-ttkh/transpose_matrix/run01	S5	1.0	2	-	3
+gemma4-31b--bale-all-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+gemma4-31b--bale-all-4	cpp-ttkh/randperm/run01	S5	1.0	1	-	2
+gemma4-31b--bale-ex-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+gemma4-31b--bale-ex-2	cpp-ttkh/transpose_matrix/run01	S1	None	8	correction-cap	9

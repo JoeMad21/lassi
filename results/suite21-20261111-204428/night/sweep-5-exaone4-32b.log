@@ -1,0 +1,48 @@
+2026-11-11T23:18:41-0800 sweep 20261111-2318: deadline 00:31:50, 4389 s left, output /mnt/nvme10/shrec-shared/lassi/lassi-runs/rngd-sweep/20261111-2318
+2026-11-11T23:18:42-0800 START exaone4-32b: furiosa-ai/EXAONE-4.0-32B-FP8@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-11T23:19:02-0800 READY exaone4-32b: running 8 recipes side by side for at most 3768 s
+2026-11-11T23:35:57-0800 exaone4-32b run 3832785 ended rc=0
+2026-11-11T23:35:57-0800 exaone4-32b run 3832786 ended rc=0
+2026-11-11T23:42:55-0800 exaone4-32b run 3832787 ended rc=0
+2026-11-11T23:42:55-0800 exaone4-32b run 3832788 ended rc=0
+2026-11-11T23:42:55-0800 exaone4-32b run 3832790 ended rc=0
+2026-11-11T23:42:55-0800 exaone4-32b run 3832791 ended rc=0
+2026-11-11T23:42:55-0800 exaone4-32b run 3832794 ended rc=0
+2026-11-11T23:43:26-0800 exaone4-32b run 3832797 ended rc=0
+exaone4-32b--bale-all-1	cpp-ttkh/histo/run01	S5	1.0	2	-	3
+exaone4-32b--bale-all-1	cpp-ttkh/ig/run01	S1	None	8	correction-cap	9
+exaone4-32b--bale-all-2	cpp-ttkh/transpose_matrix/run01	S5	1.0	0	-	1
+exaone4-32b--bale-all-2	cpp-ttkh/triangle/run01	S5	1.0	4	-	5
+exaone4-32b--bale-all-3	cpp-ttkh/permute_matrix/run01	S5	1.0	4	-	5
+exaone4-32b--bale-all-3	cpp-ttkh/sssp/run01	S1	None	8	correction-cap	9
+exaone4-32b--bale-all-4	cpp-ttkh/randperm/run01	S5	1.0	4	-	5
+exaone4-32b--bale-all-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9
+exaone4-32b--bale-ex-1	cpp-ttkh/histo/run01	S5	1.0	1	-	2
+exaone4-32b--bale-ex-1	cpp-ttkh/ig/run01	S1	None	8	correction-cap	9
+exaone4-32b--bale-ex-2	cpp-ttkh/transpose_matrix/run01	S5	1.0	0	-	1
+exaone4-32b--bale-ex-2	cpp-ttkh/triangle/run01	S5	1.0	0	-	1
+exaone4-32b--bale-ex-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+exaone4-32b--bale-ex-3	cpp-ttkh/sssp/run01	S5	1.0	0	-	1
+exaone4-32b--bale-ex-4	cpp-ttkh/randperm/run01	S5	1.0	0	-	1
+exaone4-32b--bale-ex-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9
+2026-11-11T23:43:28-0800 server 3810992 exited
+2026-11-11T23:43:28-0800 DONE exaone4-32b; free cards now 8; 2902 s left
+2026-11-11T23:43:28-0800 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+exaone4-32b--bale-all-1	cpp-ttkh/histo/run01	S5	1.0	2	-	3
+exaone4-32b--bale-all-1	cpp-ttkh/ig/run01	S1	None	8	correction-cap	9
+exaone4-32b--bale-all-2	cpp-ttkh/transpose_matrix/run01	S5	1.0	0	-	1
+exaone4-32b--bale-all-2	cpp-ttkh/triangle/run01	S5	1.0	4	-	5
+exaone4-32b--bale-all-3	cpp-ttkh/permute_matrix/run01	S5	1.0	4	-	5
+exaone4-32b--bale-all-3	cpp-ttkh/sssp/run01	S1	None	8	correction-cap	9
+exaone4-32b--bale-all-4	cpp-ttkh/randperm/run01	S5	1.0	4	-	5
+exaone4-32b--bale-all-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9
+exaone4-32b--bale-ex-1	cpp-ttkh/histo/run01	S5	1.0	1	-	2
+exaone4-32b--bale-ex-1	cpp-ttkh/ig/run01	S1	None	8	correction-cap	9
+exaone4-32b--bale-ex-2	cpp-ttkh/transpose_matrix/run01	S5	1.0	0	-	1
+exaone4-32b--bale-ex-2	cpp-ttkh/triangle/run01	S5	1.0	0	-	1
+exaone4-32b--bale-ex-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+exaone4-32b--bale-ex-3	cpp-ttkh/sssp/run01	S5	1.0	0	-	1
+exaone4-32b--bale-ex-4	cpp-ttkh/randperm/run01	S5	1.0	0	-	1
+exaone4-32b--bale-ex-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9
+2026-11-11T23:43:28-0800 sweep ended

@@ -1,0 +1,28 @@
+2026-11-11T21:38:12-0800 sweep 20261111-2138: deadline 22:27:33, 2961 s left, output /mnt/nvme10/shrec-shared/lassi/lassi-runs/rngd-sweep/20261111-2138
+2026-11-11T21:38:13-0800 START gemma4-31b: furiosa-ai/gemma-4-31B-it-FP8-block@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-11T21:38:48-0800 READY gemma4-31b: running 8 recipes side by side for at most 2325 s
+2026-11-11T22:17:33-0800 gemma4-31b run 3596422 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596424 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596425 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596426 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596428 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596429 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596431 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596434 ended rc=124
+gemma4-31b--bale-all-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+gemma4-31b--bale-all-2	cpp-ttkh/transpose_matrix/run01	S5	1.0	2	-	3
+gemma4-31b--bale-all-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+gemma4-31b--bale-all-4	cpp-ttkh/randperm/run01	S5	1.0	1	-	2
+gemma4-31b--bale-ex-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+gemma4-31b--bale-ex-2	cpp-ttkh/transpose_matrix/run01	S1	None	8	correction-cap	9
+2026-11-11T22:17:36-0800 server 3569748 exited
+2026-11-11T22:17:36-0800 DONE gemma4-31b; free cards now 8; 596 s left
+2026-11-11T22:17:37-0800 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+gemma4-31b--bale-all-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+gemma4-31b--bale-all-2	cpp-ttkh/transpose_matrix/run01	S5	1.0	2	-	3
+gemma4-31b--bale-all-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+gemma4-31b--bale-all-4	cpp-ttkh/randperm/run01	S5	1.0	1	-	2
+gemma4-31b--bale-ex-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+gemma4-31b--bale-ex-2	cpp-ttkh/transpose_matrix/run01	S1	None	8	correction-cap	9
+2026-11-11T22:17:37-0800 sweep ended

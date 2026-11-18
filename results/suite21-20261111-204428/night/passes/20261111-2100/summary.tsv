@@ -1,0 +1,14 @@
+slug	trial	stage	alignment	corrections	end	attempts
+qwen3-coder-30b--bale-all-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-1	cpp-ttkh/ig/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-2	cpp-ttkh/transpose_matrix/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-2	cpp-ttkh/triangle/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-all-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-1	cpp-ttkh/ig/run01	S5	0.0	8	correction-cap	9
+qwen3-coder-30b--bale-ex-3	cpp-ttkh/permute_matrix/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-3	cpp-ttkh/sssp/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-4	cpp-ttkh/randperm/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bale-ex-4	cpp-ttkh/toposort/run01	S4	None	8	correction-cap	9

@@ -1,0 +1,2 @@
+1046 trials from 55 pass-model pairs into /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/tables
+254 attempt(s) built but not verifiable on ttsim (simulator gaps; the label assumes the simulator is ttsim, as every RNGD sweep run is), listed for a hardware check; nothing was run

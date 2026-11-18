@@ -1,0 +1,17 @@
+slug	trial	stage	alignment	corrections	end	attempts
+exaone45-33b--bale-all-1	cpp-ttkh/histo/run01	S5	1.0	0	-	1
+exaone45-33b--bale-all-1	cpp-ttkh/ig/run01	S5	1.0	6	-	7
+exaone45-33b--bale-all-2	cpp-ttkh/transpose_matrix/run01	S5	1.0	0	-	1
+exaone45-33b--bale-all-2	cpp-ttkh/triangle/run01	S5	1.0	0	-	1
+exaone45-33b--bale-all-3	cpp-ttkh/permute_matrix/run01	S5	1.0	7	-	8
+exaone45-33b--bale-all-3	cpp-ttkh/sssp/run01	S5	1.0	0	-	1
+exaone45-33b--bale-all-4	cpp-ttkh/randperm/run01	S5	1.0	4	-	5
+exaone45-33b--bale-all-4	cpp-ttkh/toposort/run01	S5	1.0	7	-	8
+exaone45-33b--bale-ex-1	cpp-ttkh/histo/run01	S1	None	8	correction-cap	9
+exaone45-33b--bale-ex-1	cpp-ttkh/ig/run01	S5	1.0	0	-	1
+exaone45-33b--bale-ex-2	cpp-ttkh/transpose_matrix/run01	S1	None	8	correction-cap	9
+exaone45-33b--bale-ex-2	cpp-ttkh/triangle/run01	S1	None	8	correction-cap	9
+exaone45-33b--bale-ex-3	cpp-ttkh/permute_matrix/run01	S5	1.0	0	-	1
+exaone45-33b--bale-ex-3	cpp-ttkh/sssp/run01	S1	None	8	correction-cap	9
+exaone45-33b--bale-ex-4	cpp-ttkh/randperm/run01	S5	1.0	1	-	2
+exaone45-33b--bale-ex-4	cpp-ttkh/toposort/run01	S1	None	8	correction-cap	9

@@ -1,0 +1,121 @@
+2026-11-11T20:44:28-0800 run-passes 20261111-204428-suite21-02f0: start 2026-11-11 21:00:00 -0800, deadline 2026-11-12 01:45:00 -0800, at most 20 pass(es) of plans/runs/suite/run-suite.sh --table plans/runs/suite/models-30b.tsv --models qwen3-coder-30b,gemma4-31b,qwen3-32b,qwen3-30b-instruct,exaone4-32b,exaone45-33b --sweep projects/lassi-demo/sweep21
+2026-11-11T21:00:28-0800 pass 1 as 20261111-204428-suite21-02f0, 17072 s to the deadline
+2026-11-11T21:00:28-0800 run-suite 20261111-204428-suite21-02f0: deadline 2026-11-12 01:45:00 -0800, 17072 s left
+2026-11-11T21:00:28-0800 models qwen3-coder-30b gemma4-31b qwen3-32b qwen3-30b-instruct exaone4-32b exaone45-33b; sweeps projects/lassi-demo/sweep21; only (every recipe); table plans/runs/suite/models-30b.tsv; output /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0
+2026-11-11T21:00:28-0800 commit ff91d925e1683468ff21cd35323558f37d9818f8, 0 changed paths
+2026-11-11T21:00:29-0800 scratch disk: 91 GB free; scratch root 40G
+recipes.py: 48 recipes listed, 48 selected, into /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/recipes.tsv
+2026-11-11T21:00:35-0800 91 GB free: downloading furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8@v2026.4 for at most 7200 s
+2026-11-11T21:00:36-0800 qwen3-coder-30b download ended rc=0
+2026-11-11T21:00:36-0800 91 GB free: downloading furiosa-ai/gemma-4-31B-it-FP8-block@v2026.4 for at most 7200 s
+2026-11-11T21:00:36-0800 gemma4-31b download ended rc=0
+2026-11-11T21:00:36-0800 91 GB free: downloading furiosa-ai/Qwen3-32B-FP8@v2026.4 for at most 7200 s
+2026-11-11T21:00:37-0800 context:tt-metalium-5280a9cf-kh built; its manifest equals the tracked one
+2026-11-11T21:00:37-0800 qwen3-32b download ended rc=0
+2026-11-11T21:00:37-0800 91 GB free: downloading furiosa-ai/Qwen3-30B-A3B-Instruct-2507-FP8@v2026.4 for at most 7200 s
+2026-11-11T21:00:37-0800 examples:tt-kh-examples-v0 built; its manifest equals the tracked one
+2026-11-11T21:00:37-0800 qwen3-30b-instruct download ended rc=0
+2026-11-11T21:00:37-0800 91 GB free: downloading furiosa-ai/EXAONE-4.0-32B-FP8@v2026.4 for at most 7200 s
+2026-11-11T21:00:38-0800 exaone4-32b download ended rc=0
+2026-11-11T21:00:38-0800 91 GB free: downloading furiosa-ai/EXAONE-4.5-33B-FP8@v2026.4 for at most 7200 s
+2026-11-11T21:00:38-0800 exaone45-33b download ended rc=0
+2026-11-11T21:00:48-0800 retrieval:tt-metal-docs built; its manifest equals the tracked one
+2026-11-11T21:00:49-0800 bale-v0-tt sources fetched and checked
+2026-11-11T21:00:49-0800 6 run.sh call(s): qwen3-coder-30b gemma4-31b qwen3-32b qwen3-30b-instruct exaone4-32b exaone45-33b
+2026-11-11T21:00:49-0800 call 1 of 6: qwen3-coder-30b over projects/lassi-demo/sweep21, 8 recipe(s), until 21:48:10
+2026-11-11T21:38:12-0800 call 1 ended rc=0, pass 20261111-2100; its log: /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/sweep-1-qwen3-coder-30b.log
+2026-11-11T21:00:50-0800 START qwen3-coder-30b: furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-11T21:01:20-0800 READY qwen3-coder-30b: running 8 recipes side by side for at most 2210 s
+2026-11-11T21:16:36-0800 qwen3-coder-30b run 2533809 ended rc=0
+2026-11-11T21:21:11-0800 qwen3-coder-30b run 2533810 ended rc=0
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533812 ended rc=124
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533814 ended rc=0
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533815 ended rc=0
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533820 ended rc=124
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533822 ended rc=0
+2026-11-11T21:38:10-0800 qwen3-coder-30b run 2533827 ended rc=0
+2026-11-11T21:38:12-0800 sweep ended
+2026-11-11T21:38:12-0800 call 2 of 6: gemma4-31b over projects/lassi-demo/sweep21, 8 recipe(s), until 22:27:33
+2026-11-11T22:17:37-0800 call 2 ended rc=0, pass 20261111-2138; its log: /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/sweep-2-gemma4-31b.log
+2026-11-11T21:38:13-0800 START gemma4-31b: furiosa-ai/gemma-4-31B-it-FP8-block@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-11T21:38:48-0800 READY gemma4-31b: running 8 recipes side by side for at most 2325 s
+2026-11-11T22:17:33-0800 gemma4-31b run 3596422 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596424 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596425 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596426 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596428 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596429 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596431 ended rc=124
+2026-11-11T22:17:33-0800 gemma4-31b run 3596434 ended rc=124
+2026-11-11T22:17:37-0800 sweep ended
+2026-11-11T22:17:37-0800 call 3 of 6: qwen3-32b over projects/lassi-demo/sweep21, 8 recipe(s), until 23:09:27
+2026-11-11T22:59:29-0800 call 3 ended rc=0, pass 20261111-2217; its log: /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/sweep-3-qwen3-32b.log
+2026-11-11T22:17:37-0800 START qwen3-32b: furiosa-ai/Qwen3-32B-FP8@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-11T22:17:57-0800 READY qwen3-32b: running 8 recipes side by side for at most 2490 s
+2026-11-11T22:59:27-0800 qwen3-32b run 387622 ended rc=124
+2026-11-11T22:59:27-0800 qwen3-32b run 387623 ended rc=1
+2026-11-11T22:59:27-0800 qwen3-32b run 387624 ended rc=1
+2026-11-11T22:59:27-0800 qwen3-32b run 387625 ended rc=1
+2026-11-11T22:59:27-0800 qwen3-32b run 387626 ended rc=124
+2026-11-11T22:59:27-0800 qwen3-32b run 387627 ended rc=124
+2026-11-11T22:59:27-0800 qwen3-32b run 387628 ended rc=124
+2026-11-11T22:59:27-0800 qwen3-32b run 387630 ended rc=124
+2026-11-11T22:59:29-0800 sweep ended
+2026-11-11T22:59:29-0800 call 4 of 6: qwen3-30b-instruct over projects/lassi-demo/sweep21, 8 recipe(s), until 23:54:39
+2026-11-11T23:18:41-0800 call 4 ended rc=0, pass 20261111-2259; its log: /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/sweep-4-qwen3-30b-instruct.log
+2026-11-11T22:59:29-0800 START qwen3-30b-instruct: furiosa-ai/Qwen3-30B-A3B-Instruct-2507-FP8@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-11T22:59:59-0800 READY qwen3-30b-instruct: running 8 recipes side by side for at most 2680 s
+2026-11-11T23:15:08-0800 qwen3-30b-instruct run 3392314 ended rc=0
+2026-11-11T23:17:21-0800 qwen3-30b-instruct run 3392315 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392316 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392317 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392319 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392321 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392322 ended rc=0
+2026-11-11T23:18:39-0800 qwen3-30b-instruct run 3392324 ended rc=0
+2026-11-11T23:18:41-0800 sweep ended
+2026-11-11T23:18:41-0800 call 5 of 6: exaone4-32b over projects/lassi-demo/sweep21, 8 recipe(s), until 00:31:50
+2026-11-11T23:43:28-0800 call 5 ended rc=0, pass 20261111-2318; its log: /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/sweep-5-exaone4-32b.log
+2026-11-11T23:18:42-0800 START exaone4-32b: furiosa-ai/EXAONE-4.0-32B-FP8@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-11T23:19:02-0800 READY exaone4-32b: running 8 recipes side by side for at most 3768 s
+2026-11-11T23:35:57-0800 exaone4-32b run 3832785 ended rc=0
+2026-11-11T23:35:57-0800 exaone4-32b run 3832786 ended rc=0
+2026-11-11T23:42:55-0800 exaone4-32b run 3832787 ended rc=0
+2026-11-11T23:42:55-0800 exaone4-32b run 3832788 ended rc=0
+2026-11-11T23:42:55-0800 exaone4-32b run 3832790 ended rc=0
+2026-11-11T23:42:55-0800 exaone4-32b run 3832791 ended rc=0
+2026-11-11T23:42:55-0800 exaone4-32b run 3832794 ended rc=0
+2026-11-11T23:43:26-0800 exaone4-32b run 3832797 ended rc=0
+2026-11-11T23:43:28-0800 sweep ended
+2026-11-11T23:43:28-0800 call 6 of 6: exaone45-33b over projects/lassi-demo/sweep21, 8 recipe(s), until 01:45:00
+2026-11-12T01:17:15-0800 call 6 ended rc=0, pass 20261111-2343; its log: /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/sweep-6-exaone45-33b.log
+2026-11-11T23:43:28-0800 START exaone45-33b: furiosa-ai/EXAONE-4.5-33B-FP8@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-11T23:44:04-0800 READY exaone45-33b: running 8 recipes side by side for at most 6656 s
+2026-11-12T00:31:29-0800 exaone45-33b run 4012559 ended rc=0
+2026-11-12T00:31:29-0800 exaone45-33b run 4012560 ended rc=0
+2026-11-12T00:54:53-0800 exaone45-33b run 4012561 ended rc=0
+2026-11-12T01:14:07-0800 exaone45-33b run 4012562 ended rc=0
+2026-11-12T01:14:07-0800 exaone45-33b run 4012563 ended rc=0
+2026-11-12T01:17:13-0800 exaone45-33b run 4012564 ended rc=0
+2026-11-12T01:17:13-0800 exaone45-33b run 4012565 ended rc=0
+2026-11-12T01:17:13-0800 exaone45-33b run 4012569 ended rc=0
+2026-11-12T01:17:15-0800 sweep ended
+2026-11-12T01:17:20-0800 tabulate rc=0: 1046 trials from 55 pass-model pairs into /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/tables
+13 trials into /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/features-20261111-2100.tsv
+2026-11-12T01:17:20-0800 count_features 20261111-2100 rc=0
+6 trials into /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/features-20261111-2138.tsv
+2026-11-12T01:17:20-0800 count_features 20261111-2138 rc=0
+5 trials into /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/features-20261111-2217.tsv
+2026-11-12T01:17:20-0800 count_features 20261111-2217 rc=0
+16 trials into /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/features-20261111-2259.tsv
+2026-11-12T01:17:21-0800 count_features 20261111-2259 rc=0
+16 trials into /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/features-20261111-2318.tsv
+2026-11-12T01:17:21-0800 count_features 20261111-2318 rc=0
+16 trials into /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0/features-20261111-2343.tsv
+2026-11-12T01:17:21-0800 count_features 20261111-2343 rc=0
+2026-11-12T01:17:25-0800 classify rc=0
+2026-11-12T01:17:25-0800 scratch disk at the end: 91 GB free; scratch root 40G
+2026-11-12T01:17:31-0800 run-suite ended
+2026-11-12T01:17:31-0800 pass 1 ended rc=0 after 15423 s; its output: /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261111-204428-suite21-02f0
+2026-11-12T01:18:31-0800 1589 s to the deadline, under 1860: no more passes
+2026-11-12T01:18:31-0800 run-passes ended after 1 pass(es)

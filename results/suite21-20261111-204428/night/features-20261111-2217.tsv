@@ -1,0 +1,6 @@
+run_tree	direction	item	run	stage	alignment	corrections	end	generate	compile_loop	run_loop	restart	looked-up_notes	retrieved_notes
+sweep-20261111-2217-qwen3-32b--bale-all-1	cpp-ttkh	histo	run01	S1	None	8	correction-cap	1	6	0	2	5	9
+sweep-20261111-2217-qwen3-32b--bale-all-4	cpp-ttkh	randperm	run01	S1	None	8	correction-cap	1	6	0	2	4	9
+sweep-20261111-2217-qwen3-32b--bale-ex-1	cpp-ttkh	histo	run01	S1	None	8	correction-cap	1	7	1	0	0	0
+sweep-20261111-2217-qwen3-32b--bale-ex-2	cpp-ttkh	transpose_matrix	run01	S4	None	8	correction-cap	1	8	0	0	0	0
+sweep-20261111-2217-qwen3-32b--bale-ex-4	cpp-ttkh	randperm	run01	S1	None	8	correction-cap	1	8	0	0	0	0

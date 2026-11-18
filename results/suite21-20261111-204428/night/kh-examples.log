@@ -1,0 +1,2 @@
+build_tt_examples: 4 examples, 8 files under /mnt/nvme10/shrec-shared/lassi/lassi-wt/suite/assets/examples/tt-kh-examples-v0; pack sha256 2ecfd1d7e3e3789b73319e46860c4d3f12dca778f7b16bfc0773234fb1d8ac70
+build_tt_examples: /mnt/nvme10/shrec-shared/lassi/lassi-wt/suite/assets/examples/tt-kh-examples-v0 matches MANIFEST.yaml (pack sha256 2ecfd1d7e3e3789b73319e46860c4d3f12dca778f7b16bfc0773234fb1d8ac70)

@@ -1,0 +1,7 @@
+call	slug	sweep	stamp	rc	recipes	skip
+1	qwen3-coder-30b	projects/lassi-demo/sweep21	20261111-2100	0	8	-
+2	gemma4-31b	projects/lassi-demo/sweep21	20261111-2138	0	8	-
+3	qwen3-32b	projects/lassi-demo/sweep21	20261111-2217	0	8	-
+4	qwen3-30b-instruct	projects/lassi-demo/sweep21	20261111-2259	0	8	-
+5	exaone4-32b	projects/lassi-demo/sweep21	20261111-2318	0	8	-
+6	exaone45-33b	projects/lassi-demo/sweep21	20261111-2343	0	8	-
