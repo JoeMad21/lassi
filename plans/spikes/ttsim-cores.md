@@ -17,16 +17,20 @@ the run's CPU limit).
 
     uv run tools/rx.py run --slot spike-cores -- 'bash plans/spikes/ttsim-cores/run.sh'
 
-The record run: PLACEHOLDER (the run from a clean commit, still to come). Exploratory runs from snapshot commits
-before it, not reportable: rx 20261117-194514-spike-cores-53f7, 20261117-194621-spike-cores-72ef,
-20261117-194704-spike-cores-a70a.
+The record run: rx 20261117-195815-spike-cores-5c02 on alpha01, from clean commit
+def005a8d20216ee1887fe5b036efd5bd4cbfc09, 2026-11-17 19:58 alpha01 time (22:58 EST), over the five development
+references (`bash plans/spikes/ttsim-cores/run.sh vecadd_multi_core vecadd_sharding pad_multi_core
+matmul_multicore_reuse matmul_multicore_reuse_mcast`), its files under
+$LASSI_SCRATCH/spike-ttsim-cores/20261117-195815; the profiler's error line was read from that run's stdout.txt with
+rx 20261117-195934-exec-4b84. Exploratory runs from snapshot commits before it, not reportable: rx
+20261117-194514-spike-cores-53f7, 20261117-194621-spike-cores-72ef, 20261117-194704-spike-cores-a70a.
 
 ## Ways Compared
 
-1. The device profiler, which gives each program's CORE COUNT on the cards (P17.42): under ttsim the program exits
-   1 after "Profiler started on device 0", with "ERROR: UnimplementedFunctionality: noc_regs_rd32: offset=0x1c" in
-   stderr, and writes only new_zone_src_locations.log; its outputs are not written. ttsim v1.3.4 does not implement
-   the register read the profiler needs, so this way does not work under ttsim.
+1. The device profiler, which gives each program's CORE COUNT on the cards (P17.42): under ttsim each of the five
+   programs exits 1 after "Profiler started on device 0", printing "ERROR: UnimplementedFunctionality: noc_regs_rd32:
+   offset=0x1c", and writes only new_zone_src_locations.log; its outputs are not written. ttsim v1.3.4 does not
+   implement the register read the profiler needs, so this way does not work under ttsim.
 2. The kernel JIT's outputs (@ttsim/cache/<cache>/<hash>/kernels/<kernel>/<hash>/): one build per kernel and its
    compile-time arguments, shared by every core the kernel runs on, so they name the kernels, not the cores.
 3. tt-metal's Inspector logs, which every ttsim run already writes (@ttsim/logs/generated/inspector/): kernels.yaml
@@ -40,14 +44,20 @@ before it, not reportable: rx 20261117-194514-spike-cores-53f7, 20261117-194621-
 
 ## Counts
 
-Every count in this section comes from the exploratory runs and is replaced by the record run's once it has run from
-a clean commit.
+[MEASURED, ttsim v1.3.4 on alpha01, the record run rx 20261117-195815-spike-cores-5c02, commit def005a] Each
+reference's plain and Watcher runs exited 0 with outputs equal to the check run's. The exploratory runs gave the same
+counts for the three items they ran.
 
-| Reference | Watcher worker core lines | Workers with a nonzero kernel id | Their k_ids |
+| Reference | Watcher worker core lines | Workers with a nonzero kernel id | Their k_ids (workers) |
 | --- | --- | --- | --- |
-| vecadd_multi_core | 80 | 72 | 1/2/3/3/3 |
-| matmul_multicore_reuse | 80 | 56 | 2/1/3/3/3 |
-| pad_multi_core | 80 | 72 | 1/2/0/0/0 |
+| vecadd_multi_core | 80 | 72 | 1/2/3/3/3 (72) |
+| vecadd_sharding | 80 | 56 | 0/0/1/1/1 (56) |
+| pad_multi_core | 80 | 72 | 1/2/0/0/0 (72) |
+| matmul_multicore_reuse | 80 | 56 | 2/1/3/3/3 (56) |
+| matmul_multicore_reuse_mcast | 80 | 56 | 5/3/7/7/7 (7), 5/4/7/7/7 (42), 6/1/7/7/7 (1), 6/2/7/7/7 (6) |
+
+vecadd_sharding's 56 is the core count its manifest sets (448 tiles on 56 cores), and matmul_multicore_reuse_mcast's
+four kernel sets are its sender and receiver roles.
 
 Each dump also lists 16 idle ethernet cores ("idleth"). ttsim's descriptor is tt-metal's
 wormhole_b0_80_arch.yaml (toolchains/ttsim.pin), and the dumps list 80 worker cores. vecadd_multi_core and
