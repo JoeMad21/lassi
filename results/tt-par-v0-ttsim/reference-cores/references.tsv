@@ -1,0 +1,12 @@
+# device: ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf-tracy: a simulator, not silicon
+run	split	item	direction	model	alignment	attempt	exit	outputs_equal	cores	workers	note
+ttpar-check-dev-1117	dev	matmul_multicore_reuse	cpp-tt	mock-reference	1.0	0	0	yes	56	80	cores used: 56 of 80 worker cores ran a kernel (Watcher dump #3); a count, not a time
+ttpar-check-dev-1117	dev	matmul_multicore_reuse_mcast	cpp-tt	mock-reference	1.0	0	0	yes	56	80	cores used: 56 of 80 worker cores ran a kernel (Watcher dump #4); a count, not a time
+ttpar-check-dev-1117	dev	pad_multi_core	cpp-tt	mock-reference	1.0	0	0	yes	72	80	cores used: 72 of 80 worker cores ran a kernel (Watcher dump #9); a count, not a time
+ttpar-check-dev-1117	dev	vecadd_multi_core	cpp-tt	mock-reference	1.0	0	0	yes	72	80	cores used: 72 of 80 worker cores ran a kernel (Watcher dump #1); a count, not a time
+ttpar-check-dev-1117	dev	vecadd_sharding	cpp-tt	mock-reference	1.0	0	0	yes	56	80	cores used: 56 of 80 worker cores ran a kernel (Watcher dump #1); a count, not a time
+ttpar-check-eval-1117	eval	col_max	cpp-tt	mock-reference	1.0	0	0	yes	72	80	cores used: 72 of 80 worker cores ran a kernel (Watcher dump #1); a count, not a time
+ttpar-check-eval-1117	eval	col_scale	cpp-tt	mock-reference	1.0	0	0	yes	72	80	cores used: 72 of 80 worker cores ran a kernel (Watcher dump #2); a count, not a time
+ttpar-check-eval-1117	eval	row_softmax	cpp-tt	mock-reference	1.0	0	0	yes	72	80	cores used: 72 of 80 worker cores ran a kernel (Watcher dump #2); a count, not a time
+ttpar-check-eval-1117	eval	row_sum	cpp-tt	mock-reference	1.0	0	0	yes	72	80	cores used: 72 of 80 worker cores ran a kernel (Watcher dump #1); a count, not a time
+ttpar-check-eval-1117	eval	transpose_2d	cpp-tt	mock-reference	1.0	0	0	yes	72	80	cores used: 72 of 80 worker cores ran a kernel (Watcher dump #1); a count, not a time

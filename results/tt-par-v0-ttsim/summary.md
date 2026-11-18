@@ -49,8 +49,33 @@ program's, from the baseline.
 
 No reference needed a fix, so P17.76 changed no program. row_sum's tolerance of 4.0 is about nine times the
 agreement measured here (0.434); P17.76 never changes an item's tolerance (plans/p17-portable.md, P17.76), so it
-stays and is noted for the owner. Each reference's core count on ttsim waits on P17.70's build behind the ttsim
-executor; its spike (plans/spikes/ttsim-cores.md) counts three of the development references.
+stays and is noted for the owner.
+
+## Each Reference's Cores On ttsim
+
+[MEASURED, ttsim v1.3.4 on alpha01] rx 20261117-204246-count-cores-1bc8, from clean commit 61c90d9: each reference
+above was run once more through the sandboxed ttsim executor with count_cores on (task P17.70;
+plans/runs/tt-par/count_cores.py --include-eval over both check runs), its outputs equal to its check run's, and the
+Watcher's last complete dump counted the worker cores that ran a kernel. The table is pulled into reference-cores/
+(references.tsv, whose first line names the device), beside the job's own provenance.json (commit
+61c90d9eb7b461917756de2e80b92114665f7f74, dirty false, 2026-11-17T20:42:46-08:00 to 20:44:18-08:00, rc 0). Counts of
+cores, never times (Agent Rule 2).
+
+| Item | Split | Worker cores that ran a kernel, of 80 |
+| --- | --- | --- |
+| vecadd_multi_core | dev | 72 |
+| vecadd_sharding | dev | 56 |
+| pad_multi_core | dev | 72 |
+| matmul_multicore_reuse | dev | 56 |
+| matmul_multicore_reuse_mcast | dev | 56 |
+| row_sum | eval | 72 |
+| col_max | eval | 72 |
+| transpose_2d | eval | 72 |
+| row_softmax | eval | 72 |
+| col_scale | eval | 72 |
+
+The development counts equal the spike's record run (plans/spikes/ttsim-cores.md), which ran the same builds outside
+the sandbox.
 
 ## The Leak Test's Built Half
 
