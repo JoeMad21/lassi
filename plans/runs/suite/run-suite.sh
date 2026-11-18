@@ -14,7 +14,8 @@
 #    resolved text under recipes/ (the provenance of what runs); a recipe that does not load stops the job.
 # 3. Downloads, unless --skip-download: each model's revision, every file (the server checks the cached snapshot
 #    offline), one at a time in the background in table order, each only while the scratch disk keeps the gate's
-#    60 GB big-job floor plus a 5 GB margin after the bytes still missing (run-night.sh's rule; GB of 1e9 bytes).
+#    60 GB big-job floor plus a margin (5 GB, or SUITE_MARGIN_GB) after the bytes still missing (run-night.sh's
+#    rule; GB of 1e9 bytes).
 # 4. Assets the selected recipes need, built from the tt-metal install at the pin and checked against their
 #    tracked manifests, as run-night.sh builds them; a recipe whose asset did not build as tracked is left out.
 # 5. The sweep: plans/runs/rngd-sweep/run.sh once per model and recipe directory, model by model, so one model is
@@ -53,7 +54,8 @@ Options:
 Environment: LASSI_SCRATCH, LASSI_RUNS_ROOT, and LASSI_TOOLCHAINS (the gate sets them); LASSI_RX_RUN_ID (the rx
 job id, which names the output directory $LASSI_RUNS_ROOT/suite/<id>); SWEEP_MAX_SHARE (the most seconds one
 run.sh call's recipes may run; default 14400, run-night.sh's); SUITE_FETCH_TIMEOUT (the most seconds one download
-may take; default 7200, run-night.sh's longest).
+may take; default 7200, run-night.sh's longest); SUITE_MARGIN_GB (the whole GB kept free above the gate's 60 GB
+big-job floor, before each download and each run.sh call; default 5, run-night.sh's).
 
 Stop early: create $LASSI_RUNS_ROOT/rngd-sweep/STOP (tools/suite.py stop). While it exists this script refuses to
 start; tools/suite.py stop --clear removes it.
@@ -101,7 +103,8 @@ id=${LASSI_RX_RUN_ID:-manual-$(date +%Y%m%d-%H%M%S)}
 out="$runs/suite/$id"
 stopfile="$runs/rngd-sweep/STOP"
 floor_gb=60   # the gate's free-space floor for big jobs (tools/server/config.default.json, min_free_gb_big)
-margin_gb=5   # run-night.sh's margin on the shared disk
+margin_gb=${SUITE_MARGIN_GB:-5}   # the margin above the floor on the shared disk; run-night.sh's 5 GB by default
+[[ "$margin_gb" =~ ^[0-9]+$ ]] || { echo "run-suite: SUITE_MARGIN_GB must be a whole number of GB" >&2; exit 2; }
 max_share=${SWEEP_MAX_SHARE:-14400}
 fetch_max=${SUITE_FETCH_TIMEOUT:-7200}
 mkdir -p "$out"
@@ -159,7 +162,7 @@ fetch() {  # fetch <slug>: download the row's revision, every file, with the hub
   fi
   need=$(( floor_gb + margin_gb + $(missing_gb "$model" "$size") ))
   if [ "$(free_gb)" -lt "$need" ]; then
-    echo "$(ts) SKIP the $slug download: $(free_gb) GB free, under $need (the bytes missing, the 60 GB floor, a 5 GB margin)"
+    echo "$(ts) SKIP the $slug download: $(free_gb) GB free, under $need (the bytes missing, the 60 GB floor, a $margin_gb GB margin)"
     return 1
   fi
   limit=$(left); [ "$limit" -gt "$fetch_max" ] && limit=$fetch_max

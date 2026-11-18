@@ -101,7 +101,8 @@ its log). Clear it with `uv run tools/suite.py stop --clear` before the next lau
 - `$LASSI_RUNS_ROOT/rngd-sweep/<pass>/` and `$LASSI_RUNS_ROOT/runs/sweep-<pass>-*`: run.sh's output and the run
   trees, one pass per run.sh call.
 - `$LASSI_SCRATCH/.cache/huggingface`: model downloads. Each runs only while the scratch disk keeps 65 GB free
-  after the bytes it still needs; the scratch root's 150G cap stays lifted while OQ-074's lift holds, and the job
+  after the bytes it still needs (the gate's 60 GB floor plus a margin of 5 GB, or SUITE_MARGIN_GB set in the
+  job's command; the same margin holds before each run.sh call); the scratch root's 150G cap stays lifted while OQ-074's lift holds, and the job
   logs the root's size at its start and end.
 - The RNGD cards and port 8123: run.sh claims only cards that read 0.00 GiB in `furiosa-smi status`, polling
   `furiosa-smi ps` and status every 60 s, serves one model at a time, checks that `/v1/models` lists it, and waits
