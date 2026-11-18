@@ -225,4 +225,4 @@ A phase marked BLOCKED stays blocked until the owner records in its Note that th
 | P17.73 | READY | A single-core correction (opt-in) | P17.68,P17.70,P17.72 |  |
 | P17.74 | ACTIVE | tt-par sweeps on ttsim: the development ladder, then the frozen held-out run | P17.67,P17.68,P17.69,P17.70,P17.71,P17.72,P17.73,P17.76 | first five rungs (sweep22) on the six 30B models in the window of 2026-11-17; correction rungs wait for P17.73, the held-out run for the development results |
 | P17.75 | OWNER | Card profiles of the tt-par translations | P17.74 | the owner starts card runs (OQ-127) |
-| P17.76 | OWNER | tt-par-v0's programs built and checked on ttsim | P17.67,P17.68 | the fetches, checks, and the leak test's built half run in the owner's window of 2026-11-17 (OQ-130 (a)) |
+| P17.76 | DONE | tt-par-v0's programs built and checked on ttsim | P17.67,P17.68 | all ten references pass on ttsim (S5; rx 20261117-193129-ttpar-check-0e04); leak test built half passes in three slots; core counts follow P17.70 |

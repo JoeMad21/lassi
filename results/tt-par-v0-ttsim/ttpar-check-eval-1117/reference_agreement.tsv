@@ -1,0 +1,6 @@
+item	stage	output	pcc	max_abs	max_ulp	passed
+col_max	S5	m	1.0	0.0	0	True
+col_scale	S5	c	0.9999959410070871	0.0078125	1	True
+row_softmax	S5	y	0.9999854402955776	0.005859375	6	True
+row_sum	S5	s	0.9999761358048429	0.43359375	2048983040	True
+transpose_2d	S5	b	1.0	0.0	0	True

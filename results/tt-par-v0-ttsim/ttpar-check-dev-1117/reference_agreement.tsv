@@ -1,0 +1,6 @@
+item	stage	output	pcc	max_abs	max_ulp	passed
+matmul_multicore_reuse	S5	c	0.9998127194554087	0.3125	30793	True
+matmul_multicore_reuse_mcast	S5	c	0.9998093412548199	0.3125	30762	True
+pad_multi_core	S5	dst	1.0	0.0	0	True
+vecadd_multi_core	S5	c	0.9999912488476981	0.0625	32768	True
+vecadd_sharding	S5	c	0.9999912334956415	0.0625	32768	True

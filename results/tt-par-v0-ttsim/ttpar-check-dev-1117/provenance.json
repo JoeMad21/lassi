@@ -1,0 +1,33 @@
+{
+  "run_id": "ttpar-check-dev-1117",
+  "status": "complete",
+  "recipe": "dev-cpp2tt",
+  "recipe_path": "projects/lassi-demo/tt-par-check/dev-cpp2tt.yaml",
+  "recipe_chain": [
+    "base",
+    "dev-cpp2tt"
+  ],
+  "recipe_hash": "21f52d272efda6cb9e26e9cd8eed3350e425756c25e3162f40456538fb8386fe",
+  "commit": "afd410c2dcf7f0bcd7cd2a954207f63191d69498",
+  "dirty": false,
+  "host": "alpha01",
+  "platform": "Linux-6.6.29+main+3.0.0r1-amd64-gio-epilmore-dev+-x86_64-with-glibc2.35",
+  "python": "3.10.12",
+  "executor": {
+    "cpp": "native",
+    "tt": "ttsim"
+  },
+  "devices": {
+    "cpp": "host CPU (native): AMD EPYC 9534 64-Core Processor",
+    "tt": "ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf-tracy: a simulator, not silicon"
+  },
+  "driver": null,
+  "device_records": [],
+  "started_utc": "2026-11-18T03:34:03+00:00",
+  "finished_utc": "2026-11-18T03:36:37+00:00",
+  "pins": {
+    "tt_metal": "5280a9cf-tracy",
+    "ttsim": "v1.3.4",
+    "gcc": "12.3.0"
+  }
+}
