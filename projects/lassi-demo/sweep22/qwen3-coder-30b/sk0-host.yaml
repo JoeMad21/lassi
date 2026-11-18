@@ -1,0 +1,13 @@
+# sweep22 (task P17.74), rung sk0 (the control: the old template set with the v0 skeleton, one core), host only, for
+# furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8 (v2026.4, 4 RNGD cards). Its sampling is sweep20's for this model
+# (projects/lassi-demo/sweep20/qwen3-coder-30b/ttir-l0.yaml). The shared settings and their reasons are in
+# ../../tt-par-30b-base.yaml. Exploratory; every TT program runs on ttsim, a simulator.
+extends: ../../tt-par-30b-base.yaml
+model:
+  id: furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8
+llm:
+  sampling:
+    temperature: 0.7
+    top_p: 0.8
+    max_tokens: 8192
+skeleton: {name: tt-host-skeleton-v0, prompts: [generate, correct]}  # OQ-096 (a): item-agnostic

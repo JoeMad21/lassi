@@ -1,0 +1,45 @@
+# The settings shared by sweep22's recipes (task P17.74), the development ladder of the multi-core C++ -> TT test
+# (OQ-129), for the owner's window of 2026-11-17 22:30 to 2026-11-18 04:30 EST (the owner: "I've booked you six hours
+# to run amok starting at 10:30pm EST. Do what you need to do starting then. Launch the work yourself, try not to
+# include me. Try to run the various models in that window."). C++ -> TT on tt-par-v0's development split: the model
+# turns an item's serial C++ program, which says nothing of the device or its cores, into a TT-Metalium host program
+# that runs the item's kernels; this file is the host-only variant, and tt-par-30b-kh-base.yaml the host-and-kernels
+# variant. Three of the five development items, one of each computation (vecadd_sharding and
+# matmul_multicore_reuse_mcast compute the same as vecadd_multi_core and matmul_multicore_reuse), so every rung
+# reaches each computation within a model's share of the window. Retrieval, worked examples, and API packs are off in
+# every rung, since the tt-metal-docs corpus holds parts of the development references (P17.74). The default model
+# below is the first of plans/runs/suite/models-30b.tsv, so this file loads as a recipe of its own; each sweep22
+# recipe names its model with sweep20's sampling for it. Every item is a development item: given for evaluation and
+# prompt tuning, refused to training and harvest (P17.31). Exploratory; every TT program runs on ttsim, a simulator,
+# never silicon, and nothing here is a time (Agent Rule 2); outputs are judged by each item's own tolerance.
+extends: base  # projects/base.yaml: runs root, sandbox (wall_s ten times the reference's run), and report choices
+faithful: false  # nothing here reproduces an upstream run
+model:
+  backend: openai_compat  # furiosa-llm's OpenAI-compatible server, which run.sh starts on port 8123
+  id: furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8  # the default; each sweep22 recipe names its model
+  timeout_s: 3600  # as sweep21's recipes
+llm:
+  sampling:
+    temperature: 0.7  # the default model's, as sweep20 reads them; each recipe sets all three
+    top_p: 0.8
+    max_tokens: 8192
+extract:
+  unfenced_file_lines: true  # as sweep21's recipes
+bench:
+  suite: tt-par-v0  # assets/bench/tt-par-v0.yaml
+  split: dev  # the development items (OQ-129); the held-out items wait for their frozen recipes (P17.74)
+  items: [vecadd_multi_core, matmul_multicore_reuse, pad_multi_core]  # one item of each computation
+directions: [{source: cpp, target: tt}]
+prompts: tt-host-v1  # the bare loop's template set; the rungs with the core-grid set name tt-host-v2
+toolchain:
+  cpp: gcc-native  # the pinned host g++ with the native row's flags (toolchains/gcc.pin)
+  tt: ttmetal-host  # the pinned clang++-20 against the pinned tt-metal tree (toolchains/tt-metal.pin)
+fixes:
+  baseline_both: true  # build and run both references, so the baseline records their agreement
+stages: [baseline, generate, compile_loop, run_loop, oracle]
+executor:
+  cpp: {kind: native}  # the C++ program runs in the sandbox on the host CPU
+  tt: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # TT programs run in the sandbox on ttsim, a simulator
+oracle: {kind: binary_io, metric: from_item, threshold: from_item, shape: elements}  # the item's declared tolerance
+trials: {n: 1}  # one trial per item and rung, so each model reaches every rung within its share
+loop: {max_corrections: 8, correct_on_mismatch: true, correct_on_sim_gap: true}  # as sweep21

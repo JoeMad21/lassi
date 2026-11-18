@@ -1,0 +1,12 @@
+# sweep22 (task P17.74), rung bare (the bare loop: the old template set, no skeleton), host only, for
+# furiosa-ai/EXAONE-4.0-32B-FP8 (v2026.4, 4 RNGD cards). Its sampling is sweep20's for this model
+# (projects/lassi-demo/sweep20/exaone4-32b/ttir-l0.yaml). The shared settings and their reasons are in
+# ../../tt-par-30b-base.yaml. Exploratory; every TT program runs on ttsim, a simulator.
+extends: ../../tt-par-30b-base.yaml
+model:
+  id: furiosa-ai/EXAONE-4.0-32B-FP8
+llm:
+  sampling:
+    temperature: 0.2
+    top_p: 0.9
+    max_tokens: 8192

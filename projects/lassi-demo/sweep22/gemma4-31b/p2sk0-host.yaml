@@ -1,0 +1,14 @@
+# sweep22 (task P17.74), rung p2sk0 (the core-grid template set with the v0 skeleton), host only, for
+# furiosa-ai/gemma-4-31B-it-FP8-block (v2026.4, 4 RNGD cards). Its sampling is sweep20's for this model
+# (projects/lassi-demo/sweep20/gemma4-31b/ttir-l0.yaml). The shared settings and their reasons are in
+# ../../tt-par-30b-base.yaml. Exploratory; every TT program runs on ttsim, a simulator.
+extends: ../../tt-par-30b-base.yaml
+model:
+  id: furiosa-ai/gemma-4-31B-it-FP8-block
+llm:
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    max_tokens: 16384
+prompts: tt-host-v2  # the core-grid template set (P17.72)
+skeleton: {name: tt-host-skeleton-v0, prompts: [generate, correct]}  # OQ-096 (a): item-agnostic

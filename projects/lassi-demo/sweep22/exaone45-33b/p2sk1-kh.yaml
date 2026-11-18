@@ -1,0 +1,14 @@
+# sweep22 (task P17.74), rung p2sk1 (the core-grid template set with the v1 skeleton), host and kernels, for
+# furiosa-ai/EXAONE-4.5-33B-FP8 (v2026.4, 4 RNGD cards). Its sampling is sweep20's for this model
+# (projects/lassi-demo/sweep20/exaone45-33b/ttir-l0.yaml). The shared settings and their reasons are in
+# ../../tt-par-30b-kh-base.yaml. Exploratory; every TT program runs on ttsim, a simulator.
+extends: ../../tt-par-30b-kh-base.yaml
+model:
+  id: furiosa-ai/EXAONE-4.5-33B-FP8
+llm:
+  sampling:
+    temperature: 1.0
+    top_p: 0.95
+    max_tokens: 16384
+prompts: tt-kh-v1  # the core-grid template set (P17.72)
+skeleton: {name: tt-kh-skeleton-v1, prompts: [generate, correct]}  # OQ-096 (a): item-agnostic

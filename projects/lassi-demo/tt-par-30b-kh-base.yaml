@@ -1,0 +1,13 @@
+# The host-and-kernels variant of sweep22 (task P17.74): every setting is tt-par-30b-base.yaml's but the suite, the
+# direction, and the template set. On tt-par-v0-kh the model writes the whole TT-Metalium program, the host program
+# and every kernel it launches (the ttkh language); the reference is the item's tt program on ttsim (reference: tt),
+# as sweep9 has it for tt-pairs-v0-kh. Exploratory; every TT program runs on ttsim, a simulator, never silicon.
+extends: tt-par-30b-base.yaml
+bench:
+  suite: tt-par-v0-kh  # tt-par-v0's items unchanged, with a ttkh language
+directions: [{source: cpp, target: ttkh}]
+prompts: tt-kh-v0  # the bare loop's template set; the rungs with the core-grid set name tt-kh-v1
+toolchain:
+  ttkh: ttmetal-host  # compiles the host program; writes each kernel uncompiled at its path for the kernel JIT
+executor:
+  ttkh: {kind: ttsim, arch: wormhole_b0, dispatch: slow}  # candidates run in the sandbox on ttsim, a simulator

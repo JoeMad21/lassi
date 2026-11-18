@@ -1592,7 +1592,7 @@ Recommendation: (1a), (2a), (3a), all of (4), and (5a): steer on some items and 
 Answer: The owner, in the working session of 2026-11-17 (about 01:00 EST), chose "Both, per item", "Both variants", and "Upstream + our own", and said "Forget the testing window tonight, just focus on creating materials for the new test." Then, of the held-out computations proposed, all four: "Reductions" (row_sum and col_max), "Transpose" (transpose_2d), "Row softmax", and "Broadcast multiply" (col_scale); and, of the development items in plans/spikes/tt-par-upstream.md, "All five, resized" (vecadd_multi_core, vecadd_sharding, pad_multi_core, matmul_multicore_reuse, matmul_multicore_reuse_mcast; contributed/multicast left out, since its output never spans more tiles than the grid has cores). Applied in plans/p17-portable.md (P17.67 to P17.75): tt-metal's examples, close to Tier A and partly in the tt-metal-docs retrieval corpus, are the development items, and the programs written here are the held-out items.
 
 ## OQ-130 An alpha01 Batch: The sweep21 Pull And The tt-par-v0 Builds And ttsim Runs
-State: OPEN
+State: ANSWERED
 Kind: access
 Blocks: P17.64 (its pull and summaries), P17.76 (tt-par-v0's builds and ttsim runs, split from P17.67 and P17.68), P17.70 (its ttsim spike), P17.71 (its compile and one-tile ttsim run)
 Evidence: plans/STATUS.md (P17.64: sweep21 ran in the window of 2026-11-12, and its runs appear in the read-only inventory rx 20261116-161608-exec-0f2e, but nothing was pulled); plans/p17-portable.md, P17.67 to P17.71 and P17.76; plans/spikes/tt-par-upstream.md; plans/runs/tt-par/README.md (the commands of steps (2) and (3), and the pulls); projects/lassi-demo/tt-par-check/ (its two check recipes)
@@ -1602,4 +1602,4 @@ Options:
 - (b) The pull only (1): P17.64 closes; tt-par-v0 stays unbuilt.
 - (c) Defer: everything above stays waiting.
 Recommendation: (a): every step is read-only on alpha01 or confined to the scratch root and ttsim, and the tt-par-v0 references must pass on ttsim before any sweep can use them.
-Answer:
+Answer: (the owner, in the working session, 2026-11-17 about 21:50 EST) "I've booked you six hours to run amok starting at 10:30pm EST. Do what you need to do starting then. Launch the work yourself, try not to include me. Try to run the various models in that window." Recorded as (a), with model runs added and run unattended (no questions; the owner queue only): the window of 2026-11-17 22:30 to 2026-11-18 04:30 EST (plans/runs/2026-11-17-window-plan.md).
