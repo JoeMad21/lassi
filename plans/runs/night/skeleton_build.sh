@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Compile assets/skeletons/tt-host-skeleton-v0/host.cpp exactly as the ttmetal-host toolchain compiles a TT host
-# program (lassi/toolchains/ttmetal_build.py, TtMetalHost.command; toolchains/tt-metal.pin, the HOST_* keys):
+# Compile a skeleton's host.cpp (assets/skeletons/tt-host-skeleton-v0 by default) exactly as the ttmetal-host
+# toolchain compiles a TT host program (lassi/toolchains/ttmetal_build.py, TtMetalHost.command; toolchains/tt-metal.pin,
+# the HOST_* keys):
 #
 #   <EXECUTABLE> HOST_DEFINES HOST_INCLUDES -idirafter . HOST_FLAGS HOST_LINK_FLAGS -o main host.cpp
 #       HOST_LINK_LIBRARIES
@@ -12,7 +13,9 @@
 # --version line is EXPECT_VERSION. It prints the compile's exit status and the first 40 lines of its errors.
 #
 # For alpha01, from the repository root of a clean commit, through the remote runner, for example:
-#   uv run tools/rx.py run -- 'bash <path of this script>'
+#   uv run tools/rx.py run -- 'bash <path of this script> [skeleton directory]'
+# The optional argument, a skeleton directory relative to the repository root, names another skeleton whose host.cpp
+# is compiled the same way (task P17.71: assets/skeletons/tt-host-skeleton-v1); tt-host-skeleton-v0 is the default.
 # It writes only under $LASSI_SCRATCH (Agent Rule 7) and runs no program: the compiled host program is never run.
 prlimit --pid $$ --core=1:1
 set -euo pipefail
@@ -26,7 +29,7 @@ echo "core limit (soft hard): $limit"
 
 # The checkout is the working directory, where the remote runner starts a command.
 repo=$PWD
-skeleton="$repo/assets/skeletons/tt-host-skeleton-v0"
+skeleton="$repo/${1:-assets/skeletons/tt-host-skeleton-v0}"
 harness="$repo/assets/harness/c/lassi_io.h"
 if [ ! -f "$repo/toolchains/tt-metal.pin" ] || [ ! -f "$skeleton/host.cpp" ]; then
     echo "skeleton_build: run from the repository root of a checkout that holds $skeleton; stopping" >&2
