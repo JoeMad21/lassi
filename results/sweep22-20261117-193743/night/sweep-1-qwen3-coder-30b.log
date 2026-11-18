@@ -1,0 +1,78 @@
+2026-11-17T19:37:52-0800 sweep 20261117-1937: deadline 20:34:03, 3371 s left, output /mnt/nvme10/shrec-shared/lassi/lassi-runs/rngd-sweep/20261117-1937
+2026-11-17T19:37:52-0800 START qwen3-coder-30b: furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-17T19:38:27-0800 READY qwen3-coder-30b: running 10 recipes side by side for at most 2736 s
+2026-11-17T20:03:27-0800 qwen3-coder-30b run 2834915 ended rc=0
+2026-11-17T20:08:41-0800 qwen3-coder-30b run 2834916 ended rc=0
+2026-11-17T20:10:32-0800 qwen3-coder-30b run 2834917 ended rc=0
+2026-11-17T20:14:11-0800 qwen3-coder-30b run 2834919 ended rc=0
+2026-11-17T20:23:43-0800 qwen3-coder-30b run 2834920 ended rc=0
+2026-11-17T20:23:43-0800 qwen3-coder-30b run 2834923 ended rc=0
+2026-11-17T20:23:43-0800 qwen3-coder-30b run 2834925 ended rc=0
+2026-11-17T20:23:43-0800 qwen3-coder-30b run 2834926 ended rc=0
+2026-11-17T20:23:43-0800 qwen3-coder-30b run 2834928 ended rc=0
+2026-11-17T20:23:43-0800 qwen3-coder-30b run 2834930 ended rc=0
+qwen3-coder-30b--bare-host	cpp-tt/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bare-host	cpp-tt/pad_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bare-host	cpp-tt/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bare-kh	cpp-ttkh/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bare-kh	cpp-ttkh/pad_multi_core/run01	S0	None	8	correction-cap	9
+qwen3-coder-30b--bare-kh	cpp-ttkh/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-host	cpp-tt/pad_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-host	cpp-tt/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-kh	cpp-ttkh/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-kh	cpp-ttkh/pad_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-kh	cpp-ttkh/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-host	cpp-tt/pad_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-host	cpp-tt/vecadd_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-kh	cpp-ttkh/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-kh	cpp-ttkh/pad_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-kh	cpp-ttkh/vecadd_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk0-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	sim-gap	9
+qwen3-coder-30b--sk0-host	cpp-tt/pad_multi_core/run01	S4	None	8	sim-gap	9
+qwen3-coder-30b--sk0-host	cpp-tt/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--sk0-kh	cpp-ttkh/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk0-kh	cpp-ttkh/pad_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--sk0-kh	cpp-ttkh/vecadd_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk1-host	cpp-tt/matmul_multicore_reuse/run01	S5	0.0	8	correction-cap	9
+qwen3-coder-30b--sk1-host	cpp-tt/pad_multi_core/run01	S4	None	8	sim-gap	9
+qwen3-coder-30b--sk1-host	cpp-tt/vecadd_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk1-kh	cpp-ttkh/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk1-kh	cpp-ttkh/pad_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk1-kh	cpp-ttkh/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+2026-11-17T20:23:46-0800 server 2805093 exited
+2026-11-17T20:23:46-0800 DONE qwen3-coder-30b; free cards now 8; 617 s left
+2026-11-17T20:23:46-0800 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+qwen3-coder-30b--bare-host	cpp-tt/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bare-host	cpp-tt/pad_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bare-host	cpp-tt/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bare-kh	cpp-ttkh/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--bare-kh	cpp-ttkh/pad_multi_core/run01	S0	None	8	correction-cap	9
+qwen3-coder-30b--bare-kh	cpp-ttkh/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-host	cpp-tt/pad_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-host	cpp-tt/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-kh	cpp-ttkh/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-kh	cpp-ttkh/pad_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk0-kh	cpp-ttkh/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-host	cpp-tt/pad_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-host	cpp-tt/vecadd_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-kh	cpp-ttkh/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-kh	cpp-ttkh/pad_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--p2sk1-kh	cpp-ttkh/vecadd_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk0-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	sim-gap	9
+qwen3-coder-30b--sk0-host	cpp-tt/pad_multi_core/run01	S4	None	8	sim-gap	9
+qwen3-coder-30b--sk0-host	cpp-tt/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--sk0-kh	cpp-ttkh/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk0-kh	cpp-ttkh/pad_multi_core/run01	S1	None	8	correction-cap	9
+qwen3-coder-30b--sk0-kh	cpp-ttkh/vecadd_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk1-host	cpp-tt/matmul_multicore_reuse/run01	S5	0.0	8	correction-cap	9
+qwen3-coder-30b--sk1-host	cpp-tt/pad_multi_core/run01	S4	None	8	sim-gap	9
+qwen3-coder-30b--sk1-host	cpp-tt/vecadd_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk1-kh	cpp-ttkh/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk1-kh	cpp-ttkh/pad_multi_core/run01	S4	None	8	correction-cap	9
+qwen3-coder-30b--sk1-kh	cpp-ttkh/vecadd_multi_core/run01	S1	None	8	correction-cap	9
+2026-11-17T20:23:46-0800 sweep ended

@@ -1,0 +1,3 @@
+# device: ttsim v1.3.4 (libttsim_wh.so, a virtual Wormhole) on the host CPU, with tt-metal 5280a9cf-tracy: a simulator, not silicon
+run	split	item	direction	model	alignment	attempt	exit	outputs_equal	cores	workers	note
+sweep-20261117-1937-qwen3-coder-30b--sk1-host	dev	matmul_multicore_reuse	cpp-tt	furiosa-ai/Qwen3-Coder-30B-A3B-Instruct-FP8	0.0	8	0	yes	72	80	cores used: 72 of 80 worker cores ran a kernel (Watcher dump #1); a count, not a time

@@ -1,0 +1,36 @@
+2026-11-17T21:07:05-0800 sweep 20261117-2107: deadline 22:09:03, 3718 s left, output /mnt/nvme10/shrec-shared/lassi/lassi-runs/rngd-sweep/20261117-2107
+2026-11-17T21:07:06-0800 START qwen3-32b: furiosa-ai/Qwen3-32B-FP8@v2026.4 on npu:0,npu:1,npu:2,npu:3 (parser -)
+2026-11-17T21:07:26-0800 READY qwen3-32b: running 10 recipes side by side for at most 3097 s
+2026-11-17T21:59:03-0800 qwen3-32b run 262646 ended rc=124
+2026-11-17T21:59:03-0800 qwen3-32b run 262647 ended rc=124
+2026-11-17T21:59:03-0800 qwen3-32b run 262648 ended rc=124
+2026-11-17T21:59:03-0800 qwen3-32b run 262649 ended rc=124
+2026-11-17T21:59:03-0800 qwen3-32b run 262650 ended rc=124
+2026-11-17T21:59:03-0800 qwen3-32b run 262652 ended rc=124
+2026-11-17T21:59:03-0800 qwen3-32b run 262654 ended rc=124
+2026-11-17T21:59:03-0800 qwen3-32b run 262655 ended rc=124
+2026-11-17T21:59:03-0800 qwen3-32b run 262659 ended rc=124
+2026-11-17T21:59:03-0800 qwen3-32b run 262662 ended rc=124
+qwen3-32b--bare-host	cpp-tt/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--bare-kh	cpp-ttkh/matmul_multicore_reuse/run01	S5	0.0	8	correction-cap	9
+qwen3-32b--p2sk0-host	cpp-tt/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--p2sk0-kh	cpp-ttkh/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--p2sk1-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-32b--p2sk1-kh	cpp-ttkh/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--sk0-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-32b--sk0-kh	cpp-ttkh/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--sk1-kh	cpp-ttkh/matmul_multicore_reuse/run01	S4	None	8	sim-gap	9
+2026-11-17T21:59:05-0800 server 245194 exited
+2026-11-17T21:59:06-0800 DONE qwen3-32b; free cards now 8; 597 s left
+2026-11-17T21:59:06-0800 summary:
+slug	trial	stage	alignment	corrections	end	attempts
+qwen3-32b--bare-host	cpp-tt/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--bare-kh	cpp-ttkh/matmul_multicore_reuse/run01	S5	0.0	8	correction-cap	9
+qwen3-32b--p2sk0-host	cpp-tt/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--p2sk0-kh	cpp-ttkh/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--p2sk1-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-32b--p2sk1-kh	cpp-ttkh/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--sk0-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-32b--sk0-kh	cpp-ttkh/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--sk1-kh	cpp-ttkh/matmul_multicore_reuse/run01	S4	None	8	sim-gap	9
+2026-11-17T21:59:06-0800 sweep ended

@@ -1,0 +1,6 @@
+Using CPython 3.10.12 interpreter at: /usr/bin/python3.10
+Creating virtual environment at: .venv
+   Building lassi @ file:///mnt/nvme10/shrec-shared/lassi/lassi-wt/sweep22
+      Built lassi @ file:///mnt/nvme10/shrec-shared/lassi/lassi-wt/sweep22
+Installed 19 packages in 25ms
+recipes.py: 60 recipes listed, 60 selected, into /mnt/nvme10/shrec-shared/lassi/lassi-runs/suite/20261117-193743-sweep22-8f46/recipes.tsv

@@ -1,0 +1,10 @@
+run_tree	direction	item	run	stage	alignment	corrections	end	generate	compile_loop	run_loop	restart	looked-up_notes	retrieved_notes
+sweep-20261117-2107-qwen3-32b--bare-host	cpp-tt	matmul_multicore_reuse	run01	S1	None	8	correction-cap	1	8	0	0	0	0
+sweep-20261117-2107-qwen3-32b--bare-kh	cpp-ttkh	matmul_multicore_reuse	run01	S5	0.0	8	correction-cap	1	7	1	0	0	0
+sweep-20261117-2107-qwen3-32b--p2sk0-host	cpp-tt	matmul_multicore_reuse	run01	S1	None	8	correction-cap	1	2	6	0	0	0
+sweep-20261117-2107-qwen3-32b--p2sk0-kh	cpp-ttkh	matmul_multicore_reuse	run01	S1	None	8	correction-cap	1	5	3	0	0	0
+sweep-20261117-2107-qwen3-32b--p2sk1-host	cpp-tt	matmul_multicore_reuse	run01	S4	None	8	correction-cap	1	2	6	0	0	0
+sweep-20261117-2107-qwen3-32b--p2sk1-kh	cpp-ttkh	matmul_multicore_reuse	run01	S1	None	8	correction-cap	1	1	7	0	0	0
+sweep-20261117-2107-qwen3-32b--sk0-host	cpp-tt	matmul_multicore_reuse	run01	S4	None	8	correction-cap	1	1	7	0	0	0
+sweep-20261117-2107-qwen3-32b--sk0-kh	cpp-ttkh	matmul_multicore_reuse	run01	S1	None	8	correction-cap	1	7	1	0	0	0
+sweep-20261117-2107-qwen3-32b--sk1-kh	cpp-ttkh	matmul_multicore_reuse	run01	S4	None	8	sim-gap	1	2	6	0	0	0

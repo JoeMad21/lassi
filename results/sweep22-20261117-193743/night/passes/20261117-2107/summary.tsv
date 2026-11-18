@@ -1,0 +1,10 @@
+slug	trial	stage	alignment	corrections	end	attempts
+qwen3-32b--bare-host	cpp-tt/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--bare-kh	cpp-ttkh/matmul_multicore_reuse/run01	S5	0.0	8	correction-cap	9
+qwen3-32b--p2sk0-host	cpp-tt/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--p2sk0-kh	cpp-ttkh/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--p2sk1-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-32b--p2sk1-kh	cpp-ttkh/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--sk0-host	cpp-tt/matmul_multicore_reuse/run01	S4	None	8	correction-cap	9
+qwen3-32b--sk0-kh	cpp-ttkh/matmul_multicore_reuse/run01	S1	None	8	correction-cap	9
+qwen3-32b--sk1-kh	cpp-ttkh/matmul_multicore_reuse/run01	S4	None	8	sim-gap	9

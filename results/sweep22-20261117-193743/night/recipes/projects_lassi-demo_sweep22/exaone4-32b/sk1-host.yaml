@@ -1,0 +1,74 @@
+# Resolved recipe sk1-host (chain: base -> tt-par-30b-base -> sk1-host)
+# recipe_hash: cea971709a8702163aa84f7ba5220310aa5cbd16192040606bc8e5ea04595447 is the sha256 of the YAML below these comment lines
+bench:
+  items:
+  - vecadd_multi_core
+  - matmul_multicore_reuse
+  - pad_multi_core
+  split: dev
+  suite: tt-par-v0
+directions:
+- source: cpp
+  target: tt
+executor:
+  cpp:
+    kind: native
+  tt:
+    arch: wormhole_b0
+    dispatch: slow
+    kind: ttsim
+extract:
+  unfenced_file_lines: true
+faithful: false
+fixes:
+  baseline_both: true
+  execution_gate: true
+  fence_tag: true
+  parsed_diagnostics: true
+  prompt_newlines: true
+  prompt_spaces: true
+llm:
+  sampling:
+    max_tokens: 8192
+    temperature: 0.2
+    top_p: 0.9
+loop:
+  correct_on_mismatch: true
+  correct_on_sim_gap: true
+  max_corrections: 8
+model:
+  backend: openai_compat
+  id: furiosa-ai/EXAONE-4.0-32B-FP8
+  timeout_s: 3600
+oracle:
+  kind: binary_io
+  metric: from_item
+  shape: elements
+  threshold: from_item
+project: sk1-host
+prompts: tt-host-v1
+report:
+  parquet: true
+  trial_md: true
+runs_root: /mnt/nvme10/joseph_ufl/lassi-runs
+sandbox:
+  mem_gb: 16
+  network: false
+  wall_s: baseline_x10
+skeleton:
+  name: tt-host-skeleton-v1
+  prompts:
+  - generate
+  - correct
+  sha256: af555e777cc469464f390b4a1bc7020eb781d183ed8cbe78ab1a9ca9d1db56ae
+stages:
+- baseline
+- generate
+- compile_loop
+- run_loop
+- oracle
+toolchain:
+  cpp: gcc-native
+  tt: ttmetal-host
+trials:
+  n: 1
