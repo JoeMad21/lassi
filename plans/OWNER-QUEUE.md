@@ -1605,7 +1605,7 @@ Recommendation: (a): every step is read-only on alpha01 or confined to the scrat
 Answer: (the owner, in the working session, 2026-11-17 about 21:50 EST) "I've booked you six hours to run amok starting at 10:30pm EST. Do what you need to do starting then. Launch the work yourself, try not to include me. Try to run the various models in that window." Recorded as (a), with model runs added and run unattended (no questions; the owner queue only): the window of 2026-11-17 22:30 to 2026-11-18 04:30 EST (plans/runs/2026-11-17-window-plan.md).
 
 ## OQ-131 The Shared Scratch Disk At The Big-Job Floor: sweep22 Stopped Before Its Last Three Models
-State: OPEN
+State: ANSWERED
 Kind: decision
 Blocks: P17.74 (sweep22's gemma4-31b, exaone4-32b, and exaone45-33b arms)
 Evidence: plans/runs/2026-11-17-window.md; rx 20261117-212636-exec-f545, 20261117-212710-exec-8e65, 20261117-213257-exec-5085, and 20261117-213303-exec-aab4 (free space and sizes, 21:26 to 21:33 alpha01 time); rx 20261117-213313-exec-a223 (the STOP file); results/suite21-20261111-204428/output.log (91 GB free as run-suite.sh printed it, 2026-11-12 01:17 alpha01 time); plans/runs/suite/run-suite.sh (the stop line before each model)
@@ -1616,4 +1616,4 @@ Options:
 - (c) A code change for later runs: the ttsim executor removes an attempt's @ttsim/cache once its run is read, keeping its logs; [PROJECTED] about half of a sweep's run-tree size (1,408,364 of tonight's 2,664,676 KiB). A Decision Log entry, since run trees would no longer hold the JIT outputs.
 - (d) Lower the gate's 60 GB big-job floor: frees no space, and the disk is shared and 99% full.
 Recommendation: (a) and (c), then the three missing models first in the next window, after the owner or an approved session clears the STOP file: the caches are regenerable and unread, and (c) keeps the problem from returning; (d) only moves the risk onto the other projects on the disk.
-Answer:
+Answer: (the owner, in the working session, 2026-11-18 about 19:05 EST) "Let's free up space and remove the stop file. Give me the commands so we can finish testing soon." Recorded as (a), with the owner running the removal: the session gave the owner commands that delete every @ttsim/cache directory under lassi-runs (the run trees, and the count-cores copies and spike runs beside them) and the sweep's STOP file, then read the free space. (c) is not chosen. CLOSED once the free space after the removal is recorded and the next window's plan runs sweep22's three missing models first.
